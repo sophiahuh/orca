@@ -4,6 +4,26 @@ What makes a question worth asking in Orca. Written from Sophia's reviews of the
 every rule below came from a real question that failed. The generator prompt includes this
 file, and the checker pass (planned) grades each generated question against it.
 
+## Shape (from the assessment-blueprint model)
+
+0. **Every question works on a concrete instance.** A given bit pattern, expression, circuit,
+   array, snippet or scenario. Five tiers describe what the student must *do* with it:
+   - *retrieval*: run a procedure on the instance (convert, simplify, trace, classify)
+   - *mechanism*: explain why or how, in one sentence
+   - *application*: solve a small problem with constraints
+   - *connection*: relate two ideas (why does X make Y possible / cheaper / wrong)
+   - *transfer*: design something new from the ideas
+   Quick review uses retrieval + mechanism (under a minute). Deep review uses application +
+   connection. Exam review mixes in transfer.
+   - Not a question: "What is a max-heap?"
+   - Retrieval: "Draw [4, 12, 8, 21, 14, 9, 17] as a complete tree. Max-heap, min-heap or neither?"
+   - Mechanism: "Why is insert_last on a dynamic array Θ(1) amortised when a single call can be Θ(n)?"
+0b. **Prefer typed answers over multiple choice.** If the answer has an exact form (bits, a number,
+   a short expression) the student types it and code checks it. If it's a one-sentence "why", a
+   rubric grades it: required ideas, acceptable phrasings, known misconceptions; never the
+   grader's own opinion. Multiple choice only when choosing between plausible alternatives *is*
+   the skill.
+
 ## Level
 
 1. **Assume the course's level, not the topic's.** ALD is an upper-level course; Lecture 2 is a

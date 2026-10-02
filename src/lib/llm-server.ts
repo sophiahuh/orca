@@ -80,6 +80,7 @@ export async function completeJson<T>(
   prompt: string,
   schema: z.ZodType<T>,
   parseLoose: (text: string) => T,
+  opts: { effort?: "low" | "medium"; maxTokens?: number } = {},
 ): Promise<T> {
   if (PROVIDERS[config.provider].browserOnly) {
     throw new LlmError(`${PROVIDERS[config.provider].label} runs in your browser, not on the server.`, 400);
@@ -89,9 +90,9 @@ export async function completeJson<T>(
     try {
       const response = await client.messages.parse({
         model: config.model,
-        max_tokens: 16000,
+        max_tokens: opts.maxTokens ?? 16000,
         system,
-        output_config: { format: zodOutputFormat(schema), ...(EFFORT_MODELS.test(config.model) ? { effort: "medium" as const } : {}) },
+        output_config: { format: zodOutputFormat(schema), ...(EFFORT_MODELS.test(config.model) ? { effort: opts.effort ?? "medium" } : {}) },
         messages: [{ role: "user", content: prompt }],
       });
       if (response.stop_reason === "refusal") throw new LlmError("The model declined to process this material.", 422);
@@ -106,7 +107,7 @@ export async function completeJson<T>(
   }
   let text: string;
   try {
-    text = await compatChat(config, system, [{ role: "user", content: prompt }], { maxTokens: 16000, json: true });
+    text = await compatChat(config, system, [{ role: "user", content: prompt }], { maxTokens: opts.maxTokens ?? 16000, json: true });
   } catch (error) {
     throw new LlmError(error instanceof Error ? error.message : "The model provider returned an error.", 502);
   }

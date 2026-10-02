@@ -123,15 +123,32 @@ export interface TruthRow {
   cells: string[];
 }
 
+/** Bloom-ish tiers from the assessment blueprint: what the question asks the student to do. */
+export type QuestionTier = "retrieval" | "mechanism" | "application" | "connection" | "transfer";
+
+/** Rubric for grading a short free-text answer (never the grader's own judgement). */
+export interface AnswerRubric {
+  requiredIdeas: string[];
+  acceptableAlternatives: string[];
+  knownMisconceptions: Array<{ description: string; indicativePhrasing: string[] }>;
+}
+
 export interface QuizQuestion {
   id: string;
-  kind: "Multiple choice" | "True or false";
+  kind: "Multiple choice" | "True or false" | "Short answer";
+  tier?: QuestionTier;
   topic: string;
   prompt: string;
   /** Optional inline truth table shown under the prompt. */
   table?: { headers: string[]; rows: TruthRow[] };
+  /** Choices for MC/TF; empty for short answer. */
   options: string[];
+  /** Index into options; -1 for short answer. */
   answer: number;
+  /** Short answer: accepted exact answers (normalised before comparing). Checked on-device, no model. */
+  exact?: string[];
+  /** Short answer without an exact form: graded by a model against this rubric. */
+  rubric?: AnswerRubric;
   explanation: string;
   /** Where in the course material this question is grounded. */
   anchor?: { locator: string; excerpt: string };

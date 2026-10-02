@@ -13,6 +13,10 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { RoundButton } from "@/components/ui/RoundButton";
 import { TruthTable } from "@/components/quiz/TruthTable";
+import { ShortAnswer } from "@/components/quiz/ShortAnswer";
+import { GRADE_SYSTEM, type GradeResult, gradeExact, gradePrompt, parseGradeLoose } from "@/lib/grading";
+import { PROVIDERS, compatChat, llmReady } from "@/lib/llm";
+import { useServerModel } from "@/hooks/useServerModel";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { fadeUp, stagger } from "@/lib/motion";
 
@@ -21,7 +25,8 @@ const LETTERS = "ABCDEFGH";
 export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) {
   const { slug, topic: topicId } = use(params);
   const router = useRouter();
-  const { hydrated, streak, recordQuiz, questionBank } = useOrca();
+  const { hydrated, streak, recordQuiz, questionBank, llm } = useOrca();
+  const serverModel = useServerModel();
   const course = useCourse(slug);
   const topic = course?.topics.find((t) => t.id === topicId);
 
@@ -36,6 +41,8 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
+  const [grading, setGrading] = useState(false);
+  const [grade, setGrade] = useState<GradeResult | null>(null);
   const [correct, setCorrect] = useState(0);
   const [missed, setMissed] = useState<QuizQuestion[]>([]);
   const [finished, setFinished] = useState(false);
@@ -69,6 +76,52 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     else setMissed((m) => [...m, q]);
   }, [selected, checked, q]);
 
+  const noModel: string | null = llmReady(llm) || serverModel ? null : serverModel === undefined ? null : "no AI connected";
+
+  const settle = useCallback(
+    (result: GradeResult) => {
+      if (!q) return;
+      setGrade(result);
+      setChecked(true);
+      if (result.outcome === "correct") setCorrect((c) => c + 1);
+      else setMissed((m) => [...m, q]);
+    },
+    [q],
+  );
+
+  const submitShort = useCallback(
+    async (response: string) => {
+      if (!q || checked || grading) return;
+      if (q.exact?.length) {
+        settle(gradeExact(response, q.exact));
+        return;
+      }
+      if (!q.rubric) return;
+      setGrading(true);
+      try {
+        let result: GradeResult;
+        if (llmReady(llm) && PROVIDERS[llm.provider].browserOnly) {
+          result = parseGradeLoose(await compatChat(llm, GRADE_SYSTEM, [{ role: "user", content: gradePrompt(q.prompt, q.rubric, response) }], { maxTokens: 1024, json: true }));
+        } else {
+          const res = await fetch("/api/grade", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ llm: llmReady(llm) ? llm : null, question: q.prompt, rubric: q.rubric, response }),
+          });
+          const data = (await res.json()) as GradeResult & { error?: string };
+          if (!res.ok || data.error) throw new Error(data.error ?? "Grading failed.");
+          result = data;
+        }
+        settle(result);
+      } catch (error) {
+        settle({ outcome: "incorrect", feedback: `Couldn't grade this one (${error instanceof Error ? error.message : "error"}). Compare with the key below.` });
+      } finally {
+        setGrading(false);
+      }
+    },
+    [q, checked, grading, llm, settle],
+  );
+
   const advance = useCallback(() => {
     if (!q) return;
     if (!checked) setMissed((m) => [...m, q]); // skipped counts as a miss
@@ -80,6 +133,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     setIndex((i) => i + 1);
     setSelected(null);
     setChecked(false);
+    setGrade(null);
     bodyRef.current?.scrollTo({ top: 0 });
   }, [checked, index, total, q]);
 
@@ -91,11 +145,13 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
       if (e.key === "Enter") {
+        if (q.kind === "Short answer" && !checked) return; // the input owns Enter until graded
         e.preventDefault();
         if (checked) advance();
         else if (selected !== null) check();
         return;
       }
+      if (q.kind === "Short answer") return;
       if (checked) return;
       const k = e.key.toLowerCase();
       const idx = /^[1-9]$/.test(k) ? Number(k) - 1 : /^[a-h]$/.test(k) ? k.charCodeAt(0) - 97 : -1;
@@ -132,6 +188,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     setIndex(0);
     setSelected(null);
     setChecked(false);
+    setGrade(null);
     setCorrect(0);
     setMissed([]);
     setFinished(false);
@@ -180,7 +237,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
         <AnimatePresence mode="wait">
           <motion.div key={q.id} variants={stagger(0.05, 0.07)} initial="hidden" animate="show" exit="exit" className="flex max-w-[800px] flex-col">
             <motion.span variants={fadeUp} className="eyebrow">
-              {q.kind} · {q.topic}
+              {q.kind}{q.tier ? ` · ${q.tier}` : ""} · {q.topic}
             </motion.span>
             <motion.h1 variants={fadeUp} className="mt-[10px] text-[34px] font-bold leading-tight text-prussian">
               {q.prompt}
@@ -199,13 +256,26 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
               </div>
             )}
 
-            <div className="mt-[24px] flex flex-col gap-[12px]">
-              {q.options.map((opt, i) => (
-                <AnswerOption key={opt} letter={LETTERS[i]} state={stateFor(i)} disabled={checked} onClick={() => setSelected(i)}>
-                  {opt}
-                </AnswerOption>
-              ))}
-            </div>
+            {q.kind === "Short answer" ? (
+              <div className="mt-[24px]">
+                <ShortAnswer
+                  question={q}
+                  grading={grading}
+                  result={grade}
+                  noModel={noModel}
+                  onSubmit={(r) => void submitShort(r)}
+                  onSelfReport={(ok) => settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." })}
+                />
+              </div>
+            ) : (
+              <div className="mt-[24px] flex flex-col gap-[12px]">
+                {q.options.map((opt, i) => (
+                  <AnswerOption key={opt} letter={LETTERS[i]} state={stateFor(i)} disabled={checked} onClick={() => setSelected(i)}>
+                    {opt}
+                  </AnswerOption>
+                ))}
+              </div>
+            )}
 
             <AnimatePresence>
               {checked && (
@@ -217,8 +287,24 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
                   exit="exit"
                   className="mt-[18px] rounded-[18px] bg-alice px-[20px] py-[14px] text-[16px] leading-relaxed text-prussian"
                 >
-                  <span className="font-bold text-wisteria-deep">{selected === q.answer ? "Correct. " : "Not quite. "}</span>
+                  <span className="font-bold text-wisteria-deep">
+                    {q.kind === "Short answer"
+                      ? grade?.outcome === "correct"
+                        ? "Correct. "
+                        : grade?.outcome === "partial"
+                          ? "Partly. "
+                          : "Not quite. "
+                      : selected === q.answer
+                        ? "Correct. "
+                        : "Not quite. "}
+                  </span>
+                  {q.kind === "Short answer" && grade?.feedback && grade.outcome !== "correct" && <span className="text-prussian">{grade.feedback} </span>}
                   {q.explanation}
+                  {q.kind === "Short answer" && q.rubric && grade?.outcome !== "correct" && (
+                    <span className="mt-[8px] block text-[15px] text-prussian/80">
+                      Key: {q.rubric.requiredIdeas.join(" · ")}
+                    </span>
+                  )}
                   {q.anchor && (
                     <span className="mt-[8px] block text-[14px] text-wisteria-deep">
                       From {q.anchor.locator}: “{q.anchor.excerpt}”
@@ -245,6 +331,8 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
           <Button size="sm" onClick={advance}>
             {index + 1 >= total ? "Finish" : "Continue"}
           </Button>
+        ) : q.kind === "Short answer" ? (
+          <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
         ) : (
           <Button size="sm" onClick={check} disabled={selected === null}>
             Check

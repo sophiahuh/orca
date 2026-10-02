@@ -21,10 +21,21 @@ export const ExtractedTopic = z.object({
 
 export const ExtractedQuestion = z.object({
   topic: z.string().describe("Exactly one of the topic names above"),
-  kind: z.enum(["Multiple choice", "True or false"]),
+  kind: z.enum(["Multiple choice", "True or false", "Short answer"]),
+  tier: z.enum(["retrieval", "mechanism", "application", "connection", "transfer"]),
   prompt: z.string().min(1),
-  options: z.array(z.string().min(1)).min(2).max(4),
-  answer: z.number().int().min(0).describe("Index into options"),
+  options: z.array(z.string().min(1)).max(4).describe("2–4 choices for MC/TF; empty for short answer"),
+  answer: z.number().int().min(-1).describe("Index into options; -1 for short answer"),
+  exact: z.array(z.string()).nullable().optional().describe("Short answer with one exact form (bit pattern, number, small expression): every accepted spelling. Else null"),
+  rubric: z
+    .object({
+      requiredIdeas: z.array(z.string()).min(1),
+      acceptableAlternatives: z.array(z.string()),
+      knownMisconceptions: z.array(z.object({ description: z.string(), indicativePhrasing: z.array(z.string()) })),
+    })
+    .nullable()
+    .optional()
+    .describe("Short answer graded in prose (mechanism/connection): the rubric. Else null"),
   explanation: z.string().min(1).describe("One or two sentences; say why the right answer is right"),
   anchor: z.object({
     locator: z.string().describe("e.g. 'slide 14'"),
@@ -42,6 +53,7 @@ export type Extraction = z.infer<typeof ExtractionSchema>;
 
 /** Question-quality rules (mirrors docs/QUIZ-RUBRIC.md). Kept inline so the server bundle needs no file reads. */
 export const QUIZ_RUBRIC = `Rules for every question:
+- Every question works on a concrete instance: a given bit pattern, expression, circuit, array, code snippet or scenario. "Retrieval" means running a procedure on that instance (convert this, simplify this, trace this), never reciting a definition. "Mechanism" means explaining why or how in one sentence.
 - Assume the course's level, not the topic's. If the course is upper-level, early lectures are refreshers: a question answerable from a definition alone is too easy. Target apply/analyse: give a small circuit, expression, bit pattern or code fragment and ask what it does, equals, or how to build it. At most one pure-recall question per topic, and only for a fact students actually forget.
 - Never test notation or vocabulary before the slide that defines it; a question may only assume terms from its own slide range or earlier. Spell out AND/OR/XOR/NOT in words if the symbols haven't been introduced yet.
 - If the question needs a diagram or table, set figureSlide and say "In the figure, …". Never describe a picture the student can't see.
@@ -70,14 +82,18 @@ ${existing}
 
 Tasks:
 1. Split the material into 2 to 6 topics in the order they are taught. Skip logistics (syllabus, grading, office hours, contact details). A topic is something a student would review as a unit.
-2. For each topic write 4 to 6 quiz questions that follow the rules above: mostly apply/analyse, one-step, under a minute, each citing the slide it comes from.
+2. For each topic write 4 to 6 quick-review questions that follow the rules above, each citing the slide it comes from, mixed like this:
+   - at least two "Short answer" questions: a retrieval-tier task on a concrete instance with an exact answer (set exact, e.g. ["1010"]), and a mechanism-tier "why/how" answerable in one sentence (set rubric with 1–3 requiredIdeas);
+   - the rest "Multiple choice" with four options, used only where choosing between plausible alternatives is itself the skill;
+   - at most one "True or false".
+   Tag every question with its tier. Save application/connection/transfer questions for later deep review: keep quick-review questions under a minute.
 3. Each question gets a one or two sentence explanation that teaches, not just confirms.
 4. Prefer questions that stand alone in words. When a question only makes sense with a diagram or table from a slide, set figureSlide to that slide number and phrase the prompt as "In the figure, …"; otherwise set figureSlide to null.
 
 Output schema (JSON):
 {
   "topics": [{ "name": string, "summary": string, "slideStart": number, "slideEnd": number, "keyTerms": string[] }],
-  "questions": [{ "topic": string, "kind": "Multiple choice" | "True or false", "prompt": string, "options": string[], "answer": number, "explanation": string, "anchor": { "locator": string, "excerpt": string }, "figureSlide": number | null }]
+  "questions": [{ "topic": string, "kind": "Multiple choice" | "True or false" | "Short answer", "tier": "retrieval" | "mechanism" | "application" | "connection" | "transfer", "prompt": string, "options": string[], "answer": number, "exact": string[] | null, "rubric": { "requiredIdeas": string[], "acceptableAlternatives": string[], "knownMisconceptions": [{ "description": string, "indicativePhrasing": string[] }] } | null, "explanation": string, "anchor": { "locator": string, "excerpt": string }, "figureSlide": number | null }]
 }
 
 Material follows.
@@ -109,14 +125,19 @@ export function questionsByTopic(x: Extraction, filename: string, figures: Recor
   const topicIds = new Map(x.topics.map((t) => [t.name.toLowerCase(), slugifyTopic(t.name)]));
   x.questions.forEach((q, i) => {
     const id = topicIds.get(q.topic.toLowerCase()) ?? slugifyTopic(q.topic);
-    if (q.answer >= q.options.length) return; // malformed; skip rather than teach the wrong thing
+    const short = q.kind === "Short answer";
+    if (!short && (q.answer < 0 || q.answer >= q.options.length)) return; // malformed; skip rather than teach the wrong thing
+    if (short && !(q.exact && q.exact.length) && !q.rubric) return; // ungradable
     (out[id] ??= []).push({
       id: `${id}-${filename}-${i}`.replace(/[^a-z0-9-]+/gi, "-").toLowerCase(),
       kind: q.kind,
+      tier: q.tier,
       topic: q.topic,
       prompt: q.prompt,
-      options: q.options,
-      answer: q.answer,
+      options: short ? [] : q.options,
+      answer: short ? -1 : q.answer,
+      exact: short && q.exact && q.exact.length ? q.exact : undefined,
+      rubric: short && !(q.exact && q.exact.length) && q.rubric ? q.rubric : undefined,
       explanation: q.explanation,
       anchor: q.anchor,
       figure: q.figureSlide && figures[q.figureSlide] ? { src: figures[q.figureSlide], alt: `Slide ${q.figureSlide} of ${filename}` } : undefined,
