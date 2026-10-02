@@ -2,7 +2,9 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import Link from "next/link";
 import { useOrca } from "@/lib/store";
+import { PROVIDERS, type ChatTurn, compatChat, llmReady, modelLabel, systemFor } from "@/lib/llm";
 import { IconSend, IconUp } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -15,7 +17,7 @@ import { fadeUp, popIn, stagger } from "@/lib/motion";
 
 export default function ChatPage({ searchParams }: PageProps<"/chat">) {
   const sp = use(searchParams);
-  const { courses } = useOrca();
+  const { courses, llm } = useOrca();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const course = courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
@@ -47,19 +49,26 @@ export default function ChatPage({ searchParams }: PageProps<"/chat">) {
     setInput("");
     setShowSuggestions(false);
     setBusy(true);
+    const turns: ChatTurn[] = next.map(({ role, content }) => ({ role, content }));
+    const courseCtx = course ? { name: course.name, short: course.short, topics: course.topics.map((t) => ({ name: t.name, status: t.status })) } : null;
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          messages: next.map(({ role, content }) => ({ role, content })),
-          course: course ? { name: course.name, short: course.short, topics: course.topics.map((t) => ({ name: t.name, status: t.status })) } : null,
-        }),
-      });
-      const data = (await res.json()) as { reply?: string; error?: string };
-      setMessages((m) => [...m, { id: nextId("a"), role: "assistant", content: data.reply ?? data.error ?? "Something went quiet. Try again?" }]);
-    } catch {
-      setMessages((m) => [...m, { id: nextId("a"), role: "assistant", content: "I couldn't reach the server. Try again in a moment." }]);
+      let reply: string;
+      if (llmReady(llm) && PROVIDERS[llm.provider].browserOnly) {
+        // Local models (Ollama) are reached straight from the browser; the server can't see localhost.
+        reply = await compatChat(llm, systemFor(courseCtx), turns);
+      } else {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: turns, course: courseCtx, llm: llmReady(llm) ? llm : null }),
+        });
+        const data = (await res.json()) as { reply?: string; error?: string };
+        reply = data.reply ?? data.error ?? "Something went quiet. Try again?";
+      }
+      setMessages((m) => [...m, { id: nextId("a"), role: "assistant", content: reply }]);
+    } catch (error) {
+      const why = error instanceof Error ? error.message : "I couldn't reach the server.";
+      setMessages((m) => [...m, { id: nextId("a"), role: "assistant", content: `${why} Check Settings → Your AI.` }]);
     } finally {
       setBusy(false);
       inputRef.current?.focus();
@@ -76,7 +85,16 @@ export default function ChatPage({ searchParams }: PageProps<"/chat">) {
 
       <header className="flex items-center justify-between px-[28px] pt-[28px]">
         <BackButton />
-        {course && <ContextPill>{course.short}</ContextPill>}
+        <div className="flex items-center gap-[10px]">
+          <Link
+            href="/settings"
+            title="Change model"
+            className="pressable inline-flex items-center rounded-pill border-2 border-alice-deep bg-parchment px-[14px] py-[9px] text-[14px] font-bold text-wisteria-deep lip-3 lip-alice"
+          >
+            {llmReady(llm) ? modelLabel(llm.model) : "Demo mode · connect your AI"}
+          </Link>
+          {course && <ContextPill>{course.short}</ContextPill>}
+        </div>
       </header>
 
       <div ref={listRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[40px]">

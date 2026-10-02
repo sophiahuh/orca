@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
+import { YourAI } from "@/components/settings/YourAI";
 import { fadeUp, stagger } from "@/lib/motion";
 
 export default function SettingsPage() {
@@ -59,8 +60,12 @@ export default function SettingsPage() {
           })}
         </motion.div>
 
+        <motion.div variants={stagger(0.1, 0.08)} initial="hidden" animate="show" className="flex w-[418px] max-w-full flex-col gap-[24px]">
+          <motion.div variants={fadeUp}>
+            <YourAI />
+          </motion.div>
         {target && (
-          <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full">
+          <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[24px]">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-[22px] font-bold text-prussian">Weights · {target.short}</h2>
@@ -118,6 +123,7 @@ export default function SettingsPage() {
             </Card>
           </motion.div>
         )}
+        </motion.div>
       </div>
     </Screen>
   );

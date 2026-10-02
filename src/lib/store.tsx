@@ -26,6 +26,7 @@ import {
   shortName,
   slugify,
 } from "./data";
+import type { LlmConfig } from "./llm";
 
 interface QuizResult {
   courseId: string;
@@ -46,6 +47,8 @@ interface OrcaState {
   streak: number;
   results: QuizResult[];
   onboarded: boolean;
+  /** The student's own model connection (bring-your-own-LLM). Lives only in this browser. */
+  llm: LlmConfig | null;
 }
 
 const STORAGE_KEY = "orca:v1";
@@ -60,6 +63,7 @@ const initialState: OrcaState = {
   streak: 5,
   results: [],
   onboarded: false,
+  llm: null,
 };
 
 interface OrcaActions {
@@ -69,6 +73,7 @@ interface OrcaActions {
   addMaterial: (m: Omit<Material, "id">) => void;
   recordQuiz: (r: Omit<QuizResult, "finishedAt">) => void;
   setOnboarded: (v: boolean) => void;
+  setLlm: (c: LlmConfig | null) => void;
   reset: () => void;
 }
 
@@ -200,11 +205,12 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
+  const setLlm = useCallback((llm: LlmConfig | null) => setState((s) => ({ ...s, llm })), []);
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo<OrcaContextValue>(
-    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, reset }),
-    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, reset],
+    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, reset }),
+    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, reset],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
