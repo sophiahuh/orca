@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Orca
 
-## Getting Started
+Mastery made easy. Orca turns every college class into an island on a knowledge map, runs a
+Duolingo-style trail of topics inside each island, quizzes you, and nudges reviews on a cadence
+you configure per class.
 
-First, run the development server:
+This is the v1 web prototype: Next.js 16 (App Router) + Tailwind v4 + `motion`. State lives in a
+React context persisted to `localStorage`; Supabase is the planned backend. See `CLAUDE.md` for
+the build plan and `docs/ANIMATION.md` for how motion is organised.
+
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Optional: put `ANTHROPIC_API_KEY=...` in `.env.local` and `/chat` talks to Claude
+(`claude-sonnet-5-5`). Without a key the chat route returns a canned demo reply.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npx tsc --noEmit
+npm run lint
+npm run build
+```
 
-## Learn More
+## Routes
 
-To learn more about Next.js, take a look at the following resources:
+| Route | Screen |
+|---|---|
+| `/` | Onboarding |
+| `/home` | Knowledge map (islands, due sidebar, class config modal) |
+| `/course/[slug]` | Knowledge path (dotted trail, topic nodes) |
+| `/quiz/[slug]/[topic]` | Quiz, then the quiz-end card |
+| `/chat` | Ask Orca (POST `/api/chat`) |
+| `/settings` | Review configurations + material-type weights |
+| `/calendar` | Month view with HW / Lab / Review / Exam tags |
+| `/add-material` | Upload a document with type, dates, reflect toggle |
+| `/new-course` | Create a new island |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Design source: Figma "Orca – Study App Mockups" (`docs/figma/screens.png`, `docs/figma/styleguide.png`).
