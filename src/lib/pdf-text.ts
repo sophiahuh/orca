@@ -7,8 +7,8 @@ import type { DocumentText } from "./extraction";
  * pdf.js is loaded lazily; the worker ships as a static asset via import.meta.url.
  */
 export async function extractPdfText(file: File, onProgress?: (done: number, total: number) => void): Promise<DocumentText> {
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 
   const data = await file.arrayBuffer();
   const task = pdfjs.getDocument({ data });
@@ -35,6 +35,28 @@ export async function extractPdfText(file: File, onProgress?: (done: number, tot
   }
   await task.destroy();
   return { filename: file.name, type: "PDF", pages };
+}
+
+/** Render one slide to a JPEG data URL (for figures a question depends on). */
+export async function renderPdfSlide(file: File, pageNumber: number, maxWidth = 960, quality = 0.8): Promise<string> {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  try {
+    const doc = await task.promise;
+    const page = await doc.getPage(pageNumber);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: Math.min(2, maxWidth / base.width) });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas unavailable");
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+    return canvas.toDataURL("image/jpeg", quality);
+  } finally {
+    await task.destroy();
+  }
 }
 
 export function isPdf(file: File) {

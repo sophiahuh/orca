@@ -8,7 +8,7 @@ import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/li
 import { useOrca } from "@/lib/store";
 import { PROVIDERS, compatChat, llmReady, modelLabel } from "@/lib/llm";
 import { EXTRACTION_SYSTEM, type DocumentText, type Extraction, extractionPrompt, parseExtraction } from "@/lib/extraction";
-import { extractPdfText, isPdf } from "@/lib/pdf-text";
+import { extractPdfText, isPdf, renderPdfSlide } from "@/lib/pdf-text";
 import { IconCalendar, IconUpload } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -72,6 +72,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
   const [doc, setDoc] = useState<DocumentText | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [chosenName, setChosenName] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [type, setType] = useState<MaterialType>("Lecture");
@@ -88,6 +89,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const onFile = async (f: File) => {
     setChosenName(f.name);
     setDoc(null);
+    setFile(f);
     if (!isPdf(f)) {
       setPhase({ kind: "error", message: "Only PDFs can be read for now. It will still be added to the course." });
       return;
@@ -126,7 +128,19 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         if (!res.ok || !data.extraction) throw new Error(data.error ?? "Extraction failed.");
         extraction = data.extraction;
       }
-      const result = importExtraction(course.id, material, extraction);
+      // Cut the figures the questions depend on straight from the PDF, in the browser.
+      const figures: Record<number, string> = {};
+      if (file) {
+        const slides = Array.from(new Set(extraction.questions.map((q) => q.figureSlide).filter((n): n is number => typeof n === "number" && n >= 1 && n <= doc.pages.length))).slice(0, 12);
+        for (const n of slides) {
+          try {
+            figures[n] = await renderPdfSlide(file, n);
+          } catch (error) {
+            console.warn(`Could not render slide ${n} for a figure`, error); // a missing figure is not fatal
+          }
+        }
+      }
+      const result = importExtraction(course.id, material, extraction, figures);
       setPhase({ kind: "done", topics: result.topicsAdded, questions: result.questionsAdded });
       window.setTimeout(() => router.push(`/course/${course.slug}`), 1400);
     } catch (error) {

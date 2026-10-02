@@ -186,6 +186,13 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
               {q.prompt}
             </motion.h1>
 
+            {q.figure && (
+              <motion.div variants={fadeUp} className="mt-[18px] inline-flex max-w-full self-start overflow-hidden rounded-[18px] border-2 border-alice-deep bg-white p-[10px] lip-3 lip-alice">
+                {/* eslint-disable-next-line @next/next/no-img-element -- figures may be data URLs rendered on-device */}
+                <img src={q.figure.src} alt={q.figure.alt} className="max-h-[260px] w-auto max-w-full object-contain" />
+              </motion.div>
+            )}
+
             {q.table && (
               <div className="mt-[20px] flex justify-center">
                 <TruthTable table={q.table} />

@@ -135,6 +135,8 @@ export interface QuizQuestion {
   explanation: string;
   /** Where in the course material this question is grounded. */
   anchor?: { locator: string; excerpt: string };
+  /** A figure the student needs to see (cropped slide or redrawn diagram). */
+  figure?: { src: string; alt: string };
 }
 
 /* ── Seed ─────────────────────────────────────────────────────────────── */

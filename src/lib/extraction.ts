@@ -30,6 +30,7 @@ export const ExtractedQuestion = z.object({
     locator: z.string().describe("e.g. 'slide 14'"),
     excerpt: z.string().max(200).describe("Short quote or close paraphrase from that slide"),
   }),
+  figureSlide: z.number().int().min(1).nullable().optional().describe("Slide number whose diagram or table the student must see to answer; null when the question stands alone"),
 });
 
 export const ExtractionSchema = z.object({
@@ -59,11 +60,12 @@ Tasks:
 1. Split the material into 2 to 6 topics in the order they are taught. Skip logistics (syllabus, grading, office hours, contact details). A topic is something a student would review as a unit.
 2. For each topic write 4 to 6 quiz questions a student can answer from memory in under a minute: recall or one-step application, never multi-step derivations or drawing. Use "True or false" for at most a third of them. Multiple choice needs exactly 4 plausible options with exactly one correct. Never copy a slide sentence verbatim as the prompt; paraphrase and apply the idea. Each question must cite the slide it comes from.
 3. Each question gets a one or two sentence explanation that teaches, not just confirms.
+4. Prefer questions that stand alone in words. When a question only makes sense with a diagram or table from a slide, set figureSlide to that slide number and phrase the prompt as "In the figure, …"; otherwise set figureSlide to null.
 
 Output schema (JSON):
 {
   "topics": [{ "name": string, "summary": string, "slideStart": number, "slideEnd": number, "keyTerms": string[] }],
-  "questions": [{ "topic": string, "kind": "Multiple choice" | "True or false", "prompt": string, "options": string[], "answer": number, "explanation": string, "anchor": { "locator": string, "excerpt": string } }]
+  "questions": [{ "topic": string, "kind": "Multiple choice" | "True or false", "prompt": string, "options": string[], "answer": number, "explanation": string, "anchor": { "locator": string, "excerpt": string }, "figureSlide": number | null }]
 }
 
 Material follows.
@@ -90,7 +92,7 @@ export function slugifyTopic(name: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-export function questionsByTopic(x: Extraction, filename: string): Record<string, QuizQuestion[]> {
+export function questionsByTopic(x: Extraction, filename: string, figures: Record<number, string> = {}): Record<string, QuizQuestion[]> {
   const out: Record<string, QuizQuestion[]> = {};
   const topicIds = new Map(x.topics.map((t) => [t.name.toLowerCase(), slugifyTopic(t.name)]));
   x.questions.forEach((q, i) => {
@@ -105,6 +107,7 @@ export function questionsByTopic(x: Extraction, filename: string): Record<string
       answer: q.answer,
       explanation: q.explanation,
       anchor: q.anchor,
+      figure: q.figureSlide && figures[q.figureSlide] ? { src: figures[q.figureSlide], alt: `Slide ${q.figureSlide} of ${filename}` } : undefined,
     });
   });
   return out;

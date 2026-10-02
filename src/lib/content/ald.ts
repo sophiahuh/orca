@@ -84,7 +84,8 @@ export const ALD_TOPICS: ContentTopic[] = [
     questions: [
       {
         kind: MC,
-        prompt: "Two switches wired in series between the supply and a light implement which function?",
+        prompt: "In figure (a), two switches sit in series between the supply and the light. Which function does the light compute?",
+        figure: { src: "/figures/ald/l02-s11.png", alt: "Two switch circuits: (a) switches in series, (b) switches in parallel, each driving a light" },
         options: ["OR", "AND", "NOT", "XOR"],
         answer: 1,
         explanation: "Current only flows when both series switches are closed, so the light is on only when x1 AND x2 are 1. Parallel switches give OR.",
@@ -100,7 +101,8 @@ export const ALD_TOPICS: ContentTopic[] = [
       },
       {
         kind: MC,
-        prompt: "In the inverter built from a switch and a resistor, how does closing the switch turn the light off?",
+        prompt: "In the figure, how does closing switch S turn the light off?",
+        figure: { src: "/figures/ald/l02-s13.png", alt: "A power supply feeding a resistor R, then a switch S in parallel with a light" },
         options: ["It disconnects the battery", "It short-circuits the light so current bypasses it", "It reverses the current direction", "It adds resistance in series"],
         answer: 1,
         explanation: "The closed switch provides a path around the light, so no current flows through it: output is the complement of the input.",
@@ -116,10 +118,10 @@ export const ALD_TOPICS: ContentTopic[] = [
       },
       {
         kind: MC,
-        prompt: "An AND gate with inputs x1 … xn produces which output?",
-        options: ["x1 + x2 + … + xn", "x1 · x2 · … · xn", "The complement of x1", "x1 ⊕ x2 ⊕ … ⊕ xn"],
+        prompt: "An AND gate has inputs x1 through xn. When is its output 1?",
+        options: ["When any one of the inputs is 1", "Only when every input is 1", "When exactly one input is 1", "Only when every input is 0"],
         answer: 1,
-        explanation: "AND is the logical product; OR is the logical sum. Multi-input gates extend the two-input forms.",
+        explanation: "AND needs all inputs high, like switches in series. An OR gate is the opposite: any input high is enough, like switches in parallel.",
         anchor: { locator: "slide 15", excerpt: "AND gates: x1 × x2 × … × xn; OR gates: x1 + x2 + … + xn" },
       },
     ],
@@ -280,7 +282,8 @@ export const ALD_TOPICS: ContentTopic[] = [
       },
       {
         kind: MC,
-        prompt: "The columns of a two-variable K-map header read 00, 01, 11, 10. Why that order?",
+        prompt: "In the K-map on the right, the columns read 00, 01, 11, 10. Why that order?",
+        figure: { src: "/figures/ald/l02-s36.png", alt: "A three-variable truth table beside its Karnaugh map with columns 00, 01, 11, 10" },
         options: ["It is numeric order", "Adjacent columns differ in exactly one variable", "It groups the even numbers", "It is arbitrary"],
         answer: 1,
         explanation: "Gray-code ordering makes horizontal and vertical neighbours differ by one bit, which is what lets a group of 1s drop a variable.",
@@ -437,7 +440,8 @@ export const ALD_TOPICS: ContentTopic[] = [
       },
       {
         kind: MC,
-        prompt: "Which 8-bit addition is the worst case for a ripple-carry adder?",
+        prompt: "In the 8-bit ripple-carry adder shown, which addition is the worst case for delay?",
+        figure: { src: "/figures/ald/l03-s24.png", alt: "Eight full adders chained by carries c1 to c7, from x0 y0 on the right to x7 y7 on the left" },
         options: ["50 + 4", "0 + 0", "1 + (−1), where the carry ripples through every stage", "127 + 0"],
         answer: 2,
         explanation: "00000001 + 11111111 makes every carry 1, so the result isn't valid until the carry has rippled through all eight full adders.",

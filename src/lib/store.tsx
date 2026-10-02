@@ -81,7 +81,7 @@ interface OrcaActions {
   setOnboarded: (v: boolean) => void;
   setLlm: (c: LlmConfig | null) => void;
   /** Merge an extraction into a course: new topics on the trail, questions in the bank, material recorded. */
-  importExtraction: (courseId: string, material: Omit<Material, "id">, extraction: Extraction) => { topicsAdded: number; questionsAdded: number };
+  importExtraction: (courseId: string, material: Omit<Material, "id">, extraction: Extraction, figures?: Record<number, string>) => { topicsAdded: number; questionsAdded: number };
   reset: () => void;
 }
 
@@ -213,9 +213,9 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
-  const importExtraction = useCallback<OrcaActions["importExtraction"]>((courseId, material, extraction) => {
+  const importExtraction = useCallback<OrcaActions["importExtraction"]>((courseId, material, extraction, figures = {}) => {
     const newTopics = topicsFrom(extraction, material.filename);
-    const byTopic = questionsByTopic(extraction, material.filename);
+    const byTopic = questionsByTopic(extraction, material.filename, figures);
     let topicsAdded = 0;
     let questionsAdded = 0;
     setState((s) => {
