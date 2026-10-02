@@ -86,7 +86,14 @@ export const pulseHalo = {
 };
 
 /* ── Trail draw-on ───────────────────────────────────────────────────── */
+/** Solid paths: animate pathLength. (Overrides stroke-dasharray, so not for dotted trails.) */
 export const drawTrail: Variants = {
   hidden: { pathLength: 0, opacity: 0 },
   show: { pathLength: 1, opacity: 1, transition: { duration: 1.4, ease: easeOrca } },
 };
+
+/** Dotted paths: reveal top-to-bottom by growing a clip rect's `height` to `full`. */
+export const revealDown = (full: number): Variants => ({
+  hidden: { height: 0 },
+  show: { height: full, transition: { duration: 1.4, ease: easeOrca } },
+});

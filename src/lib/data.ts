@@ -332,3 +332,44 @@ export function defaultTopicPositions(n: number) {
   for (let i = 0; i < n; i++) out.push({ x: xs[i % xs.length], y: 240 + i * 120 });
   return out;
 }
+
+/** Quiz for a topic. K-Maps has real content; every other topic gets a short
+ *  placeholder set until Claude-generated quizzes land. */
+export function quizFor(topicId: string, topicName: string): QuizQuestion[] {
+  if (topicId === "k-maps") return KMAPS_QUIZ;
+  return [
+    {
+      id: `${topicId}-1`,
+      kind: "Multiple choice",
+      topic: topicName,
+      prompt: `Which habit builds lasting mastery of ${topicName}?`,
+      options: ["Cramming the night before", "Short, spaced review sessions", "Re-reading notes once", "Skipping practice problems"],
+      answer: 1,
+      explanation: "Spacing short sessions over days beats one long session: each recall strengthens the memory trace.",
+    },
+    {
+      id: `${topicId}-2`,
+      kind: "True or false",
+      topic: topicName,
+      prompt: `Testing yourself on ${topicName} is more effective than re-reading the material.`,
+      options: ["True", "False"],
+      answer: 0,
+      explanation: "Retrieval practice is one of the most reliable findings in learning science.",
+    },
+    {
+      id: `${topicId}-3`,
+      kind: "Multiple choice",
+      topic: topicName,
+      prompt: `When should Orca schedule your next ${topicName} review?`,
+      options: ["Right now, again", "Just before you would forget it", "Never, once is enough", "Only the day of the exam"],
+      answer: 1,
+      explanation: "Reviewing right at the edge of forgetting gives the biggest boost per minute spent.",
+    },
+  ];
+}
+
+export function formatSeconds(total: number) {
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
