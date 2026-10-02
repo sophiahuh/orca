@@ -44,7 +44,7 @@ export function AnswerOption({ letter, children, state = "idle", disabled, onCli
       aria-pressed={state === "selected"}
       data-state={state}
       className={cn(
-        "pressable flex w-full items-center gap-4 rounded-[16px] border-[2.5px] px-4 py-[14px] text-left text-[17px] font-bold lip-4 disabled:opacity-100",
+        "pressable flex w-full items-center gap-4 rounded-[16px] border-[2.5px] px-4 py-[12px] text-left text-[17px] font-bold lip-4 disabled:opacity-100",
         rowLook[state],
       )}
     >

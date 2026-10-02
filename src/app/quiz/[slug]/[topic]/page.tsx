@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { type QuizQuestion, quizFor } from "@/lib/data";
@@ -41,6 +41,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const [finished, setFinished] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const startedAt = useRef<number | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const recorded = useRef(false);
 
   // Tick the clock while the quiz is live.
@@ -57,6 +58,52 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     recorded.current = true;
     recordQuiz({ courseId: course.id, topicId: topic.id, correct, total: questions.length, seconds });
   }, [finished, course, topic, correct, questions.length, seconds, recordQuiz]);
+
+  const q = questions[index];
+  const total = questions.length;
+
+  const check = useCallback(() => {
+    if (!q || selected === null || checked) return;
+    setChecked(true);
+    if (selected === q.answer) setCorrect((c) => c + 1);
+    else setMissed((m) => [...m, q]);
+  }, [selected, checked, q]);
+
+  const advance = useCallback(() => {
+    if (!q) return;
+    if (!checked) setMissed((m) => [...m, q]); // skipped counts as a miss
+    if (index + 1 >= total) {
+      setFinished(true);
+      window.scrollTo(0, 0);
+      return;
+    }
+    setIndex((i) => i + 1);
+    setSelected(null);
+    setChecked(false);
+    bodyRef.current?.scrollTo({ top: 0 });
+  }, [checked, index, total, q]);
+
+  // Keyboard: 1–4 / A–D pick an answer, Enter checks then continues.
+  useEffect(() => {
+    if (finished || !q) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (checked) advance();
+        else if (selected !== null) check();
+        return;
+      }
+      if (checked) return;
+      const k = e.key.toLowerCase();
+      const idx = /^[1-9]$/.test(k) ? Number(k) - 1 : /^[a-h]$/.test(k) ? k.charCodeAt(0) - 97 : -1;
+      if (idx >= 0 && idx < q.options.length) setSelected(idx);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [finished, checked, selected, q, check, advance]);
 
   if (!course || !topic) {
     return (
@@ -79,26 +126,6 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     );
   }
 
-  const q = questions[index];
-  const total = questions.length;
-
-  const check = () => {
-    if (selected === null) return;
-    setChecked(true);
-    if (selected === q.answer) setCorrect((c) => c + 1);
-    else setMissed((m) => [...m, q]);
-  };
-
-  const advance = () => {
-    if (!checked) setMissed((m) => [...m, q]); // skipped counts as a miss
-    if (index + 1 >= total) {
-      setFinished(true);
-      return;
-    }
-    setIndex((i) => i + 1);
-    setSelected(null);
-    setChecked(false);
-  };
 
   const restart = (set: QuizQuestion[]) => {
     setSubset(set);
@@ -136,8 +163,8 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   };
 
   return (
-    <Screen bg="parchment">
-      <header className="flex items-center gap-[24px] px-[40px] pt-[36px]">
+    <Screen bg="parchment" className="h-screen max-h-screen">
+      <header className="flex shrink-0 items-center gap-[24px] px-[40px] pt-[28px]">
         <RoundButton size={48} label="Exit quiz" onClick={() => router.push(backHref)}>
           <IconClose size={20} />
         </RoundButton>
@@ -149,23 +176,23 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
         </span>
       </header>
 
-      <div className="flex flex-1 flex-col px-[120px] pb-[32px] pt-[56px]">
+      <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[100px] pb-[24px] pt-[32px]">
         <AnimatePresence mode="wait">
           <motion.div key={q.id} variants={stagger(0.05, 0.07)} initial="hidden" animate="show" exit="exit" className="flex max-w-[800px] flex-col">
             <motion.span variants={fadeUp} className="eyebrow">
               {q.kind} · {q.topic}
             </motion.span>
-            <motion.h1 variants={fadeUp} className="mt-[12px] text-[40px] font-bold leading-tight text-prussian">
+            <motion.h1 variants={fadeUp} className="mt-[10px] text-[34px] font-bold leading-tight text-prussian">
               {q.prompt}
             </motion.h1>
 
             {q.table && (
-              <div className="mt-[28px] flex justify-center">
+              <div className="mt-[20px] flex justify-center">
                 <TruthTable table={q.table} />
               </div>
             )}
 
-            <div className="mt-[32px] flex flex-col gap-[14px]">
+            <div className="mt-[24px] flex flex-col gap-[12px]">
               {q.options.map((opt, i) => (
                 <AnswerOption key={opt} letter={LETTERS[i]} state={stateFor(i)} disabled={checked} onClick={() => setSelected(i)}>
                   {opt}
@@ -181,7 +208,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
                   initial="hidden"
                   animate="show"
                   exit="exit"
-                  className="mt-[24px] rounded-[18px] bg-alice px-[20px] py-[16px] text-[16px] leading-relaxed text-prussian"
+                  className="mt-[18px] rounded-[18px] bg-alice px-[20px] py-[14px] text-[16px] leading-relaxed text-prussian"
                 >
                   <span className="font-bold text-wisteria-deep">{selected === q.answer ? "Correct. " : "Not quite. "}</span>
                   {q.explanation}
@@ -197,10 +224,10 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
         </AnimatePresence>
       </div>
 
-      <footer className="flex items-center justify-between border-t-2 border-alice px-[100px] py-[22px]">
+      <footer className="flex shrink-0 items-center justify-between border-t-2 border-alice bg-parchment px-[100px] py-[16px]">
         {checked ? (
           <span className="text-[15px] font-medium text-wisteria-deep">
-            {correct} correct so far
+            {correct} correct so far · <span className="text-periwinkle-deep">Enter to continue</span>
           </span>
         ) : (
           <Button variant="ghost" size="sm" onClick={advance}>
