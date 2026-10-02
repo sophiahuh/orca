@@ -159,9 +159,9 @@ const ALD_POSITIONS = defaultTopicPositions(ALD_TOPICS.length);
 const ALD_SEED_TOPICS: Topic[] = ALD_TOPICS.map((t, i) => ({
   id: t.id,
   name: t.name,
-  status: i < 2 ? "done" : i === 2 ? "current" : "locked",
+  status: i < 1 ? "done" : i === 1 ? "current" : "locked",
   lessons: 1,
-  lessonsDone: i < 2 ? 1 : 0,
+  lessonsDone: i < 1 ? 1 : 0,
   pos: ALD_POSITIONS[i],
   summary: t.summary,
   source: t.source,
@@ -238,7 +238,7 @@ export const SEED_DUE: DueItem[] = [
   { id: "d1", courseId: "circuit", title: "Quick review", when: "today", topicId: "kcl-kvl" },
   { id: "d2", courseId: "ald", title: "Boolean Algebra", when: "today", topicId: "boolean-algebra" },
   { id: "d3", courseId: "ald", title: "Review Logic Circuits", when: "tomorrow", topicId: "logic-circuits-switches" },
-  { id: "d4", courseId: "ald", title: "Review Why Chips Matter", when: "tomorrow", topicId: "why-chips-matter" },
+  { id: "d4", courseId: "ald", title: "Exam 1 prep", when: "tomorrow", topicId: "karnaugh-maps" },
 ];
 
 export const SEED_EVENTS: CalendarEvent[] = [

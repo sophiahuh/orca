@@ -56,7 +56,7 @@ interface OrcaState {
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
 }
 
-const STORAGE_KEY = "orca:v2"; // v2: ALD seed rebuilt from lecture content
+const STORAGE_KEY = "orca:v3"; // v3: ALD trail without the background topic; built-in bank merged on load
 
 const initialState: OrcaState = {
   courses: SEED_COURSES,
@@ -110,6 +110,9 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as Partial<OrcaState>;
+        // Built-in content always wins for its own topic ids, so authored fixes reach existing browsers.
+        const savedBank = saved.questionBank ?? {};
+        saved.questionBank = { ...savedBank, ald: { ...(savedBank.ald ?? {}), ...ALD_QUESTION_BANK } };
         // Hydrating persisted state after mount is intentional: reading
         // localStorage during render would mismatch the server HTML.
         // eslint-disable-next-line react-hooks/set-state-in-effect
