@@ -40,9 +40,21 @@ export const ExtractionSchema = z.object({
 
 export type Extraction = z.infer<typeof ExtractionSchema>;
 
+/** Question-quality rules (mirrors docs/QUIZ-RUBRIC.md). Kept inline so the server bundle needs no file reads. */
+export const QUIZ_RUBRIC = `Rules for every question:
+- Assume the course's level, not the topic's. If the course is upper-level, early lectures are refreshers: a question answerable from a definition alone is too easy. Target apply/analyse: give a small circuit, expression, bit pattern or code fragment and ask what it does, equals, or how to build it. At most one pure-recall question per topic, and only for a fact students actually forget.
+- Never test notation or vocabulary before the slide that defines it; a question may only assume terms from its own slide range or earlier. Spell out AND/OR/XOR/NOT in words if the symbols haven't been introduced yet.
+- If the question needs a diagram or table, set figureSlide and say "In the figure, …". Never describe a picture the student can't see.
+- Distractors must be wrong for a reason a student might believe (the dual operation, an off-by-one, the unsigned reading of a signed pattern). No joke options.
+- Every claim traces to a slide (the anchor). Don't paraphrase the slide's sentence as the prompt; apply the idea so understanding, not reading, is what's tested.
+- Multiple choice: exactly four options, exactly one defensible answer. True/false: only for statements with a tempting wrong reading, at most one per topic.
+- Answerable in under a minute without paper. The explanation teaches: why the right answer is right and why the most tempting distractor is wrong, in one or two sentences.`;
+
 export const EXTRACTION_SYSTEM = `You turn one piece of college course material into a short study trail for a spaced-repetition app.
 Work only from the material you are given. Do not invent facts, and do not use outside knowledge for claims.
-Return JSON only, matching the schema you are given, with no commentary.`;
+Return JSON only, matching the schema you are given, with no commentary.
+
+${QUIZ_RUBRIC}`;
 
 export function extractionPrompt(course: { name: string; short: string }, doc: DocumentText, existingTopics: string[]) {
   const body = doc.pages
@@ -58,7 +70,7 @@ ${existing}
 
 Tasks:
 1. Split the material into 2 to 6 topics in the order they are taught. Skip logistics (syllabus, grading, office hours, contact details). A topic is something a student would review as a unit.
-2. For each topic write 4 to 6 quiz questions a student can answer from memory in under a minute: recall or one-step application, never multi-step derivations or drawing. Use "True or false" for at most a third of them. Multiple choice needs exactly 4 plausible options with exactly one correct. Never copy a slide sentence verbatim as the prompt; paraphrase and apply the idea. Each question must cite the slide it comes from.
+2. For each topic write 4 to 6 quiz questions that follow the rules above: mostly apply/analyse, one-step, under a minute, each citing the slide it comes from.
 3. Each question gets a one or two sentence explanation that teaches, not just confirms.
 4. Prefer questions that stand alone in words. When a question only makes sense with a diagram or table from a slide, set figureSlide to that slide number and phrase the prompt as "In the figure, …"; otherwise set figureSlide to null.
 
