@@ -97,6 +97,9 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as Partial<OrcaState>;
+        // Hydrating persisted state after mount is intentional: reading
+        // localStorage during render would mismatch the server HTML.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setState((s) => ({ ...s, ...saved }));
       }
     } catch {

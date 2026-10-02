@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Gabarito } from "next/font/google";
 import "./globals.css";
-import { OrcaProvider } from "@/lib/store";
+import { Providers } from "./providers";
 
 const gabarito = Gabarito({
   variable: "--font-gabarito",
@@ -19,7 +19,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${gabarito.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <OrcaProvider>{children}</OrcaProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
