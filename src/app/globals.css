@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ───────────────────────── Orca design tokens ─────────────────────────
+   Source: Figma "Orca – Study App Mockups" → Style Guide page.
+   Deep shades are used only for the bottom "lip" shadow and strokes. */
+@theme {
+  --color-prussian: #151d3a;
+  --color-ink-deep: #0a0f22;
+
+  --color-wisteria: #839bec;
+  --color-wisteria-deep: #5b78d8;
+
+  --color-periwinkle: #afb5f2;
+  --color-periwinkle-deep: #8c93de;
+
+  --color-alice: #e1ecfa;
+  --color-alice-deep: #b4c8e6;
+
+  --color-parchment: #fcf7f4;
+  --color-parchment-deep: #e3d9d2;
+  --color-orca-shadow: #d9d0cb;
+
+  --font-sans: var(--font-gabarito), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 20px;
+  --radius-panel: 32px;
+  --radius-pill: 999px;
+
+  --ease-orca: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ── Lip shadow: the chunky offset shadow under buttons, cards, nodes.
+   Combine a size (lip-3 … lip-10) with a color (lip-alice, lip-wisteria …). */
+@utility lip-1 { box-shadow: 0 1px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-2 { box-shadow: 0 2px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-3 { box-shadow: 0 3px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-4 { box-shadow: 0 4px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-5 { box-shadow: 0 5px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-6 { box-shadow: 0 6px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-8 { box-shadow: 0 8px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-10 { box-shadow: 0 10px 0 0 var(--lip, var(--color-alice-deep)); }
+@utility lip-0 { box-shadow: 0 0 0 0 var(--lip, var(--color-alice-deep)); }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@utility lip-alice { --lip: var(--color-alice-deep); }
+@utility lip-wisteria { --lip: var(--color-wisteria-deep); }
+@utility lip-periwinkle { --lip: var(--color-periwinkle-deep); }
+@utility lip-ink { --lip: var(--color-ink-deep); }
+@utility lip-parchment { --lip: var(--color-parchment-deep); }
+
+/* ── Press: every lipped control sinks into its shadow on click. */
+@utility pressable {
+  transition:
+    transform 120ms var(--ease-orca),
+    box-shadow 120ms var(--ease-orca),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+  &:active {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 0 var(--lip, var(--color-alice-deep));
+  }
+  &:disabled {
+    opacity: 0.55;
+    pointer-events: none;
   }
 }
 
+/* ── Eyebrow: small tracked caps label (e.g. "MULTIPLE CHOICE · K-MAPS") */
+@utility eyebrow {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-wisteria-deep);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+}
+
+body {
+  background: var(--color-alice);
+  color: var(--color-prussian);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Range input styled like the Figma slider: alice track, wisteria fill, parchment knob */
+input[type="range"].orca-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(
+    to right,
+    var(--color-wisteria) 0%,
+    var(--color-wisteria) var(--fill, 50%),
+    var(--color-alice) var(--fill, 50%),
+    var(--color-alice) 100%
+  );
+  outline: none;
+}
+input[type="range"].orca-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-parchment);
+  border: 3px solid var(--color-wisteria-deep);
+  cursor: grab;
+}
+input[type="range"].orca-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-parchment);
+  border: 3px solid var(--color-wisteria-deep);
+  cursor: grab;
+}
+
+::selection {
+  background: var(--color-periwinkle);
+  color: var(--color-prussian);
 }

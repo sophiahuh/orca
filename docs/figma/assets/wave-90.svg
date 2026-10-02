@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="90" height="16" viewBox="0 0 90 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="wave" clip-path="url(#clip0_0_94)">
+<path id="Vector" opacity="0.9" d="M0 8C6.66667 1.33333 13.3333 1.33333 20 8C26.6667 14.6667 33.3333 14.6667 40 8C46.6667 1.33333 53.3333 1.33333 60 8C66.6667 14.6667 73.3333 14.6667 80 8C86.6667 1.33333 93.3333 1.33333 100 8" stroke="#FCF7F4" stroke-width="4" stroke-linecap="round"/>
+</g>
+<defs>
+<clipPath id="clip0_0_94">
+<rect width="90" height="16" fill="white"/>
+</clipPath>
+</defs>
+</svg>
