@@ -1,69 +1,100 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
+import { Button } from "@/components/ui/Button";
+import { Screen } from "@/components/layout/Screen";
+import { OrcaLogo } from "@/components/brand/OrcaLogo";
+import { Island } from "@/components/brand/Island";
+import { Bubble, Wave } from "@/components/brand/Decor";
+import { useOrca } from "@/lib/store";
+import { fadeUp, popIn, stagger } from "@/lib/motion";
+
+const ISLANDS = [
+  { x: 20, y: 120, variant: "ald", active: true, scale: 0.78 },
+  { x: 330, y: 220, variant: "circuit", active: true, scale: 0.78 },
+  { x: 10, y: 410, variant: "linear", active: true, scale: 0.72 },
+  { x: 250, y: 560, variant: "signals", active: false, scale: 0.78 },
+  { x: 560, y: 470, variant: "stats", active: false, scale: 0.7 },
+] as const;
+
+const BUBBLES = [
+  { x: 190, y: 90, s: 18 },
+  { x: 650, y: 60, s: 10 },
+  { x: 700, y: 170, s: 12 },
+  { x: 290, y: 345, s: 10 },
+  { x: 560, y: 620, s: 22 },
+  { x: 150, y: 680, s: 8 },
+  { x: 720, y: 720, s: 14 },
+];
+
+export default function OnboardingPage() {
+  const router = useRouter();
+  const { setOnboarded } = useOrca();
+  const go = () => {
+    setOnboarded(true);
+    router.push("/home");
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <Screen bg="alice">
+      <motion.div
+        variants={stagger(0.1, 0.09)}
+        initial="hidden"
+        animate="show"
+        className="relative z-10 flex max-w-[560px] flex-col px-[72px] pb-[56px] pt-[80px] lg:px-[100px]"
+      >
+        <motion.div variants={fadeUp} className="flex items-center gap-[10px]">
+          <OrcaLogo width={56} shadow={false} />
+          <span className="text-[24px] font-bold text-prussian">Orca</span>
+        </motion.div>
+
+        <motion.h1 variants={fadeUp} className="mt-[40px] text-[68px] font-bold leading-[1.0] tracking-[-1px] text-prussian">
+          Mastery
+          <br />
+          Made
+          <br />
+          Easy.
+        </motion.h1>
+
+        <motion.p variants={fadeUp} className="mt-[32px] max-w-[420px] text-[17px] leading-[1.45] text-prussian">
+          Turn every class into an island. Explore it in quick, calm sessions that fit around your week.
+        </motion.p>
+
+        <motion.div variants={fadeUp} className="mt-[40px] flex w-[340px] flex-col gap-[14px]">
+          <Button onClick={go}>Get started</Button>
+          <Button variant="secondary" onClick={go}>
+            I already have an account
+          </Button>
+        </motion.div>
+
+        <motion.div variants={fadeUp} className="mt-[64px] flex items-center gap-[8px]" aria-hidden>
+          <span className="h-[8px] w-[26px] rounded-pill bg-wisteria" />
+          <span className="h-[8px] w-[8px] rounded-pill bg-alice-deep" />
+          <span className="h-[8px] w-[8px] rounded-pill bg-alice-deep" />
+        </motion.div>
+      </motion.div>
+
+      {/* Decorative archipelago, anchored to the right edge. */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 hidden w-[800px] md:block"
+        variants={stagger(0.2, 0.1)}
+        initial="hidden"
+        animate="show"
+      >
+        <Wave tone="light" x={-40} y={290} width={70} seed={1} />
+        <Wave tone="light" x={420} y={420} width={60} seed={2} />
+        <Wave tone="light" x={120} y={760} width={80} seed={3} />
+        {BUBBLES.map((b, i) => (
+          <Bubble key={i} x={b.x} y={b.y} size={b.s} seed={i} />
+        ))}
+        {ISLANDS.map((isl, i) => (
+          <motion.div key={i} variants={popIn} className="absolute" style={{ left: isl.x, top: isl.y }}>
+            <Island variant={isl.variant} active={isl.active} scale={isl.scale} float seed={i} />
+          </motion.div>
+        ))}
+      </motion.div>
+    </Screen>
   );
 }
