@@ -14,7 +14,7 @@ export const TAG_LABELS: Record<EventKind, string> = {
 
 const looks: Record<EventKind, string> = {
   hw: "bg-periwinkle text-prussian",
-  lab: "bg-alice text-prussian",
+  lab: "bg-alice text-prussian ring-2 ring-inset ring-alice-deep",
   rev: "bg-wisteria text-parchment",
   exam: "bg-prussian text-parchment",
 };

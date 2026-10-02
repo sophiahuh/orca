@@ -59,7 +59,8 @@ export interface ReviewConfig {
 }
 
 export type WeightKey = "homework" | "practiceExams" | "practiceProblems" | "lectures";
-export type Weights = Record<WeightKey, number>;
+/** Built-in keys plus any custom material types the student adds. */
+export type Weights = Record<string, number>;
 
 export const WEIGHT_LABELS: Record<WeightKey, string> = {
   homework: "Homework",
@@ -67,6 +68,16 @@ export const WEIGHT_LABELS: Record<WeightKey, string> = {
   practiceProblems: "Practice problems",
   lectures: "Lectures",
 };
+
+export function weightLabel(key: string) {
+  return (WEIGHT_LABELS as Record<string, string>)[key] ?? key;
+}
+
+/** Normalise raw slider values to percentages that sum to ~100. */
+export function weightPercents(w: Weights): Record<string, number> {
+  const sum = Object.values(w).reduce((a, b) => a + b, 0) || 1;
+  return Object.fromEntries(Object.entries(w).map(([k, v]) => [k, Math.round((v / sum) * 100)]));
+}
 
 export type EventKind = "hw" | "lab" | "rev" | "exam";
 
@@ -221,7 +232,27 @@ export const SEED_EVENTS: CalendarEvent[] = [
   { id: "e7", date: "2026-09-24", kind: "rev", title: "K-Maps quiz", courseId: "ald" },
   { id: "e8", date: "2026-09-30", kind: "rev", title: "Quick review", courseId: "circuit" },
   { id: "e9", date: "2026-10-01", kind: "rev", title: "Exam 1 prep", courseId: "ald" },
+  { id: "e10", date: "2026-10-06", kind: "hw", title: "Circuits HW 5", courseId: "circuit" },
+  { id: "e11", date: "2026-10-08", kind: "lab", title: "ALD Lab 3", courseId: "ald" },
+  { id: "e12", date: "2026-10-13", kind: "rev", title: "Verilog review", courseId: "ald" },
+  { id: "e13", date: "2026-10-20", kind: "exam", title: "Circuits midterm", courseId: "circuit" },
+  { id: "e14", date: "2026-10-27", kind: "rev", title: "Fourier review", courseId: "signals" },
 ];
+
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Past exam", "Practice problems", "Practice exam", "Homework", "Lecture", "Other"];
+
+/* ── Dates ────────────────────────────────────────────────────────────── */
+export function toISODate(d: Date) {
+  const y = d.getFullYear();
+  const m = (d.getMonth() + 1).toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function formatUSDate(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${m}/${d}/${y}`;
+}
 
 export const SEED_MATERIALS: Material[] = [
   {
