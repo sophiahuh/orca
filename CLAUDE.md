@@ -13,7 +13,7 @@ traced SVG assets in `docs/figma/assets/`). Frames are 1194×834; v1 ships as a 
 - Next.js 16 (App Router, `src/` dir, TypeScript), Tailwind v4, `motion` (Framer Motion) for animation.
 - No backend yet. State is a React context persisted to localStorage (`src/lib/store.tsx`).
   Supabase is the planned backend; the types in `src/lib/data.ts` are the future table shapes.
-- AI chat / quiz generation will use the Claude API (`claude-sonnet-5-5`). Load the `claude-api`
+- AI chat / quiz generation will use the Claude API (`claude-opus-5-5`). Load the `claude-api`
   skill before writing any API route. Until a key exists, `/api/chat` must return a canned reply.
 
 ## Design tokens (already in `src/app/globals.css`)
@@ -46,7 +46,7 @@ Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 re
 - Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/chat` + `/api/chat`, `/settings`,
   `/calendar`, `/add-material`, `/new-course`. Dynamic pages read `params`/`searchParams` with
   React `use()` and the generated `PageProps<...>` types (run `npx next typegen` before `tsc`).
-- `/api/chat` uses `@anthropic-ai/sdk` (`claude-sonnet-5-5`, low effort, server-side refusal
+- `/api/chat` uses `@anthropic-ai/sdk` (`claude-opus-5-5`, low effort, server-side refusal
   fallbacks). With no `ANTHROPIC_API_KEY` it returns a canned demo reply.
 
 ## What to build next

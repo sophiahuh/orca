@@ -12,7 +12,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 export const runtime = "nodejs";
 
-const MODEL = "claude-sonnet-5-5";
+const MODEL = "claude-opus-5-5";
 
 interface ChatBody {
   messages?: Array<{ role: "user" | "assistant"; content: string }>;

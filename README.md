@@ -16,7 +16,7 @@ npm run dev        # http://localhost:3000
 ```
 
 Optional: put `ANTHROPIC_API_KEY=...` in `.env.local` and `/chat` talks to Claude
-(`claude-sonnet-5-5`). Without a key the chat route returns a canned demo reply.
+(`claude-opus-5-5`). Without a key the chat route returns a canned demo reply.
 
 ## Checks
 
