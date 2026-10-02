@@ -6,6 +6,12 @@
  * table shapes and the seed becomes a migration.
  */
 
+import { ALD_TOPICS } from "./content/ald";
+
+/** Path canvas layout: first node y and vertical gap between nodes (854-wide canvas). */
+export const PATH_NODE_GAP = 120;
+export const PATH_TOP = 240;
+
 export type IslandVariant = "ald" | "circuit" | "signals" | "linear" | "stats";
 
 export type TopicStatus = "done" | "current" | "locked";
@@ -146,6 +152,19 @@ export const DEFAULT_WEIGHTS: Weights = {
   lectures: 10,
 };
 
+/** ALD's trail comes from the authored lecture content; the first two topics start complete. */
+const ALD_POSITIONS = defaultTopicPositions(ALD_TOPICS.length);
+const ALD_SEED_TOPICS: Topic[] = ALD_TOPICS.map((t, i) => ({
+  id: t.id,
+  name: t.name,
+  status: i < 2 ? "done" : i === 2 ? "current" : "locked",
+  lessons: 1,
+  lessonsDone: i < 2 ? 1 : 0,
+  pos: ALD_POSITIONS[i],
+  summary: t.summary,
+  source: t.source,
+}));
+
 export const SEED_COURSES: Course[] = [
   {
     id: "ald",
@@ -154,15 +173,7 @@ export const SEED_COURSES: Course[] = [
     short: "ALD",
     variant: "ald",
     pos: { x: 70, y: 110 },
-    trail:
-      "M330 240C400 260 460 290 450 350C440 410 380 430 330 480C280 530 220 550 210 610C205 660 290 680 330 725",
-    topics: [
-      { id: "intro", name: "Intro", status: "done", lessons: 4, lessonsDone: 4, pos: { x: 330, y: 240 } },
-      { id: "digital-logic", name: "Digital Logic", status: "done", lessons: 5, lessonsDone: 5, pos: { x: 450, y: 350 } },
-      { id: "k-maps", name: "K-Maps", status: "current", lessons: 6, lessonsDone: 3, pos: { x: 330, y: 480 } },
-      { id: "verilog", name: "Verilog", status: "locked", lessons: 6, lessonsDone: 0, pos: { x: 210, y: 610 } },
-      { id: "matlab-lab", name: "MATLAB Lab", status: "locked", lessons: 3, lessonsDone: 0, pos: { x: 330, y: 725 } },
-    ],
+    topics: ALD_SEED_TOPICS,
   },
   {
     id: "circuit",
@@ -223,9 +234,9 @@ export const SEED_COURSES: Course[] = [
 
 export const SEED_DUE: DueItem[] = [
   { id: "d1", courseId: "circuit", title: "Quick review", when: "today", topicId: "kcl-kvl" },
-  { id: "d2", courseId: "ald", title: "HW 3 · Verilog", when: "today", topicId: "verilog" },
-  { id: "d3", courseId: "ald", title: "Exam 1 prep", when: "tomorrow", topicId: "k-maps" },
-  { id: "d4", courseId: "ald", title: "Review Intro", when: "tomorrow", topicId: "intro" },
+  { id: "d2", courseId: "ald", title: "Boolean Algebra", when: "today", topicId: "boolean-algebra" },
+  { id: "d3", courseId: "ald", title: "Review Logic Circuits", when: "tomorrow", topicId: "logic-circuits-switches" },
+  { id: "d4", courseId: "ald", title: "Review Why Chips Matter", when: "tomorrow", topicId: "why-chips-matter" },
 ];
 
 export const SEED_EVENTS: CalendarEvent[] = [
@@ -362,9 +373,6 @@ export function trailFromPoints(points: { x: number; y: number }[]) {
   return d;
 }
 
-export const PATH_NODE_GAP = 120;
-export const PATH_TOP = 240;
-
 /** Canvas height needed to show n topics (never shorter than the 834 design frame). */
 export function pathCanvasHeight(n: number) {
   return Math.max(834, PATH_TOP + Math.max(0, n - 1) * PATH_NODE_GAP + 110);
@@ -378,10 +386,9 @@ export function defaultTopicPositions(n: number) {
   return out;
 }
 
-/** Quiz for a topic. K-Maps has real content; every other topic gets a short
- *  placeholder set until Claude-generated quizzes land. */
+/** Fallback quiz for a topic with nothing in the question bank. */
 export function quizFor(topicId: string, topicName: string): QuizQuestion[] {
-  if (topicId === "k-maps") return KMAPS_QUIZ;
+  if (topicId === "k-maps" || topicId === "karnaugh-maps") return KMAPS_QUIZ;
   return [
     {
       id: `${topicId}-1`,

@@ -29,6 +29,7 @@ import {
 import type { LlmConfig } from "./llm";
 import { type Extraction, questionsByTopic, topicsFrom } from "./extraction";
 import type { QuizQuestion } from "./data";
+import { ALD_QUESTION_BANK } from "./content/ald";
 
 interface QuizResult {
   courseId: string;
@@ -55,7 +56,7 @@ interface OrcaState {
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
 }
 
-const STORAGE_KEY = "orca:v1";
+const STORAGE_KEY = "orca:v2"; // v2: ALD seed rebuilt from lecture content
 
 const initialState: OrcaState = {
   courses: SEED_COURSES,
@@ -68,7 +69,7 @@ const initialState: OrcaState = {
   results: [],
   onboarded: false,
   llm: null,
-  questionBank: {},
+  questionBank: { ald: ALD_QUESTION_BANK },
 };
 
 interface OrcaActions {
