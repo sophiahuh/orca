@@ -46,15 +46,28 @@ Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 re
 - Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/chat` + `/api/chat`, `/settings`,
   `/calendar`, `/add-material`, `/new-course`. Dynamic pages read `params`/`searchParams` with
   React `use()` and the generated `PageProps<...>` types (run `npx next typegen` before `tsc`).
-- `/api/chat` uses `@anthropic-ai/sdk` (`claude-opus-5-5`, low effort, server-side refusal
-  fallbacks). With no `ANTHROPIC_API_KEY` it returns a canned demo reply.
+- Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, Settings → "Your AI"): the student picks
+  Anthropic / OpenAI / Gemini / OpenRouter / Ollama + a key; it lives in the store (browser only) and
+  rides along with each request. Anthropic goes through `@anthropic-ai/sdk`; the rest use the
+  OpenAI-compatible chat.completions shape; Ollama is called from the browser. `/api/chat` and
+  `/api/extract` fall back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`) and then to demo mode.
+- Material pipeline: `src/lib/pdf-text.ts` reads PDFs on-device with pdf.js → `/api/extract` asks the
+  model for topics + source-anchored quiz questions (`src/lib/extraction.ts`, zod schema, Anthropic
+  structured outputs or JSON mode) → `importExtraction` in the store appends topics to the trail and
+  fills `questionBank[courseId][topicId]`, which the quiz page prefers over the seed quiz.
+- Sample material: `docs/samples/ald/L01–L04` (real ALD lecture decks; syllabus in L01).
+- Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app). Deploy with
+  `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
+  is not linked yet. `.vercelignore` keeps docs/ out of uploads.
 
 ## What to build next
 
 1. Backend: Supabase auth + tables matching `src/lib/data.ts`; swap the store's persistence layer.
 2. Real spaced repetition: a scheduler that turns `ReviewConfig` + `Weights` + quiz results into
    `DueItem`s (today/tomorrow) and calendar reviews. See `docs/BACKEND-NOTES.md` once written.
-3. Quiz generation from uploaded materials via Claude (structured outputs), with source anchors.
+3. Pipeline polish: chunk very long PDFs, let the student review/rename extracted topics before
+   they land, merge near-duplicate topics (e.g. "K-Maps" vs "Karnaugh Maps"), image-only slides via
+   vision, HW/exam PDFs as practice sets.
 4. Streaming chat replies; chat that can schedule reviews and start quizzes.
 5. Animation next steps listed in `docs/ANIMATION.md`.
 

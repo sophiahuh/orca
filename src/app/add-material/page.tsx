@@ -1,10 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { use, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
+import { PROVIDERS, compatChat, llmReady, modelLabel } from "@/lib/llm";
+import { EXTRACTION_SYSTEM, type DocumentText, type Extraction, extractionPrompt, parseExtraction } from "@/lib/extraction";
+import { extractPdfText, isPdf } from "@/lib/pdf-text";
 import { IconCalendar, IconUpload } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -13,10 +17,19 @@ import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
 import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
 
 const SKELETON = [92, 100, 78, 96, 60, 0, 100, 88, 94, 70, 0, 90, 84];
+
+type Phase =
+  | { kind: "idle" }
+  | { kind: "reading"; done: number; total: number }
+  | { kind: "ready" }
+  | { kind: "extracting" }
+  | { kind: "done"; topics: number; questions: number }
+  | { kind: "error"; message: string };
 
 function DateField({ label, value, onChange, noneLabel }: { label: string; value: string | null; onChange: (v: string | null) => void; noneLabel: string }) {
   const [last, setLast] = useState(value ?? toISODate(new Date()));
@@ -53,26 +66,75 @@ function DateField({ label, value, onChange, noneLabel }: { label: string; value
 export default function AddMaterialPage({ searchParams }: PageProps<"/add-material">) {
   const sp = use(searchParams);
   const router = useRouter();
-  const { courses, addMaterial } = useOrca();
+  const { courses, addMaterial, importExtraction, llm } = useOrca();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
   const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
-  // null = "use the sample name for the current course" until a real file is chosen.
+  const [doc, setDoc] = useState<DocumentText | null>(null);
   const [chosenName, setChosenName] = useState<string | null>(null);
-  const filename = chosenName ?? `${course?.short.replace(/\s+/g, "_") ?? "Course"}_HW3.pdf`;
-  const [type, setType] = useState<MaterialType>("Homework");
-  const [assigned, setAssigned] = useState<string | null>("2026-09-24");
-  const [due, setDue] = useState<string | null>("2026-10-01");
+  const [phase, setPhase] = useState<Phase>({ kind: "idle" });
+  const [type, setType] = useState<MaterialType>("Lecture");
+  const [assigned, setAssigned] = useState<string | null>(null);
+  const [due, setDue] = useState<string | null>(null);
   const [reflect, setReflect] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!course) return null;
+  const filename = chosenName ?? "Choose a PDF…";
+  const connected = llmReady(llm);
+  const busy = phase.kind === "reading" || phase.kind === "extracting";
 
-  const submit = () => {
-    addMaterial({ courseId: course.id, filename, type, assigned, due, reflect });
-    router.push(due ? "/calendar" : "/home");
+  const onFile = async (f: File) => {
+    setChosenName(f.name);
+    setDoc(null);
+    if (!isPdf(f)) {
+      setPhase({ kind: "error", message: "Only PDFs can be read for now. It will still be added to the course." });
+      return;
+    }
+    try {
+      setPhase({ kind: "reading", done: 0, total: 1 });
+      const text = await extractPdfText(f, (done, total) => setPhase({ kind: "reading", done, total }));
+      setDoc(text);
+      setPhase({ kind: "ready" });
+    } catch (error) {
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Couldn't read that PDF." });
+    }
   };
+
+  const submit = async () => {
+    const material = { courseId: course.id, filename: chosenName ?? "material.pdf", type, assigned, due, reflect };
+    if (!doc || !connected) {
+      addMaterial(material);
+      router.push(due ? "/calendar" : `/course/${course.slug}`);
+      return;
+    }
+    setPhase({ kind: "extracting" });
+    try {
+      const existingTopics = course.topics.map((t) => t.name);
+      let extraction: Extraction;
+      if (PROVIDERS[llm.provider].browserOnly) {
+        const text = await compatChat(llm, EXTRACTION_SYSTEM, [{ role: "user", content: extractionPrompt(course, doc, existingTopics) }], { maxTokens: 16000, json: true });
+        extraction = parseExtraction(text);
+      } else {
+        const res = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ llm, course: { name: course.name, short: course.short }, existingTopics, document: doc }),
+        });
+        const data = (await res.json()) as { extraction?: Extraction; error?: string };
+        if (!res.ok || !data.extraction) throw new Error(data.error ?? "Extraction failed.");
+        extraction = data.extraction;
+      }
+      const result = importExtraction(course.id, material, extraction);
+      setPhase({ kind: "done", topics: result.topicsAdded, questions: result.questionsAdded });
+      window.setTimeout(() => router.push(`/course/${course.slug}`), 1400);
+    } catch (error) {
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Extraction failed." });
+    }
+  };
+
+  const previewLines = doc ? doc.pages.slice(0, 6).flatMap((p) => p.text.split("\n").filter((l) => l.trim().length > 3).slice(0, 4)).slice(0, 18) : [];
 
   return (
     <Screen bg="alice" className="overflow-y-auto">
@@ -99,11 +161,11 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           <input
             ref={fileRef}
             type="file"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.md"
+            accept=".pdf,application/pdf"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) setChosenName(f.name);
+              if (f) void onFile(f);
             }}
           />
           <Card
@@ -112,25 +174,56 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             role="button"
             tabIndex={0}
             aria-label="Choose a file"
-            onClick={() => fileRef.current?.click()}
+            onClick={() => !busy && fileRef.current?.click()}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const f = e.dataTransfer.files?.[0];
+              if (f) void onFile(f);
+            }}
             className="pressable flex min-h-[560px] cursor-pointer flex-col gap-[14px] px-[24px] pb-[28px] pt-[22px]"
           >
-            <div className="flex items-center justify-between">
-              <span className="truncate text-[15px] font-bold text-prussian">{filename}</span>
-              <span className="flex items-center gap-1 text-[13px] font-semibold text-wisteria-deep">
-                <IconUpload size={16} /> Replace
+            <div className="flex items-center justify-between gap-3">
+              <span className={cn("truncate text-[15px] font-bold", chosenName ? "text-prussian" : "text-periwinkle-deep")}>{filename}</span>
+              <span className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-wisteria-deep">
+                <IconUpload size={16} /> {chosenName ? "Replace" : "Upload"}
               </span>
             </div>
-            <div className="mt-[6px] flex flex-col gap-[9px]" aria-hidden>
-              {SKELETON.slice(0, 5).map((w, i) => (
-                <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
-              ))}
-              <span className="my-[6px] block h-[120px] rounded-[12px] bg-alice" />
-              {SKELETON.slice(6).map((w, i) => (
-                <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
-              ))}
-            </div>
+
+            {phase.kind === "reading" && (
+              <div className="flex flex-col gap-[8px]">
+                <ProgressBar value={phase.total ? phase.done / phase.total : 0} height={10} label="Reading slides" />
+                <span className="text-[13px] font-semibold text-wisteria-deep">
+                  Reading slide {phase.done} of {phase.total}…
+                </span>
+              </div>
+            )}
+
+            {doc ? (
+              <div className="mt-[4px] flex flex-col gap-[6px]">
+                <span className="text-[12px] font-semibold uppercase tracking-[1.2px] text-wisteria-deep">
+                  {doc.pages.length} slides · text read on this device
+                </span>
+                {previewLines.map((l, i) => (
+                  <span key={i} className="truncate text-[13px] leading-snug text-prussian/80">
+                    {l}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-[6px] flex flex-col gap-[9px]" aria-hidden>
+                {SKELETON.slice(0, 5).map((w, i) => (
+                  <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
+                ))}
+                <span className="my-[6px] flex h-[120px] items-center justify-center rounded-[12px] bg-alice text-[14px] font-semibold text-wisteria-deep">
+                  Drop a PDF here or click to choose
+                </span>
+                {SKELETON.slice(6).map((w, i) => (
+                  <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
+                ))}
+              </div>
+            )}
           </Card>
         </motion.div>
 
@@ -167,10 +260,47 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             </Card>
           </motion.div>
 
-          <motion.div variants={fadeUp}>
-            <Button full onClick={submit}>
-              Add to {course.short}
+          <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
+            <Card radius={18} lip={4} tone="alice" className="flex items-center justify-between gap-[12px] border-transparent px-[18px] py-[12px] lip-0">
+              <span className="text-[14px] font-semibold text-prussian">
+                {connected ? (
+                  <>
+                    {modelLabel(llm.model)} will build topics and quizzes from this file.
+                  </>
+                ) : (
+                  <>No AI connected: the file is saved, but no topics or quizzes are generated.</>
+                )}
+              </span>
+              <Link href="/settings" className="shrink-0 text-[13px] font-bold text-wisteria-deep hover:underline">
+                {connected ? "Change" : "Connect"}
+              </Link>
+            </Card>
+
+            <Button full onClick={submit} disabled={busy || !chosenName}>
+              {phase.kind === "extracting"
+                ? `Building ${course.short} from ${doc?.pages.length ?? ""} slides…`
+                : connected && doc
+                  ? `Add to ${course.short} and generate quizzes`
+                  : `Add to ${course.short}`}
             </Button>
+
+            <AnimatePresence mode="wait">
+              {phase.kind === "extracting" && (
+                <motion.span key="x" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[13px] font-semibold text-wisteria-deep">
+                  This takes about a minute. Orca is reading every slide and writing questions grounded in them.
+                </motion.span>
+              )}
+              {phase.kind === "done" && (
+                <motion.span key="d" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-wisteria-deep">
+                  Added {phase.topics} topic{phase.topics === 1 ? "" : "s"} and {phase.questions} question{phase.questions === 1 ? "" : "s"}. Opening the path…
+                </motion.span>
+              )}
+              {phase.kind === "error" && (
+                <motion.span key="e" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-semibold text-prussian">
+                  {phase.message}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </motion.div>
         </div>
       </motion.div>

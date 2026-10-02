@@ -2,14 +2,13 @@
 
 import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
-import { trailFromPoints } from "@/lib/data";
+import { pathCanvasHeight, trailFromPoints } from "@/lib/data";
 import { Wave } from "@/components/brand/Decor";
 import { PathNode } from "@/components/ui/PathNode";
 import { useFitScale } from "@/hooks/useFitScale";
 import { revealDown } from "@/lib/motion";
 
 export const PATH_W = 854;
-export const PATH_H = 834;
 
 const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 60, y: 300, w: 70 },
@@ -26,12 +25,15 @@ function statusLine(t: Topic) {
 
 /** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
 export function KnowledgePath({ course, onStart }: { course: Course; onStart: (topic: Topic) => void }) {
-  const { ref, scale, x, y } = useFitScale(PATH_W, PATH_H, "contain");
+  const PATH_H = pathCanvasHeight(course.topics.length);
+  // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
+  const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
   const d = course.trail ?? trailFromPoints(course.topics.map((t) => t.pos));
 
   return (
-    <div ref={ref} className="absolute inset-0">
-      <div className="absolute origin-top-left" style={{ width: PATH_W, height: PATH_H, left: x, top: y, transform: `scale(${scale})` }}>
+    <div ref={ref} className="absolute inset-0 overflow-y-auto overflow-x-hidden">
+      <div style={{ width: PATH_W * scale, height: PATH_H * scale, marginLeft: x }}>
+      <div className="origin-top-left" style={{ width: PATH_W, height: PATH_H, transform: `scale(${scale})` }}>
         {WAVES.map((w, i) => (
           <Wave key={i} tone="light" x={w.x} y={w.y} width={w.w} seed={i + 3} />
         ))}
@@ -66,6 +68,7 @@ export function KnowledgePath({ course, onStart }: { course: Course; onStart: (t
             onClick={t.status === "locked" ? undefined : () => onStart(t)}
           />
         ))}
+      </div>
       </div>
     </div>
   );

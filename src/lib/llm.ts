@@ -149,21 +149,32 @@ export function compatBaseUrl(c: LlmConfig) {
   return (c.baseUrl || PROVIDERS[c.provider].baseUrl || "").replace(/\/+$/, "");
 }
 
-export async function compatChat(c: LlmConfig, system: string, messages: ChatTurn[], signal?: AbortSignal): Promise<string> {
-  const res = await fetch(`${compatBaseUrl(c)}/chat/completions`, {
+export interface CompatOptions {
+  maxTokens?: number;
+  /** Ask for a JSON object reply (OpenAI `response_format`). Retried without it if the provider rejects it. */
+  json?: boolean;
+  signal?: AbortSignal;
+}
+
+export async function compatChat(c: LlmConfig, system: string, messages: ChatTurn[], opts: CompatOptions = {}): Promise<string> {
+  const attempt = (json: boolean) =>
+    fetch(`${compatBaseUrl(c)}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(c.apiKey ? { authorization: `Bearer ${c.apiKey}` } : {}),
       ...(c.provider === "openrouter" ? { "HTTP-Referer": "https://orca.study", "X-Title": "Orca" } : {}),
     },
-    body: JSON.stringify({
-      model: c.model,
-      messages: [{ role: "system", content: system }, ...messages],
-      max_tokens: 1024,
-    }),
-    signal,
-  });
+      body: JSON.stringify({
+        model: c.model,
+        messages: [{ role: "system", content: system }, ...messages],
+        max_tokens: opts.maxTokens ?? 1024,
+        ...(json ? { response_format: { type: "json_object" } } : {}),
+      }),
+      signal: opts.signal,
+    });
+  let res = await attempt(Boolean(opts.json));
+  if (!res.ok && opts.json && res.status === 400) res = await attempt(false);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`${PROVIDERS[c.provider].label} returned ${res.status}${text ? `: ${text.slice(0, 200)}` : ""}`);

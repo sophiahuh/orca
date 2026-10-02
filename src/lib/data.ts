@@ -16,8 +16,12 @@ export interface Topic {
   status: TopicStatus;
   lessons: number;
   lessonsDone: number;
-  /** Node centre in the 854×834 path canvas. */
+  /** Node centre in the 854-wide path canvas. */
   pos: { x: number; y: number };
+  /** One-paragraph summary (from extracted course material). */
+  summary?: string;
+  /** Where this topic came from. */
+  source?: { filename: string; slideStart: number; slideEnd: number };
 }
 
 export interface Course {
@@ -123,6 +127,8 @@ export interface QuizQuestion {
   options: string[];
   answer: number;
   explanation: string;
+  /** Where in the course material this question is grounded. */
+  anchor?: { locator: string; excerpt: string };
 }
 
 /* ── Seed ─────────────────────────────────────────────────────────────── */
@@ -356,11 +362,19 @@ export function trailFromPoints(points: { x: number; y: number }[]) {
   return d;
 }
 
+export const PATH_NODE_GAP = 120;
+export const PATH_TOP = 240;
+
+/** Canvas height needed to show n topics (never shorter than the 834 design frame). */
+export function pathCanvasHeight(n: number) {
+  return Math.max(834, PATH_TOP + Math.max(0, n - 1) * PATH_NODE_GAP + 110);
+}
+
 /** Default node layout for a new course: a lazy S-curve down the canvas. */
 export function defaultTopicPositions(n: number) {
   const xs = [330, 450, 330, 210, 330, 450, 330];
   const out: { x: number; y: number }[] = [];
-  for (let i = 0; i < n; i++) out.push({ x: xs[i % xs.length], y: 240 + i * 120 });
+  for (let i = 0; i < n; i++) out.push({ x: xs[i % xs.length], y: PATH_TOP + i * PATH_NODE_GAP });
   return out;
 }
 

@@ -27,6 +27,8 @@ import {
   slugify,
 } from "./data";
 import type { LlmConfig } from "./llm";
+import { type Extraction, questionsByTopic, topicsFrom } from "./extraction";
+import type { QuizQuestion } from "./data";
 
 interface QuizResult {
   courseId: string;
@@ -49,6 +51,8 @@ interface OrcaState {
   onboarded: boolean;
   /** The student's own model connection (bring-your-own-LLM). Lives only in this browser. */
   llm: LlmConfig | null;
+  /** Generated questions: courseId → topicId → questions. */
+  questionBank: Record<string, Record<string, QuizQuestion[]>>;
 }
 
 const STORAGE_KEY = "orca:v1";
@@ -64,6 +68,7 @@ const initialState: OrcaState = {
   results: [],
   onboarded: false,
   llm: null,
+  questionBank: {},
 };
 
 interface OrcaActions {
@@ -74,6 +79,8 @@ interface OrcaActions {
   recordQuiz: (r: Omit<QuizResult, "finishedAt">) => void;
   setOnboarded: (v: boolean) => void;
   setLlm: (c: LlmConfig | null) => void;
+  /** Merge an extraction into a course: new topics on the trail, questions in the bank, material recorded. */
+  importExtraction: (courseId: string, material: Omit<Material, "id">, extraction: Extraction) => { topicsAdded: number; questionsAdded: number };
   reset: () => void;
 }
 
@@ -205,12 +212,58 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
+  const importExtraction = useCallback<OrcaActions["importExtraction"]>((courseId, material, extraction) => {
+    const newTopics = topicsFrom(extraction, material.filename);
+    const byTopic = questionsByTopic(extraction, material.filename);
+    let topicsAdded = 0;
+    let questionsAdded = 0;
+    setState((s) => {
+      const courses = s.courses.map((c) => {
+        if (c.id !== courseId) return c;
+        const topics = [...c.topics];
+        for (const t of newTopics) {
+          const i = topics.findIndex((x) => x.id === t.id);
+          if (i >= 0) {
+            topics[i] = { ...topics[i], summary: t.summary ?? topics[i].summary, source: t.source ?? topics[i].source };
+          } else {
+            const hasCurrent = topics.some((x) => x.status === "current");
+            topics.push({ ...t, status: hasCurrent ? "locked" : "current", lessonsDone: 0, pos: { x: 0, y: 0 } });
+            topicsAdded++;
+          }
+        }
+        const positions = defaultTopicPositions(topics.length);
+        return { ...c, trail: undefined, topics: topics.map((t, i) => ({ ...t, pos: positions[i] })) };
+      });
+      const bank = { ...(s.questionBank[courseId] ?? {}) };
+      for (const [topicId, qs] of Object.entries(byTopic)) {
+        const existing = bank[topicId] ?? [];
+        const seen = new Set(existing.map((q) => q.prompt));
+        const fresh = qs.filter((q) => !seen.has(q.prompt));
+        questionsAdded += fresh.length;
+        bank[topicId] = [...existing, ...fresh];
+      }
+      const id = `m-${Date.now().toString(36)}`;
+      const events = [...s.events];
+      if (material.due) {
+        events.push({
+          id: `ev-${id}`,
+          date: material.due,
+          kind: material.type === "Homework" ? "hw" : material.type === "Past exam" || material.type === "Practice exam" ? "exam" : "rev",
+          title: material.filename.replace(/\.[a-z0-9]+$/i, ""),
+          courseId,
+        });
+      }
+      return { ...s, courses, events, materials: [...s.materials, { ...material, id }], questionBank: { ...s.questionBank, [courseId]: bank } };
+    });
+    return { topicsAdded, questionsAdded };
+  }, []);
+
   const setLlm = useCallback((llm: LlmConfig | null) => setState((s) => ({ ...s, llm })), []);
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo<OrcaContextValue>(
-    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, reset }),
-    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, reset],
+    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, importExtraction, reset }),
+    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, importExtraction, reset],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

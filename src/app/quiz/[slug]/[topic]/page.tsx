@@ -21,11 +21,15 @@ const LETTERS = "ABCDEFGH";
 export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) {
   const { slug, topic: topicId } = use(params);
   const router = useRouter();
-  const { hydrated, streak, recordQuiz } = useOrca();
+  const { hydrated, streak, recordQuiz, questionBank } = useOrca();
   const course = useCourse(slug);
   const topic = course?.topics.find((t) => t.id === topicId);
 
-  const fullSet = useMemo(() => quizFor(topicId, topic?.name ?? "this topic"), [topicId, topic?.name]);
+  const generated = course ? questionBank[course.id]?.[topicId] : undefined;
+  const fullSet = useMemo(
+    () => (generated && generated.length > 0 ? generated.slice(0, 8) : quizFor(topicId, topic?.name ?? "this topic")),
+    [generated, topicId, topic?.name],
+  );
   // null = the full set for this topic (derived, so it follows store hydration); a list = a review subset.
   const [subset, setSubset] = useState<QuizQuestion[] | null>(null);
   const questions = subset ?? fullSet;
@@ -181,6 +185,11 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
                 >
                   <span className="font-bold text-wisteria-deep">{selected === q.answer ? "Correct. " : "Not quite. "}</span>
                   {q.explanation}
+                  {q.anchor && (
+                    <span className="mt-[8px] block text-[14px] text-wisteria-deep">
+                      From {q.anchor.locator}: “{q.anchor.excerpt}”
+                    </span>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
