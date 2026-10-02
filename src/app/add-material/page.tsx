@@ -9,6 +9,7 @@ import { useOrca } from "@/lib/store";
 import { PROVIDERS, compatChat, llmReady, modelLabel } from "@/lib/llm";
 import { EXTRACTION_SYSTEM, type DocumentText, type Extraction, extractionPrompt, parseExtraction } from "@/lib/extraction";
 import { extractPdfText, isPdf, renderPdfSlide } from "@/lib/pdf-text";
+import { useServerModel } from "@/hooks/useServerModel";
 import { IconCalendar, IconUpload } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -67,6 +68,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const sp = use(searchParams);
   const router = useRouter();
   const { courses, addMaterial, importExtraction, llm } = useOrca();
+  const serverModel = useServerModel();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
   const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
@@ -83,7 +85,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
 
   if (!course) return null;
   const filename = chosenName ?? "Choose a PDF…";
-  const connected = llmReady(llm);
+  const ownModel = llmReady(llm);
+  const connected = ownModel || Boolean(serverModel);
   const busy = phase.kind === "reading" || phase.kind === "extracting";
 
   const onFile = async (f: File) => {
@@ -115,14 +118,14 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     try {
       const existingTopics = course.topics.map((t) => t.name);
       let extraction: Extraction;
-      if (PROVIDERS[llm.provider].browserOnly) {
+      if (ownModel && PROVIDERS[llm.provider].browserOnly) {
         const text = await compatChat(llm, EXTRACTION_SYSTEM, [{ role: "user", content: extractionPrompt(course, doc, existingTopics) }], { maxTokens: 16000, json: true });
         extraction = parseExtraction(text);
       } else {
         const res = await fetch("/api/extract", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ llm, course: { name: course.name, short: course.short }, existingTopics, document: doc }),
+          body: JSON.stringify({ llm: ownModel ? llm : null, course: { name: course.name, short: course.short }, existingTopics, document: doc }),
         });
         const data = (await res.json()) as { extraction?: Extraction; error?: string };
         if (!res.ok || !data.extraction) throw new Error(data.error ?? "Extraction failed.");
@@ -277,16 +280,16 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
             <Card radius={18} lip={4} tone="alice" className="flex items-center justify-between gap-[12px] border-transparent px-[18px] py-[12px] lip-0">
               <span className="text-[14px] font-semibold text-prussian">
-                {connected ? (
-                  <>
-                    {modelLabel(llm.model)} will build topics and quizzes from this file.
-                  </>
+                {ownModel ? (
+                  <>{modelLabel(llm.model)} will build topics and quizzes from this file.</>
+                ) : serverModel ? (
+                  <>Orca ({modelLabel(serverModel)}) will build topics and quizzes from this file.</>
                 ) : (
                   <>No AI connected: the file is saved, but no topics or quizzes are generated.</>
                 )}
               </span>
               <Link href="/settings" className="shrink-0 text-[13px] font-bold text-wisteria-deep hover:underline">
-                {connected ? "Change" : "Connect"}
+                {ownModel ? "Change" : serverModel ? "Use my own model" : "Connect"}
               </Link>
             </Card>
 

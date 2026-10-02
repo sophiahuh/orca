@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { fadeUp } from "@/lib/motion";
+import { useServerModel } from "@/hooks/useServerModel";
 
 type Status = { kind: "idle" } | { kind: "testing" } | { kind: "ok"; count: number } | { kind: "error"; message: string };
 
@@ -21,6 +22,7 @@ const field =
  */
 export function YourAI() {
   const { llm, setLlm } = useOrca();
+  const serverModel = useServerModel();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [models, setModels] = useState<string[]>([]);
 
@@ -71,7 +73,7 @@ export function YourAI() {
         <div>
           <h2 className="text-[22px] font-bold text-prussian">Your AI</h2>
           <p className="mt-[4px] text-[14px] font-medium text-wisteria-deep">
-            Bring the model you already use. Your key stays in this browser.
+            {serverModel ? `Orca runs on ${modelLabel(serverModel)} by default. ` : ""}Bring the model you already use if you prefer. Your key stays in this browser.
           </p>
         </div>
         <span
@@ -81,7 +83,7 @@ export function YourAI() {
           }
         >
           {connected && <IconCheck size={12} strokeWidth={4} />}
-          {connected ? "Connected" : "Demo mode"}
+          {connected ? "Your model" : serverModel ? "Orca's model" : "Demo mode"}
         </span>
       </div>
 

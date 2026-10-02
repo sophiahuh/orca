@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useOrca } from "@/lib/store";
 import { PROVIDERS, type ChatTurn, compatChat, llmReady, modelLabel, systemFor } from "@/lib/llm";
+import { useServerModel } from "@/hooks/useServerModel";
 import { IconSend, IconUp } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -18,6 +19,7 @@ import { fadeUp, popIn, stagger } from "@/lib/motion";
 export default function ChatPage({ searchParams }: PageProps<"/chat">) {
   const sp = use(searchParams);
   const { courses, llm } = useOrca();
+  const serverModel = useServerModel();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const course = courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
@@ -91,7 +93,7 @@ export default function ChatPage({ searchParams }: PageProps<"/chat">) {
             title="Change model"
             className="pressable inline-flex items-center rounded-pill border-2 border-alice-deep bg-parchment px-[14px] py-[9px] text-[14px] font-bold text-wisteria-deep lip-3 lip-alice"
           >
-            {llmReady(llm) ? modelLabel(llm.model) : "Demo mode · connect your AI"}
+            {llmReady(llm) ? modelLabel(llm.model) : serverModel ? `Orca · ${modelLabel(serverModel)}` : serverModel === null ? "Demo mode · connect your AI" : "…"}
           </Link>
           {course && <ContextPill>{course.short}</ContextPill>}
         </div>
