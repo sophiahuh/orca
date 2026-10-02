@@ -33,12 +33,12 @@ export const ALD_TOPICS: ContentTopic[] = [
     questions: [
       {
         kind: MC,
-        prompt: "In figure (a), two switches sit in series between the supply and the light. Which function does the light compute?",
-        figure: { src: "/figures/ald/l02-s11.png", alt: "Two switch circuits: (a) switches in series, (b) switches in parallel, each driving a light" },
+        prompt: "In the figure, two switches sit in series between the supply and the light. Which function of x1 and x2 does the light compute?",
+        figure: { src: "/figures/ald/l02-s11a.png", alt: "A power supply, two switches x1 and x2 in series, and a light" },
         options: ["OR", "AND", "NOT", "XOR"],
         answer: 1,
         explanation: "Current only flows when both series switches are closed, so the light is on only when x1 AND x2 are 1. Parallel switches give OR.",
-        anchor: { locator: "slide 11", excerpt: "The logical AND function (series connection); the logical OR function (parallel connection)" },
+        anchor: { locator: "slide 11", excerpt: "The logical AND function (series connection)" },
       },
       {
         kind: MC,
@@ -59,12 +59,12 @@ export const ALD_TOPICS: ContentTopic[] = [
       },
       {
         kind: TF,
-        prompt: "In figure (b), with switches in parallel, the light is off whenever either switch is open.",
+        prompt: "In the figure, with the switches in parallel, the light is off whenever either switch is open.",
         options: ["True", "False"],
         answer: 1,
-        explanation: "Parallel switches give OR: one closed path is enough to light the lamp. The light is off only when both are open. 'Either open means off' describes the series (AND) circuit in figure (a).",
+        explanation: "Parallel switches give OR: one closed path is enough to light the lamp. The light is off only when both are open. 'Either open means off' describes the series (AND) circuit.",
         anchor: { locator: "slide 11", excerpt: "L = 1 if x1 = 1 or x2 = 1 or if x1 = x2 = 1; L = 0 if x1 = x2 = 0" },
-        figure: { src: "/figures/ald/l02-s11.png", alt: "Two switch circuits: (a) switches in series, (b) switches in parallel, each driving a light" },
+        figure: { src: "/figures/ald/l02-s11b.png", alt: "A power supply, two switches x1 and x2 in parallel, and a light" },
       },
       {
         kind: MC,
