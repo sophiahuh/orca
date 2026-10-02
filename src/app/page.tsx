@@ -1,5 +1,6 @@
 "use client";
 
+import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/Button";
@@ -28,9 +29,17 @@ const BUBBLES = [
   { x: 720, y: 720, s: 14 },
 ];
 
-export default function OnboardingPage() {
+export default function OnboardingPage({ searchParams }: PageProps<"/">) {
+  const sp = use(searchParams);
   const router = useRouter();
-  const { setOnboarded } = useOrca();
+  const { setOnboarded, onboarded, hydrated } = useOrca();
+  const preview = sp.preview !== undefined;
+
+  // Returning students land on the map; `/?preview` always shows this screen.
+  useEffect(() => {
+    if (hydrated && onboarded && !preview) router.replace("/home");
+  }, [hydrated, onboarded, preview, router]);
+
   const go = () => {
     setOnboarded(true);
     router.push("/home");

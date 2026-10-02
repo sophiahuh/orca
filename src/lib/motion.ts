@@ -85,6 +85,26 @@ export const pulseHalo = {
   transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" as const },
 };
 
+/** Quick crossfade for swapped text (calendar month heading). */
+export const fadeSwap: Variants = {
+  hidden: { opacity: 0, y: 8 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.18 } },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.18 } },
+};
+
+/** Dim overlay behind modals. */
+export const overlayFade: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.2 } },
+};
+
+/** One of the three "Orca is typing" dots; `i` staggers them. */
+export const typingDot = (i: number) => ({
+  y: [0, -5, 0],
+  transition: { duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" as const },
+});
+
 /* ── Trail draw-on ───────────────────────────────────────────────────── */
 /** Solid paths: animate pathLength. (Overrides stroke-dasharray, so not for dotted trails.) */
 export const drawTrail: Variants = {

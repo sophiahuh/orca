@@ -68,9 +68,10 @@ export default function SettingsPage() {
                   <Select
                     size="sm"
                     label="Course for weights"
-                    value={target.short}
-                    options={courses.map((c) => c.short)}
-                    onChange={(short) => setWeightsFor(courses.find((c) => c.short === short)?.id)}
+                    value={target.id}
+                    options={courses.map((c) => c.id)}
+                    labels={Object.fromEntries(courses.map((c) => [c.id, c.short]))}
+                    onChange={setWeightsFor}
                   />
                 )}
               </div>

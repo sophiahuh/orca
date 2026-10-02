@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { OrcaLogo } from "@/components/brand/OrcaLogo";
 import { cn } from "@/lib/cn";
-import { fadeUp } from "@/lib/motion";
+import { fadeUp, typingDot } from "@/lib/motion";
 
 export interface ChatMessage {
   id: string;
@@ -40,8 +40,7 @@ export function Typing() {
           <motion.span
             key={i}
             className="block h-[8px] w-[8px] rounded-pill bg-periwinkle-deep"
-            animate={{ y: [0, -5, 0] }}
-            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+            animate={typingDot(i)}
           />
         ))}
       </div>

@@ -14,9 +14,12 @@ export interface SelectProps<T extends string> extends Omit<SelectHTMLAttributes
   onChange: (value: T) => void;
   label: string;
   size?: "md" | "sm";
+  /** Display text per option value (defaults to the value itself). */
+  labels?: Partial<Record<T, string>>;
 }
 
-export function Select<T extends string>({ value, options, onChange, label, size = "md", className, ...rest }: SelectProps<T>) {
+export function Select<T extends string>({ value, options, onChange, label, size = "md", labels, className, ...rest }: SelectProps<T>) {
+  const text = (v: T) => labels?.[v] ?? v;
   return (
     <span
       className={cn(
@@ -25,7 +28,7 @@ export function Select<T extends string>({ value, options, onChange, label, size
         className,
       )}
     >
-      <span className="whitespace-nowrap">{value}</span>
+      <span className="whitespace-nowrap">{text(value)}</span>
       <IconDown size={16} className="text-prussian" />
       <select
         aria-label={label}
@@ -36,7 +39,7 @@ export function Select<T extends string>({ value, options, onChange, label, size
       >
         {options.map((o) => (
           <option key={o} value={o}>
-            {o}
+            {text(o)}
           </option>
         ))}
       </select>

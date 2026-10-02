@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { fadeSwap } from "@/lib/motion";
 import type { EventKind } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { useToday } from "@/hooks/useToday";
@@ -14,9 +15,8 @@ import { MonthGrid } from "@/components/calendar/MonthGrid";
 
 const KINDS: EventKind[] = ["hw", "lab", "rev", "exam"];
 
-/** First day of the month containing an ISO date (or the seed's September if unknown). */
+/** First day of the month containing an ISO date. */
 function monthOf(iso: string) {
-  if (!iso) return new Date(2026, 8, 1);
   const [y, m] = iso.split("-").map(Number);
   return new Date(y, m - 1, 1);
 }
@@ -26,11 +26,13 @@ export default function CalendarPage() {
   const today = useToday();
   // null = "follow today"; set once the student pages away.
   const [picked, setPicked] = useState<Date | null>(null);
+  // Until the client clock is known, render the empty sea rather than a wrong month.
+  if (!today) return <Screen bg="alice" />;
   const cursor = picked ?? monthOf(today);
 
   const shift = (n: number) => setPicked(new Date(cursor.getFullYear(), cursor.getMonth() + n, 1));
   const monthName = cursor.toLocaleString("en-US", { month: "long" });
-  const showYear = today !== "" && cursor.getFullYear() !== Number(today.slice(0, 4));
+  const showYear = cursor.getFullYear() !== Number(today.slice(0, 4));
 
   return (
     <Screen bg="alice" className="overflow-y-auto">
@@ -39,10 +41,10 @@ export default function CalendarPage() {
         <AnimatePresence mode="wait">
           <motion.h1
             key={`${cursor.getFullYear()}-${cursor.getMonth()}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
+            variants={fadeSwap}
+            initial="hidden"
+            animate="show"
+            exit="exit"
             className="text-[46px] font-bold leading-none text-prussian"
           >
             {monthName}

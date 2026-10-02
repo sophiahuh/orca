@@ -26,7 +26,9 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const topic = course?.topics.find((t) => t.id === topicId);
 
   const fullSet = useMemo(() => quizFor(topicId, topic?.name ?? "this topic"), [topicId, topic?.name]);
-  const [questions, setQuestions] = useState<QuizQuestion[]>(fullSet);
+  // null = the full set for this topic (derived, so it follows store hydration); a list = a review subset.
+  const [subset, setSubset] = useState<QuizQuestion[] | null>(null);
+  const questions = subset ?? fullSet;
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
@@ -61,9 +63,20 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     );
   }
 
+  const backHref = `/course/${course.slug}`;
+
+  if (topic.status === "locked") {
+    return (
+      <Screen bg="parchment" className="items-start gap-4 p-[32px]">
+        <BackButton href={backHref} />
+        <p className="text-[22px] font-bold text-prussian">{topic.name} is still locked.</p>
+        <p className="text-[16px] text-wisteria-deep">Finish the topic before it on the path and it will open up.</p>
+      </Screen>
+    );
+  }
+
   const q = questions[index];
   const total = questions.length;
-  const backHref = `/course/${course.slug}`;
 
   const check = () => {
     if (selected === null) return;
@@ -84,7 +97,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   };
 
   const restart = (set: QuizQuestion[]) => {
-    setQuestions(set);
+    setSubset(set);
     setIndex(0);
     setSelected(null);
     setChecked(false);

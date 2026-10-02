@@ -11,6 +11,7 @@ import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
+import { Select } from "@/components/ui/Select";
 import { Toggle } from "@/components/ui/Toggle";
 import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -54,9 +55,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const router = useRouter();
   const { courses, addMaterial } = useOrca();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
-  const course = courses.find((c) => c.slug === courseSlug) ?? courses[0];
+  const [pickedId, setPickedId] = useState<string | null>(null);
+  const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
-  const [filename, setFilename] = useState(`${course?.short.replace(/\s+/g, "_") ?? "Course"}_HW3.pdf`);
+  // null = "use the sample name for the current course" until a real file is chosen.
+  const [chosenName, setChosenName] = useState<string | null>(null);
+  const filename = chosenName ?? `${course?.short.replace(/\s+/g, "_") ?? "Course"}_HW3.pdf`;
   const [type, setType] = useState<MaterialType>("Homework");
   const [assigned, setAssigned] = useState<string | null>("2026-09-24");
   const [due, setDue] = useState<string | null>("2026-10-01");
@@ -75,7 +79,18 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton />
         <h1 className="text-[44px] font-bold leading-none text-prussian">Add material</h1>
-        <ContextPill className="ml-[8px]">{course.short}</ContextPill>
+        {courses.length > 1 ? (
+          <Select
+            label="Course"
+            value={course.id}
+            options={courses.map((c) => c.id)}
+            labels={Object.fromEntries(courses.map((c) => [c.id, c.short]))}
+            onChange={setPickedId}
+            className="ml-[8px]"
+          />
+        ) : (
+          <ContextPill className="ml-[8px]">{course.short}</ContextPill>
+        )}
       </header>
 
       <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex flex-wrap items-start gap-[40px] px-[40px] pb-[48px] pt-[32px]">
@@ -88,7 +103,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f) setFilename(f.name);
+              if (f) setChosenName(f.name);
             }}
           />
           <Card

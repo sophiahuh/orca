@@ -69,7 +69,7 @@ export default function ChatPage({ searchParams }: PageProps<"/chat">) {
   const empty = messages.length === 0;
 
   return (
-    <Screen bg="alice">
+    <Screen bg="alice" className="h-screen max-h-screen">
       <Wave tone="light" x={110} y={210} width={70} seed={1} />
       <Wave tone="light" x={1010} y={250} width={60} seed={2} />
       <Wave tone="light" x={150} y={680} width={80} seed={3} />

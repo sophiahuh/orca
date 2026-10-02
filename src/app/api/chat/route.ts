@@ -59,8 +59,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "Send at least one user message." }, { status: 400 });
   }
 
+  const raw = body.course;
+  const course: ChatBody["course"] =
+    raw && typeof raw.name === "string" && typeof raw.short === "string"
+      ? {
+          name: raw.name,
+          short: raw.short,
+          topics: Array.isArray(raw.topics)
+            ? raw.topics.filter((t) => t && typeof t.name === "string").map((t) => ({ name: t.name, status: String(t.status ?? "") }))
+            : [],
+        }
+      : null;
+
   if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json({ reply: canned(messages, body.course), demo: true });
+    return Response.json({ reply: canned(messages, course), demo: true });
   }
 
   const client = new Anthropic();
@@ -68,7 +80,7 @@ export async function POST(request: Request) {
     const response = await client.beta.messages.create({
       model: MODEL,
       max_tokens: 2048,
-      system: [{ type: "text", text: systemFor(body.course), cache_control: { type: "ephemeral" } }],
+      system: systemFor(course),
       output_config: { effort: "low" },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",

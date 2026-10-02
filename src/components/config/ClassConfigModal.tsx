@@ -8,7 +8,7 @@ import { IconArrowRight, IconClose } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { RoundButton } from "@/components/ui/RoundButton";
 import { useOrca } from "@/lib/store";
-import { popIn, stagger } from "@/lib/motion";
+import { overlayFade, popIn, stagger } from "@/lib/motion";
 import { ConfigRow, REVIEW_LABELS } from "./ConfigRow";
 
 /**
@@ -33,10 +33,10 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
         <motion.div
           key="overlay"
           className="fixed inset-0 z-50 flex items-center justify-center bg-prussian/70 p-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          variants={overlayFade}
+          initial="hidden"
+          animate="show"
+          exit="exit"
           onClick={onClose}
         >
           <motion.div
