@@ -32,8 +32,19 @@ export const MASTERY_RULES = {
   deepReviewStretch: 1.5,
 } as const;
 
+/**
+ * The version of the rules stored snapshots were folded under (`objective_state.rules_version`).
+ * A snapshot with an older version counts as stale and is rebuilt from the evidence log. Bump it
+ * whenever the result of the fold could change: a constant in MASTERY_RULES, the FSRS parameters
+ * (including a ts-fsrs upgrade that moves its default weights), or the logic of applyAnswer,
+ * applyConfusion or a day key. tests/mastery/snapshot.test.ts fails when the constants or the FSRS
+ * parameters change without a bump (it hashes them) and when the logic does (a golden replay
+ * recorded per version); record the new hash and golden accumulator there with the bump.
+ */
+export const RULES_VERSION = 1;
+
 /** Deterministic (no fuzz), day-based (no same-day learning steps; sessions are daily), capped at 60 days. */
-const scheduler = fsrs(
+export const FSRS_PARAMETERS = Object.freeze(
   generatorParameters({
     request_retention: MASTERY_RULES.targetRetention,
     maximum_interval: MASTERY_RULES.maxIntervalDays,
@@ -41,6 +52,7 @@ const scheduler = fsrs(
     enable_short_term: false,
   }),
 );
+const scheduler = fsrs(FSRS_PARAMETERS);
 
 const DAY_MS = 86_400_000;
 
@@ -69,6 +81,21 @@ export interface ObjectiveStateOptions {
 export function localDayKey(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Day keys (YYYY-MM-DD) in an IANA timezone, for code that doesn't run in the student's own
+ * clock: the server always folds with the student's profile timezone. Throws a RangeError for an
+ * unknown timezone and an Error for an unparseable time, rather than guessing a day.
+ */
+export function dayKeyIn(timeZone: string): (iso: string) => string {
+  const format = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  return (iso: string) => {
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) throw new Error(`Can't take the day of an unparseable time: "${iso}"`);
+    const part = (type: string) => format.formatToParts(t).find((p) => p.type === type)!.value;
+    return `${part("year")}-${part("month")}-${part("day")}`;
+  };
 }
 
 /** An FSRS card as plain JSON (dates as ISO strings). */
