@@ -33,6 +33,13 @@ the outcome in the doc it affects.
   the final art. Phase 1 builds the levels from the existing island SVG parts; the Figma art can
   replace them later without any code change outside `Island.tsx`.
 
+### Detecting a mix-up without asking for confidence
+- **Decided 2026-10-04:** two unaided misses in a row on different questions marks an objective
+  mixed-up. The quiz doesn't ask how sure the student was.
+- **Watch for:** beginners being flagged often, since honest misses count the same as confident
+  ones. If that shows up, add a "Sure / Guessing" tap and count only confident misses (the
+  platform's rule).
+
 ### Clearing a mix-up when an objective has no "mechanism" question
 - **Source:** `docs/MASTERY-PLAN.md` §2.4 says only an unaided correct answer on a *mechanism*
   question clears a mix-up.
@@ -59,9 +66,16 @@ the outcome in the doc it affects.
 - **Decide:** keep it as an option, or move everything to Orca's server key once the backend
   exists. Most students won't have a key, so the server key has to work without one either way.
 
+### Question supply for the built-in ALD content
+- **Decided 2026-10-04:** leave it until generation. Mastery needs 3 different questions per
+  objective, and only 7 of the 40 ALD objectives have that many, so most ALD topics can't be
+  finished in the demo until Phase 4 (generation) or Phase 6 (drills) adds questions.
+- **Revisit:** if the demo needs a finished topic before then, write more questions for the
+  thin objectives rather than weakening the rule.
+
 ### Demo content
-- Phase 1 removes the generic fallback quiz (the study-habit questions shown for topics with no
-  bank) and the four placeholder topics a new course used to get, because answers to them would
-  count as evidence about a course they don't test. Seed courses other than ALD therefore show
-  empty trails until material is added.
-- **Decide:** whether the demo should ship authored content for a second course.
+- **Decided 2026-10-04:** only ALD ships seeded. Phase 1 deletes the four seed courses that had no
+  real content (Circuits, Signals, Linear Algebra, Statistics), along with the generic fallback quiz
+  and the four placeholder topics a new course used to get, since answers to those would count as
+  evidence about material they don't test.
+- **Open:** whether to author a second real course later.

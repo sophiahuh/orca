@@ -13,7 +13,11 @@ Open questions live in `docs/TO-DISCUSS.md`.
   to an objective. Concepts from extraction come in Phase 4 as tags on objectives, used for merging
   duplicates and grounding, not as the unit students see.
 - **Learner state is derived, never written.** Every answer appends an evidence event; objective
-  state, topic progress and island level are pure functions of the events and the clock.
+  state, topic progress and island level are pure functions of the events and the clock. An answer
+  counts toward its question's current objective, so re-sorting questions re-files past answers.
+- **Question supply comes from generation.** Mastery needs 3 different questions per objective;
+  most built-in ALD objectives have fewer, and Phases 4 and 6 fill the gap (aim: 6+ per objective).
+- **Only ALD ships seeded.** The four content-free demo courses are removed.
 - **Mastery is a decision, not an average:** 3 credited answers on 3 different questions, on at
   least 2 days, last two correct, no open mix-up. Stability grows ×2.2 per successful spaced check
   (cap 60 days); a miss cuts it to a third; mastered + cap + 3 checks = retired.

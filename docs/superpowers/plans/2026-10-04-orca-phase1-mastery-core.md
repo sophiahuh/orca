@@ -1073,6 +1073,16 @@ test("rolls evidence up into objectives, topics and an island level", () => {
   assert.equal(m.island, "growing");
 });
 
+test("answers follow their question's current objective, not the one recorded", () => {
+  const filedUnderOldId = ["q1", "q2", "q3"].map((q, i) => ({
+    ...ev(q, i < 2 ? "2026-10-01T12:00:00Z" : "2026-10-02T12:00:00Z"),
+    objectiveId: "t1#unsorted",
+  }));
+  const m = courseMastery({ ...base, evidence: filedUnderOldId, now: new Date("2026-10-02T13:00:00Z") });
+  assert.equal(m.objectives.get("t1/a")!.status, "mastered");
+  assert.equal(m.objectives.has("t1#unsorted"), false);
+});
+
 test("evidence from another course is ignored", () => {
   const evidence = [ev("q1", "2026-10-01T12:00:00Z", "other")];
   const m = courseMastery({ ...base, evidence, now: new Date("2026-10-02T13:00:00Z") });
@@ -1157,11 +1167,23 @@ export interface CourseMasteryInput {
 }
 
 export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, now, dayKey }: CourseMasteryInput): CourseMastery {
-  const events = evidence.filter((e) => e.courseId === courseId);
+  const perTopic = topicIds.map((topicId) => ({ topicId, list: objectivesForTopic(topicId, bank[topicId] ?? [], catalogue) }));
+
+  // An answer counts toward its question's *current* objective, so re-sorting questions into
+  // objectives re-files past answers too. The objective recorded at answer time is used only
+  // when the question is no longer in the bank.
+  const objectiveOfQuestion = new Map<string, string>();
+  for (const { list } of perTopic) for (const o of list) for (const q of o.questionIds) objectiveOfQuestion.set(q, o.id);
+  const events = evidence
+    .filter((e) => e.courseId === courseId)
+    .map((e) => {
+      const current = objectiveOfQuestion.get(e.questionId);
+      return current && current !== e.objectiveId ? { ...e, objectiveId: current } : e;
+    });
+
   const objectives = new Map<string, ObjectiveState>();
   const topics = new Map<string, TopicProgress>();
-  for (const topicId of topicIds) {
-    const list = objectivesForTopic(topicId, bank[topicId] ?? [], catalogue);
+  for (const { topicId, list } of perTopic) {
     for (const o of list) {
       objectives.set(o.id, computeObjectiveState(o.id, events, now, { hasMechanismQuestions: o.hasMechanismQuestions, dayKey }));
     }
@@ -1424,7 +1446,7 @@ Add an empty state right after `const backHref = ...;` (before the `topic.status
 Run: `npx tsc --noEmit && npm run lint && npm test`
 Expected: all pass.
 
-Run `npm run dev`, open `http://localhost:3000/quiz/ald/boolean-algebra`, answer two questions, then in the browser console run `JSON.parse(localStorage.getItem("orca:v3")).evidence` and expect two events with `objectiveId` values starting `boolean-algebra/`. Open `/quiz/circuit-analysis/ohm` and expect the "No questions for Ohm's Law yet." empty state.
+Run `npm run dev`, open `http://localhost:3000/quiz/ald/boolean-algebra`, answer two questions, then in the browser console run `JSON.parse(localStorage.getItem("orca:v3")).evidence` and expect two events with `objectiveId` values starting `boolean-algebra/`. (No seeded topic has an empty bank, so the "No questions yet" state isn't reachable from the demo; it covers topics imported without questions.)
 
 - [ ] **Step 4: Commit**
 
@@ -1473,7 +1495,7 @@ const ALD_SEED_TOPICS: Topic[] = ALD_TOPICS.map((t, i) => ({
   source: t.source,
 }));
 ```
-- In every other seed course, delete `status`, `lessons` and `lessonsDone` from each topic literal, e.g. `{ id: "ohm", name: "Ohm's Law", pos: { x: 330, y: 240 } },`.
+- Delete the four seed courses with no real content (`circuit`, `signals`, `linear`, `stats`) from `SEED_COURSES`, so only ALD ships. Delete the seed rows that point at them: `SEED_DUE` `d1`, and `SEED_EVENTS` `e1`, `e6`, `e8`, `e10`, `e13`, `e14`. Then run `grep -n '"circuit"\|"signals"\|"linear"\|"stats"' src/lib/data.ts` and expect matches only in the `IslandVariant` type (variants remain as island shapes for new courses).
 
 In `src/lib/extraction.ts`, `topicsFrom` returns `Array<Omit<Topic, "pos">>` and drops `lessons: 1`.
 
@@ -1700,7 +1722,7 @@ Expected: only `TopicStatus` inside `src/lib/mastery/progress.ts`.
 Run: `npx tsc --noEmit && npm run lint && npm test`
 Expected: all pass.
 
-Run `npm run dev`. On `/course/ald`, the first topic carries START and every node says "N objectives". Answer one Boolean Algebra question; back on the trail, Boolean Algebra reads "0 of 4 objectives mastered" and the first node is still START. `/course/circuit-analysis` shows "No questions yet" under each node. Create a course on `/new-course`; its page shows "This island is uncharted."
+Run `npm run dev`. On `/course/ald`, the first topic carries START and every node says "N objectives". Answer one Boolean Algebra question; back on the trail, Boolean Algebra reads "0 of 4 objectives mastered" and the first node is still START. `/home` shows only the ALD island. Create a course on `/new-course`; its page shows "This island is uncharted."
 
 - [ ] **Step 8: Commit**
 
@@ -1858,7 +1880,7 @@ npm run lint
 npm test
 npm run build
 ```
-Expected: all four succeed. Then `npm run dev` and walk: `/` → `/home` (islands pale) → ALD island → answer a quiz on two topics → trail shows objective counts, ALD island sprouting → `/course/circuit-analysis` shows "No questions yet" → no chat icon in the nav, and `/chat` returns 404.
+Expected: all four succeed. Then `npm run dev` and walk: `/` → `/home` (islands pale) → ALD island → answer a quiz on two topics → trail shows objective counts, ALD island sprouting → a newly created course shows "This island is uncharted." → no chat icon in the nav, and `/chat` returns 404.
 
 - [ ] **Step 5: Commit**
 
