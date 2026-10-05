@@ -23,6 +23,14 @@
 >   an anchor. `save_structure` upserts only the keys a row gives (a left-out key keeps its value),
 >   so the store can send just what changed. `supabase db lint` reports one false positive on
 >   `save_structure` (it can't follow the dynamic table name).
+> - **Isolation audit (2026-10-05, local):** `npm run check:isolation` creates two throwaway
+>   accounts and checks over the real HTTP API (REST, RPC, Storage, GraphQL) that the second and a
+>   signed-out caller can't read, change, delete, attach to or impersonate anything of the first's
+>   (39 checks, all passing locally). It takes a hosted project's URL and keys, so Task 10 runs it
+>   against the live project. The audit also revoked EXECUTE on the `private` functions from the
+>   API roles (a guard test checks). By design the secret (service-role) key bypasses RLS: it stays
+>   server-only, and server code that uses it (jobs, Task 7) must scope every query to the
+>   student it's working for.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
@@ -238,7 +246,8 @@ CI job with the Supabase stack; roadmap (Phase 4 built, dependencies and why), `
 green on the merge into `backend-implementation`.
 
 ### Task 10 — Live verification (needs the owner's projects)
-Link the hosted Supabase project and push migrations; prove RLS with two real accounts; deploy
+Link the hosted Supabase project and push migrations; prove RLS with two real accounts
+(`npm run check:isolation` with the hosted URL and keys); deploy
 the Trigger.dev tasks; set Vercel env vars; one real ALD upload end to end with
 `ANTHROPIC_API_KEY`; confirm sign-up and reset emails arrive once SMTP is set. Status notes say
 which of these ran.

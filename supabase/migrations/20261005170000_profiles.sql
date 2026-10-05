@@ -30,5 +30,7 @@ begin
 end;
 $$;
 
+revoke execute on function private.create_profile() from public, anon, authenticated;
+
 create trigger create_profile after insert on auth.users
   for each row execute function private.create_profile();

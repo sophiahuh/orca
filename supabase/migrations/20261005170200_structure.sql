@@ -173,6 +173,8 @@ begin
 end;
 $$;
 
+revoke execute on function private.check_question_anchor() from public, anon, authenticated;
+
 create constraint trigger question_anchor after insert or update of anchor, objective_id on public.questions
   deferrable initially deferred for each row execute function private.check_question_anchor();
 

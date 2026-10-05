@@ -57,7 +57,9 @@ them silently; list what you assumed.
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
   `.env.local`; template in `.env.example`), `npm run db:reset` (re-applies `supabase/migrations/`),
-  `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run db:types`, `npm run db:stop`. In a
+  `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run check:isolation` (two throwaway
+  accounts over the real HTTP API; pass `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and
+  `SUPABASE_SECRET_KEY` to run it against a hosted project), `npm run db:types`, `npm run db:stop`. In a
   cloud container, start the daemon first (`sudo dockerd > /tmp/dockerd.log 2>&1 &`) and pull from
   Docker Hub, since the CLI's default AWS registry is blocked there:
   `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npm run db:start`. Docker Hub rate-limits anonymous

@@ -2,7 +2,7 @@
 -- reachable by API roles. They pass trivially until tables exist and keep later migrations honest.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(4);
+select plan(5);
 
 select has_schema('private', 'the private schema exists');
 
@@ -27,6 +27,15 @@ select is(
 select ok(
   not has_schema_privilege('authenticated', 'private', 'usage') and not has_schema_privilege('anon', 'private', 'usage'),
   'API roles cannot use the private schema'
+);
+
+select is(
+  (select array_agg(p.proname::text order by p.proname)
+     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'private'
+      and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))),
+  null,
+  'no function in private is executable by API roles'
 );
 
 select * from finish();
