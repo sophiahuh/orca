@@ -159,9 +159,11 @@
 >   poll wasn't told apart in a test. 7a has **not had its task review yet**: review it first
 >   (base 81abfff). **Next:** 7b (injection defences), 7c (cost guard, daily page limit), then
 >   Tasks 8–10. Tasks 3–6 were each reviewed and their Important findings fixed.
-> - **How the rest is run:** one fresh subagent per task (Task 7 is split into 7a, 7b and 7c;
->   their briefs were written out from this plan's Task 7 and decisions 10 and 13), a review after
->   each, and a whole-branch review before merging into `backend-implementation`.
+> - **How the rest is run:** in parallel waves, per
+>   `2026-10-05-orca-phase4-execution.md` (proposed 2026-10-05): a short Wave 0 (7a review and
+>   shared contracts), then 7b, 7c, Task 8, the deferred findings and CI side by side, then
+>   integration, a whole-branch review and docs before merging into `backend-implementation`.
+>   This plan still defines what each task builds.
 > - **Review findings deferred (fix before merge or record why not):**
 >   - Snapshots: a newer `rules_version` is treated as stale, so during a rolling deploy an old
 >     server overwrites newer snapshots; the 409 message blames a concurrent answer when a structure
