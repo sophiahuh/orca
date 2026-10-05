@@ -52,9 +52,12 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   any API route. Without a key, routes fall back to demo mode.
 - Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), run with `npm test`.
 - Browser tests: Playwright (`e2e/`, `playwright.config.ts`), run with `npm run test:e2e`. It starts
-  `next dev` on port 3100 (or reuses one) at the 1194×834 frame size; each test gets a fresh
+  `next dev` on port 3100 (reuses a running one locally, never in CI) at the 1194×834 frame size; each test gets a fresh
   localStorage. First run: `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_PATH` to
   an installed Chromium (cloud containers ship one at `/opt/pw-browsers/chromium-*/chrome-linux/chrome`).
+- CI: `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build, and the Playwright
+  suite in a second job (traces uploaded on failure), on pushes to `main` / `backend-implementation`
+  and on pull requests.
 
 ## Design tokens (already in `src/app/globals.css`)
 
