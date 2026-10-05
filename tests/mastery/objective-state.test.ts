@@ -1,0 +1,287 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  EMPTY_ACCUMULATOR,
+  MASTERY_RULES,
+  applyAnswer,
+  computeObjectiveState,
+  stateAt,
+} from "../../src/lib/mastery/objective-state.ts";
+import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
+
+/** Noon UTC on 2026-10-<n>. */
+const day = (n: number, hour = 12) => new Date(Date.UTC(2026, 9, n, hour)).toISOString();
+const at = (n: number, hour = 13) => new Date(day(n, hour));
+const utcDay = (iso: string) => iso.slice(0, 10);
+const msBefore = (iso: string) => new Date(Date.parse(iso) - 1);
+
+let seq = 0;
+function ev(questionId: string, when: string, over: Partial<EvidenceEvent> = {}): EvidenceEvent {
+  seq += 1;
+  return {
+    id: `e${seq}`,
+    at: when,
+    courseId: "ald",
+    topicId: "t",
+    objectiveId: "t/o",
+    questionId,
+    tier: null,
+    outcome: "correct",
+    grader: "choice",
+    source: "quiz",
+    ...over,
+  };
+}
+
+const opts = (hasMechanismQuestions = false) => ({ hasMechanismQuestions, dayKey: utcDay });
+const state = (events: EvidenceEvent[], now: Date, hasMechanismQuestions = false) =>
+  computeObjectiveState("t/o", events, now, opts(hasMechanismQuestions));
+
+/** Mastered on day 2: q1, q2 on day 1 and q3 on day 2. */
+const masteredOnDay2 = () => [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
+const dueAfter = (events: EvidenceEvent[]) => state(events, at(2)).dueAt!;
+
+/* ── The mastery bar (Orca's rule) ─────────────────────────────────── */
+
+test("no answers is unseen", () => {
+  const s = state([], at(1));
+  assert.equal(s.status, "unseen");
+  assert.equal(s.credit, 0);
+  assert.equal(s.dueAt, null);
+  assert.equal(s.recall, null);
+  assert.equal(s.lastEvidenceAt, null);
+});
+
+test("events for other objectives are ignored", () => {
+  assert.equal(state([ev("q1", day(1), { objectiveId: "t/other" })], at(1)).status, "unseen");
+});
+
+test("three correct answers on one day is still learning", () => {
+  const s = state([ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(1))], at(1));
+  assert.equal(s.status, "learning");
+  assert.equal(s.credit, 3);
+  assert.equal(s.creditDays, 1);
+  assert.equal(s.dueAt, null);
+});
+
+test("three credited answers over two days with the last two correct is mastered", () => {
+  const s = state(masteredOnDay2(), at(2));
+  assert.equal(s.status, "mastered");
+  assert.ok(s.dueAt && Date.parse(s.dueAt) > Date.parse(day(2)), "a check is scheduled after mastery");
+  assert.ok(s.stabilityDays && s.stabilityDays > 0);
+  assert.equal(s.spacedChecks, 0);
+});
+
+test("repeating a question never adds credit", () => {
+  const s = state([ev("q1", day(1)), ev("q1", day(2)), ev("q2", day(2))], at(2));
+  assert.equal(s.credit, 2);
+  assert.equal(s.status, "learning");
+});
+
+test("a question first missed earns nothing when later answered correctly", () => {
+  const s = state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(2))], at(2));
+  assert.equal(s.credit, 0);
+});
+
+test("self-marked answers count half", () => {
+  const events = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2), { grader: "self" }), ev("q4", day(2), { grader: "self" })];
+  const s = state(events, at(2));
+  assert.equal(s.credit, 3);
+  assert.equal(s.status, "mastered");
+});
+
+test("the last two answers must be correct", () => {
+  const events = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2), { outcome: "incorrect" }), ev("q4", day(2))];
+  assert.equal(state(events, at(2)).status, "learning");
+  assert.equal(state([...events, ev("q5", day(3))], at(3)).status, "mastered");
+});
+
+test("partial answers count half and don't break the streak", () => {
+  const events = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2), { outcome: "partial", grader: "rubric" }), ev("q4", day(2), { outcome: "partial", grader: "rubric" })];
+  const s = state(events, at(2));
+  assert.equal(s.credit, 3);
+  assert.equal(s.status, "mastered");
+});
+
+/* ── Mix-ups ───────────────────────────────────────────────────────── */
+
+test("two misses in a row on different questions is a mix-up, cleared only by a mechanism question", () => {
+  const misses = [ev("q1", day(1), { outcome: "incorrect" }), ev("q2", day(1), { outcome: "incorrect" })];
+  assert.equal(state(misses, at(1), true).status, "mixed-up");
+  const retrieval = [...misses, ev("q3", day(1), { tier: "retrieval" })];
+  assert.equal(state(retrieval, at(1), true).status, "mixed-up");
+  const mechanism = [...retrieval, ev("q4", day(1), { tier: "mechanism" })];
+  assert.equal(state(mechanism, at(1), true).status, "learning");
+});
+
+test("missing the same question twice is not a mix-up", () => {
+  const s = state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(1), { outcome: "incorrect" })], at(1));
+  assert.equal(s.status, "learning");
+});
+
+test("without mechanism questions any unaided correct answer clears a mix-up", () => {
+  const events = [ev("q1", day(1), { outcome: "incorrect" }), ev("q2", day(1), { outcome: "incorrect" }), ev("q3", day(1))];
+  assert.equal(state(events, at(1), false).status, "learning");
+});
+
+test("self-marked answers neither cause nor clear a mix-up", () => {
+  const selfMisses = [ev("q1", day(1), { outcome: "incorrect", grader: "self" }), ev("q2", day(1), { outcome: "incorrect", grader: "self" })];
+  assert.equal(state(selfMisses, at(1)).status, "learning");
+  const misses = [ev("q1", day(1), { outcome: "incorrect" }), ev("q2", day(1), { outcome: "incorrect" }), ev("q3", day(1), { grader: "self" })];
+  assert.equal(state(misses, at(1)).status, "mixed-up");
+});
+
+test("an open mix-up blocks mastery", () => {
+  const events = [
+    ev("q1", day(1), { outcome: "incorrect" }),
+    ev("q2", day(1), { outcome: "incorrect" }),
+    ev("q3", day(1), { tier: "retrieval" }),
+    ev("q4", day(2), { tier: "retrieval" }),
+    ev("q5", day(2), { tier: "retrieval" }),
+  ];
+  const s = state(events, at(2), true);
+  assert.equal(s.credit, 3);
+  assert.equal(s.status, "mixed-up");
+});
+
+/* ── Spacing (FSRS) ────────────────────────────────────────────────── */
+
+test("a mastered objective fades the moment its check is due", () => {
+  const due = dueAfter(masteredOnDay2());
+  assert.equal(state(masteredOnDay2(), msBefore(due)).status, "mastered");
+  assert.equal(state(masteredOnDay2(), new Date(due)).status, "fading");
+});
+
+test("a correct answer before the check is due is not a spaced check", () => {
+  const events = [...masteredOnDay2(), ev("q4", day(3))];
+  const s = state(events, at(3));
+  assert.equal(s.status, "mastered");
+  assert.equal(s.spacedChecks, 0);
+});
+
+test("passing a check that was due counts it, grows stability and pushes the next check further out", () => {
+  const events = masteredOnDay2();
+  const first = state(events, at(2));
+  events.push(ev("q4", first.dueAt!));
+  const after = state(events, new Date(first.dueAt!));
+  assert.equal(after.status, "mastered");
+  assert.equal(after.spacedChecks, 1);
+  assert.ok(after.stabilityDays! > first.stabilityDays!);
+  const firstGap = Date.parse(first.dueAt!) - Date.parse(day(2));
+  const secondGap = Date.parse(after.dueAt!) - Date.parse(first.dueAt!);
+  assert.ok(secondGap > firstGap, "intervals grow");
+});
+
+test("a miss after mastery fades it and cuts stability; passing the next check restores it", () => {
+  const events = masteredOnDay2();
+  const before = state(events, at(2));
+  events.push(ev("q4", day(3), { outcome: "incorrect" }));
+  const missed = state(events, at(3));
+  assert.equal(missed.status, "fading");
+  assert.ok(missed.stabilityDays! < before.stabilityDays!);
+  // Answering right again before the new check is due doesn't clear it...
+  events.push(ev("q5", day(3, 14)));
+  assert.equal(state(events, at(3, 15)).status, "fading");
+  // ...passing the check once it's due does.
+  const due = state(events, at(3, 15)).dueAt!;
+  events.push(ev("q6", due));
+  assert.equal(state(events, new Date(due)).status, "mastered");
+});
+
+test("FSRS tracks difficulty from the first answer: a hard-won objective gets a shorter first interval", () => {
+  const clean = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
+  const struggled = [
+    ev("x1", day(1), { outcome: "incorrect" }),
+    ev("q1", day(1)),
+    ev("q2", day(1)),
+    ev("q3", day(2)),
+  ];
+  const cleanGap = Date.parse(state(clean, at(2)).dueAt!) - Date.parse(day(2));
+  const struggledGap = Date.parse(state(struggled, at(2)).dueAt!) - Date.parse(day(2));
+  assert.equal(state(struggled, at(2)).status, "mastered");
+  assert.ok(struggledGap < cleanGap, `struggled ${struggledGap} vs clean ${cleanGap}`);
+});
+
+test("predicted recall is near 1 right after an answer and falls over time", () => {
+  const events = masteredOnDay2();
+  const soon = state(events, at(2)).recall!;
+  const later = state(events, at(30)).recall!;
+  assert.ok(soon > 0.95, `soon ${soon}`);
+  assert.ok(later < soon, `later ${later}`);
+});
+
+test("no check is ever scheduled more than the maximum interval out", () => {
+  const events = masteredOnDay2();
+  let s = state(events, at(2));
+  for (let i = 0; i < 4; i += 1) {
+    const from = Date.parse(s.dueAt!);
+    events.push(ev(`c${i}`, s.dueAt!));
+    s = state(events, new Date(from));
+    if (s.status === "retired") break;
+    assert.ok(Date.parse(s.dueAt!) - from <= MASTERY_RULES.maxIntervalDays * 86_400_000, `check ${i + 1}`);
+  }
+});
+
+test("passing every check on time eventually retires the objective", () => {
+  const events = masteredOnDay2();
+  let s = state(events, at(2));
+  let checks = 0;
+  while (s.status !== "retired" && checks < 10) {
+    events.push(ev(`check${checks}`, s.dueAt!));
+    checks += 1;
+    s = state(events, new Date(s.dueAt!));
+  }
+  assert.equal(s.status, "retired");
+  assert.ok(s.spacedChecks >= MASTERY_RULES.retireAfterChecks);
+  assert.ok(s.stabilityDays! >= MASTERY_RULES.retireStabilityDays);
+  assert.ok(checks <= 6, `took ${checks} checks`);
+});
+
+/* ── The fold ──────────────────────────────────────────────────────── */
+
+test("events are ordered by time, not by array position", () => {
+  const s = state([ev("q3", day(2)), ev("q1", day(1)), ev("q2", day(1))], at(2));
+  assert.equal(s.status, "mastered");
+});
+
+test("applying answers one at a time gives the same state as replaying the log", () => {
+  const events = [
+    ev("q1", day(1), { outcome: "incorrect" }),
+    ev("q2", day(1)),
+    ev("q3", day(2)),
+    ev("q4", day(2)),
+    ev("q5", day(9)),
+    ev("q6", day(12), { outcome: "incorrect" }),
+    ev("q7", day(14)),
+  ];
+  let acc = EMPTY_ACCUMULATOR;
+  for (let i = 0; i < events.length; i += 1) {
+    acc = applyAnswer(acc, events[i], opts());
+    const now = at(20);
+    assert.deepEqual(stateAt("t/o", acc, now), state(events.slice(0, i + 1), now), `after answer ${i + 1}`);
+  }
+});
+
+test("the accumulator survives a JSON round trip, so it can be stored as a snapshot", () => {
+  const acc = masteredOnDay2().reduce((a, e) => applyAnswer(a, e, opts()), EMPTY_ACCUMULATOR);
+  const restored = JSON.parse(JSON.stringify(acc));
+  assert.deepEqual(restored, acc);
+  const next = ev("q4", day(9));
+  assert.deepEqual(applyAnswer(restored, next, opts()), applyAnswer(acc, next, opts()));
+});
+
+test("an answer older than the last one applied throws instead of corrupting the state", () => {
+  const acc = applyAnswer(EMPTY_ACCUMULATOR, ev("q2", day(2)), opts());
+  assert.throws(() => applyAnswer(acc, ev("q1", day(1)), opts()), /rebuild/);
+});
+
+test("applyAnswer never mutates the state it was given", () => {
+  const before = applyAnswer(EMPTY_ACCUMULATOR, ev("q1", day(1)), opts());
+  const snapshot = JSON.stringify(before);
+  applyAnswer(before, ev("q2", day(2)), opts());
+  assert.equal(JSON.stringify(before), snapshot);
+});
+
+test("an unparseable timestamp throws", () => {
+  assert.throws(() => state([ev("q1", "garbage")], at(1)), /unparseable timestamp/);
+});
