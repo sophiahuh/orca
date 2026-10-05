@@ -51,6 +51,10 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
   any API route. Without a key, routes fall back to demo mode.
 - Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), run with `npm test`.
+- Browser tests: Playwright (`e2e/`, `playwright.config.ts`), run with `npm run test:e2e`. It starts
+  `next dev` on port 3100 (or reuses one) at the 1194×834 frame size; each test gets a fresh
+  localStorage. First run: `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_PATH` to
+  an installed Chromium (cloud containers ship one at `/opt/pw-browsers/chromium-*/chrome-linux/chrome`).
 
 ## Design tokens (already in `src/app/globals.css`)
 
@@ -109,6 +113,10 @@ This describes the code as it is.
 - Built-in ALD content: `src/lib/content/ald.ts` (topics + 69 questions); draft objectives in
   `docs/OBJECTIVES-ALD.md`. Sample material: `docs/samples/ald/L01–L04` (real ALD lecture decks;
   syllabus in L01).
+- `e2e/mastery-core.spec.ts` — the Phase 1 walkthrough in a real browser: fresh state, no chat,
+  island looks, the sample trail (START, objective counts, no locks), empty calendar, quiz answers
+  writing evidence and moving the trail, island and streak, and a new course starting uncharted.
+  Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
   is not linked yet. `.vercelignore` keeps docs/ out of uploads.
@@ -158,5 +166,6 @@ topics, objectives, weights and relations (on-device), (3) scheduling and sessio
 
 - Keep screens thin: data from `useOrca()`, visuals from components, timing from `motion.ts`.
 - Pixel values from Figma are fine inline (`text-[22px]`, `rounded-[20px]`); colors must be tokens.
-- Run `npx tsc --noEmit` and `npm run lint` before committing and `npm test`.
+- Before committing: `npx tsc --noEmit`, `npm run lint`, `npm test`, and `npm run test:e2e` when a
+  screen or the store changed. A behaviour you would check by hand in the browser belongs in `e2e/`.
   `npm run dev` for the preview.

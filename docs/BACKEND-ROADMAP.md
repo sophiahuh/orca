@@ -77,15 +77,15 @@ Open questions live in `docs/TO-DISCUSS.md`.
   `superpowers:subagent-driven-development`.
 - Not Spec Kit. The platform ran both flows side by side; one is enough here.
 - Ported from the platform in Phase 1: its engineering invariants (into `CLAUDE.md`), its
-  `learner-graph` and `assessment-pipeline` skills (rewritten for objectives and Claude), and its
-  typecheck-on-edit hook. Not ported: `concept-atlas` and Spec Kit skills. The Trigger.dev skills
+  `learner-graph` and `assessment-pipeline` skills (rewritten for objectives and Claude as
+  `.claude/skills/learner-evidence` and `.claude/skills/assessment`), and its typecheck-on-edit hook. Not ported: `concept-atlas` and Spec Kit skills. The Trigger.dev skills
   come over only if Phase 4 picks Trigger.dev.
 
 ## Phases
 
 ### Phase 1 — Mastery core, on-device
 Plan: `docs/superpowers/plans/2026-10-04-orca-phase1-mastery-core.md`.
-Remove the AI chat. Test runner. Built-in ALD questions tagged with objectives, ALD kept as a
+Remove the AI chat. Test runners (`node:test` units, Playwright browser walkthrough). Built-in ALD questions tagged with objectives, ALD kept as a
 labelled sample course, fabricated seed data removed. Evidence log in the store; the mastery rule
 as a step function; topic progress, island level, due list and streak derived.
 The quiz writes evidence; the trail and islands read derived state. Still localStorage.

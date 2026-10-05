@@ -59,7 +59,7 @@ export function MonthGrid({ cursor, events, today }: { cursor: Date; events: Cal
               </span>
               <div className="flex min-h-0 flex-col gap-[4px] overflow-hidden">
                 {evs.slice(0, 2).map((e) => (
-                  <Tag key={e.id} kind={e.kind} title={e.title}>
+                  <Tag key={e.id} kind={e.kind} title={e.title} data-part="event">
                     {e.title}
                   </Tag>
                 ))}

@@ -27,6 +27,7 @@ Node ≥ 20.9; the unit tests need Node ≥ 22.6 (`.nvmrc`).
 npx tsc --noEmit
 npm run lint
 npm test        # unit tests (Node ≥ 22.6)
+npm run test:e2e  # browser tests (Playwright; first run: npx playwright install chromium)
 npm run build
 ```
 
