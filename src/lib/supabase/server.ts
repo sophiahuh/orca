@@ -7,7 +7,8 @@
  * - `adminClient()` uses the secret key and bypasses row-level security. Code that uses it must
  *   scope every query to the user `signedInUser` returned, never to an id from the request body.
  *
- * Task 4 adds the browser client, the proxy that refreshes the session cookie, and the auth screens.
+ * `cookieClient()` is the session-cookie client for server actions and route handlers that sign
+ * people in or out. The browser client is `browser.ts`; `src/proxy.ts` refreshes the cookie.
  */
 import { createServerClient } from "@supabase/ssr";
 import { type SupabaseClient, createClient } from "@supabase/supabase-js";
@@ -16,6 +17,26 @@ import type { Database } from "./database.types";
 import { publicSupabaseEnv, serverSupabaseEnv } from "./env";
 
 export type OrcaSupabase = SupabaseClient<Database>;
+
+/** A client that reads and writes the session cookie (server actions and route handlers). */
+export async function cookieClient(): Promise<OrcaSupabase> {
+  const { url, publishableKey } = publicSupabaseEnv();
+  const store = await cookies();
+  return createServerClient<Database>(url, publishableKey, {
+    cookies: {
+      getAll: () => store.getAll(),
+      setAll: (list) => {
+        // A refreshed session is written back when the caller may set cookies; the proxy does it
+        // on every request, so a read-only store (a server component) is fine.
+        try {
+          for (const { name, value, options } of list) store.set(name, value, options);
+        } catch {
+          /* read-only cookie store */
+        }
+      },
+    },
+  });
+}
 
 /** The signed-in user's id, or null when the caller isn't signed in (or the session is invalid). */
 export async function signedInUser(request: Request): Promise<{ id: string } | null> {
@@ -26,21 +47,7 @@ export async function signedInUser(request: Request): Promise<{ id: string } | n
     const { data, error } = await client.auth.getUser(bearer);
     return error || !data.user ? null : { id: data.user.id };
   }
-  const store = await cookies();
-  const client = createServerClient<Database>(url, publishableKey, {
-    cookies: {
-      getAll: () => store.getAll(),
-      setAll: (list) => {
-        // A refreshed session is written back when the handler may set cookies; the proxy (Task 4)
-        // does it on every request.
-        try {
-          for (const { name, value, options } of list) store.set(name, value, options);
-        } catch {
-          /* read-only cookie store */
-        }
-      },
-    },
-  });
+  const client = await cookieClient();
   const { data, error } = await client.auth.getUser();
   return error || !data.user ? null : { id: data.user.id };
 }
