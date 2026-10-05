@@ -107,8 +107,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Weekly` =
   due until one is finished in the last 7 days; `1 wk before exam` = daily within 7 days of an
   exam on the calendar. Extra practice is always available from the course page.
-- **Decide:** whether these feel right in use; whether the default deep review (3 hours, the
-  existing Settings default) should be shorter (MASTERY-PLAN §3 says 10–15 minutes).
+- **Decide:** whether these feel right in use. (Deep review length is now picked by the student at
+  the start of each deep review; see Decided. The Settings value is only the starting suggestion,
+  still 3 hours by default; whether that suggestion should be shorter is minor now.)
 
 ### Deep review as a spaced check
 - **Source:** MASTERY-PLAN §3: "Deep review success counts as a spaced check for every objective
@@ -164,5 +165,10 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - 2026-10-05: question and objective ids are random UUIDs, never derived from content or position;
   nothing is deleted (archive or merge), and rejected objectives are kept so later uploads don't
   re-propose them. Duplicates are caught by a normalised prompt, separately from ids.
+- 2026-10-05: deep review asks how many minutes the student wants at its start (presets 10–60 or any
+  1–600; the course's Settings length is the starting suggestion) and shows what that covers:
+  questions, minutes, how many objectives get a question and, when some don't fit, how long
+  covers them all. Assembly covers every objective once, highest priority first, before going
+  deeper on any. The end card offers "Start another deep review".
 - 2026-10-05: the built-in ALD sample course is removed too; the app ships no courses. ALD is
   reached by uploading `docs/samples/ald/`. The e2e suite seeds its own fixture course.

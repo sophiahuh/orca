@@ -116,6 +116,18 @@ test("deep review splits the budget by material sliders, and hands unused time o
   assert.equal(noExams.items.length, 8, "the exam share goes to the types that have questions");
 });
 
+test("deep review covers every objective once, highest priority first, before going deeper on any", () => {
+  const deep = (o: string) => [mc(`${o}1`, "application"), mc(`${o}2`, "transfer"), mc(`${o}3`, "connection")];
+  const candidates = [cand("a", "fading", deep("a")), cand("b", "learning", deep("b")), cand("c", "mastered", deep("c"))];
+  const opts = { sliders: { lectures: 25 }, materialTypeOf: () => null };
+  const short = assembleDeepReview(candidates, { ...ctx(60), ...opts });
+  assert.deepEqual(short.items.map((i) => i.objectiveId), ["a", "b"], "a short session spends its time on the top objectives, one question each");
+  assert.deepEqual(short.coverage, { objectives: 3, covered: 2, coverAllSeconds: 90, stockSeconds: 270 });
+  const long = assembleDeepReview(candidates, { ...ctx(180), ...opts });
+  assert.deepEqual(long.items.map((i) => i.objectiveId), ["a", "b", "c", "a", "b", "c"]);
+  assert.equal(long.coverage.covered, 3);
+});
+
 test("candidates keep priority order and leave out objectives with no questions; last seen is the latest answer", async () => {
   const { sessionCandidates, lastSeenOf } = await import("../../src/lib/mastery/session.ts");
   const ranked = [

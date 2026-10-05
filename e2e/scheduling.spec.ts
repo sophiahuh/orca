@@ -132,32 +132,60 @@ test.describe("scheduling", () => {
     await expect(page.locator('[data-todo="requiz"]')).toHaveCount(0);
   });
 
-  test("deep review comes due a week after the first answer and stays due until done", async ({ page }) => {
+  test("deep review comes due a week after the first answer, asks how long, and stays due until done", async ({ page }) => {
     await noModel(page);
-    const answered = {
+    const answered = (id: string, objectiveId: string, questionId: string, topicId: string) => ({
       kind: "answer",
-      id: "e1",
+      id,
       at: "2026-09-27T10:00:00.000Z",
       courseId: COURSE,
-      topicId: "boolean-algebra",
-      objectiveId: "boolean-algebra/simplify",
-      questionId: "ba-1",
+      topicId,
+      objectiveId,
+      questionId,
       tier: "retrieval",
       outcome: "correct",
       grader: "exact",
       source: "quiz",
       sessionId: "old",
-    };
+    });
+    const evidence = [
+      answered("e1", "boolean-algebra/simplify", "ba-1", "boolean-algebra"),
+      answered("e2", "twos-complement/convert", "tc-1", "twos-complement"),
+      answered("e3", "twos-complement/sign-extend", "tc-4", "twos-complement"),
+    ];
     const config = { ...FIXTURE_STATE.configs[COURSE], deep: { duration: "5 min", cadence: "Weekly" } };
-    await seedState(page, { ...FIXTURE_STATE, configs: { [COURSE]: config }, evidence: [answered] });
+    await seedState(page, { ...FIXTURE_STATE, configs: { [COURSE]: config }, evidence });
     await page.goto("/home");
     const card = page.locator('[data-todo="deep"]');
-    await expect(card).toContainText("Deep review · 5 min");
+    await expect(card).toContainText("Deep review");
     await card.click();
     await expect(page).toHaveURL(/kind=deep/);
-    // Only the objective the student has answered goes into a deep review.
-    await expect(page.getByText("1 / 2")).toBeVisible();
+
+    // The student picks the length first and sees what it covers. Only answered objectives go in.
+    await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toBeVisible();
+    const plan = page.locator('[data-part="deep-plan"]');
+    await expect(plan).toContainText("6 questions · about 5 min");
+    await expect(page.locator('[data-part="deep-coverage"]')).toHaveText("Covers 3 of 3 objectives, most urgent first.");
+
+    // One minute covers only the most urgent objective; the plan says how long covers them all.
+    await page.locator('[data-part="deep-custom"]').fill("1");
+    await expect(plan).toContainText("1 question · about 1 min");
+    await expect(page.locator('[data-part="deep-short"]')).toContainText("2 lower-priority objectives don't fit.");
+    await page.locator('[data-part="deep-cover-all"]').click();
+    await expect(page.locator('[data-part="deep-custom"]')).toHaveValue("3");
+    await expect(page.locator('[data-part="deep-coverage"]')).toHaveText("Covers 3 of 3 objectives, most urgent first.");
+    await expect(plan).toContainText("4 questions · about 3 min");
+
+    await page.locator('[data-part="deep-start"]').click();
+    await expect(page.getByText("1 / 4")).toBeVisible();
     await answerAll(page, true);
+
+    // The end card offers another deep review, which asks for its length again.
+    await page.locator('[data-part="again"]').click();
+    await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toBeVisible();
+    const modes = await stored(page, (s) => (s.results as Array<{ mode: string }>).map((r) => r.mode));
+    expect(modes).toEqual(["deep"]);
+
     await page.goto("/home");
     await expect(page.locator('[data-todo="deep"]')).toHaveCount(0);
   });

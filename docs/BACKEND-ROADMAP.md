@@ -205,6 +205,9 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
 - **Top-up** after each session for objectives below 3 unseen questions.
 - **Deep review** due per course from its configured cadence (next due one cadence after the last
   completed one; stays due if missed), with its question mix weighted by the material sliders.
+  At its start the student picks how many minutes (the Settings length is the suggestion) and
+  sees what that covers; every objective gets one question, highest priority first, before any
+  gets a second. The end card offers another deep review (decided 2026-10-05).
 - **Poor-quiz loop:** a Review to-do with the slide range and missed explanations, and a re-quiz
   the next day.
 

@@ -155,7 +155,8 @@ This describes the code as it is.
   `priority.ts` (overdue, weight, gap, mix-up and open confusion, each with a reason sentence),
   `agenda.ts` (per course: ranked due list, quick- and deep-review cadence, poor-session review
   to-dos and next-day re-quizzes), `session.ts` (quick review, re-quiz and deep review assembled
-  from the question stock within the time budget), `todo.ts` (sidebar cards from the agenda),
+  from the question stock within the time budget; deep review covers every objective once, by
+  priority, before going deeper, and reports its coverage for the length picker), `todo.ts` (sidebar cards from the agenda),
   `streak.ts` (consecutive local days with an unaided graded answer). `catalogue.ts` follows `mergedInto` and leaves archived objectives out; `applyConfusion`
   resets an objective to learning.
 - `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
@@ -180,7 +181,8 @@ This describes the code as it is.
   Toggle, Slider, AnswerOption, DueCard, PathNode (done / current / upcoming, no locks) (barrel in `ui/index.ts`).
 - `src/components/layout/` — AppShell (main + 340px Sidebar with NavBar), BackButton, Screen.
 - Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (QuizRunner,
-  shared by topic quizzes and sessions; TruthTable, QuizEnd, ShortAnswer), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
+  shared by topic quizzes and sessions; TruthTable, QuizEnd, ShortAnswer, DeepReviewSetup: the
+  "how long do you want to study?" picker with the coverage plan), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
 - Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`),
   `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
   `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`. Dynamic

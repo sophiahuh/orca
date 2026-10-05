@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Course, DEFAULT_CONFIG, DEFAULT_WEIGHTS, type QuizQuestion, trailTopics } from "@/lib/data";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
@@ -20,6 +20,7 @@ import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
 import { QuizRunner, type RunnerItem } from "@/components/quiz/QuizRunner";
+import { DEEP_MAX_MINUTES, DeepReviewSetup, type DeepReviewPlan } from "@/components/quiz/DeepReviewSetup";
 
 const KINDS = ["quick", "deep", "requiz"] as const;
 type Kind = (typeof KINDS)[number];
@@ -43,16 +44,20 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
   return <SessionBody key={`${course.id}:${kind}`} course={course} kind={kind} />;
 }
 
-/** Mounted once the store is loaded, so the session is assembled exactly once, at start. */
+/** Mounted once the store is loaded. A deep review asks for its length first and can be run again from its end card. */
 function SessionBody({ course, kind }: { course: Course; kind: Kind }) {
-  const router = useRouter();
-  const { questionBank, objectives, configs, weights, materials } = useOrca();
+  const [round, setRound] = useState(0);
+  if (kind === "deep") return <DeepReview key={round} course={course} onAgain={() => setRound((r) => r + 1)} />;
+  return <ScheduledSession course={course} kind={kind} />;
+}
+
+/** What every session draws on, read from the store once at mount so the session doesn't change under the student. */
+function useSessionSources(course: Course) {
+  const { questionBank, objectives } = useOrca();
   const agenda = useAgenda()[course.id];
   const mastery = useMasteryByCourse()[course.id];
   if (!agenda || !mastery) throw new Error(`No agenda computed for course ${course.id}`);
-  const backHref = `/course/${course.slug}`;
-
-  const [session] = useState(() => {
+  const [sources] = useState(() => {
     const catalogue = objectives[course.id] ?? {};
     const byId = new Map<string, QuizQuestion>();
     const byObjective = new Map<string, QuizQuestion[]>();
@@ -64,53 +69,91 @@ function SessionBody({ course, kind }: { course: Course; kind: Kind }) {
         byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
       }
     }
-    const config = configs[course.id] ?? DEFAULT_CONFIG;
     const ctx = { lastSeen: lastSeenOf(mastery.events), now: new Date(), dayKey: localDayKey };
-    let assembled: AssembledSession;
-    if (kind === "quick") {
-      assembled = assembleQuickReview(sessionCandidates(agenda.dueToday, mastery.objectives, byObjective), { ...ctx, budgetSeconds: durationSeconds(config.quick.duration) });
-    } else if (kind === "requiz") {
-      const ids = agenda.study.filter((s) => s.requiz === "today").map((s) => s.objectiveId);
-      assembled = assembleRequiz(sessionCandidates(agenda.ranked, mastery.objectives, byObjective), ids, { ...ctx, budgetSeconds: durationSeconds(config.quick.duration) });
-    } else {
-      assembled = assembleDeepReview(sessionCandidates(agenda.ranked, mastery.objectives, byObjective), {
-        ...ctx,
-        budgetSeconds: durationSeconds(config.deep.duration),
-        sliders: weights[course.id] ?? DEFAULT_WEIGHTS,
-        materialTypeOf: (id) => materials.find((m) => m.id === id)?.type ?? null,
-      });
-    }
     const reasons = new Map(agenda.ranked.map((r) => [r.objectiveId, reasonsOf(r.priority)[0]]));
-    const items: RunnerItem[] = assembled.items.map((i) => {
-      const question = byId.get(i.questionId);
-      if (!question) throw new Error(`Session picked question ${i.questionId}, which isn't in the course`);
-      const why = reasons.get(i.objectiveId);
-      const notes = [...(why ? [why] : []), ...(i.seenBefore ? ["Seen before: no new questions left for this one yet"] : [])];
-      return { question, topicId: i.topicId, notes };
-    });
-    return { items };
+    const toItems = (assembled: AssembledSession): RunnerItem[] =>
+      assembled.items.map((i) => {
+        const question = byId.get(i.questionId);
+        if (!question) throw new Error(`Session picked question ${i.questionId}, which isn't in the course`);
+        const why = reasons.get(i.objectiveId);
+        const notes = [...(why ? [why] : []), ...(i.seenBefore ? ["Seen before: no new questions left for this one yet"] : [])];
+        return { question, topicId: i.topicId, notes };
+      });
+    return { agenda, ctx, toItems, candidates: (ranked: typeof agenda.ranked) => sessionCandidates(ranked, mastery.objectives, byObjective) };
+  });
+  return sources;
+}
+
+function ScheduledSession({ course, kind }: { course: Course; kind: "quick" | "requiz" }) {
+  const router = useRouter();
+  const { configs } = useOrca();
+  const { agenda, ctx, toItems, candidates } = useSessionSources(course);
+  const backHref = `/course/${course.slug}`;
+
+  const [items] = useState(() => {
+    const budgetSeconds = durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).quick.duration);
+    if (kind === "quick") return toItems(assembleQuickReview(candidates(agenda.dueToday), { ...ctx, budgetSeconds }));
+    const ids = agenda.study.filter((s) => s.requiz === "today").map((s) => s.objectiveId);
+    return toItems(assembleRequiz(candidates(agenda.ranked), ids, { ...ctx, budgetSeconds }));
   });
 
-  if (session.items.length === 0) {
+  if (items.length === 0) {
     const tomorrow = kind === "requiz" && agenda.study.some((s) => s.requiz === "tomorrow");
     const message =
       kind === "quick"
         ? `Nothing to review in ${course.name} right now.`
-        : kind === "deep"
-          ? "Nothing to deep review yet: answer some questions first."
-          : tomorrow
-            ? "Your re-quiz opens tomorrow. Same-day retries only measure short-term memory."
-            : "No re-quiz due.";
-    return (
-      <Screen bg="parchment" className="items-start gap-4 p-[32px]">
-        <BackButton href={backHref} />
-        <p className="text-[22px] font-bold text-prussian">{message}</p>
-        <Button size="sm" onClick={() => router.push(backHref)}>
-          Back to {course.short}
-        </Button>
-      </Screen>
-    );
+        : tomorrow
+          ? "Your re-quiz opens tomorrow. Same-day retries only measure short-term memory."
+          : "No re-quiz due.";
+    return <NothingToDo course={course} message={message} onBack={() => router.push(backHref)} />;
   }
+  return <QuizRunner course={course} items={items} mode={kind} title={course.name} backHref={backHref} />;
+}
 
-  return <QuizRunner course={course} items={session.items} mode={kind} title={course.name} backHref={backHref} />;
+function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }) {
+  const router = useRouter();
+  const { configs, weights, materials } = useOrca();
+  const { agenda, ctx, toItems, candidates } = useSessionSources(course);
+  const backHref = `/course/${course.slug}`;
+  // The course's deep-review length in Settings is the starting suggestion; the student picks the length here.
+  const [minutes, setMinutes] = useState(() => Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
+  const [items, setItems] = useState<RunnerItem[] | null>(null);
+  const [pool] = useState(() => candidates(agenda.ranked));
+
+  const assembled = useMemo(
+    () =>
+      assembleDeepReview(pool, {
+        ...ctx,
+        budgetSeconds: minutes * 60,
+        sliders: weights[course.id] ?? DEFAULT_WEIGHTS,
+        materialTypeOf: (id) => materials.find((m) => m.id === id)?.type ?? null,
+      }),
+    [pool, ctx, minutes, weights, course.id, materials],
+  );
+  const plan = useMemo((): DeepReviewPlan => {
+    const perTopic = new Map<string, number>();
+    for (const i of assembled.items) perTopic.set(i.topicId, (perTopic.get(i.topicId) ?? 0) + 1);
+    const topics = trailTopics(course).flatMap((t) => (perTopic.has(t.id) ? [{ name: t.name, questions: perTopic.get(t.id)! }] : []));
+    return { questions: assembled.items.length, plannedSeconds: assembled.plannedSeconds, coverage: assembled.coverage, topics };
+  }, [assembled, course]);
+
+  if (assembled.coverage.objectives === 0) {
+    return <NothingToDo course={course} message="Nothing to deep review yet: answer some questions first." onBack={() => router.push(backHref)} />;
+  }
+  if (items) {
+    return <QuizRunner course={course} items={items} mode="deep" title={course.name} backHref={backHref} again={{ label: "Start another deep review", onStart: onAgain }} />;
+  }
+  return <DeepReviewSetup courseName={course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} plan={plan} onStart={() => setItems(toItems(assembled))} />;
+}
+
+function NothingToDo({ course, message, onBack }: { course: Course; message: string; onBack: () => void }) {
+  return (
+    <Screen bg="parchment" className="items-start gap-4 p-[32px]">
+      <BackButton href={`/course/${course.slug}`} />
+      <p className="text-[22px] font-bold text-prussian">{message}</p>
+      <Button size="sm" onClick={onBack}>
+        Back to {course.short}
+      </Button>
+    </Screen>
+  );
 }

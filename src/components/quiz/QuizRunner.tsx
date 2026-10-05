@@ -42,6 +42,8 @@ export interface QuizRunnerProps {
   /** Shown on the end card ("Boolean Algebra is getting stronger"). */
   title: string;
   backHref: string;
+  /** An end-card button that starts another session of the same kind (deep review). */
+  again?: { label: string; onStart: () => void };
 }
 
 /**
@@ -49,7 +51,7 @@ export interface QuizRunnerProps {
  * answer, records one evidence event per graded answer, records the finished session, then tops up
  * the stock for the objectives it asked about.
  */
-export function QuizRunner({ course, items: allItems, mode, title, backHref }: QuizRunnerProps) {
+export function QuizRunner({ course, items: allItems, mode, title, backHref, again }: QuizRunnerProps) {
   const router = useRouter();
   const streak = useStreak();
   const { recordQuiz, recordEvidence, objectives, llm } = useOrca();
@@ -253,6 +255,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref }: Q
         streak={streak}
         onContinue={() => router.push(backHref)}
         onReview={missed.length ? () => restart(missed) : undefined}
+        again={again}
         onClose={() => router.push(backHref)}
       />
     );

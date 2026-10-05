@@ -19,12 +19,14 @@ export interface QuizEndProps {
   onContinue: () => void;
   onReview?: () => void;
   onClose: () => void;
+  /** Start another session of the same kind (deep review). */
+  again?: { label: string; onStart: () => void };
   /** A line under the buttons (e.g. new questions being written). */
   extra?: React.ReactNode;
 }
 
 /** Figma: Quiz End. Centred 640px result card on an alice sea. */
-export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue, onReview, onClose, extra }: QuizEndProps) {
+export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue, onReview, onClose, again, extra }: QuizEndProps) {
   const misses = total - correct;
   const accuracy = total ? Math.round((correct / total) * 100) : 0;
 
@@ -67,6 +69,11 @@ export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue
             <Button full onClick={onContinue}>
               Continue
             </Button>
+            {again && (
+              <Button full variant="secondary" onClick={again.onStart} data-part="again">
+                {again.label}
+              </Button>
+            )}
             {misses > 0 && onReview && (
               <Button full variant="secondary" onClick={onReview}>
                 Review {misses} miss{misses === 1 ? "" : "es"}
