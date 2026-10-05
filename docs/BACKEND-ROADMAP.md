@@ -9,7 +9,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
 
 ## Decisions
 
-- **Unit of mastery is the objective** ("can do X"): course → topic → objective. Questions belong
+- **Unit of mastery is the objective** ("can do X"): course → topic → objective, created once per
+  course (at upload from Phase 4) and stored as course data. Questions belong
   to an objective. Concepts from extraction come in Phase 4 as tags on objectives, used for merging
   duplicates and grounding, not as the unit students see.
 - **Learner state is derived, never written.** Every answer appends an evidence event; objective
@@ -68,12 +69,33 @@ are the checklist. Swap the store's persistence behind `useOrca()` so screens do
 Verify live: push migrations, prove RLS with two users, run a real upload.
 
 ### Phase 4 — Material pipeline, server-side
-Upload to Storage; server extraction of topics → objectives → questions with source anchors (Claude
-with PDF document blocks); concept tags and merging (port the platform's reconciliation prompt,
-`merge | distinct | uncertain`); a student review step before topics land; question validation
-(port the ambiguity check and answer agreement). First: decide where long jobs run (Vercel
-function limits vs Trigger.dev vs Supabase functions), and record why. Measure objective extraction
-on a second course with the platform's scoring harness pattern (`scripts/score-extraction.ts`).
+**Objectives are created once, at upload, and never regenerated.** For each upload:
+1. Extraction (Claude, PDF document blocks) reads the material together with the course's existing
+   topics and objectives, and proposes new topics, new objectives, and which existing objectives
+   the material covers. It may use general knowledge of the subject as well as the material.
+2. Reconciliation labels each proposed objective `same as <existing id> | new | uncertain` (the
+   platform's `merge | distinct | uncertain` prompt, applied to objectives). Matches attach to the
+   existing objective; nothing gets a new id if it already exists.
+3. The student reviews the proposals (rename, merge, drop) before they land; `uncertain` ones are
+   highlighted.
+4. Questions are generated per objective (aim: 6+), validated (port the ambiguity check and
+   answer agreement), and attached.
+
+Rules decided 2026-10-04:
+- **Inferred objectives are allowed, flagged.** An objective that comes from general knowledge
+  rather than the uploaded material is created and quizzable, marked `origin: "inferred"`, and its
+  questions carry no source anchor, so they're never presented as course-specific. Objectives
+  from the material are `origin: "material"` with anchors; built-in content is `"authored"`.
+- **Material type limits what an upload creates.** Lectures and syllabi create topics and
+  objectives. Homework and exams mostly attach to existing objectives (marking them as tested, and
+  adding practice-style questions), and create a new objective only when it's clearly new.
+- Answers are filed by each question's current objective, so the rare merge, split or re-tag
+  after reconciliation re-files past answers automatically.
+
+Also in this phase: upload to Storage, concept tags on objectives for duplicate detection, and a
+decision on where long jobs run (Vercel function limits vs Trigger.dev vs Supabase functions),
+recorded here. Measure objective extraction on a second course with the platform's scoring
+harness pattern (`scripts/score-extraction.ts`).
 
 ### Phase 5 — Deep review, relationships, exams
 Deep review screen (application and connection questions). Connection questions write evidence for

@@ -1218,7 +1218,7 @@ git commit -m "Mastery: topic progress, island levels, and a per-course roll-up"
 
 **Interfaces:**
 - Consumes: `EvidenceEvent` (Task 3), `courseMastery`, `CourseMastery` (Task 5), `ALD_OBJECTIVES` (Task 3).
-- Produces: `useOrca().evidence: EvidenceEvent[]`, `useOrca().recordEvidence(e: Omit<EvidenceEvent, "id" | "at">): void`, `useMasteryByCourse(): Record<string, CourseMastery>`, `useNow(): number`.
+- Produces: `useOrca().objectives: Record<string, Record<string, ObjectiveInfo>>`, `useOrca().evidence: EvidenceEvent[]`, `useOrca().recordEvidence(e: Omit<EvidenceEvent, "id" | "at">): void`, `useMasteryByCourse(): Record<string, CourseMastery>`, `useNow(): number`.
 
 - [ ] **Step 1: A clock hook that is safe to render**
 
@@ -1255,13 +1255,27 @@ import { useNow } from "@/hooks/useNow";
 
 In `interface OrcaState`, after `questionBank`:
 ```ts
+  /** Course structure: courseId → objectiveId → objective. Created once (built-in content now, uploads in Phase 4), never regenerated. */
+  objectives: Record<string, Record<string, ObjectiveInfo>>;
   /** Append-only answer log. Every learner-facing state is computed from it. */
   evidence: EvidenceEvent[];
 ```
+(and import `ObjectiveInfo` alongside `EvidenceEvent` from `./mastery/types`).
 
 In `initialState`, after `questionBank: { ald: ALD_QUESTION_BANK },`:
 ```ts
+  objectives: { ald: ALD_OBJECTIVES },
   evidence: [],
+```
+
+In the load effect, next to the existing built-in bank merge, make built-in objectives win for their course the same way:
+```ts
+        saved.objectives = { ...(saved.objectives ?? {}), ald: ALD_OBJECTIVES };
+```
+
+In `addCourse`, give the new course an empty objective list alongside its config and weights:
+```ts
+        objectives: { ...s.objectives, [id]: {} },
 ```
 
 In `interface OrcaActions`, after `recordQuiz`:
@@ -1282,12 +1296,9 @@ Add `recordEvidence` to the `value` object and its dependency list.
 
 Below `useCourse`, add:
 ```ts
-/** Objectives in the catalogue. Only ALD has authored objectives so far. */
-const OBJECTIVE_CATALOGUE = ALD_OBJECTIVES;
-
 /** Derived learner state for every course: objective states, topic progress, island level. */
 export function useMasteryByCourse(): Record<string, CourseMastery> {
-  const { courses, questionBank, evidence } = useOrca();
+  const { courses, questionBank, objectives, evidence } = useOrca();
   const nowMs = useNow();
   return useMemo(
     () =>
@@ -1298,13 +1309,13 @@ export function useMasteryByCourse(): Record<string, CourseMastery> {
             courseId: c.id,
             topicIds: c.topics.map((t) => t.id),
             bank: questionBank[c.id] ?? {},
-            catalogue: OBJECTIVE_CATALOGUE,
+            catalogue: objectives[c.id] ?? {},
             evidence,
             now: new Date(nowMs),
           }),
         ]),
       ),
-    [courses, questionBank, evidence, nowMs],
+    [courses, questionBank, objectives, evidence, nowMs],
   );
 }
 ```
@@ -1318,7 +1329,7 @@ Expected: all pass.
 
 ```bash
 git add src/hooks/useNow.ts src/lib/store.tsx
-git commit -m "Store: append-only evidence log, recordEvidence, and useMasteryByCourse"
+git commit -m "Store: objectives as course data, append-only evidence log, recordEvidence, and useMasteryByCourse"
 ```
 
 ---
