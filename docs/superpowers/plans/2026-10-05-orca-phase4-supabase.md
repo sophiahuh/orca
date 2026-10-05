@@ -80,8 +80,10 @@ replay the whole log.
   and doesn't count the answer; a job that fails says why on the review screen.
 - Live claims need live checks (invariant): "works against local Supabase" and "works against
   the hosted project" are different claims, and the plan's status notes say which one was made.
-- Before every commit: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run test:db` once it
-  exists, and `npm run test:e2e` when a screen, the store or a route changed.
+- Tests stay lean (owner, 2026-10-05): happy paths and the edge cases that matter (isolation,
+  data loss, mastery). Per commit: `npx tsc --noEmit`, `npm run lint` and the tests covering
+  the change. The whole suite runs once at the end of a task that touched the store, a
+  migration or shared code, and before the merge.
 
 ## What needs the owner, and when
 

@@ -324,6 +324,10 @@ topics, objectives, weights and relations (on-device), (3) scheduling and sessio
 
 - Keep screens thin: data from `useOrca()`, visuals from components, timing from `motion.ts`.
 - Pixel values from Figma are fine inline (`text-[22px]`, `rounded-[20px]`); colors must be tokens.
-- Before committing: `npx tsc --noEmit`, `npm run lint`, `npm test`, and `npm run test:e2e` when a
-  screen or the store changed. A behaviour you would check by hand in the browser belongs in `e2e/`.
+- Testing is lean while the project is early: write tests for the happy path and the edge cases
+  that matter (security, data loss, mastery rules), not exhaustive matrices. Per commit: `npx tsc
+  --noEmit`, `npm run lint`, and only the tests covering what changed (one unit file, one pgTAP
+  file, one e2e spec). Run the whole suite (`npm test`, `npm run test:db`, `npm run test:e2e`,
+  the check scripts) once at the end of a task that changed the store, a migration or shared
+  code, and always before merging a branch.
   `npm run dev` for the preview.
