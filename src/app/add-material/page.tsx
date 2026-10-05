@@ -6,12 +6,9 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
-import { llmReady, modelLabel } from "@/lib/llm";
-import { type Progress, runUpload } from "@/lib/pipeline/run";
-import { pipelineCaller } from "@/lib/pipeline/client";
-import { renderPdfSlide } from "@/lib/pdf-text";
-import { type UploadStage, hiddenNote, loadMaterialPages, uploadMaterial, uploadProblem } from "@/lib/uploads";
-import type { Material, MaterialPages } from "@/lib/data";
+import { modelLabel } from "@/lib/llm";
+import { type UploadStage, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import type { MaterialPages } from "@/lib/data";
 import { useServerModel } from "@/hooks/useServerModel";
 import { IconCalendar, IconUpload } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
@@ -27,21 +24,6 @@ import { fadeUp, stagger } from "@/lib/motion";
 
 const SKELETON = [92, 100, 78, 96, 60, 0, 100, 88, 94, 70, 0, 90, 84];
 
-function progressMessage(p: Progress): string {
-  switch (p.stage) {
-    case "mapping":
-      return "Mapping the material onto the course…";
-    case "matching":
-      return `Checking ${p.candidates} topics and objectives against what the course already has…`;
-    case "writing":
-      return `Writing questions for ${p.objectives} objective${p.objectives === 1 ? "" : "s"}…`;
-    case "checking":
-      return `Checking ${p.questions} question${p.questions === 1 ? "" : "s"} with an independent solve…`;
-    case "figures":
-      return `Cutting ${p.slides} figure${p.slides === 1 ? "" : "s"} from the slides…`;
-  }
-}
-
 const STAGE_MESSAGE: Record<UploadStage, string> = {
   hashing: "Checking whether the course already has this file…",
   uploading: "Uploading the file…",
@@ -52,7 +34,8 @@ type Phase =
   | { kind: "idle" }
   | { kind: "sending"; stage: UploadStage }
   | { kind: "working"; message: string }
-  | { kind: "done"; topics: number; objectives: number; questions: number; hidden: Material["hiddenText"] }
+  /** Stored and read, but nothing will be generated (said why). */
+  | { kind: "saved"; message: string }
   | { kind: "duplicate"; filename: string }
   | { kind: "error"; message: string };
 
@@ -92,7 +75,7 @@ function DateField({ label, value, onChange, noneLabel }: { label: string; value
 export default function AddMaterialPage({ searchParams }: PageProps<"/add-material">) {
   const sp = use(searchParams);
   const router = useRouter();
-  const { courses, objectives, questionBank, relations, materials, runs, addMaterial, applyUpload, llm, hydrated } = useOrca();
+  const { courses, addMaterial, hydrated } = useOrca();
   const serverModel = useServerModel();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -127,8 +110,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     );
   }
   const filename = chosenName ?? "Choose a PDF…";
-  const ownModel = llmReady(llm);
-  const connected = ownModel || Boolean(serverModel);
+  const connected = Boolean(serverModel);
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
 
@@ -138,34 +120,6 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     setFile(f);
     const problem = uploadProblem(f);
     setPhase(problem ? { kind: "error", message: `${problem} It will still be added to the course, without its file.` } : { kind: "idle" });
-  };
-
-  /** Build topics and questions from a file's pages (the model pipeline runs in the browser until Task 7). */
-  const generate = async (material: Material, pages: MaterialPages, hidden: Material["hiddenText"]) => {
-    setPhase({ kind: "working", message: "Starting…" });
-    const plan = await runUpload(
-    {
-      course: { id: course.id, name: course.name, short: course.short, topics: course.topics },
-      objectives: objectives[course.id] ?? {},
-      bank: questionBank[course.id] ?? {},
-      relations: relations[course.id] ?? [],
-      material,
-      pages,
-      hiddenText: hidden,
-      runId: crypto.randomUUID(),
-      model: ownModel ? llm.model : (serverModel ?? "unknown"),
-      now: new Date().toISOString(),
-    },
-    {
-      call: pipelineCaller(llm),
-      newId: () => crypto.randomUUID(),
-      renderFigure: file ? (n) => (n <= pages.length ? renderPdfSlide(file, n) : Promise.resolve(null)) : undefined,
-      onProgress: (p) => setPhase({ kind: "working", message: progressMessage(p) }),
-    },
-  );
-    applyUpload(course.id, plan);
-    setPhase({ kind: "done", topics: plan.newTopics.length, objectives: plan.newObjectives.length, questions: plan.run.questionsAdded, hidden });
-    window.setTimeout(() => router.push(`/course/${course.slug}/review?run=${plan.run.id}`), 1400);
   };
 
   const submit = async () => {
@@ -179,27 +133,29 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     }
     try {
       const outcome = await uploadMaterial(file, meta, (stage) => setPhase({ kind: "sending", stage }));
+      if (outcome.kind === "read") {
+        addMaterial(outcome.material, { saved: true });
+        setDoc(outcome.pages);
+      }
+      const g = outcome.generation;
+      if (g.state === "started" || g.state === "running") {
+        // The server builds it (a job); the review screen follows its progress.
+        setPhase({ kind: "working", message: "Orca is building topics and questions from it." });
+        router.push(`/course/${course.slug}/review?run=${g.runId}`);
+        return;
+      }
       if (outcome.kind === "duplicate") {
-        // The course has this file. If its questions were never built (no model then, or a failed
-        // run), build them now from its stored pages; otherwise there's nothing new to add.
-        const existing = materials.find((m) => m.id === outcome.id);
-        const built = runs.some((r) => r.materialId === outcome.id && (r.kind ?? "upload") === "upload");
-        const pages = existing && !built && connected ? (await loadMaterialPages([existing.id]))[existing.id] : undefined;
-        if (!existing || !pages) {
-          setPhase({ kind: "duplicate", filename: outcome.filename });
-          return;
-        }
-        setDoc(pages);
-        await generate(existing, pages, existing.hiddenText);
+        setPhase({ kind: "duplicate", filename: outcome.filename });
         return;
       }
-      addMaterial(outcome.material, { saved: true });
-      setDoc(outcome.pages);
-      if (!connected) {
-        leave();
-        return;
-      }
-      await generate(outcome.material, outcome.pages, outcome.hidden);
+      setPhase({
+        kind: "saved",
+        message:
+          g.state === "no-text"
+            ? `Saved to ${course.short}, but Orca found no text in this file, so there's nothing to build questions from.`
+            : `Saved to ${course.short}. No AI is connected, so no topics or questions were generated.`,
+      });
+      window.setTimeout(leave, 2500);
     } catch (error) {
       setPhase({ kind: "error", message: error instanceof Error ? error.message : "The upload failed." });
     }
@@ -337,23 +293,18 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
             <Card radius={18} lip={4} tone="alice" className="flex items-center justify-between gap-[12px] border-transparent px-[18px] py-[12px] lip-0">
-              <span className="text-[14px] font-semibold text-prussian">
-                {ownModel ? (
-                  <>{modelLabel(llm.model)} will build topics and quizzes from this file.</>
-                ) : serverModel ? (
+              <span className="text-[14px] font-semibold text-prussian" data-part="model-note">
+                {serverModel ? (
                   <>Orca ({modelLabel(serverModel)}) will build topics and quizzes from this file.</>
                 ) : (
                   <>No AI connected: the file is saved, but no topics or quizzes are generated.</>
                 )}
               </span>
-              <Link href="/settings" className="shrink-0 text-[13px] font-bold text-wisteria-deep hover:underline">
-                {ownModel ? "Change" : serverModel ? "Use my own model" : "Connect"}
-              </Link>
             </Card>
 
             <Button full onClick={submit} disabled={busy || !chosenName}>
               {phase.kind === "working"
-                ? `Building ${course.short} from ${doc?.length ?? ""} slides…`
+                ? `Building ${course.short}…`
                 : connected && !unreadable
                   ? `Add to ${course.short} and generate quizzes`
                   : `Add to ${course.short}`}
@@ -362,12 +313,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <AnimatePresence mode="wait">
               {phase.kind === "working" && (
                 <motion.span key="x" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[13px] font-semibold text-wisteria-deep" role="status">
-                  {phase.message} This takes a few minutes: every question is checked before you see it.
+                  {phase.message} Opening the review…
                 </motion.span>
               )}
-              {phase.kind === "done" && (
-                <motion.span key="d" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-wisteria-deep">
-                  Added {phase.topics} topic{phase.topics === 1 ? "" : "s"}, {phase.objectives} objective{phase.objectives === 1 ? "" : "s"} and {phase.questions} question{phase.questions === 1 ? "" : "s"}. {hiddenNote(phase.hidden)} Opening the review…
+              {phase.kind === "saved" && (
+                <motion.span key="s" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-prussian" role="status" data-part="saved">
+                  {phase.message}
                 </motion.span>
               )}
               {phase.kind === "duplicate" && (

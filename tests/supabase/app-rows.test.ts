@@ -37,6 +37,15 @@ test("a save sends only changed rows, names cleared fields as null, and carries 
   assert.deepEqual(structureRows(before, before), {}, "no change, nothing to save");
 });
 
+test("an existing row is saved with only the columns that changed; a new row whole", () => {
+  const before: StructureState = { topics: [topic], objectives: { o1: objective }, bank: {}, relations: [] };
+  const added: Topic = { ...topic, id: "t2", name: "K-maps" };
+  const after: StructureState = { ...before, topics: [{ ...topic, aliases: ["Switching algebra"] }, added] };
+  const rows = structureRows(before, after);
+  assert.deepEqual(rows.topics![0], { id: "t1", aliases: ["Switching algebra"] });
+  assert.deepEqual(rows.topics![1], topicToRow(added, 1));
+});
+
 test("a row that disappears is refused: nothing is ever deleted", () => {
   const before: StructureState = { topics: [topic], objectives: { o1: objective }, bank: {}, relations: [] };
   assert.throws(() => structureRows(before, { ...before, objectives: {} }), /disappeared/);

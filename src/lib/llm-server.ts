@@ -58,7 +58,9 @@ export async function completeJson<T>(
     const client = new Anthropic({ apiKey: config.apiKey });
     const fallback = FALLBACK_MODELS.test(config.model);
     try {
-      const response = await client.beta.messages.parse({
+      // Streamed: a long reply (generate may write 24k tokens) would outlast a plain request, which the
+      // SDK refuses to send; finalMessage() gathers it and parses it against the schema the same way.
+      const stream = client.beta.messages.stream({
         model: config.model,
         max_tokens: opts.maxTokens ?? 16000,
         system,
@@ -74,6 +76,7 @@ export async function completeJson<T>(
         ],
         ...(fallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       });
+      const response = await stream.finalMessage();
       if (response.stop_reason === "refusal") throw new LlmError("The model declined to process this material.", 422);
       if (response.stop_reason === "max_tokens") throw new LlmError("The material is too long for one pass. Try a smaller file.", 413);
       if (response.parsed_output) return response.parsed_output;

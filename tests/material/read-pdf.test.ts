@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { LIMITS } from "../../src/lib/limits.ts";
 import { UnreadablePdfError, readPdf } from "../../src/lib/material/read-pdf.ts";
+import { renderSlide } from "../../src/lib/material/render-slide.ts";
 import { isHidden, visibleItems } from "../../src/lib/untrusted/hidden-text.ts";
 import { lines, makePdf } from "../fixtures/pdf.ts";
 
@@ -55,4 +56,12 @@ test("too many pages, non-PDFs and oversize files are refused before reading", a
 test("a file that takes longer than the time budget is refused as unreadable", async () => {
   const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
   await assert.rejects(readPdf(deck, { timeoutMs: 1 }), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422 && /gave up/.test(e.message));
+});
+
+test("a slide renders on the server as a JPEG figure", async () => {
+  const bytes = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const src = await renderSlide(bytes, 12);
+  assert.match(src, /^data:image\/jpeg;base64,/);
+  assert.ok(src.length > 5000);
+  await assert.rejects(renderSlide(bytes, 9999), /no slide 9999/);
 });

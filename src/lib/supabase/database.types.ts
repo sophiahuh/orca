@@ -194,13 +194,13 @@ isOneToOne: false
                   ]
                 },"pipeline_runs": {
                   Row: {
-                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string,"model": string,"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"status": string,"topics_created": (string)[]
+                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string | null,"model": string,"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"status": string,"topics_created": (string)[]
                   }
                   Insert: {
-                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id": string,"model": string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
+                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id"?: string | null,"model": string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
                   }
                   Update: {
-                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string,"model"?: string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
+                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string | null,"model"?: string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
                   }
                   Relationships: [
                     {

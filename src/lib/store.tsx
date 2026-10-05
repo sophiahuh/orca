@@ -22,9 +22,11 @@
  * `GET /api/state` when stale); the streak, last seen, poor sessions and deep-review cadence are
  * computed from the loaded events, with day boundaries in the profile's timezone.
  *
- * Uploaded files go to Storage and are read on the server (`src/lib/uploads.ts`); their pages are
- * read back from `material_pages` when needed, never kept here. The bring-your-own model setting is
- * kept in memory only (it holds a key; Task 7 hides it). Older localStorage state (`orca:v3`–`orca:v8`
+ * Uploaded files go to Storage and are read on the server (`src/lib/uploads.ts`); the server's jobs
+ * build their topics, objectives and questions and top up the stock after sessions, and the
+ * screens that follow a job call `refresh()` when it finishes. Run records are the server's: the
+ * store reads them, never writes them. The bring-your-own model setting is kept in memory only (it
+ * holds a key; Settings no longer shows it). Older localStorage state (`orca:v3`–`orca:v8`
  * and the page text uploads used to keep, `orca:materialPages`) is removed.
  */
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -42,15 +44,11 @@ import {
   type Weights,
   DEFAULT_CONFIG,
   DEFAULT_WEIGHTS,
-  defaultTopicPositions,
   shortName,
   trailTopics,
   slugify,
 } from "./data";
 import type { LlmConfig } from "./llm";
-import type { UploadPlan } from "./pipeline/run";
-import { applyUploadPlan } from "./pipeline/apply";
-import type { TopUpPlan } from "./pipeline/topup";
 import type { QuizQuestion } from "./data";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types";
 import type { CourseStructure } from "./course/ops";
@@ -61,6 +59,7 @@ import { isUnsortedObjectiveId } from "./mastery/catalogue";
 import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
+import { laidOut } from "./course/layout";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
 import { type MyData, type StructureState, calendarToRow, courseToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
@@ -135,10 +134,13 @@ interface OrcaActions {
   setOnboarded: (v: boolean) => void;
   setTimezone: (timezone: string) => void;
   setLlm: (c: LlmConfig | null) => void;
-  /** Merge an upload's pipeline result into a course and keep the run's record. */
-  applyUpload: (courseId: string, plan: UploadPlan) => void;
-  /** Add questions topped up after a session, and keep the runs' records. */
-  addQuestions: (courseId: string, plan: TopUpPlan) => void;
+  /**
+   * Read everything again from the database, after the saves already queued (a job finished on the
+   * server: its topics, objectives, questions and run are there now). Resolves when it landed.
+   */
+  refresh: () => Promise<void>;
+  /** Resolves when every save queued so far has finished (or failed). */
+  afterSaves: () => Promise<void>;
   /** Apply a review operation (`src/lib/course/ops.ts`) to one course's topics, objectives and questions. */
   editStructure: (courseId: string, op: (s: CourseStructure) => CourseStructure) => void;
   /** Hide the last save error. */
@@ -239,14 +241,6 @@ function structureOf(s: OrcaState, courseId: string): StructureState {
   const course = s.courses.find((c) => c.id === courseId);
   if (!course) throw new Error(`No course ${courseId}`);
   return { topics: course.topics, objectives: s.objectives[courseId] ?? {}, bank: s.questionBank[courseId] ?? {}, relations: s.relations[courseId] ?? [] };
-}
-
-/** Lay the visible topics out again; archived ones keep their old spot. */
-function laidOut(topics: Course["topics"]): Course["topics"] {
-  const visible = trailTopics({ topics });
-  const positions = defaultTopicPositions(visible.length);
-  const posOf = new Map(visible.map((t, i) => [t.id, positions[i]]));
-  return topics.map((t) => ({ ...t, pos: posOf.get(t.id) ?? t.pos }));
 }
 
 function withStructure(s: OrcaState, courseId: string, next: StructureState): OrcaState {
@@ -403,10 +397,10 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refreshSnapshots]);
 
-  /** Save a course's structure change: the rows that changed plus any new runs, then fresh snapshots. */
+  /** Save a course's structure change (the rows that changed), then fresh snapshots. */
   const saveStructure = useCallback(
-    (courseId: string, before: StructureState, after: StructureState, runs: PipelineRun[]) => {
-      const rows = structureRows(before, after, runs);
+    (courseId: string, before: StructureState, after: StructureState) => {
+      const rows = structureRows(before, after);
       if (isEmpty(rows)) return;
       save(
         async () => {
@@ -604,28 +598,20 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save, refreshAfterSave],
   );
 
-  const applyUpload = useCallback<OrcaActions["applyUpload"]>(
-    (courseId, plan) => {
-      const before = structureOf(stateRef.current, courseId);
-      const merged = applyUploadPlan({ topics: before.topics, objectives: before.objectives, bank: before.bank, relations: before.relations }, plan);
-      const after: StructureState = { topics: laidOut(merged.topics), objectives: merged.objectives, bank: merged.bank, relations: merged.relations };
-      setState((s) => ({ ...withStructure(s, courseId, after), runs: [...s.runs, plan.run] }));
-      saveStructure(courseId, before, after, [plan.run]);
-    },
-    [saveStructure],
-  );
+  const refresh = useCallback<OrcaActions["refresh"]>(() => {
+    const next = queue.current.then(async () => {
+      try {
+        const loaded = await loadAll();
+        setState((s) => ({ ...initialState, ...loaded, llm: s.llm }));
+      } catch (e) {
+        setSaveError(`Couldn't load the latest changes: ${message(e)}. Reload the page to see them.`);
+      }
+    });
+    queue.current = next;
+    return next;
+  }, []);
 
-  const addQuestions = useCallback<OrcaActions["addQuestions"]>(
-    (courseId, plan) => {
-      const before = structureOf(stateRef.current, courseId);
-      const bank = { ...before.bank };
-      for (const [topicId, qs] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...qs];
-      const after = { ...before, bank };
-      setState((s) => ({ ...withStructure(s, courseId, after), runs: [...s.runs, ...plan.runs] }));
-      saveStructure(courseId, before, after, plan.runs);
-    },
-    [saveStructure],
-  );
+  const afterSaves = useCallback<OrcaActions["afterSaves"]>(() => queue.current, []);
 
   const editStructure = useCallback<OrcaActions["editStructure"]>(
     (courseId, op) => {
@@ -633,7 +619,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       const next = op({ topics: before.topics, objectives: before.objectives, bank: before.bank });
       const after: StructureState = { topics: laidOut(next.topics), objectives: next.objectives, bank: next.bank, relations: before.relations };
       setState((s) => withStructure(s, courseId, after));
-      saveStructure(courseId, before, after, []);
+      saveStructure(courseId, before, after);
     },
     [saveStructure],
   );
@@ -661,13 +647,13 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       setOnboarded,
       setTimezone,
       setLlm,
-      applyUpload,
-      addQuestions,
+      refresh,
+      afterSaves,
       editStructure,
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setLlm, applyUpload, addQuestions, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

@@ -279,6 +279,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     materialId: input.material.id,
     at: input.now,
     model: input.model,
+    status: "done",
     topicsCreated: newTopics.map((t) => t.id),
     objectivesCreated: newObjectives.map((o) => o.id),
     objectivesAttached: Object.keys(objectiveUpdates),

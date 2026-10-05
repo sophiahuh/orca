@@ -43,11 +43,17 @@ export interface TopUpSkip {
 export interface TopUpPlan {
   /** topicId → new questions. */
   questions: Record<string, QuizQuestion[]>;
-  /** One record per material written from. */
-  runs: PipelineRun[];
+  /**
+   * The top-up's one run record: every material it wrote from (named when there was exactly one),
+   * every objective it tried, and what was left out, including objectives it couldn't write for.
+   */
+  run: PipelineRun;
   /** Objectives that needed questions but couldn't get them, and why. */
   skipped: TopUpSkip[];
 }
+
+/** How a skipped objective reads in the run's left-out list (the end card shows the first one). */
+export const SKIPPED_PREFIX = "skipped: ";
 
 function survivorId(id: string, objectives: Readonly<Record<string, Objective>>) {
   let current = id;
@@ -125,15 +131,17 @@ export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">)
   return { byMaterial, pages, skipped };
 }
 
-export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "newId">): Promise<TopUpPlan> {
+export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "newId" | "onProgress">): Promise<TopUpPlan> {
   const { byMaterial, pages, skipped } = topUpTargets(input);
   const questions: Record<string, QuizQuestion[]> = {};
-  const runs: PipelineRun[] = [];
+  const dropped: PipelineRun["dropped"] = [];
+  const attached: string[] = [];
   const topics = new Map(input.course.topics.map((t) => [t.id, t]));
   // Questions written from one material count as "already in the course" for the next.
   const bank: Record<string, QuizQuestion[]> = { ...input.bank };
   for (const [materialId, targets] of byMaterial) {
     const material = input.materials.find((m) => m.id === materialId)!;
+    attached.push(...targets.map((t) => t.objective.id));
     let written: Awaited<ReturnType<typeof writeQuestions>>;
     try {
       written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank }, deps);
@@ -145,19 +153,23 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
       questions[topicId] = [...(questions[topicId] ?? []), ...qs];
       bank[topicId] = [...(bank[topicId] ?? []), ...qs];
     }
-    runs.push({
-      id: runs.length === 0 ? input.runId : `${input.runId}:${runs.length}`,
-      kind: "top-up",
-      courseId: input.course.id,
-      materialId,
-      at: input.now,
-      model: input.model,
-      topicsCreated: [],
-      objectivesCreated: [],
-      objectivesAttached: targets.map((t) => t.objective.id),
-      questionsAdded: Object.values(written.questions).flat().length,
-      dropped: written.dropped,
-    });
+    dropped.push(...written.dropped);
   }
-  return { questions, runs, skipped };
+  for (const s of skipped) dropped.push({ prompt: `Objective "${input.objectives[s.objectiveId]?.name ?? s.objectiveId}"`, reason: `${SKIPPED_PREFIX}${s.reason}` });
+  const used = [...byMaterial.keys()];
+  const run: PipelineRun = {
+    id: input.runId,
+    kind: "top-up",
+    courseId: input.course.id,
+    materialId: used.length === 1 ? used[0] : null,
+    at: input.now,
+    model: input.model,
+    status: "done",
+    topicsCreated: [],
+    objectivesCreated: [],
+    objectivesAttached: [...new Set(attached)],
+    questionsAdded: Object.values(questions).flat().length,
+    dropped,
+  };
+  return { questions, run, skipped };
 }

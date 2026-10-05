@@ -13,7 +13,6 @@ import { Select } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { AccountCard } from "@/components/settings/Account";
-import { YourAI } from "@/components/settings/YourAI";
 import { fadeUp, stagger } from "@/lib/motion";
 
 export default function SettingsPage() {
@@ -65,9 +64,8 @@ export default function SettingsPage() {
           <motion.div variants={fadeUp}>
             <AccountCard />
           </motion.div>
-          <motion.div variants={fadeUp}>
-            <YourAI />
-          </motion.div>
+          {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
+              Orca's key only (Phase 4, decision 9). Its code stays until "Bring-your-own model" is decided. */}
         {target && (
           <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[24px]">

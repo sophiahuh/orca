@@ -7,6 +7,9 @@ import type { Objective, Topic } from "@/lib/data";
 import { useCourse, useOrca } from "@/lib/store";
 import { pendingReview } from "@/lib/course/review";
 import { hiddenNote } from "@/lib/uploads";
+import { progressMessage } from "@/lib/pipeline/progress-text";
+import { isFinished, useRun } from "@/hooks/useRun";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { confirmTopic, rejectObjective, rejectTopic, renameTopic, resolveUncertain, resolveUncertainTopic } from "@/lib/course/ops";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -20,8 +23,10 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
   const { slug } = use(params);
   const sp = use(searchParams);
   const runId = typeof sp.run === "string" ? sp.run : undefined;
-  const { hydrated, objectives, runs, materials, editStructure } = useOrca();
+  const { hydrated, objectives, materials, editStructure } = useOrca();
   const course = useCourse(slug);
+  // The upload's job runs on the server; this follows it until it's done.
+  const { run, missing } = useRun(runId);
 
   if (!course) {
     return (
@@ -36,8 +41,9 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
   const catalogue = objectives[course.id] ?? {};
   const pending = pendingReview(course.topics, catalogue);
-  const run = runId ? runs.find((r) => r.id === runId) : undefined;
   const material = run ? materials.find((m) => m.id === run.materialId) : undefined;
+  const working = run && !isFinished(run);
+  const failed = run?.status === "failed";
   const topicName = (id: string) => course.topics.find((t) => t.id === id)?.name ?? "a topic";
   const objectivesIn = (topicId: string) => Object.values(catalogue).filter((o) => o.topicId === topicId && o.review !== "archived");
   const edit = editStructure.bind(null, course.id);
@@ -53,7 +59,37 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
       </header>
 
       <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="flex w-[820px] max-w-full flex-col gap-[24px] px-[28px] py-[28px]">
-        {run && (
+        {runId && missing && (
+          <motion.div variants={fadeUp}>
+            <Card radius={20} lip={4} className="px-[22px] py-[18px] text-[16px] font-semibold text-prussian" data-part="run-missing">
+              Orca can&apos;t find that upload&apos;s run.
+            </Card>
+          </motion.div>
+        )}
+
+        {working && (
+          <motion.div variants={fadeUp}>
+            <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part="run-progress" role="status">
+              <span className="text-[17px] font-bold text-prussian">Building from {material?.filename ?? "your upload"}</span>
+              <ProgressBar value={run.status === "running" ? stageShare(run.progress?.stage) : 0.05} height={10} label="Building" />
+              <span className="text-[14px] font-semibold text-wisteria-deep">
+                {run.status === "running" ? progressMessage(run.progress) : "Waiting to start…"} This takes a few minutes: every question is checked before you see it. You can leave this page; it keeps going.
+              </span>
+            </Card>
+          </motion.div>
+        )}
+
+        {failed && (
+          <motion.div variants={fadeUp}>
+            <Card radius={20} lip={4} className="flex flex-col gap-[8px] px-[22px] py-[18px]" data-part="run-failed" role="alert">
+              <span className="text-[17px] font-bold text-prussian">Nothing was added from {material?.filename ?? "this upload"}.</span>
+              <span className="text-[15px] text-prussian/80">{run.error}</span>
+              <span className="text-[14px] text-prussian/70">The file is saved. Upload it again to try again.</span>
+            </Card>
+          </motion.div>
+        )}
+
+        {run && run.status === "done" && (
           <motion.div variants={fadeUp}>
             <Card radius={20} lip={4} className="flex flex-col gap-[8px] px-[22px] py-[18px]" data-part="run-summary">
               <span className="text-[17px] font-bold text-prussian">From {material?.filename ?? "this upload"}</span>
@@ -85,7 +121,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
           </motion.div>
         )}
 
-        {pending.count === 0 && (
+        {pending.count === 0 && !working && (
           <motion.div variants={fadeUp} className="flex flex-col items-start gap-[12px]">
             <p className="text-[20px] font-bold text-prussian">Nothing to review.</p>
             <Link href={`/course/${course.slug}`} className="text-[15px] font-bold text-wisteria-deep hover:underline">
@@ -152,6 +188,11 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
       </motion.div>
     </Screen>
   );
+}
+
+/** Roughly how far along a running upload is, by stage. */
+function stageShare(stage: string | undefined): number {
+  return ({ mapping: 0.15, matching: 0.3, writing: 0.5, checking: 0.75, figures: 0.9 } as Record<string, number>)[stage ?? ""] ?? 0.1;
 }
 
 function Duplicate({ kind, name, other, reasoning, onSame, onSeparate }: { kind: "topic" | "objective"; name: string; other: string; reasoning: string; onSame: () => void; onSeparate: () => void }) {

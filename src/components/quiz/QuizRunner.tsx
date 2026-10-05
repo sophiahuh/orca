@@ -100,7 +100,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
       const o = liveObjectiveOf(i.question, i.topicId, catalogue ?? {});
       return o ? [o.id] : [];
     });
-    startTopUp(course.id, ids);
+    // The session id was set when the result was recorded (the effect above).
+    if (sessionId.current) startTopUp(course.id, sessionId.current, ids);
   }, [finished, allItems, catalogue, course.id, startTopUp]);
 
   const item = items[index];
@@ -414,14 +415,14 @@ function TopUpNote({ status }: { status: TopUpStatus }) {
         ? status.added > 0
           ? `${status.added} new question${status.added === 1 ? "" : "s"} written and checked for next time.`
           : status.skipped.length > 0
-            ? `Couldn't write new questions: ${status.skipped[0].reason}.`
+            ? `Couldn't write new questions: ${status.skipped[0]}.`
             : status.dropped > 0
               ? "No new questions passed the checks this time."
               : null
         : status.state === "unavailable"
           ? status.reason
           : status.state === "error"
-            ? `Couldn't write new questions: ${status.message}`
+            ? `Couldn't write new questions: ${status.message.replace(/^Orca couldn't write new questions: /, "")}`
             : null;
   if (!text) return null;
   return (

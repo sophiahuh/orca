@@ -12,7 +12,7 @@
  *    `failed` with why.
  *
  * Both run with the service-role client and scope every query to the signed-in student.
- * Model work stays in the browser until Task 7 moves it into the jobs.
+ * The routes then start the job that builds the questions (`src/lib/server/jobs/start.ts`).
  */
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -23,9 +23,21 @@ import { isOwnPath, safeName } from "@/lib/material/paths";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
-import { ownsCourse, reply } from "./student";
+import { ownsCourse } from "./student";
 
 export const BUCKET = "materials";
+
+/** A route's answer, before it's sent (the route adds what happens to the questions). */
+export interface Outcome {
+  status: number;
+  body: Processed | Duplicate | Started | { error: string };
+}
+const reply = (status: number, body: Outcome["body"]): Outcome => ({ status, body });
+
+export interface Started {
+  material: Material;
+  upload: { path: string; token: string };
+}
 
 
 
@@ -65,7 +77,7 @@ async function sameFile(db: OrcaSupabase, ownerId: string, courseId: string, has
   return data ? { duplicate: { id: data.id, filename: data.filename } } : null;
 }
 
-export async function startUpload(db: OrcaSupabase, ownerId: string, body: UploadRequest): Promise<Response> {
+export async function startUpload(db: OrcaSupabase, ownerId: string, body: UploadRequest): Promise<Outcome> {
   if (body.mime !== LIMITS.uploadMime && !/\.pdf$/i.test(body.filename)) return reply(415, { error: "Only PDFs can be uploaded for now." });
   if (body.size > LIMITS.uploadBytes) return reply(413, { error: `This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.` });
   if (!(await ownsCourse(db, ownerId, body.courseId))) return reply(404, { error: "No such course." });
@@ -112,7 +124,7 @@ async function discard(db: OrcaSupabase, ownerId: string, id: string, path: stri
   if (error) throw fail("remove the duplicate upload", error);
 }
 
-export async function processUpload(db: OrcaSupabase, ownerId: string, id: string): Promise<Response> {
+export async function processUpload(db: OrcaSupabase, ownerId: string, id: string): Promise<Outcome> {
   const { data: m, error } = await db.from("materials").select().eq("owner_id", ownerId).eq("id", id).maybeSingle();
   if (error) throw fail("read the upload", error);
   if (!m) return reply(404, { error: "No such upload." });
@@ -121,7 +133,7 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     const out: Processed = { material: materialFromRow(m), pages: await storedPages(db, ownerId, id), hidden: (m.hidden_text as unknown as HiddenText | null) ?? { items: 0, pages: [] } };
     return reply(200, out);
   }
-  if (m.status === "failed") return reply(422, { error: m.error });
+  if (m.status === "failed") return reply(422, { error: m.error ?? "This upload failed." });
   if ((m.status !== "uploaded" && m.status !== "reading") || !m.storage_path) return reply(409, { error: "This upload isn't waiting to be read." });
   const path = m.storage_path;
 

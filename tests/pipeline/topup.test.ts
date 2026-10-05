@@ -109,10 +109,13 @@ test("runTopUp writes and checks questions, drops duplicates and failures, and r
   const plan = await runTopUp(base(), { call, newId: () => `new${++n}` });
   assert.deepEqual(plan.questions.t.map((x) => x.prompt), ["Negate 0101 in 4 bits."]);
   assert.equal(plan.questions.t[0].materialId, "L1");
-  assert.equal(plan.runs.length, 1);
-  assert.equal(plan.runs[0].kind, "top-up");
-  assert.equal(plan.runs[0].questionsAdded, 1);
-  assert.deepEqual(plan.runs[0].dropped.map((d) => d.reason), ["the course already has this question", 'an independent solve answered "0000", not 1111']);
+  assert.equal(plan.run.kind, "top-up");
+  assert.equal(plan.run.id, "top1");
+  assert.equal(plan.run.materialId, "L1");
+  assert.equal(plan.run.status, "done");
+  assert.equal(plan.run.questionsAdded, 1);
+  assert.deepEqual(plan.run.objectivesAttached, ["a"]);
+  assert.deepEqual(plan.run.dropped.map((d) => d.reason), ["the course already has this question", 'an independent solve answered "0000", not 1111']);
   assert.deepEqual(calls, ["generate", "solve"]);
 });
 
@@ -121,7 +124,17 @@ test("nothing needed, nothing called", async () => {
     throw new Error("no calls expected");
   }) as CallStep;
   const plan = await runTopUp(base({ answered: new Set() }), { call, newId: () => "x" });
-  assert.deepEqual(plan, { questions: {}, runs: [], skipped: [] });
+  assert.deepEqual(plan.questions, {});
+  assert.deepEqual(plan.skipped, []);
+  assert.deepEqual([plan.run.materialId, plan.run.questionsAdded, plan.run.dropped], [null, 0, []]);
+});
+
+test("an objective that can't be topped up is in the run's left-out list, saying why", async () => {
+  const call = (async () => {
+    throw new Error("no calls expected");
+  }) as CallStep;
+  const plan = await runTopUp(base({ materialPages: {} }), { call, newId: () => "x" });
+  assert.deepEqual(plan.run.dropped, [{ prompt: 'Objective "Objective a"', reason: "skipped: its material's text isn't stored (it was added without its file); upload the file again" }]);
 });
 
 test("locators name pages or slides; anything else names none", () => {

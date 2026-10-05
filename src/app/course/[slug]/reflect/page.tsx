@@ -5,7 +5,6 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useCourse, useOrca } from "@/lib/store";
-import { pipelineCaller } from "@/lib/pipeline/client";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
 import { formatUSDate } from "@/lib/data";
 import { Screen } from "@/components/layout/Screen";
@@ -26,7 +25,7 @@ export default function ReflectPage({ params, searchParams }: PageProps<"/course
   const sp = use(searchParams);
   const materialId = typeof sp.material === "string" ? sp.material : undefined;
   const router = useRouter();
-  const { hydrated, materials, objectives, llm, recordReflection } = useOrca();
+  const { hydrated, materials, objectives, recordReflection } = useOrca();
   const course = useCourse(slug);
   const material = materials.find((m) => m.id === materialId && m.courseId === course?.id);
   const [note, setNote] = useState("");
@@ -46,17 +45,18 @@ export default function ReflectPage({ params, searchParams }: PageProps<"/course
 
   const catalogue = objectives[course.id] ?? {};
   const live = Object.values(catalogue).filter((o) => o.review !== "archived");
-  const topicName = (id: string) => course.topics.find((t) => t.id === id)?.name ?? "";
-
+  
   const match = async () => {
     setPhase({ kind: "matching" });
     try {
-      const out = await pipelineCaller(llm)("reflect", {
-        course: { name: course.name, short: course.short },
-        material: { filename: material.filename, type: material.type },
-        note: note.trim(),
-        objectives: live.map((o) => ({ id: o.id, name: o.name, description: o.description, topic: topicName(o.topicId) })),
+      // Matched on the server with Orca's model (POST /api/reflect).
+      const res = await fetch("/api/reflect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ materialId: material.id, note: note.trim() }),
       });
+      const out = (await res.json().catch(() => null)) as (ReflectOutput & { error?: string }) | null;
+      if (!res.ok || !out?.matches) throw new Error(out?.error ?? `the server answered ${res.status}`);
       const matches = out.matches.filter((m) => catalogue[m.objectiveId] && catalogue[m.objectiveId].review !== "archived");
       setChosen(new Set(matches.filter((m) => m.sure).map((m) => m.objectiveId)));
       setPhase({ kind: "choosing", matches });
@@ -107,6 +107,7 @@ export default function ReflectPage({ params, searchParams }: PageProps<"/course
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 disabled={phase.kind === "matching" || phase.kind === "choosing"}
+                maxLength={2000}
                 rows={5}
                 placeholder="e.g. I kept getting the K-map groups wrong when they wrapped around the edges."
                 className="rounded-[16px] border-2 border-alice-deep bg-parchment px-[16px] py-[12px] text-[16px] text-prussian outline-none focus:border-wisteria"

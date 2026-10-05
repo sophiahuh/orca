@@ -1,5 +1,9 @@
-/** GET → whether the server can answer without a student key, and with which model. */
+import { modelIsLocal, serverModel } from "@/lib/server/model";
+
+/**
+ * GET → { serverModel, local }: the model Orca's server uses (null: no key, nothing is generated),
+ * and whether its calls go to this machine (the tests' fake API), which the browser tests require.
+ */
 export function GET() {
-  const model = process.env.ANTHROPIC_API_KEY ? "claude-opus-5-5" : null;
-  return Response.json({ serverModel: model }, { headers: { "cache-control": "no-store" } });
+  return Response.json({ serverModel: serverModel(), local: modelIsLocal() }, { headers: { "cache-control": "no-store" } });
 }

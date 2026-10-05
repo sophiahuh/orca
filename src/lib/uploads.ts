@@ -3,9 +3,9 @@
 /**
  * The browser's side of uploads (Phase 4 plan, decision 7): hash the file, ask
  * POST /api/materials for a signed upload URL (or learn the course already has it), send the file
- * straight to Storage, then have the server read it (POST /api/materials/:id/process). Also reads
- * stored pages back for top-ups. The limits are checked here only to say so sooner; the server
- * checks them again.
+ * straight to Storage, then have the server read it (POST /api/materials/:id/process), which also
+ * starts the job that builds its questions (`generation`). The limits are checked here only to say
+ * so sooner; the server checks them again.
  */
 import type { Material, MaterialPages, MaterialType } from "./data";
 import { LIMITS } from "./limits";
@@ -28,9 +28,15 @@ export interface UploadMeta {
   reflect: boolean;
 }
 
+/** What happens to an upload's questions (`Generation` in src/lib/server/jobs/start.ts). */
+export type Generation =
+  | { state: "started" | "running" | "built"; runId: string }
+  | { state: "no-model" }
+  | { state: "no-text" };
+
 export type UploadOutcome =
-  | { kind: "read"; material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] } }
-  | { kind: "duplicate"; id: string; filename: string };
+  | { kind: "read"; material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation }
+  | { kind: "duplicate"; id: string; filename: string; generation: Generation };
 
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -58,9 +64,10 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
   if (problem) throw new Error(problem);
   onStage("hashing");
   const hash = await sha256(file);
-  type Started = { material: Material; upload: { path: string; token: string } } | { duplicate: { id: string; filename: string } };
+  type Duplicate = { duplicate: { id: string; filename: string }; generation: Generation };
+  type Started = { material: Material; upload: { path: string; token: string } } | Duplicate;
   const started = await post<Started>("/api/materials", { ...meta, filename: file.name, size: file.size, mime: file.type || LIMITS.uploadMime, hash });
-  if ("duplicate" in started) return { kind: "duplicate", ...started.duplicate };
+  if ("duplicate" in started) return { kind: "duplicate", ...started.duplicate, generation: started.generation };
 
   onStage("uploading");
   // Storage takes the type from the body itself, and some systems give a PDF no type (or a generic one).
@@ -69,23 +76,8 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
   if (sent.error) throw new Error(`Couldn't upload the file: ${sent.error.message}`);
 
   onStage("reading");
-  type Processed = { material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] } } | { duplicate: { id: string; filename: string } };
+  type Processed = { material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation } | Duplicate;
   const processed = await post<Processed>(`/api/materials/${started.material.id}/process`);
-  if ("duplicate" in processed) return { kind: "duplicate", ...processed.duplicate };
+  if ("duplicate" in processed) return { kind: "duplicate", ...processed.duplicate, generation: processed.generation };
   return { kind: "read", ...processed };
-}
-
-/** The stored pages of some materials (the student's own; row-level security applies). */
-export async function loadMaterialPages(materialIds: readonly string[]): Promise<Record<string, MaterialPages>> {
-  const db = browserSupabase();
-  const out: Record<string, MaterialPages> = {};
-  // One request per material: a file has at most LIMITS.pagesPerFile pages, under the API's row cap.
-  await Promise.all(
-    materialIds.map(async (id) => {
-      const { data, error } = await db.from("material_pages").select("n, text").eq("material_id", id).order("n").limit(LIMITS.pagesPerFile);
-      if (error) throw new Error(`Couldn't read the material's pages: ${error.message}`);
-      if (data.length) out[id] = data;
-    }),
-  );
-  return out;
 }

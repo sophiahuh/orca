@@ -188,18 +188,17 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
   };
 }
 
-export function runToRow(r: PipelineRun): StructureRow<"pipeline_runs"> {
+/** A finished (or failed) run as the job saves it; its Trigger.dev job id, if any, is left as it is. */
+export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id"> {
   return {
     id: r.id,
     material_id: r.materialId,
     kind: r.kind ?? "upload",
     at: r.at,
     model: r.model,
-    // Runs from the browser pipeline are finished when they are saved (Task 7 moves them to jobs).
-    status: "done",
-    progress: null,
-    job_id: null,
-    error: null,
+    status: r.status,
+    progress: r.status === "done" || r.status === "failed" ? null : json(r.progress ?? null),
+    error: r.status === "failed" ? (r.error ?? "The job failed without saying why.") : null,
     topics_created: r.topicsCreated,
     objectives_created: r.objectivesCreated,
     objectives_attached: r.objectivesAttached,
@@ -217,6 +216,9 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     materialId: r.material_id,
     at: new Date(r.at).toISOString(),
     model: r.model,
+    status: r.status as PipelineRun["status"],
+    ...(r.progress !== null ? { progress: r.progress as unknown as NonNullable<PipelineRun["progress"]> } : {}),
+    ...(r.error !== null ? { error: r.error } : {}),
     topicsCreated: r.topics_created,
     objectivesCreated: r.objectives_created,
     objectivesAttached: r.objectives_attached,
@@ -235,22 +237,36 @@ export interface StructureState {
   relations: Relation[];
 }
 
+/** A save_structure row: a new row whole, or an existing one's id and the columns that changed. */
+type SavedRow<K extends keyof Tables> = StructureRow<K> | (Partial<StructureRow<K>> & { id: string });
+
 export interface StructureRows {
-  runs?: StructureRow<"pipeline_runs">[];
-  topics?: StructureRow<"topics">[];
-  objectives?: StructureRow<"objectives">[];
-  relations?: StructureRow<"relations">[];
-  questions?: StructureRow<"questions">[];
+  /** Only the server's jobs save runs (students can't write them). */
+  runs?: Omit<StructureRow<"pipeline_runs">, "job_id">[];
+  topics?: SavedRow<"topics">[];
+  objectives?: SavedRow<"objectives">[];
+  relations?: SavedRow<"relations">[];
+  questions?: SavedRow<"questions">[];
 }
 
-function changed<T extends { id: string }>(kind: string, before: readonly T[], after: readonly T[]): T[] {
-  const old = new Map(before.map((r) => [r.id, JSON.stringify(r)]));
+/**
+ * New rows whole; rows that existed only with the columns that changed (save_structure keeps a left-out
+ * column's value), so a save never writes back a column it didn't change: a job adding an upload
+ * and the student renaming a topic at the same moment both land.
+ */
+function changed<T extends { id: string }>(kind: string, before: readonly T[], after: readonly T[]): Array<T | (Partial<T> & { id: string })> {
+  const old = new Map(before.map((r) => [r.id, r]));
   const now = new Set(after.map((r) => r.id));
   for (const id of old.keys()) {
     // Nothing is deleted (archive or merge); a row that vanished is a bug, not a save.
     if (!now.has(id)) throw new Error(`The ${kind} ${id} disappeared from the course; nothing is ever deleted`);
   }
-  return after.filter((r) => old.get(r.id) !== JSON.stringify(r));
+  return after.flatMap((r) => {
+    const was = old.get(r.id);
+    if (!was) return [r];
+    const diff = (Object.keys(r) as Array<keyof T>).filter((k) => JSON.stringify(r[k]) !== JSON.stringify(was[k]));
+    return diff.length ? [{ id: r.id, ...Object.fromEntries(diff.map((k) => [k, r[k]])) } as Partial<T> & { id: string }] : [];
+  });
 }
 
 const questionRows = (bank: StructureState["bank"]) => Object.entries(bank).flatMap(([topicId, qs]) => qs.map((q, i) => questionToRow(q, topicId, i)));

@@ -210,15 +210,25 @@ export interface Relation {
 }
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */
+/** A pipeline run's job: waiting is held back by a limit (Task 7c). */
+export type RunStatus = "queued" | "waiting" | "running" | "done" | "failed";
+
 export interface PipelineRun {
   id: string;
   /** An upload, or questions topped up after a session (absent on older records: an upload). */
   kind?: "upload" | "top-up";
   courseId: string;
-  materialId: string;
+  /** The material it was built from. A top-up written from several materials (or none) names none. */
+  materialId: string | null;
   /** ISO time. */
   at: string;
   model: string;
+  /** Where its job is (runs are written by the server's jobs): queued → running → done | failed. */
+  status: RunStatus;
+  /** While running: the stage it's at (`Progress` in pipeline/run.ts). */
+  progress?: { stage: string; [k: string]: unknown } | null;
+  /** Why it failed, for the student. */
+  error?: string;
   topicsCreated: string[];
   objectivesCreated: string[];
   objectivesAttached: string[];
