@@ -1,6 +1,6 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import path from "node:path";
-import { STORAGE_KEY } from "./fixture";
+import { expect, test, STORAGE_KEY } from "./fixture";
 
 /**
  * The upload pipeline end to end in the browser: a real ALD deck read by pdf.js, with the model

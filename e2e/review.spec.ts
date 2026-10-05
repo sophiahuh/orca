@@ -1,6 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import type { Topic } from "../src/lib/data";
-import { STORAGE_KEY, laidOut, objective, seedState, short } from "./fixture";
+import { expect, test, STORAGE_KEY, laidOut, objective, seedState, short } from "./fixture";
 
 /** A course as an upload left it: one confirmed topic, two new ones (one maybe a duplicate), an uncertain objective. */
 const ID = "logic";

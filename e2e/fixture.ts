@@ -1,5 +1,38 @@
+import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
+import { test as base, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { type Objective, type QuizQuestion, type Topic, defaultTopicPositions } from "../src/lib/data";
+
+/**
+ * Every test runs as a signed-in student: the app sends signed-out visitors to sign-in. Before
+ * each test a throwaway, already-confirmed account is created with the secret key, signed in over
+ * the real API, and its session cookies are put in the browser; the account is deleted after.
+ * The app's data is still in localStorage for now, so the account only gets the test through the door.
+ * Specs import `test` and `expect` from here. The auth spec uses Playwright's own `test` instead.
+ */
+export const test = base.extend<{ student: { id: string; email: string; password: string } }>({
+  student: [
+    async ({ context, baseURL }, use) => {
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const publishable = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+      const admin = createClient(url, process.env.SUPABASE_SECRET_KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+      const email = `e2e-${crypto.randomUUID()}@example.test`;
+      const password = "e2e-password-1";
+      const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      if (error || !data.user) throw new Error(`Couldn't create the test student: ${error?.message}`);
+      const jar: { name: string; value: string }[] = [];
+      const client = createServerClient(url, publishable, { cookies: { getAll: () => jar, setAll: (list) => list.forEach(({ name, value }) => jar.push({ name, value })) } });
+      const signedIn = await client.auth.signInWithPassword({ email, password });
+      if (signedIn.error) throw new Error(`Couldn't sign the test student in: ${signedIn.error.message}`);
+      await context.addCookies(jar.map(({ name, value }) => ({ name, value, url: baseURL! })));
+      await use({ id: data.user.id, email, password });
+      await admin.auth.admin.deleteUser(data.user.id);
+    },
+    { auto: true },
+  ],
+});
+export { expect };
 
 /** Must match STORAGE_KEY in src/lib/store.tsx. */
 export const STORAGE_KEY = "orca:v8";

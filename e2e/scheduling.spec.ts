@@ -1,5 +1,5 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
-import { FIXTURE_STATE, STORAGE_KEY, seedState } from "./fixture";
+import type { Page, Route } from "@playwright/test";
+import { expect, test, FIXTURE_STATE, STORAGE_KEY, seedState } from "./fixture";
 
 const COURSE = "logic-e2e";
 const bank = FIXTURE_STATE.questionBank[COURSE];

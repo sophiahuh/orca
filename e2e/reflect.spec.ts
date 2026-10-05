@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { FIXTURE_STATE, STORAGE_KEY, seedState } from "./fixture";
+import { expect, test, FIXTURE_STATE, STORAGE_KEY, seedState } from "./fixture";
 
 const COURSE = "logic-e2e";
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();

@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { STORAGE_KEY, seedFixtureCourse } from "./fixture";
+import type { Page } from "@playwright/test";
+import { expect, test, STORAGE_KEY, seedFixtureCourse } from "./fixture";
 
 /** The persisted store, read straight from localStorage. */
 async function storedEvidence(page: Page) {
