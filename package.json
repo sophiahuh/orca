@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "TZ=UTC node --experimental-strip-types --test \"tests/**/*.test.ts\"",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "score:extraction": "node --experimental-strip-types scripts/score-extraction.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

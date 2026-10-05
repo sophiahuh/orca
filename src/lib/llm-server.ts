@@ -6,11 +6,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
-import { type LlmConfig, PROVIDERS, compatChat } from "./llm";
+import { type LlmConfig, PROVIDERS, compatChat } from "./llm.ts";
 
 export class LlmError extends Error {
-  constructor(message: string, public status = 502) {
+  status: number;
+  constructor(message: string, status = 502) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -107,7 +109,7 @@ export async function listModels(config: Pick<LlmConfig, "provider" | "apiKey" |
       throw new LlmError("Couldn't reach Anthropic.", 502);
     }
   }
-  const { compatModels } = await import("./llm");
+  const { compatModels } = await import("./llm.ts");
   try {
     return await compatModels(config);
   } catch (error) {

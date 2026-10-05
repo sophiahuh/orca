@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-/** The model the server will use when a student has no key of their own (null = demo mode). */
+/** The model the server will use when a student has no key of their own (null = no server key: nothing is generated without a student model). */
 export function useServerModel() {
   const [model, setModel] = useState<string | null | undefined>(undefined);
   useEffect(() => {

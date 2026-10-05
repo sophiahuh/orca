@@ -1,5 +1,12 @@
 # Orca Phase 2: Uploads Create the Course Structure
 
+> **Status: built 2026-10-05.** Differences from the plan below: topics also carry `uncertain`
+> (topic duplicates are settled on the review screen too); objective merges work across topics
+> (questions move with the loser); the step budgets live in `src/lib/pipeline/budget.ts`; the
+> evaluation script runs `runUpload` with `structureOnly` (no questions) and reads the benchmark
+> straight from `docs/OBJECTIVES-ALD.md`; a reflection is a separate step (`reflect`) and page
+> (`/course/[slug]/reflect`). The evaluation has not been run yet: it needs `ANTHROPIC_API_KEY`.
+
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 2. Still on-device: pdf.js reads the file in the browser,
 model calls go through Orca's routes (or straight from the browser for browser-only providers), and
 everything lands in the localStorage store.

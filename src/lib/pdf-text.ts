@@ -1,5 +1,24 @@
 "use client";
 
+/** One page's text items joined into lines, the way every reader of Orca's PDFs does it. */
+export function pageText(items: ReadonlyArray<object>): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const item of items) {
+    if (!("str" in item)) continue;
+    const { str, hasEOL } = item as { str: string; hasEOL?: boolean };
+    line += str;
+    if (hasEOL) {
+      lines.push(line);
+      line = "";
+    } else if (str && !str.endsWith(" ")) {
+      line += " ";
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** A document's text, slide by slide, read on the device. */
 export interface DocumentText {
   filename: string;
@@ -22,20 +41,7 @@ export async function extractPdfText(file: File, onProgress?: (done: number, tot
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
-    const lines: string[] = [];
-    let line = "";
-    for (const item of content.items) {
-      if (!("str" in item)) continue;
-      line += item.str;
-      if (item.hasEOL) {
-        lines.push(line);
-        line = "";
-      } else if (item.str && !item.str.endsWith(" ")) {
-        line += " ";
-      }
-    }
-    if (line) lines.push(line);
-    pages.push({ n, text: lines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim() });
+    pages.push({ n, text: pageText(content.items) });
     onProgress?.(n, doc.numPages);
   }
   await task.destroy();

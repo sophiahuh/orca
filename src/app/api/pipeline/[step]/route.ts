@@ -4,6 +4,7 @@ import { LlmError, completeJson } from "@/lib/llm-server";
 import { buildPrompt } from "@/lib/pipeline/prompts";
 import { parseLooseJson } from "@/lib/pipeline/parse";
 import { STEPS, type StepName } from "@/lib/pipeline/schemas";
+import { STEP_BUDGET } from "@/lib/pipeline/budget";
 
 /**
  * POST /api/pipeline/{extract|reconcile|generate|solve|ambiguity|agreement|reflect}
@@ -14,16 +15,6 @@ import { STEPS, type StepName } from "@/lib/pipeline/schemas";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-/** Per step: how hard to think and how much it may write. */
-const BUDGET: Record<StepName, { effort: "low" | "medium" | "high"; maxTokens: number }> = {
-  extract: { effort: "high", maxTokens: 16000 },
-  reconcile: { effort: "low", maxTokens: 2048 },
-  generate: { effort: "medium", maxTokens: 24000 },
-  solve: { effort: "medium", maxTokens: 8000 },
-  ambiguity: { effort: "low", maxTokens: 8000 },
-  agreement: { effort: "low", maxTokens: 8000 },
-  reflect: { effort: "medium", maxTokens: 4000 },
-};
 
 export async function POST(request: Request, { params }: { params: Promise<{ step: string }> }) {
   const { step } = await params;
@@ -51,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ste
   try {
     const built = buildPrompt(name, parsedInput.data as never);
     const schema: z.ZodType<unknown> = STEPS[name].output;
-    const output = await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...BUDGET[name], context: built.context });
+    const output = await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[name], context: built.context });
     return Response.json({ output, model: config.model });
   } catch (error) {
     if (error instanceof LlmError) return Response.json({ error: error.message }, { status: error.status });

@@ -49,7 +49,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   Supabase is the planned backend (Phase 4 of the roadmap); screens only talk to `useOrca()`, so
   the persistence swap happens behind it.
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
-  any API route. Without a key, routes fall back to demo mode.
+  any API route. Without a key (and no student model), uploads are saved without generating
+  anything and prose answers are self-marked.
 - Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), run with `npm test`.
 - Browser tests: Playwright (`e2e/`, `playwright.config.ts`), run with `npm run test:e2e`. It starts
   `next dev` on port 3100 (reuses a running one locally, never in CI) at the 1194×834 frame size; each test gets a fresh
@@ -85,11 +86,19 @@ This describes the code as it is.
   `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
   fold), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
   `due.ts` (due today/tomorrow by topic), `streak.ts` (consecutive local days with an unaided graded
-  answer).
+  answer). `catalogue.ts` follows `mergedInto` and leaves archived objectives out; `applyConfusion`
+  resets an objective to learning.
 - `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
-  (key `orca:v6`). Holds per-course `objectives` and an append-only `evidence` log; `recordEvidence`
-  is the only writer of learner state. Derived reads: `useMasteryByCourse()`, `useDueItems()`,
-  `useStreak()`.
+  (key `orca:v7`). Holds per-course `objectives` and `relations`, pipeline `runs`, and an
+  append-only `evidence` log (answers and confusion events); `recordEvidence` and
+  `recordReflection` are its only writers. Course structure changes through `applyUpload` (a
+  pipeline plan) and `editStructure` (an op from `src/lib/course/ops.ts`). Derived reads:
+  `useMasteryByCourse()`, `useDueItems()`, `useStreak()`.
+- `src/lib/course/` — pure course-structure modules (tested with `npm test`): `ops.ts` (confirm,
+  reject, restore, rename, merge and un-merge topics and objectives; settle uncertain duplicates),
+  `match.ts` (name normalisation, exact name/alias matching that follows merges and reports
+  rejected matches, shortlist for reconciliation), `weights.ts` (weights from upload signals,
+  `WEIGHT_RULES`), `review.ts` (what still needs review).
 - `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
 - `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date),
   `src/hooks/useNow.ts` (clock for derived state).
@@ -99,28 +108,38 @@ This describes the code as it is.
 - `src/components/layout/` — AppShell (main + 340px Sidebar with NavBar), BackButton, Screen.
 - Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (TruthTable,
   QuizEnd, ShortAnswer), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
-- Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/settings`,
-  `/calendar`, `/add-material`, `/new-course`, `/api/extract`, `/api/grade`, `/api/llm/*`. Dynamic
+- Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`),
+  `/quiz/[slug]/[topic]`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
+  `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`. Dynamic
   pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
   (run `npx next typegen` before `tsc`).
 - Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, Settings → "Your AI"): the student picks
   Anthropic / OpenAI / Gemini / OpenRouter / Ollama + a key; it lives in the store (browser only) and
   rides along with each request. Anthropic goes through `@anthropic-ai/sdk`; the rest use the
   OpenAI-compatible chat.completions shape; Ollama is called from the browser. Model routes fall
-  back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`) and then to demo mode. Whether to keep
+  back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`); with neither, uploads are saved
+  without generating anything and prose answers are self-marked. Whether to keep
   this is open (`docs/TO-DISCUSS.md`).
-- Material pipeline (on-device; Phase 2 makes it create objectives, Phase 4 moves it server-side): `src/lib/pdf-text.ts` reads PDFs with pdf.js
-  → `/api/extract` asks the model for topics + source-anchored quiz questions (`src/lib/extraction.ts`,
-  zod schema) → `importExtraction` in the store appends topics and fills
-  `questionBank[courseId][topicId]`. It does not create objectives yet.
+- Upload pipeline (on-device; Phase 4 moves it server-side), `src/lib/pipeline/`: `src/lib/pdf-text.ts`
+  reads the PDF in the browser → `runUpload` (`run.ts`) calls the steps through an injected caller:
+  **extract** (structure and signals against the course's existing topics and objectives, with
+  material-type rules), **reconcile** (only when something is close; same/new/uncertain),
+  **generate** (questions per objective, topped up to 6), then **solve** (blind, compared in code
+  for choice and exact answers), **ambiguity** and **agreement** checks; failures and duplicates are
+  dropped with a reason in the run record. Prompts (`prompts.ts`) and zod schemas (`schemas.ts`)
+  are shared by `/api/pipeline/[step]` (builds the prompt server-side from structured input) and
+  `client.ts` (browser-only providers). `apply.ts` merges the plan; uploads land on
+  `/course/[slug]/review`. `npm run score:extraction` scores extraction on the ALD decks against
+  `docs/OBJECTIVES-ALD.md` (needs `ANTHROPIC_API_KEY`; `--dry` checks the decks without a model).
 - ALD reference material (not shipped in the app): `docs/samples/ald/L01–L04` (real ALD lecture
   decks; syllabus in L01) to upload, and draft objectives in `docs/OBJECTIVES-ALD.md`. The 69
   questions Sophia authored from them were removed from the app; they're in git history
   (`src/lib/content/ald.ts` at 89e042b) for evaluating extraction.
-- `e2e/mastery-core.spec.ts` — the Phase 1 walkthrough in a real browser: a fresh browser (no
-  courses, empty states, no chat, island looks, empty calendar, a new course starting uncharted),
-  then a fixture course seeded into localStorage by `e2e/fixture.ts` (trail with START, objective
-  counts and no locks; quiz answers writing evidence and moving the trail, island and streak).
+- `e2e/` — browser tests: `mastery-core.spec.ts` (fresh browser, empty states, the trail, quiz
+  answers writing evidence), `upload.spec.ts` (a real ALD deck through pdf.js and the pipeline with
+  `/api/pipeline/*` stubbed; re-uploading adds nothing), `review.spec.ts` (review screen and
+  objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective).
+  `e2e/fixture.ts` seeds state into localStorage.
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
@@ -128,8 +147,9 @@ This describes the code as it is.
 
 ## What to build next
 
-`docs/BACKEND-ROADMAP.md` is the plan. Phase 1 (mastery core on-device) is done; Phase 2 (uploads
-create the course structure) is next. Phases: (1) mastery core on-device, (2) uploads create
+`docs/BACKEND-ROADMAP.md` is the plan. Phases 1 (mastery core) and 2 (uploads create the course
+structure) are done on-device; Phase 3 (scheduling and sessions) is next. Before tuning anything in
+Phase 2, run `npm run score:extraction` with a key and record a baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase
 (auth, tables, Storage, snapshots, server-side pipeline), (5) relation mastery, exams and calendar,
 (6) ALD drills, (7) MCP connector. Build each phase with

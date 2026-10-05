@@ -49,8 +49,11 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 ### Weight formula constants
 - **Decided shape** (roadmap, "Weight signals and formula"): code computes weights from signals
   Claude records; clamp 0.5–2.
-- **Open:** the diminishing-returns curve for coverage and the size of the builds-on factor. Set
-  in the Phase 2 plan with tests, then checked against the ALD decks.
+- **Set provisionally (Phase 2):** coverage factor 0.75 + 0.75 × (1 − e^(−s/1.5)), builds-on
+  +0.1 per dependant up to 5, "skipped" = 0 (`WEIGHT_RULES` in `src/lib/course/weights.ts`).
+- **Open:** tune against the ALD decks once `npm run score:extraction` has a key and a baseline.
+  Lecture slides default to the lowest slider (10 of 100), so lecture-only objectives sit just under
+  1.0; check that this matches intent.
 
 ### Existing local data at first sign-in
 - When accounts arrive (Phase 4), a browser may already hold courses and answers in localStorage
@@ -75,6 +78,12 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### A second real course
 - Whether to author another course's content, like ALD, for demos and evaluation.
+
+### Question checks: batched or one at a time
+- **Phase 2:** the blind solve, ambiguity and rubric-agreement checks each run as one call per
+  batch of up to 30 questions. The platform ran one call per question.
+- **Decide:** keep batching (fewer calls, faster uploads) unless the evaluation shows batched
+  checks letting bad questions through.
 
 ## Watch
 

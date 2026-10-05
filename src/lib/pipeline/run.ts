@@ -37,6 +37,8 @@ export interface RunDeps {
   /** Render one slide as an image URL for a figure question; null when it can't be. */
   renderFigure?: (slide: number) => Promise<string | null>;
   onProgress?: (p: Progress) => void;
+  /** Stop after the structure (topics, objectives, relations): no questions are written or checked. */
+  structureOnly?: boolean;
 }
 
 export interface UploadPlan {
@@ -269,6 +271,20 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id });
   }
 
+  const runRecord = (questions: UploadPlan["questions"]): PipelineRun => ({
+    id: input.runId,
+    courseId: input.course.id,
+    materialId: input.material.id,
+    at: input.now,
+    model: input.model,
+    topicsCreated: newTopics.map((t) => t.id),
+    objectivesCreated: newObjectives.map((o) => o.id),
+    objectivesAttached: Object.keys(objectiveUpdates),
+    questionsAdded: Object.values(questions).flat().length,
+    dropped,
+  });
+  if (deps.structureOnly) return { newTopics, topicAliases, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
+
   /* 5. Questions for every objective this upload touched that is short of its stock */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
   const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => q.objectiveId && survivor(q.objectiveId, objectiveById)?.id === id);
@@ -441,17 +457,6 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     objectiveUpdates,
     relations,
     questions,
-    run: {
-      id: input.runId,
-      courseId: input.course.id,
-      materialId: input.material.id,
-      at: input.now,
-      model: input.model,
-      topicsCreated: newTopics.map((t) => t.id),
-      objectivesCreated: newObjectives.map((o) => o.id),
-      objectivesAttached: Object.keys(objectiveUpdates),
-      questionsAdded: Object.values(questions).flat().length,
-      dropped,
-    },
+    run: runRecord(questions),
   };
 }

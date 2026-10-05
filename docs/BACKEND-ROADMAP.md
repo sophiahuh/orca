@@ -4,7 +4,7 @@ How Orca gets a real backend. Decided 2026-10-04: build the backend in this repo
 learner model (`docs/MASTERY-PLAN.md`), and port the parts of `ai-native-learning-platform` that fit
 (`docs/BACKEND-NOTES.md` maps them). The platform repo is a reference, not a dependency.
 
-Each phase gets its own plan in `docs/superpowers/plans/` when it starts. Only Phase 1 has one so far.
+Each phase gets its own plan in `docs/superpowers/plans/` when it starts. Phases 1 and 2 have one.
 Open questions live in `docs/TO-DISCUSS.md`.
 
 ## Decisions
@@ -14,8 +14,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
   Objectives are course data, created once per course (at upload) and never regenerated. Concepts
   from extraction are tags on objectives, used for duplicate detection and grounding, not shown
   as the unit students see.
-- **Ids are random and permanent; nothing is deleted.** Questions and objectives get a random UUID
-  when created, never derived from text, position or filename: every answer points at its
+- **Ids are random and permanent; nothing is deleted.** Topics, objectives and questions get a
+  random UUID when created, never derived from text, position or filename: every answer points at its
   question by id, and the mastery fold uses that id to find the question's current objective and
   to count distinct questions. Questions and objectives are archived or merged, never deleted,
   so no answer outlives what it answered. An archived (rejected) objective stays so it can be
@@ -102,7 +102,19 @@ labelled sample course, fabricated seed data removed. Evidence log in the store;
 as a step function; topic progress, island level, due list and streak derived.
 The quiz writes evidence; the trail and islands read derived state. Still localStorage.
 
-### Phase 2 — Uploads create the course structure, on-device
+### Phase 2 — Uploads create the course structure, on-device ✅
+Plan: `docs/superpowers/plans/2026-10-05-orca-phase2-uploads.md`. Built 2026-10-05: the pipeline
+in `src/lib/pipeline/` (extract → match duplicates → generate → check), `/api/pipeline/[step]`,
+the review screen, the per-course objective list, homework reflection with confusion events, and
+`npm run score:extraction`. Not yet done: the evaluation has not been run against the real decks
+(it needs `ANTHROPIC_API_KEY`), so no baseline is recorded and the weight constants are untuned.
+Decisions made while building it (also in the plan): topics get random ids too; questions are
+checked in batches per topic (one blind-solve call, one ambiguity call, one agreement call per
+batch of up to 30) rather than one call per question; "Syllabus" is a material type; a "skipped"
+emphasis gives weight 0, unclamped; an objective merge across topics moves the loser's questions
+(undoable), a topic merge isn't undoable; homework and exam coverage counts as coverage weighted
+by its slider (no separate "tested" field).
+
 Real uploads become the way courses get content, testable before accounts exist. Runs through the
 current on-device path (pdf.js in the browser → model route → store) and saves in the browser;
 Phase 4 moves it server-side.
@@ -159,8 +171,10 @@ Claude reports facts; code computes weights. Per objective and per upload, extra
 Weight = 1.0 × coverage factor (coverage summed across uploads, each place scaled by its upload's
 material-type weight, on a diminishing-returns curve) × builds-on factor (how many objectives build
 on it) × emphasis (×1.5 tested, ×0 skipped), clamped to 0.5–2 and recomputed when an upload adds
-signals. A topic's weight is the mean of its objectives'. Exact curve constants are set in the
-Phase 2 plan, with tests.
+signals. A topic's weight is the mean of its objectives'. Constants (provisional, in
+`src/lib/course/weights.ts` `WEIGHT_RULES`): a place is worth its type's slider ÷ the course's
+mean slider; coverage factor = 0.75 + 0.75 × (1 − e^(−s/1.5)); builds-on factor = 1 + 0.1 × min(n, 5);
+"skipped" is 0 and not clamped.
 
 Carry-overs from the Phase 1 review, both resolved before Phase 2 by the "ids are random and
 permanent" decision: extracted questions get UUIDs plus `materialId`, and imports skip prompts the
