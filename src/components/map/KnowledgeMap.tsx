@@ -8,6 +8,7 @@ import { OrcaLogo } from "@/components/brand/OrcaLogo";
 import { Wave } from "@/components/brand/Decor";
 import { useFitScale } from "@/hooks/useFitScale";
 import { stagger } from "@/lib/motion";
+import { useMasteryByCourse } from "@/lib/store";
 import { LabelPill } from "./LabelPill";
 
 export const MAP_W = 854;
@@ -32,6 +33,12 @@ export function KnowledgeMap({ courses, dueCount, onConfigure }: {
   onConfigure: (course: Course) => void;
 }) {
   const router = useRouter();
+  const mastery = useMasteryByCourse();
+  const levelOf = (courseId: string) => {
+    const m = mastery[courseId];
+    if (!m) throw new Error(`No mastery computed for course ${courseId}`);
+    return m.island;
+  };
   const { ref, scale, x, y } = useFitScale(MAP_W, MAP_H, "contain");
 
   return (
@@ -57,7 +64,7 @@ export function KnowledgeMap({ courses, dueCount, onConfigure }: {
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.98 }}
             >
-              <Island variant={c.variant} float seed={i} />
+              <Island variant={c.variant} level={levelOf(c.id)} float seed={i} />
             </motion.button>
             <div className="absolute left-1/2 -translate-x-1/2" style={{ top: 196 }}>
               <LabelPill count={dueCount(c.id)} onClick={() => onConfigure(c)} aria-label={`${c.name} settings`}>

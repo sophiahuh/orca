@@ -12,11 +12,11 @@ import { useOrca } from "@/lib/store";
 import { fadeUp, popIn, stagger } from "@/lib/motion";
 
 const ISLANDS = [
-  { x: 20, y: 120, variant: "ald", active: true, scale: 0.78 },
-  { x: 330, y: 220, variant: "circuit", active: true, scale: 0.78 },
-  { x: 10, y: 410, variant: "linear", active: true, scale: 0.72 },
-  { x: 250, y: 560, variant: "signals", active: false, scale: 0.78 },
-  { x: 560, y: 470, variant: "stats", active: false, scale: 0.7 },
+  { x: 20, y: 120, variant: "ald", level: "thriving", scale: 0.78 },
+  { x: 330, y: 220, variant: "circuit", level: "growing", scale: 0.78 },
+  { x: 10, y: 410, variant: "linear", level: "sprouting", scale: 0.72 },
+  { x: 250, y: 560, variant: "signals", level: "uncharted", scale: 0.78 },
+  { x: 560, y: 470, variant: "stats", level: "uncharted", scale: 0.7 },
 ] as const;
 
 const BUBBLES = [
@@ -100,7 +100,7 @@ export default function OnboardingPage({ searchParams }: PageProps<"/">) {
         ))}
         {ISLANDS.map((isl, i) => (
           <motion.div key={i} variants={popIn} className="absolute" style={{ left: isl.x, top: isl.y }}>
-            <Island variant={isl.variant} active={isl.active} scale={isl.scale} float seed={i} />
+            <Island variant={isl.variant} level={isl.level} scale={isl.scale} float seed={i} />
           </motion.div>
         ))}
       </motion.div>

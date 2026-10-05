@@ -75,7 +75,7 @@ export default function NewCoursePage() {
           <Wave tone="light" x={20} y={120} width={70} seed={1} />
           <Wave tone="light" x={80} y={620} width={60} seed={2} />
           <motion.div variants={popIn} initial="hidden" animate="show" className="absolute" style={{ left: 60, top: 150 }}>
-            <Island variant="ald" active scale={2.1} float seed={2} />
+            <Island variant="ald" level="growing" scale={2.1} float seed={2} />
             <div className="absolute left-[294px] -translate-x-1/2" style={{ top: 420 }}>
               <LabelPill interactive={false} className="text-[16px]">
                 {trimmed || "Your course"}
