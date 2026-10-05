@@ -74,9 +74,10 @@ test("the browser's old local state is removed", async ({ page }) => {
       sessionStorage.setItem("seeded", "1");
       localStorage.setItem("orca:v8", JSON.stringify({ courses: [{ id: "old" }] }));
       localStorage.setItem("orca:v3", "{}");
+      localStorage.setItem("orca:materialPages", JSON.stringify({ old: [{ n: 1, text: "kept in the browser before Task 6" }] }));
     }
   });
   await page.goto("/home");
   await expect(page.getByText("No islands yet.")).toBeVisible();
-  expect(await page.evaluate(() => [localStorage.getItem("orca:v8"), localStorage.getItem("orca:v3")])).toEqual([null, null]);
+  expect(await page.evaluate(() => [localStorage.getItem("orca:v8"), localStorage.getItem("orca:v3"), localStorage.getItem("orca:materialPages")])).toEqual([null, null, null]);
 });

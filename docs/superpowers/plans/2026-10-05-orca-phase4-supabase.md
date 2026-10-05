@@ -93,6 +93,35 @@
 >   `ready`, with no Storage path); finished sessions take the database's `finished_at`; the
 >   scheduling e2e runs on the real clock, since the server stamps answers (a run that straddles
 >   midnight can fail).
+> - **Task 6 done (2026-10-05, local):** `POST /api/materials` (signed upload URL into the student's
+>   folder, PDF only, 25 MB, filename sanitised; a file the course already has is recognised by its
+>   SHA-256 before it's sent) and `POST /api/materials/:id/process` (the server takes the file from
+>   Storage, hashes it again, since the browser's hash is only a shortcut, reads it with pdf.js in
+>   Node, at most 150 pages, into `material_pages`, each page through the sanitiser in
+>   `src/lib/untrusted/sanitize.ts`; text under 2 pt is dropped and recorded in the new
+>   `materials.hidden_text`, shown on the review screen). A file that can't be read is marked
+>   `failed` with why; a duplicate that slips past the browser's check is removed. A migration
+>   also stops students changing the server's columns of a material (path, hash, size, status,
+>   hidden text), so a read material can't be reset and processed again. The upload screen
+>   uploads, then runs the browser pipeline on the stored pages (Task 7 moves it); top-ups read
+>   `material_pages`; `orca:materialPages` is gone and cleared on load. Proved locally: 9 new unit
+>   tests (sanitiser attack strings: zero-width, tag block, bidi; the ALD deck read in Node; hidden
+>   text; page and size limits), 9 pgTAP checks, `e2e/upload.spec.ts` (the deck lands in Storage and
+>   `material_pages`, a re-upload adds nothing and calls no model, oversize and non-PDF refused,
+>   151 pages refused and the material marked failed, hidden text dropped and recorded, a second
+>   student can't process, read or download the file), the whole e2e suite (34),
+>   `check:isolation` (40), `check:evidence` (44), and a production build serving both routes.
+>   Differences and judgement calls: pdf.js (v4+) already leaves glyphs outside the page box out
+>   of its text, so off-page text is dropped but can't be counted (only tiny text is); the upload
+>   screen no longer previews the text before "Add" (the server reads it on submit, then the
+>   preview shows); a re-upload of a file whose questions were never built (no model then, or a
+>   failed run) builds them from the stored pages instead of saying "nothing new"; materials that
+>   aren't `ready` (an abandoned or failed upload) don't load into the app; a file Orca can't read
+>   (not a PDF, over 25 MB) is still added as a record without its file, as before; NFKC turns
+>   superscripts and the like into plain characters (x² becomes x2); runs of one letter or digit
+>   are cut at 64 and of other characters at 8; pages are capped at 20,000 characters.
+>   `pdfjs-dist` is a `serverExternalPackages` entry (bundled, the server read fails); the build
+>   warns about the browser's worker URL, harmlessly. Not run on Vercel.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh

@@ -184,7 +184,7 @@ test.describe("scheduling", () => {
     await expect(page.locator('[data-todo="deep"]')).toHaveCount(0);
   });
 
-  test("after a session, objectives short of unseen questions are topped up from the kept material text", async ({ page, student }) => {
+  test("after a session, objectives short of unseen questions are topped up from the material's stored pages", async ({ page, student }) => {
     const generated = [
       { prompt: "Simplify x·x + x.", exact: ["x"] },
       { prompt: "Simplify ab + ab'.", exact: ["a"] },

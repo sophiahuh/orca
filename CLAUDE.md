@@ -29,22 +29,21 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   when done, as Phase 3 was). `backend-implementation` holds Phases 1–3 (CI runs on it); `main` is
   far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device. Phase 4 so far (plan Tasks 1–5 plus an isolation audit, local only): the local
+  on-device. Phase 4 so far (plan Tasks 1–6 plus an isolation audit, local only): the local
   Supabase stack, the schema with row-level security, the Storage bucket and `save_structure` in
   `supabase/migrations/`, the evidence path (`objective_state` snapshots, `record_evidence`, stale
   marks, `POST /api/evidence`, `GET /api/state`), auth, and the store on Supabase (Task 5: the app
-  loads and saves the signed-in student's data there; uploads still run the pipeline in the
-  browser until Task 7). Checks are green:
-  `npx tsc --noEmit`, `npm run lint`, `npm test` (181 unit tests), `npm run test:e2e` (29 browser
-  tests), `npm run build`, `npm run test:db` (117 pgTAP checks), `npm run check:isolation` (40
+  loads and saves the signed-in student's data there) and uploads to Storage (Task 6: the file goes
+  to the `materials` bucket, the server reads it into sanitised `material_pages`; the model
+  pipeline still runs in the browser on those pages until Task 7). Checks are green:
+  `npx tsc --noEmit`, `npm run lint`, `npm test` (190 unit tests), `npm run test:e2e` (34 browser
+  tests), `npm run build`, `npm run test:db` (126 pgTAP checks), `npm run check:isolation` (40
   HTTP checks) and `npm run check:evidence` (44 HTTP checks through Orca's own routes). CI only runs on pushes to `main` and
   `backend-implementation` and on pull requests, so `phase-4` isn't checked by CI: run the checks
   yourself. Nothing has run against a hosted Supabase or Trigger.dev project; the owner's setup
   steps are in `docs/SETUP-HOSTED.md`.
-- **Stopgap to remove in Phase 4 (Task 6):** uploads keep their page text in localStorage
-  (`orca:materialPages`, the only app data left in the browser) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
-  files to Supabase Storage and page text to a `material_pages` table, with processing in
-  Trigger.dev tasks; don't build more on browser storage.
+- No app data is kept in the browser any more (the old `orca:materialPages` key is cleared on
+  load); don't build on browser storage.
 - **Never run against a real model.** Every pipeline test stubs the model, and tests can't spend:
   Playwright starts the dev server with model keys blanked (beating `.env.local` too), and
   `e2e/global-setup.ts` stops the run if the server reports a model (e.g. a reused local dev
@@ -66,8 +65,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`: Tasks 1–5 are done (status notes at the top of the plan), **Task 6
-   (uploads to Storage) is next**. Tasks 1–9 need no hosted projects (local Supabase,
+   progress on branch `phase-4`: Tasks 1–6 are done (status notes at the top of the plan), **Task 7
+   (jobs: the pipeline on the server) is next**. Tasks 1–9 need no hosted projects (local Supabase,
    inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
    `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
    "Watch" for the two to revisit).
@@ -229,12 +228,12 @@ This describes the code as it is.
   structure through `save_structure` (only changed rows), evidence through `POST /api/evidence`,
   the rest by direct writes under RLS. A failed save is undone and shows "Couldn't save: …"
   (`SaveStatus`, `src/components/store/`); a failed load shows its own screen. Holds per-course
-  `objectives` and `relations`, pipeline `runs`, each upload's text (`materialPages`, the
-  localStorage stopgap), finished sessions (`results`), the `evidence` log (answers and confusion
+  `objectives` and `relations`, pipeline `runs`, `materials` (only read uploads; page text is
+  never held, top-ups load it from `material_pages`), finished sessions (`results`), the `evidence` log (answers and confusion
   events) and the server's `snapshots`; `recordEvidence` and `recordReflection` are its only
   evidence writers. Objective state comes from the snapshots; streak, agenda and the rest from
   the loaded events, with days in the profile's timezone. The bring-your-own model setting is kept
-  in memory only. `orca:v3`–`orca:v8` keys are removed on load. `addQuestions` adds topped-up questions. Course structure changes through `applyUpload` (a
+  in memory only. `orca:v3`–`orca:v8` and `orca:materialPages` keys are removed on load. `addQuestions` adds topped-up questions. Course structure changes through `applyUpload` (a
   pipeline plan) and `editStructure` (an op from `src/lib/course/ops.ts`). Derived reads:
   `useMasteryByCourse()`, `useAgenda()`, `useTodos()`, `useStreak()`.
 - `src/lib/course/` — pure course-structure modules (tested with `npm test`): `ops.ts` (confirm,
@@ -268,8 +267,15 @@ This describes the code as it is.
   back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`); with neither, uploads are saved
   without generating anything and prose answers are self-marked. Whether to keep
   this is open (`docs/TO-DISCUSS.md`).
-- Upload pipeline (on-device; Phase 4 moves it server-side), `src/lib/pipeline/`: `src/lib/pdf-text.ts`
-  reads the PDF in the browser → `runUpload` (`run.ts`) calls the steps through an injected caller:
+- Uploads (Task 6): `src/lib/uploads.ts` hashes the file, `POST /api/materials` answers with a
+  signed upload URL into `<owner>/<material>/<safe name>` (PDF only, 25 MB) or "the course already
+  has this file" (SHA-256), the browser uploads to Storage, and `POST /api/materials/:id/process`
+  (`src/lib/server/materials.ts`) reads it on the server (`src/lib/material/read-pdf.ts`: pdf.js
+  in Node, at most 150 pages, text under 2 pt dropped and counted in `materials.hidden_text`,
+  every page through `src/lib/untrusted/sanitize.ts`) into `material_pages`. Limits are in
+  `src/lib/limits.ts`. Only `ready` materials load into the store.
+- Upload pipeline (in the browser on the stored pages until Task 7 moves it server-side),
+  `src/lib/pipeline/`: `runUpload` (`run.ts`) calls the steps through an injected caller:
   **extract** (structure and signals against the course's existing topics and objectives, with
   material-type rules), **reconcile** (only when something is close; same/new/uncertain),
   **generate** (questions per objective, topped up to 6), then **solve** (blind, compared in code
