@@ -313,6 +313,37 @@ objective is inferred.
 conflict retries from the log; a rules bump and a merge mark the right snapshots stale and the
 next read rebuilds them.
 
+Design notes (settled with the owner 2026-10-05, before building):
+- **A snapshot belongs to the objective an event counts for now**, the way the fold reads the log
+  today (`src/lib/mastery/course-mastery.ts`): an answer counts for its question's current
+  objective after merges; otherwise the event's objective, following `merged_into`; events whose
+  objective is archived count for nothing. Extract that mapping into a pure, shared function
+  rather than copying it; the route and `/api/state`'s rebuild use it, and so does the store.
+- **Stale triggers**, beyond the plan's two: an objective gaining or losing its first mechanism-
+  tier question (insert, tier change or re-tag of a question; `hasMechanismQuestions` changes the
+  fold), and a change to `profiles.timezone` (marks all that student's snapshots stale, since
+  day keys change). Merge and un-merge mark both the loser and the winner (and the chain).
+- **`record_evidence` is server-only:** executable by `service_role` only, taking the owner as a
+  parameter; it checks the event's course belongs to that owner. `objective_state` is readable by
+  its owner and writable by nobody but the service role. The routes verify the session with the
+  user's client, then write with the secret key, scoping every query to that user.
+- **`/api/evidence` accepts both kinds of event**: answers (with the outcome the browser graded,
+  decision 13; prose grading is Task 8) and confusion events from a homework reflection (the
+  browser can't insert evidence at all).
+- **Supabase clients come forward from Task 4**, minimally: add `@supabase/supabase-js` and
+  `@supabase/ssr`, a server client that reads the session cookie and a secret-key client
+  (`src/lib/supabase/`), with the reason in the roadmap. The proxy, auth screens and sign-out
+  stay in Task 4.
+- **`version` is an optimistic-concurrency counter**, not history: one row per objective,
+  overwritten on each write.
+- `RULES_VERSION`'s comment says a change to `applyAnswer`'s logic needs a bump too, and a golden
+  replay test (a fixed log with its expected accumulator, stored with the version) catches logic
+  drift the constants hash can't.
+- Proof against local Supabase: a script in the style of `scripts/check-isolation.ts` (two
+  throwaway accounts over HTTP) that answers, reads state, compares with a full replay, forces a
+  version conflict, merges objectives and reads again; a second account and a signed-out caller
+  are refused.
+
 ### Task 4 — Auth
 Supabase clients (browser, server, service role), `src/proxy.ts`, auth screens and server
 actions, the email callback, sign-out, redirect when signed out, timezone in Settings. The
