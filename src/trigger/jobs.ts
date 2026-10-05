@@ -5,18 +5,19 @@
  * and the student can upload again. Deployed in Task 10 (`npx trigger.dev deploy`).
  */
 import { task } from "@trigger.dev/sdk";
-import { type MaterialJob, type TopUpJob, runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
+import { JOB_MAX_SECONDS, type MaterialJob, type TopUpJob } from "@/lib/jobs/start";
+import { runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
 
 export const processMaterialTask = task({
   id: "process-material",
   retry: { maxAttempts: 1 },
-  maxDuration: 1800,
+  maxDuration: JOB_MAX_SECONDS.upload,
   run: (payload: MaterialJob) => runMaterialJob(payload),
 });
 
 export const topUpTask = task({
   id: "top-up",
   retry: { maxAttempts: 1 },
-  maxDuration: 900,
+  maxDuration: JOB_MAX_SECONDS["top-up"],
   run: (payload: TopUpJob) => runTopUpJob(payload),
 });

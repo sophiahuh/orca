@@ -28,6 +28,7 @@ export interface JobStore {
   /** Move a queued (or waiting) run to running. False when it isn't queued: another worker has it, or it's finished. */
   claim(runId: string, progress: Progress): Promise<boolean>;
   progress(runId: string, progress: Progress): Promise<void>;
+  /** Mark a run that is still in flight failed; a finished run is left as it is. */
   fail(runId: string, error: string): Promise<void>;
   course(courseId: string): Promise<LoadedCourse | null>;
   /** The course's materials that were read (status ready). */

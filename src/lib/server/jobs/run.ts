@@ -5,23 +5,13 @@
  * can load it.
  */
 import { type JobOutcome, processMaterial, topUp } from "@/lib/jobs/jobs";
+import type { MaterialJob, TopUpJob } from "@/lib/jobs/start";
 import { figureRenderer } from "@/lib/server/figures";
 import { supabaseJobStore } from "@/lib/server/job-store";
 import { stepCaller } from "@/lib/server/model";
 import { adminClient } from "@/lib/supabase/server";
 
-/** A job's payload. `ownerId` is the student the route verified; every query is scoped to it. */
-export interface MaterialJob {
-  ownerId: string;
-  runId: string;
-  materialId: string;
-}
-
-export interface TopUpJob {
-  ownerId: string;
-  runId: string;
-  objectiveIds: string[];
-}
+export type { MaterialJob, TopUpJob } from "@/lib/jobs/start";
 
 async function guarded(ownerId: string, runId: string, work: (store: ReturnType<typeof supabaseJobStore>, db: ReturnType<typeof adminClient>) => Promise<JobOutcome>): Promise<JobOutcome> {
   const db = adminClient();

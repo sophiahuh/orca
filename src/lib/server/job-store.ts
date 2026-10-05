@@ -52,7 +52,8 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
     },
 
     async fail(runId, error) {
-      check("record why the run failed", await db.from("pipeline_runs").update({ status: "failed", error, progress: null }).eq("owner_id", ownerId).eq("id", runId));
+      // Only a run still in flight: a run whose save landed (done) stays done even if the reply was lost.
+      check("record why the run failed", await db.from("pipeline_runs").update({ status: "failed", error, progress: null }).eq("owner_id", ownerId).eq("id", runId).in("status", ["queued", "waiting", "running"]));
     },
 
     async course(courseId): Promise<LoadedCourse | null> {
@@ -96,7 +97,7 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
 
     async answered(courseId) {
       const rows = await readAll(
-        (a, b) => db.from("evidence_events").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "answer").order("at").range(a, b),
+        (a, b) => db.from("evidence_events").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "answer").order("at").order("id").range(a, b),
         "the answers",
       );
       return new Set(rows.flatMap((r) => (r.question_id ? [r.question_id] : [])));

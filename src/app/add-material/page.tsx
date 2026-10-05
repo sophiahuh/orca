@@ -148,6 +148,11 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         setPhase({ kind: "duplicate", filename: outcome.filename });
         return;
       }
+      if (g.state === "built") {
+        // Read again after its questions were built (a repeated request): show what was built.
+        router.push(`/course/${course.slug}/review?run=${g.runId}`);
+        return;
+      }
       setPhase({
         kind: "saved",
         message:

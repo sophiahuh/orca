@@ -25,7 +25,7 @@ const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
 });
 
 /** An in-memory JobStore for one student: what the jobs saved, the progress they wrote, the run's state. */
-function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[] }) {
+function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; lostReply?: boolean }) {
   const run = { ...init.run };
   const structure: StructureState = init.structure ?? { topics: [], objectives: {}, bank: {}, relations: [] };
   const saves: StructureRows[] = [];
@@ -40,6 +40,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
     },
     progress: async (_id, p) => void progress.push(p),
     fail: async (_id, error) => {
+      if (run.status !== "queued" && run.status !== "waiting" && run.status !== "running") return;
       run.status = "failed";
       run.error = error;
     },
@@ -50,6 +51,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
     save: async (_course, rows) => {
       saves.push(rows);
       run.status = "done";
+      if (init.lostReply) throw new Error("fetch failed");
     },
   };
   return { store, saves, progress, state: run };
@@ -163,4 +165,12 @@ test("topUp writes questions for the session's objectives from their stored page
   assert.deepEqual(rows.runs!.map((r) => [r.kind, r.material_id, r.questions_added, r.status]), [["top-up", "m1", 2, "done"]]);
   assert.deepEqual(rows.questions!.map((x) => [x.prompt, x.sort_order]), [["Simplify: case 1?", 2], ["Simplify: case 2?", 3]]);
   assert.equal(rows.topics, undefined, "nothing else is written");
+});
+
+test("a save that landed but whose reply was lost leaves the run done, so a re-upload doesn't build it again", async () => {
+  const mem = memoryStore({ run: queued(), pages, lostReply: true });
+  const out = await processMaterial({ store: mem.store, call: honestModel().call, newId }, { runId: "run1", materialId: "m1" });
+  assert.equal(out.status, "failed");
+  assert.equal(mem.saves.length, 1);
+  assert.equal(mem.state.status, "done");
 });
