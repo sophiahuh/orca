@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   return forStudent(request, async (student, db) => {
     const parsed = Body.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return reply(400, { error: "Send the material and a note of at most 2,000 characters." });
-    const call = stepCaller();
+    const call = stepCaller({ ownerId: student.id, kind: "reflect" });
     if (!call) return reply(503, { error: "No AI is connected, so Orca can't match your reflection." });
     const { data: material, error } = await db.from("materials").select("id, course_id, filename, type").eq("owner_id", student.id).eq("id", parsed.data.materialId).maybeSingle();
     if (error) throw new Error(`Couldn't read the material: ${error.message}`);

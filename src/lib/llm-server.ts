@@ -7,6 +7,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import { type LlmConfig, PROVIDERS, compatChat } from "./llm.ts";
+import type { ModelCtx } from "./server/model.ts";
 
 export class LlmError extends Error {
   status: number;
@@ -49,6 +50,8 @@ export async function completeJson<T>(
     maxTokens?: number;
     /** Long text sent before `prompt` and cached (e.g. the material shared by every call of one upload). */
     context?: string | null;
+    /** Who the call is for and why (`ModelCtx`); every call made with Orca's key passes it. */
+    ctx?: ModelCtx;
   } = {},
 ): Promise<T> {
   if (PROVIDERS[config.provider].browserOnly) {

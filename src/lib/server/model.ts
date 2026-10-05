@@ -35,6 +35,17 @@ export function modelIsLocal(): boolean {
   }
 }
 
+/**
+ * Who a model call is for and why: the verified student (every call is made for one), the kind of
+ * work, and the pipeline run it belongs to, if any. Required on every call so usage can be metered
+ * and budgeted per student (decision 10); it changes nothing about the call yet.
+ */
+export interface ModelCtx {
+  ownerId: string;
+  kind: "upload" | "top-up" | "reflect" | "grade";
+  runId?: string;
+}
+
 /** A step failed: the model or its reply, said for the student. */
 export class StepError extends Error {
   readonly step: StepName;
@@ -50,9 +61,9 @@ export class StepError extends Error {
 /**
  * The step caller the jobs and the reflection route inject into the pure pipeline. Each step's input
  * is checked against its schema before a prompt is built from it, and its reply against the output
- * schema. Null without a key.
+ * schema. Every call is made for `ctx`. Null without a key.
  */
-export function stepCaller(): CallStep | null {
+export function stepCaller(ctx: ModelCtx): CallStep | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
   const config: LlmConfig = { provider: "anthropic", model: ORCA_MODEL, apiKey };
@@ -64,7 +75,7 @@ export function stepCaller(): CallStep | null {
     const built = buildPrompt(step, parsed.data as never);
     const schema: z.ZodType<unknown> = spec.output;
     try {
-      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context });
+      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ctx });
     } catch (error) {
       if (error instanceof LlmError) throw new StepError(step, error.message, error.status);
       throw new StepError(step, `The ${step} step failed: ${error instanceof Error ? error.message : String(error)}`, 502);

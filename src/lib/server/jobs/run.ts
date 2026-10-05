@@ -38,7 +38,7 @@ async function guarded(ownerId: string, runId: string, work: (store: ReturnType<
 
 export function runMaterialJob(job: MaterialJob): Promise<JobOutcome> {
   return guarded(job.ownerId, job.runId, async (store, db) => {
-    const call = stepCaller();
+    const call = stepCaller({ ownerId: job.ownerId, kind: "upload", runId: job.runId });
     if (!call) throw new Error("the server has no model key");
     return processMaterial({ store, call, newId: () => crypto.randomUUID(), renderFigure: figureRenderer(db, job.ownerId) }, job);
   });
@@ -46,7 +46,7 @@ export function runMaterialJob(job: MaterialJob): Promise<JobOutcome> {
 
 export function runTopUpJob(job: TopUpJob): Promise<JobOutcome> {
   return guarded(job.ownerId, job.runId, async (store) => {
-    const call = stepCaller();
+    const call = stepCaller({ ownerId: job.ownerId, kind: "top-up", runId: job.runId });
     if (!call) throw new Error("the server has no model key");
     return topUp({ store, call, newId: () => crypto.randomUUID() }, job);
   });
