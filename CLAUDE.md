@@ -55,6 +55,13 @@ them silently; list what you assumed.
 **Environment gotchas.**
 - Cloud containers: Playwright's Chromium build doesn't match; run e2e with
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
+- Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
+  `.env.local`; template in `.env.example`), `npm run db:reset` (re-applies `supabase/migrations/`),
+  `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run db:types`, `npm run db:stop`. In a
+  cloud container, start the daemon first (`sudo dockerd > /tmp/dockerd.log 2>&1 &`) and pull from
+  Docker Hub, since the CLI's default AWS registry is blocked there:
+  `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npm run db:start`. Docker Hub rate-limits anonymous
+  pulls; if it answers 429, wait and retry.
 - Run `npx next typegen` before `tsc` after adding a route; delete a stale `.next/dev` if `tsc`
   complains about a route that no longer exists.
 - Playwright's `page.clock.setFixedTime` freezes `motion` animations after the first page, so

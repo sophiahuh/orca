@@ -4,6 +4,14 @@
 > merge back into it, as Phase 3 was). CI doesn't run on `phase-4`, so run every check by hand.
 > The owner accepted decisions 4 (load everything, revisit later), 5 (no guest mode) and 10 (300
 > pages a day, revisit later); 4 and 10 are under "Watch" in `docs/TO-DISCUSS.md`.
+>
+> - **Task 1 done (2026-10-05, local):** the full local stack (database, auth, Storage, Realtime,
+>   Mailpit) starts in a cloud container from Docker Hub; edge functions and analytics are off.
+>   Local auth requires email confirmation and 8-character passwords. `.env.example` uses
+>   Supabase's newer key names (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`)
+>   where this plan says anon and service-role keys; they do the same jobs. The guard tests
+>   (`supabase/tests/00_guards.test.sql`: RLS and a non-null `owner_id` on every public table, the
+>   `private` schema closed to API roles) were checked to fail on a bad table.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
