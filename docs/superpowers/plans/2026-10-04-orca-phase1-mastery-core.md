@@ -1866,7 +1866,7 @@ git commit -m "Trail reads derived progress: no stored topic status, no locks, e
 
 **Files:**
 - Create: `src/lib/mastery/due.ts`, `src/lib/mastery/streak.ts`, `tests/mastery/due.test.ts`, `tests/mastery/streak.test.ts`
-- Modify: `src/lib/data.ts`, `src/lib/store.tsx`, `src/app/home/page.tsx`, `src/components/layout/Sidebar.tsx`, `src/app/quiz/[slug]/[topic]/page.tsx`, `src/app/course/[slug]/page.tsx`
+- Modify: `src/lib/data.ts`, `src/lib/store.tsx`, `src/app/home/page.tsx`, `src/components/layout/Sidebar.tsx`, `src/app/quiz/[slug]/[topic]/page.tsx`, `src/app/course/[slug]/page.tsx`, `src/components/config/ConfigRow.tsx`
 
 **Interfaces:**
 - Consumes: `CourseMastery` with `topicObjectives` (Task 5), `localDayKey` (Task 4), `useMasteryByCourse`, `useNow` (Task 6).
@@ -2070,6 +2070,9 @@ export interface DueItem {
   sample?: boolean;
 ```
 - On the ALD entry in `SEED_COURSES`, add `sample: true,`.
+- Quick review defaults to 10 minutes: add `"10 min"` to the `Duration` union (after `"5 min"`),
+  set `DEFAULT_CONFIG.quick.duration` to `"10 min"`, and add `"10 min"` to `DURATIONS` in
+  `src/components/config/ConfigRow.tsx` in the same position.
 
 In `src/lib/store.tsx`:
 - `const STORAGE_KEY = "orca:v5"; // v5: due list and streak are derived; no fabricated seed data`

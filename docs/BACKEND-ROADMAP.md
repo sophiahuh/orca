@@ -29,7 +29,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
   clock. An answer counts toward its question's current objective, so merging or re-tagging
   questions re-files past answers.
 - **Mastery is a decision, not an average:** 3 credited answers on 3 different questions, on at
-  least 2 days, last two correct, no open mix-up. Stability grows ×2.2 per successful spaced check
+  least 2 days, last two correct, no open mix-up. The bar is the same for every objective: weights
+  change priority (what gets practised first), never what counts as mastered. Stability grows ×2.2 per successful spaced check
   (cap 60 days); a miss cuts it to a third; capped with 3 checks = retired.
 - **Due vs fading.** A review that comes due still counts as mastered for half its interval
   ("due"); after that, or after a missed check, it's "fading" and stops counting.
@@ -50,7 +51,7 @@ Open questions live in `docs/TO-DISCUSS.md`.
   stock of validated questions (about 6 at upload, topped up after sessions). Pressing start
   assembles the session instantly from that stock: spread across the highest-priority objectives,
   unseen questions first, at least one mechanism question, sized to the course's quick-review
-  time budget with per-type time estimates. Never a placeholder question.
+  time budget with per-type time estimates (default 10 minutes). Never a placeholder question.
 - **Deep review follows each course's own cadence** from its configuration. Its question mix
   follows the material-type weight sliders (e.g. more past-exam-style questions when past exams
   are weighted highest).

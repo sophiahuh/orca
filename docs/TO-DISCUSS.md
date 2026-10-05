@@ -20,18 +20,18 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Meanwhile:** left out. Retirement already does most of the "don't re-quiz the intro" work.
 - **Decide:** together with the frontier term.
 
-### Default quick-review length
-- **Now:** a new course's quick review defaults to 5 minutes (`DEFAULT_CONFIG`), editable per
-  course. Amanda described daily quizzes as about 10 minutes.
-- **Decide:** whether the default becomes 10 minutes.
-
-### Island mastery levels: names, cut-offs and art
-- **Provisional (Phase 1):** the share of a course's objectives that are mastered, due (within
-  grace) or retired. `uncharted` = no answers yet; `sprouting` < 1/3; `growing` ≥ 1/3;
-  `thriving` ≥ 2/3. Fading objectives don't count, so an island drops a level after real neglect.
-- **Decide:** the names, the cut-offs, whether a neglected island gets its own look, and the final
-  art. Phase 1 builds the looks from the existing island SVG parts; Figma art can replace them
-  later with changes only in `Island.tsx`.
+### Island looks: cut-offs and art
+- **What an island shows:** one summary of a whole course, computed from its objectives'
+  mastery states: the share of objectives currently held (mastered, due or retired). The level
+  names (`uncharted`, `sprouting`, `growing`, `thriving`) are only code identifiers for the four
+  pictures; students never see them.
+- **Provisional (Phase 1):** no answers yet → look 1; under 1/3 held → look 2; 1/3 or more →
+  look 3; 2/3 or more → look 4. Fading objectives don't count, so an island loses a look after
+  real neglect.
+- **Decide:** (1) cut-offs: how many looks, and the share that triggers each; (2) art: the final
+  drawings for each look (Phase 1 uses placeholder trees built from the current island SVG;
+  Figma art replaces them later with changes only in `Island.tsx`); (3) whether a neglected
+  island (many fading objectives) gets a look of its own.
 
 ### Clearing a mix-up when an objective has no "mechanism" question
 - **Source:** `docs/MASTERY-PLAN.md` §2.4: only an unaided correct answer on a *mechanism* question
@@ -41,8 +41,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Decide:** keep that, or require generating a mechanism question first.
 
 ### Mastery bar and "I know this"
-- Is "3 correct on 2 days" the right bar for every objective, or should important objectives need
-  more and minor ones fewer?
+- Is "3 correct on 2 days" the right bar? (The same bar applies to every objective whatever its
+  weight; see Decided.)
 - Should a student be able to mark "I know this"? (Proposal: it schedules one check tomorrow,
   never mastery directly.)
 
@@ -91,6 +91,10 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   reviews it.
 
 ## Decided (recorded in the roadmap)
+
+- 2026-10-04: quick review defaults to 10 minutes per course (adds a "10 min" option).
+- 2026-10-04: the mastery bar is the same for every objective; weights change priority (what
+  gets practised first), never what counts as mastered.
 
 - 2026-10-04: material-type sliders feed objective weights and set deep review's question mix.
 - 2026-10-04: inferred objectives count toward the island; the per-course objective list (origin,

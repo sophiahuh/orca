@@ -45,6 +45,16 @@ concrete rules for ALD and a build order.
 
 ## 2. The model
 
+**Terms.** Mastery is tracked per *objective*; nothing else holds a mastery state. "Review" is
+used three ways, none of them a stored record:
+- a **review session**: a quiz the student sits (quick review daily, deep review on the course's
+  cadence, exam review before an exam);
+- a **spaced check**: the next time a mastered objective should be re-asked, i.e. its `dueAt`. An
+  objective whose check has come due has status `due`;
+- **reviewing extracted content**: the student confirming or rejecting topics after an upload.
+
+A topic's progress and an island's look are summaries computed from its objectives' states.
+
 ### 2.1 Units
 - **Course → Topic → Objective.** Topics are the trail nodes. Objectives are the unit of mastery
   (see `docs/OBJECTIVES-ALD.md`). Every question carries an `objectiveId` and a `tier`
