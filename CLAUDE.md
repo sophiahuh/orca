@@ -45,9 +45,10 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 2. Settle the Phase 3 numbers in `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review
    as a spaced check").
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
-   storage as decided in the roadmap). Not started and no plan yet: don't start it until the
-   owner says so. First settle "Before Phase 4" in `docs/TO-DISCUSS.md`, then write the plan in
-   `docs/superpowers/plans/` in the style of the Phase 2 and 3 plans.
+   storage as decided in the roadmap). The plan is written
+   (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`) and waits for the owner's review;
+   don't start building until the owner says so. Tasks 1–9 need no hosted projects (local
+   Supabase, inline jobs, a fake Anthropic API); only Task 10's live checks do.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
 

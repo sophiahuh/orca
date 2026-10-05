@@ -131,7 +131,8 @@ Ones marked **(review)** are judgement calls worth a second look; they go into
    functions and nothing else. `ORCA_JOBS=inline` runs them inside the route instead (local dev,
    e2e and CI, where no Trigger.dev project exists); `ORCA_JOBS=trigger` is production. Progress
    goes into `pipeline_runs.progress`, which the browser follows through Supabase Realtime, so
-   both modes show progress the same way.
+   both modes show progress the same way (`pipeline_runs` joins the Realtime publication, still
+   under RLS).
 9. **Model calls are server-only, with Orca's key.** `/api/pipeline/[step]` and the browser
    pipeline (`client.ts`, browser-only providers, Ollama) are removed; the step caller moves into
    a server module the jobs use. `/api/grade` stays a route but needs a signed-in student. The
