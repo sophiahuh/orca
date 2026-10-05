@@ -1,13 +1,10 @@
 import type { Page } from "@playwright/test";
-import { expect, test, STORAGE_KEY, seedFixtureCourse } from "./fixture";
+import type { AnswerEvent } from "../src/lib/mastery/types";
+import { type Student, expect, test, F, seedFixtureCourse, stored } from "./fixture";
 
-/** The persisted store, read straight from localStorage. */
-async function storedEvidence(page: Page) {
-  return page.evaluate((key) => {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) throw new Error(`No ${key} state in localStorage`);
-    return (JSON.parse(raw) as { evidence: Array<{ questionId: string; objectiveId: string; outcome: string; grader: string; sessionId: string }> }).evidence;
-  }, STORAGE_KEY);
+/** The evidence the app saved (through POST /api/evidence), read back from the database. */
+async function storedEvidence(page: Page, student: Student) {
+  return (await stored(page, student)).evidence as AnswerEvent[];
 }
 
 async function answerShort(page: Page, text: string) {
@@ -63,7 +60,7 @@ test.describe("a fresh browser", () => {
 });
 
 test.describe("a course with uploaded questions", () => {
-  test.beforeEach(async ({ page }) => seedFixtureCourse(page));
+  test.beforeEach(async ({ student }) => seedFixtureCourse(student));
 
   test("the trail has nothing locked, START on the first topic, and objective counts with question gaps", async ({ page }) => {
     await page.goto("/course/logic-e2e");
@@ -76,18 +73,18 @@ test.describe("a course with uploaded questions", () => {
     await expect(page.locator("[data-visual] button:disabled")).toHaveCount(0);
   });
 
-  test("answering quiz questions records evidence and moves the trail, island and streak", async ({ page }) => {
-    await page.goto("/quiz/logic-e2e/boolean-algebra");
+  test("answering quiz questions records evidence and moves the trail, island and streak", async ({ page, student }) => {
+    await page.goto(`/quiz/logic-e2e/${F.booleanAlgebra}`);
     await answerShort(page, "x");
     await expect(page.getByText("Correct.")).toBeVisible();
     await page.getByRole("button", { name: "Continue" }).click();
     await answerShort(page, "a + c");
     await expect(page.getByText("Correct.")).toBeVisible();
 
-    const evidence = await storedEvidence(page);
+    const evidence = await storedEvidence(page, student);
     expect(evidence.map((e) => [e.questionId, e.objectiveId, e.outcome, e.grader])).toEqual([
-      ["ba-1", "boolean-algebra/simplify", "correct", "exact"],
-      ["ba-2", "boolean-algebra/simplify", "correct", "exact"],
+      [F.ba1, F.simplify, "correct", "exact"],
+      [F.ba2, F.simplify, "correct", "exact"],
     ]);
     expect(new Set(evidence.map((e) => e.sessionId)).size, "one session per quiz visit").toBe(1);
 
@@ -101,16 +98,16 @@ test.describe("a course with uploaded questions", () => {
     await expect(current).toContainText("0 of 1 objectives mastered");
   });
 
-  test("answers on two topics show progress on both trail nodes", async ({ page }) => {
-    await page.goto("/quiz/logic-e2e/boolean-algebra");
+  test("answers on two topics show progress on both trail nodes", async ({ page, student }) => {
+    await page.goto(`/quiz/logic-e2e/${F.booleanAlgebra}`);
     await answerShort(page, "x");
     await expect(page.getByText("Correct.")).toBeVisible();
-    await page.goto("/quiz/logic-e2e/twos-complement");
+    await page.goto(`/quiz/logic-e2e/${F.twosComplement}`);
     await answerShort(page, "1010");
     await expect(page.getByText("Correct.")).toBeVisible();
 
-    const evidence = await storedEvidence(page);
-    expect(evidence.map((e) => e.objectiveId)).toEqual(["boolean-algebra/simplify", "twos-complement/convert"]);
+    const evidence = await storedEvidence(page, student);
+    expect(evidence.map((e) => e.objectiveId)).toEqual([F.simplify, F.convert]);
     expect(new Set(evidence.map((e) => e.sessionId)).size, "each quiz visit is its own session").toBe(2);
 
     await page.goto("/course/logic-e2e");

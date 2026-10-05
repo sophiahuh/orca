@@ -2,8 +2,8 @@ import { execFileSync } from "node:child_process";
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * End-to-end tests in a real browser against the dev server. Each test gets a fresh browser
- * context, so localStorage (the app's whole state for now) starts empty every time.
+ * End-to-end tests in a real browser against the dev server and local Supabase. Each test gets a
+ * fresh browser context and a fresh throwaway student (e2e/fixture.ts), so every test starts empty.
  * Run with `npm run test:e2e` (Node ≥ 22.6; see .nvmrc). First time: `npx playwright install chromium`.
  * Where a Chromium is already installed (e.g. a cloud container whose build doesn't match this
  * Playwright version), point at it with PLAYWRIGHT_CHROMIUM_PATH instead of downloading.

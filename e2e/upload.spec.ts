@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 import path from "node:path";
-import { expect, test, STORAGE_KEY } from "./fixture";
+import { expect, test, stored } from "./fixture";
 
 /**
  * The upload pipeline end to end in the browser: a real ALD deck read by pdf.js, with the model
@@ -74,11 +74,7 @@ async function upload(page: Page, type = "Lecture") {
   await page.getByRole("button", { name: /generate quizzes/ }).click();
 }
 
-async function stored(page: Page) {
-  return page.evaluate((key) => JSON.parse(window.localStorage.getItem(key)!), STORAGE_KEY);
-}
-
-test("a lecture upload maps topics and objectives, writes checked questions and lands them on the trail", async ({ page }) => {
+test("a lecture upload maps topics and objectives, writes checked questions and lands them on the trail", async ({ page, student }) => {
   const gen = honestGenerator(2);
   await stubModel(page, {
     extract: () => ({
@@ -99,9 +95,9 @@ test("a lecture upload maps topics and objectives, writes checked questions and 
   await upload(page);
   await expect(page.getByText("Added 2 topics, 3 objectives and 6 questions.")).toBeVisible({ timeout: 30_000 });
 
-  const state = await stored(page);
+  const state = await stored(page, student);
   const course = state.courses[0];
-  expect(course.topics.map((t: { name: string; review: string }) => [t.name, t.review])).toEqual([
+  expect(course.topics.map((t) => [t.name, t.review])).toEqual([
     ["Boolean Algebra", "proposed"],
     ["Karnaugh Maps", "proposed"],
   ]);
@@ -119,7 +115,7 @@ test("a lecture upload maps topics and objectives, writes checked questions and 
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
 });
 
-test("re-uploading the same deck adds nothing new", async ({ page }) => {
+test("re-uploading the same deck adds nothing new", async ({ page, student }) => {
   const gen = honestGenerator(6);
   let existing: { topics: Array<{ id: string }>; objectives: Array<{ id: string; topicId: string }> } | null = null;
   await stubModel(page, {
@@ -148,7 +144,7 @@ test("re-uploading the same deck adds nothing new", async ({ page }) => {
   await upload(page);
   await expect(page.getByText("Added 0 topics, 0 objectives and 0 questions.")).toBeVisible({ timeout: 30_000 });
   expect(existing).not.toBeNull();
-  const state = await stored(page);
+  const state = await stored(page, student);
   expect(state.runs[1].objectivesAttached).toHaveLength(1);
   expect(Object.values(state.objectives[state.courses[0].id])[0]).toMatchObject({ signals: [{ places: [anchor] }, { places: [anchor] }] });
 });

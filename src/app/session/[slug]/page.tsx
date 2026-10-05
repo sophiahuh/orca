@@ -14,8 +14,7 @@ import {
   lastSeenOf,
   sessionCandidates,
 } from "@/lib/mastery/session";
-import { localDayKey } from "@/lib/mastery/objective-state";
-import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
+import { useAgenda, useCourse, useDayKey, useMasteryByCourse, useOrca } from "@/lib/store";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
@@ -54,6 +53,7 @@ function SessionBody({ course, kind }: { course: Course; kind: Kind }) {
 /** What every session draws on, read from the store once at mount so the session doesn't change under the student. */
 function useSessionSources(course: Course) {
   const { questionBank, objectives } = useOrca();
+  const dayKey = useDayKey();
   const agenda = useAgenda()[course.id];
   const mastery = useMasteryByCourse()[course.id];
   if (!agenda || !mastery) throw new Error(`No agenda computed for course ${course.id}`);
@@ -69,7 +69,7 @@ function useSessionSources(course: Course) {
         byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
       }
     }
-    const ctx = { lastSeen: lastSeenOf(mastery.events), now: new Date(), dayKey: localDayKey };
+    const ctx = { lastSeen: lastSeenOf(mastery.events), now: new Date(), dayKey };
     const reasons = new Map(agenda.ranked.map((r) => [r.objectiveId, reasonsOf(r.priority)[0]]));
     const toItems = (assembled: AssembledSession): RunnerItem[] =>
       assembled.items.map((i) => {

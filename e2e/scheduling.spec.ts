@@ -1,15 +1,16 @@
 import type { Page, Route } from "@playwright/test";
-import { expect, test, FIXTURE_STATE, STORAGE_KEY, seedState } from "./fixture";
+import type { AnswerEvent } from "../src/lib/mastery/types";
+import { expect, test, F, FIXTURE_STATE, daysAgo, seedPages, seedState, stored } from "./fixture";
 
 const COURSE = "logic-e2e";
-const bank = FIXTURE_STATE.questionBank[COURSE];
+const bank = FIXTURE_STATE.questionBank[F.course];
 const answers = new Map(Object.values(bank).flat().map((q) => [q.prompt, q.exact![0]]));
 
-async function stored<T>(page: Page, pick: (s: Record<string, unknown>) => T): Promise<T> {
-  const state = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null") as Record<string, unknown>, STORAGE_KEY);
-  if (!state) throw new Error("No stored state");
-  return pick(state);
-}
+/**
+ * The server stamps every answer with its own clock, so these tests run on the real clock and seed
+ * past days relative to it (they used to freeze the browser's clock, which the server can't see).
+ * A test that starts a minute before midnight can see its answers land on the next day.
+ */
 
 /** Answer every question in the run, right or wrong, then finish. */
 async function answerAll(page: Page, right: boolean) {
@@ -36,13 +37,9 @@ async function answerAll(page: Page, right: boolean) {
 const noModel = (page: Page) => page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: null } }));
 
 test.describe("scheduling", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.clock.setFixedTime(new Date("2026-10-05T10:00:00"));
-  });
-
-  test("a quick review is due, starts instantly from the stock with reasons, and is done for the day once finished", async ({ page }) => {
+  test("a quick review is due, starts instantly from the stock with reasons, and is done for the day once finished", async ({ page, student }) => {
     await noModel(page);
-    await seedState(page, FIXTURE_STATE);
+    await seedState(student, FIXTURE_STATE);
     await page.goto("/home");
     const card = page.locator('[data-todo="quick"]');
     await expect(card).toContainText("Quick review · 10 min");
@@ -56,19 +53,19 @@ test.describe("scheduling", () => {
 
     await expect(page.getByText("You answered 6 of 6 correctly.")).toBeVisible();
     await expect(page.locator('[data-part="top-up"]')).toHaveText("No AI is connected, so Orca can't write new questions.");
-    const results = await stored(page, (s) => s.results as Array<{ mode: string; sessionId: string }>);
-    const evidence = await stored(page, (s) => s.evidence as Array<{ source: string; sessionId: string }>);
+    const { results, evidence } = await stored(page, student);
     expect(results.map((r) => r.mode)).toEqual(["quick"]);
-    expect(new Set(evidence.map((e) => e.source))).toEqual(new Set(["quick-review"]));
-    expect(evidence.every((e) => e.sessionId === results[0].sessionId)).toBe(true);
+    expect(evidence).toHaveLength(6);
+    expect(new Set(evidence.map((e) => (e as AnswerEvent).source))).toEqual(new Set(["quick-review"]));
+    expect(evidence.every((e) => (e as AnswerEvent).sessionId === results[0].sessionId)).toBe(true);
 
     await page.goto("/home");
     await expect(page.locator('[data-todo="quick"]')).toHaveCount(0);
   });
 
-  test("a poor session leaves review to-dos with where to re-read, and a re-quiz for the next day", async ({ page }) => {
+  test("a poor session leaves review to-dos with where to re-read, and a re-quiz for the next day", async ({ page, student }) => {
     await noModel(page);
-    await seedState(page, FIXTURE_STATE);
+    await seedState(student, FIXTURE_STATE);
     await page.goto(`/session/${COURSE}?kind=quick`);
     await answerAll(page, false);
     await expect(page.getByText("You answered 0 of 6 correctly.")).toBeVisible();
@@ -91,14 +88,15 @@ test.describe("scheduling", () => {
     await expect(page.getByText("Your re-quiz opens tomorrow.")).toBeVisible();
   });
 
-  test("the re-quiz opens the next day and clears the to-dos", async ({ page }) => {
+  test("the re-quiz opens the next day and clears the to-dos", async ({ page, student }) => {
     await noModel(page);
-    await page.clock.setFixedTime(new Date("2026-10-06T10:00:00"));
-    const miss = (questionId: string, topicId: string, objectiveId: string, i: number) => ({
+    // Yesterday's poor quick review.
+    const yesterday = Date.now() - 86_400_000;
+    const miss = (questionId: string, topicId: string, objectiveId: string, i: number): AnswerEvent => ({
       kind: "answer",
-      id: `m${i}`,
-      at: `2026-10-05T10:00:0${i}.000Z`,
-      courseId: COURSE,
+      id: crypto.randomUUID(),
+      at: new Date(yesterday + i * 1000).toISOString(),
+      courseId: F.course,
       topicId,
       objectiveId,
       questionId,
@@ -109,15 +107,15 @@ test.describe("scheduling", () => {
       sessionId: "poor",
     });
     const evidence = [
-      miss("ba-1", "boolean-algebra", "boolean-algebra/simplify", 1),
-      miss("tc-1", "twos-complement", "twos-complement/convert", 2),
-      miss("tc-4", "twos-complement", "twos-complement/sign-extend", 3),
-      miss("ba-2", "boolean-algebra", "boolean-algebra/simplify", 4),
-      miss("tc-2", "twos-complement", "twos-complement/convert", 5),
-      miss("tc-3", "twos-complement", "twos-complement/convert", 6),
+      miss(F.ba1, F.booleanAlgebra, F.simplify, 1),
+      miss(F.tc1, F.twosComplement, F.convert, 2),
+      miss(F.tc4, F.twosComplement, F.signExtend, 3),
+      miss(F.ba2, F.booleanAlgebra, F.simplify, 4),
+      miss(F.tc2, F.twosComplement, F.convert, 5),
+      miss(F.tc3, F.twosComplement, F.convert, 6),
     ];
-    const results = [{ courseId: COURSE, topicId: null, mode: "quick", sessionId: "poor", correct: 0, total: 3, seconds: 60, finishedAt: "2026-10-05T10:01:00.000Z" }];
-    await seedState(page, { ...FIXTURE_STATE, evidence, results });
+    const results = [{ courseId: F.course, topicId: null, mode: "quick" as const, sessionId: "poor", correct: 0, total: 3, seconds: 60, finishedAt: new Date(yesterday + 60_000).toISOString() }];
+    await seedState(student, { ...FIXTURE_STATE, evidence, results });
     await page.goto("/home");
     await expect(page.getByRole("heading", { name: "Due today" }).locator("..").locator('[data-todo="requiz"]')).toContainText("Re-quiz · 3 objectives");
     await page.locator('[data-todo="requiz"]').click();
@@ -125,20 +123,20 @@ test.describe("scheduling", () => {
     await answerAll(page, true);
     await expect(page.getByText("You answered 6 of 6 correctly.")).toBeVisible();
     // The finished session is saved just after the end card shows; wait for it rather than racing it.
-    await expect.poll(() => stored(page, (s) => (s.results as Array<{ mode: string }>).map((r) => r.mode))).toEqual(["quick", "requiz"]);
+    await expect.poll(async () => (await stored(page, student)).results.map((r) => r.mode)).toEqual(["quick", "requiz"]);
 
     await page.goto("/home");
     await expect(page.locator('[data-todo="study"]')).toHaveCount(0);
     await expect(page.locator('[data-todo="requiz"]')).toHaveCount(0);
   });
 
-  test("deep review comes due a week after the first answer, asks how long, and stays due until done", async ({ page }) => {
+  test("deep review comes due a week after the first answer, asks how long, and stays due until done", async ({ page, student }) => {
     await noModel(page);
-    const answered = (id: string, objectiveId: string, questionId: string, topicId: string) => ({
+    const answered = (objectiveId: string, questionId: string, topicId: string): AnswerEvent => ({
       kind: "answer",
-      id,
-      at: "2026-09-27T10:00:00.000Z",
-      courseId: COURSE,
+      id: crypto.randomUUID(),
+      at: daysAgo(8),
+      courseId: F.course,
       topicId,
       objectiveId,
       questionId,
@@ -148,13 +146,9 @@ test.describe("scheduling", () => {
       source: "quiz",
       sessionId: "old",
     });
-    const evidence = [
-      answered("e1", "boolean-algebra/simplify", "ba-1", "boolean-algebra"),
-      answered("e2", "twos-complement/convert", "tc-1", "twos-complement"),
-      answered("e3", "twos-complement/sign-extend", "tc-4", "twos-complement"),
-    ];
-    const config = { ...FIXTURE_STATE.configs[COURSE], deep: { duration: "5 min", cadence: "Weekly" } };
-    await seedState(page, { ...FIXTURE_STATE, configs: { [COURSE]: config }, evidence });
+    const evidence = [answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement), answered(F.signExtend, F.tc4, F.twosComplement)];
+    const config = { ...FIXTURE_STATE.configs[F.course], deep: { duration: "5 min" as const, cadence: "Weekly" as const } };
+    await seedState(student, { ...FIXTURE_STATE, configs: { [F.course]: config }, evidence });
     await page.goto("/home");
     const card = page.locator('[data-todo="deep"]');
     await expect(card).toContainText("Deep review");
@@ -183,14 +177,14 @@ test.describe("scheduling", () => {
     // The end card offers another deep review, which asks for its length again.
     await page.locator('[data-part="again"]').click();
     await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toBeVisible();
-    const modes = await stored(page, (s) => (s.results as Array<{ mode: string }>).map((r) => r.mode));
+    const modes = (await stored(page, student)).results.map((r) => r.mode);
     expect(modes).toEqual(["deep"]);
 
     await page.goto("/home");
     await expect(page.locator('[data-todo="deep"]')).toHaveCount(0);
   });
 
-  test("after a session, objectives short of unseen questions are topped up from the kept material text", async ({ page }) => {
+  test("after a session, objectives short of unseen questions are topped up from the kept material text", async ({ page, student }) => {
     const generated = [
       { prompt: "Simplify x·x + x.", exact: ["x"] },
       { prompt: "Simplify ab + ab'.", exact: ["a"] },
@@ -229,16 +223,15 @@ test.describe("scheduling", () => {
       }
       return route.fulfill({ status: 500, json: { error: `no stub for ${step}` } });
     });
-    const material = { id: "fixture-material", courseId: COURSE, filename: "L01_Fixture.pdf", type: "Lecture", assigned: null, due: null, reflect: false };
-    await seedState(page, { ...FIXTURE_STATE, materials: [material], materialPages: { "fixture-material": [{ n: 2, text: "x + xy = x (absorption)" }] } });
+    await seedState(student, FIXTURE_STATE);
+    await seedPages(page, { [F.material]: [{ n: 2, text: "x + xy = x (absorption)" }] });
 
-    await page.goto(`/quiz/${COURSE}/boolean-algebra`);
+    await page.goto(`/quiz/${COURSE}/${F.booleanAlgebra}`);
     await answerAll(page, true);
     await expect(page.locator('[data-part="top-up"]')).toHaveText("2 new questions written and checked for next time.");
     expect(steps).toEqual(["generate", "solve"]);
-    const prompts = await stored(page, (s) => (s.questionBank as Record<string, Record<string, Array<{ prompt: string }>>>)[COURSE]["boolean-algebra"].map((q) => q.prompt));
-    expect(prompts).toEqual(["Simplify x + xy.", "Simplify a + a'c.", ...generated.map((g) => g.prompt)]);
-    const runs = await stored(page, (s) => s.runs as Array<{ kind?: string; questionsAdded: number }>);
-    expect(runs).toEqual([expect.objectContaining({ kind: "top-up", questionsAdded: 2 })]);
+    const s = await stored(page, student);
+    expect(s.questionBank[F.course][F.booleanAlgebra].map((q) => q.prompt)).toEqual(["Simplify x + xy.", "Simplify a + a'c.", ...generated.map((g) => g.prompt)]);
+    expect(s.runs).toEqual([expect.objectContaining({ kind: "top-up", questionsAdded: 2 })]);
   });
 });
