@@ -124,8 +124,8 @@ test.describe("scheduling", () => {
     await expect(page).toHaveURL(/kind=requiz/);
     await answerAll(page, true);
     await expect(page.getByText("You answered 6 of 6 correctly.")).toBeVisible();
-    const modes = await stored(page, (s) => (s.results as Array<{ mode: string }>).map((r) => r.mode));
-    expect(modes).toEqual(["quick", "requiz"]);
+    // The finished session is saved just after the end card shows; wait for it rather than racing it.
+    await expect.poll(() => stored(page, (s) => (s.results as Array<{ mode: string }>).map((r) => r.mode))).toEqual(["quick", "requiz"]);
 
     await page.goto("/home");
     await expect(page.locator('[data-todo="study"]')).toHaveCount(0);
