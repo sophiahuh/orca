@@ -1,6 +1,17 @@
 /** Where an objective is taught, as text the student can follow ("L03.pdf, slides 18–20, 24"). */
 import type { Material, Objective, Topic } from "../data.ts";
 
+/** Page or slide numbers a locator points at ("slide 14", "slides 3–5", "p. 212", "pages 40-41"); empty when it names none. */
+export function locatorPages(locator: string): number[] {
+  const m = /^\s*(?:slides?|pages?|pp?\.)\s*(\d+)(?:\s*[–-]\s*(\d+))?\b/i.exec(locator);
+  if (!m) return [];
+  const from = Number(m[1]);
+  const to = m[2] ? Number(m[2]) : from;
+  const out: number[] = [];
+  for (let n = Math.min(from, to); n <= Math.max(from, to); n++) out.push(n);
+  return out;
+}
+
 /** "slide 18", "slides 19-20", "Slide 24" → "slides 18–20, 24". Locators that aren't slides are kept as written. */
 export function slideRanges(locators: readonly string[]): string {
   const numbers = new Set<number>();

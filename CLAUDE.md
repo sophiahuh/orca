@@ -38,7 +38,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
    the top-up writes sensible questions (it has only run against a stubbed model).
 2. Merge `phase-3` into `backend-implementation` once reviewed; settle the Phase 3 numbers in
    `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review as a spaced check").
-3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline). Write its plan in
+3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
+   storage as decided in the roadmap). Write its plan in
    `docs/superpowers/plans/` first, in the style of the Phase 2 and 3 plans.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
@@ -195,8 +196,8 @@ This describes the code as it is.
   are shared by `/api/pipeline/[step]` (builds the prompt server-side from structured input) and
   `client.ts` (browser-only providers). `apply.ts` merges the plan; uploads land on
   `/course/[slug]/review`. `writeQuestions` (generate + checks) is shared with `topup.ts`, which
-  writes more questions after a session for objectives under 3 unseen, from the stored text of
-  the material that teaches them. `npm run score:extraction` scores extraction on the ALD decks against
+  writes more questions after a session for objectives under 3 unseen, from only the stored
+  pages of the material each objective is anchored to (plus one either side). `npm run score:extraction` scores extraction on the ALD decks against
   `docs/OBJECTIVES-ALD.md` (needs `ANTHROPIC_API_KEY`; `--dry` checks the decks without a model).
 - ALD reference material (not shipped in the app): `docs/samples/ald/L01–L04` (real ALD lecture
   decks; syllabus in L01) to upload, and draft objectives in `docs/OBJECTIVES-ALD.md`. The 69

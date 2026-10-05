@@ -221,8 +221,17 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   snapshot stale (rebuilt lazily on read); a merge or re-tag marks only the objectives involved.
   Reads never replay the log otherwise.
 - The student's **timezone** on their profile, used for every day boundary.
-- The extraction pipeline moves server-side. Decide where long jobs run (Vercel function limits
-  vs Trigger.dev vs Supabase functions) and record why here.
+- The extraction pipeline moves server-side, as **Trigger.dev** tasks (decided 2026-10-05):
+  uploads and top-ups outlive Vercel's function limits once textbooks arrive, and Trigger.dev
+  gives durable, retried, observable jobs with live progress to the browser, without running our
+  own queue or worker.
+- **Material storage** (decided 2026-10-05): the original file in Supabase Storage is the source
+  of truth; on upload a task reads it once into a `material_pages` table (one row per page or
+  slide: number, text, later a rendered image and section heading), keyed by a content hash so a
+  re-upload is recognised. Model calls get only the pages they need, found through the anchors
+  objectives already record. No third-party document or search service: the data is small and
+  relational; pgvector inside Supabase if textbooks ever need search. Browser storage of page
+  text (`materialPages`, Phase 3 stopgap) is removed.
 - Swap the store's persistence behind `useOrca()` so screens don't change.
 - Decide what happens to localStorage data at first sign-in (TO-DISCUSS).
 - Carry-overs from Phase 1: `localDayKey` uses the host's timezone, so server-side folding must

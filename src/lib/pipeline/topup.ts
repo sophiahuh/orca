@@ -4,6 +4,7 @@
  * them and checked like an upload's. Model calls are injected; nothing here touches the store.
  */
 import type { Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../data.ts";
+import { locatorPages } from "../course/study.ts";
 import { QUESTIONS_PER_OBJECTIVE } from "./questions.ts";
 import { type RunDeps, type WriteTarget, writeQuestions } from "./run.ts";
 
@@ -12,6 +13,10 @@ export const TOP_UP_RULES = {
   minUnseen: 3,
   /** ...back up to this many unseen. */
   stock: QUESTIONS_PER_OBJECTIVE,
+  /** Pages either side of an anchored page sent along for context. */
+  neighbours: 1,
+  /** With no anchored pages, the whole material is sent only if it is at most this long. */
+  wholeMaterialMaxPages: 60,
 } as const;
 
 export interface TopUpInput {
@@ -56,10 +61,36 @@ function materialsFor(o: Objective): string[] {
   return [...new Set([...bySignal, ...(o.materialId ? [o.materialId] : [])])];
 }
 
+/**
+ * The pages to write an objective's questions from: the places its uploads anchored it to in this
+ * material (plus a page either side), else its topic's slide range when the topic came from this
+ * material, else the whole material when it is short. Null when none applies (a long material
+ * with no anchors): the caller says so rather than sending a whole book.
+ */
+export function pagesFor(o: Objective, topic: Topic | undefined, material: Material, pages: MaterialPages): MaterialPages | null {
+  const wanted = new Set<number>();
+  for (const s of o.signals) {
+    if (s.materialId !== material.id) continue;
+    for (const place of s.places) for (const n of locatorPages(place.locator)) for (let d = -TOP_UP_RULES.neighbours; d <= TOP_UP_RULES.neighbours; d++) wanted.add(n + d);
+  }
+  if (wanted.size === 0 && topic?.source && topic.source.filename === material.filename) {
+    for (let n = topic.source.slideStart; n <= topic.source.slideEnd; n++) wanted.add(n);
+  }
+  if (wanted.size === 0) return pages.length <= TOP_UP_RULES.wholeMaterialMaxPages ? pages : null;
+  const picked = pages.filter((p) => wanted.has(p.n));
+  return picked.length ? picked : null;
+}
+
 /** Which objectives need questions, grouped by the material to write them from. */
-export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">): { byMaterial: Map<string, WriteTarget[]>; skipped: TopUpSkip[] } {
+export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">): {
+  byMaterial: Map<string, WriteTarget[]>;
+  /** materialId → only the pages the targets are taught on, in page order. */
+  pages: Map<string, MaterialPages>;
+  skipped: TopUpSkip[];
+} {
   const all = Object.values(input.bank).flat();
   const byMaterial = new Map<string, WriteTarget[]>();
+  const pageSets = new Map<string, Set<number>>();
   const skipped: TopUpSkip[] = [];
   for (const id of new Set(input.objectiveIds.map((id) => survivorId(id, input.objectives)))) {
     const o = input.objectives[id];
@@ -76,15 +107,26 @@ export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">)
       });
       continue;
     }
+    const material = input.materials.find((m) => m.id === source)!;
+    const topic = input.course.topics.find((t) => t.id === o.topicId);
+    const pages = pagesFor(o, topic, material, input.materialPages[source]);
+    if (!pages) {
+      skipped.push({ objectiveId: id, reason: `Orca doesn't know where in ${material.filename} it's taught, and the file is too long to send whole` });
+      continue;
+    }
     const list = byMaterial.get(source) ?? [];
     list.push({ objective: o, existing, need: TOP_UP_RULES.stock - unseen });
     byMaterial.set(source, list);
+    const set = pageSets.get(source) ?? new Set<number>();
+    for (const p of pages) set.add(p.n);
+    pageSets.set(source, set);
   }
-  return { byMaterial, skipped };
+  const pages = new Map([...pageSets].map(([m, set]) => [m, input.materialPages[m].filter((p) => set.has(p.n))]));
+  return { byMaterial, pages, skipped };
 }
 
 export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "newId">): Promise<TopUpPlan> {
-  const { byMaterial, skipped } = topUpTargets(input);
+  const { byMaterial, pages, skipped } = topUpTargets(input);
   const questions: Record<string, QuizQuestion[]> = {};
   const runs: PipelineRun[] = [];
   const topics = new Map(input.course.topics.map((t) => [t.id, t]));
@@ -94,7 +136,7 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
     const material = input.materials.find((m) => m.id === materialId)!;
     let written: Awaited<ReturnType<typeof writeQuestions>>;
     try {
-      written = await writeQuestions({ course: input.course, material, pages: input.materialPages[materialId], topics, targets, bank }, deps);
+      written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank }, deps);
     } catch (e) {
       for (const t of targets) skipped.push({ objectiveId: t.objective.id, reason: `couldn't write questions: ${e instanceof Error ? e.message : String(e)}` });
       continue;

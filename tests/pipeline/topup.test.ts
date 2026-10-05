@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Material, Objective, QuizQuestion, Topic } from "../../src/lib/data.ts";
 import type { CallStep } from "../../src/lib/pipeline/run.ts";
-import { type TopUpInput, runTopUp, topUpTargets } from "../../src/lib/pipeline/topup.ts";
+import { type TopUpInput, pagesFor, runTopUp, topUpTargets } from "../../src/lib/pipeline/topup.ts";
+import { locatorPages } from "../../src/lib/course/study.ts";
 import type { GeneratedQuestion, StepInput } from "../../src/lib/pipeline/schemas.ts";
 
 const material = (id: string): Material => ({ id, courseId: "c", filename: `${id}.pdf`, type: "Lecture", assigned: null, due: null, reflect: false });
@@ -67,7 +68,7 @@ test("the material that covers it most is used; without kept text the student is
       { materialId: "L2", materialType: "Lecture", places: [{ locator: "slide 5", excerpt: "y" }, { locator: "slide 6", excerpt: "z" }] },
     ],
   });
-  const input = base({ objectives: { a: covered }, materials: [material("L1"), material("L2")], materialPages: { L1: [{ n: 1, text: "" }], L2: [{ n: 1, text: "" }] }, objectiveIds: ["a"] });
+  const input = base({ objectives: { a: covered }, materials: [material("L1"), material("L2")], materialPages: { L1: [{ n: 2, text: "" }], L2: [{ n: 5, text: "" }, { n: 6, text: "" }] }, objectiveIds: ["a"] });
   assert.deepEqual([...topUpTargets(input).byMaterial.keys()], ["L2"]);
   assert.deepEqual(topUpTargets({ ...input, materialPages: {} }).skipped, [{ objectiveId: "a", reason: "its material's text wasn't kept (uploaded before top-ups); upload it again" }]);
   const authored = objective("a", { materialId: null, signals: [] });
@@ -121,4 +122,29 @@ test("nothing needed, nothing called", async () => {
   }) as CallStep;
   const plan = await runTopUp(base({ answered: new Set() }), { call, newId: () => "x" });
   assert.deepEqual(plan, { questions: {}, runs: [], skipped: [] });
+});
+
+test("locators name pages or slides; anything else names none", () => {
+  assert.deepEqual(locatorPages("slide 14"), [14]);
+  assert.deepEqual(locatorPages("Slides 3–5"), [3, 4, 5]);
+  assert.deepEqual(locatorPages("p. 212"), [212]);
+  assert.deepEqual(locatorPages("pages 40-41"), [40, 41]);
+  assert.deepEqual(locatorPages("problem 3"), []);
+});
+
+test("a top-up sends only the anchored pages and their neighbours, never a whole long file", () => {
+  const book = Array.from({ length: 100 }, (_, i) => ({ n: i + 1, text: `page ${i + 1}` }));
+  const anchored = objective("a", { signals: [{ materialId: "L1", materialType: "Lecture", places: [{ locator: "slide 10", excerpt: "" }, { locator: "slides 40-41", excerpt: "" }] }] });
+  assert.deepEqual(pagesFor(anchored, topic, material("L1"), book)!.map((p) => p.n), [9, 10, 11, 39, 40, 41, 42]);
+
+  const unanchored = objective("a", { signals: [] });
+  const fromTopic = { ...topic, source: { filename: "L1.pdf", slideStart: 20, slideEnd: 22 } };
+  assert.deepEqual(pagesFor(unanchored, fromTopic, material("L1"), book)!.map((p) => p.n), [20, 21, 22], "its topic's range in this file");
+  assert.equal(pagesFor(unanchored, topic, material("L1"), book), null, "a long file with no anchors is not sent whole");
+  assert.equal(pagesFor(unanchored, topic, material("L1"), book.slice(0, 30))!.length, 30, "a short one is");
+
+  const plan = topUpTargets(base({ objectives: { a: anchored }, objectiveIds: ["a"], materialPages: { L1: book } }));
+  assert.deepEqual(plan.pages.get("L1")!.map((p) => p.n), [9, 10, 11, 39, 40, 41, 42]);
+  const skipped = topUpTargets(base({ objectives: { a: unanchored }, objectiveIds: ["a"], materialPages: { L1: book } })).skipped;
+  assert.deepEqual(skipped, [{ objectiveId: "a", reason: "Orca doesn't know where in L1.pdf it's taught, and the file is too long to send whole" }]);
 });
