@@ -5,6 +5,7 @@ import { llmReady } from "@/lib/llm";
 import { pipelineCaller } from "@/lib/pipeline/client";
 import { type TopUpSkip, runTopUp } from "@/lib/pipeline/topup";
 import { useOrca } from "@/lib/store";
+import { loadMaterialPages } from "@/lib/uploads";
 
 export type TopUpStatus =
   | { state: "idle" }
@@ -42,21 +43,26 @@ export function useTopUp(serverModel: string | null | undefined) {
       if (!course) throw new Error(`No course ${courseId}`);
       inFlight.add(courseId);
       setStatus({ state: "running" });
-      runTopUp(
-        {
-          course: { id: course.id, name: course.name, short: course.short, topics: course.topics },
-          objectives: orca.objectives[courseId] ?? {},
-          bank: orca.questionBank[courseId] ?? {},
-          materials: orca.materials.filter((m) => m.courseId === courseId),
-          materialPages: orca.materialPages,
-          objectiveIds,
-          answered: new Set(orca.evidence.flatMap((e) => (e.kind === "answer" && e.courseId === courseId ? [e.questionId] : []))),
-          runId: crypto.randomUUID(),
-          model: ownModel ? ownModel.model : (serverModel ?? "unknown"),
-          now: new Date().toISOString(),
-        },
-        { call: pipelineCaller(orca.llm), newId: () => crypto.randomUUID() },
-      )
+      const materials = orca.materials.filter((m) => m.courseId === courseId);
+      // The course's stored pages (read on the server at upload); top-ups pick the ones each objective is taught on.
+      loadMaterialPages(materials.map((m) => m.id))
+        .then((materialPages) =>
+          runTopUp(
+            {
+              course: { id: course.id, name: course.name, short: course.short, topics: course.topics },
+              objectives: orca.objectives[courseId] ?? {},
+              bank: orca.questionBank[courseId] ?? {},
+              materials,
+              materialPages,
+              objectiveIds,
+              answered: new Set(orca.evidence.flatMap((e) => (e.kind === "answer" && e.courseId === courseId ? [e.questionId] : []))),
+              runId: crypto.randomUUID(),
+              model: ownModel ? ownModel.model : (serverModel ?? "unknown"),
+              now: new Date().toISOString(),
+            },
+            { call: pipelineCaller(orca.llm), newId: () => crypto.randomUUID() },
+          ),
+        )
         .then((plan) => {
           orca.addQuestions(courseId, plan);
           setStatus({

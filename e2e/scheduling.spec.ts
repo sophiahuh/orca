@@ -224,7 +224,7 @@ test.describe("scheduling", () => {
       return route.fulfill({ status: 500, json: { error: `no stub for ${step}` } });
     });
     await seedState(student, FIXTURE_STATE);
-    await seedPages(page, { [F.material]: [{ n: 2, text: "x + xy = x (absorption)" }] });
+    await seedPages(student, { [F.material]: [{ n: 2, text: "x + xy = x (absorption)" }] });
 
     await page.goto(`/quiz/${COURSE}/${F.booleanAlgebra}`);
     await answerAll(page, true);

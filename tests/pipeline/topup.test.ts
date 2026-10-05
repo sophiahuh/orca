@@ -70,7 +70,7 @@ test("the material that covers it most is used; without kept text the student is
   });
   const input = base({ objectives: { a: covered }, materials: [material("L1"), material("L2")], materialPages: { L1: [{ n: 2, text: "" }], L2: [{ n: 5, text: "" }, { n: 6, text: "" }] }, objectiveIds: ["a"] });
   assert.deepEqual([...topUpTargets(input).byMaterial.keys()], ["L2"]);
-  assert.deepEqual(topUpTargets({ ...input, materialPages: {} }).skipped, [{ objectiveId: "a", reason: "its material's text wasn't kept (uploaded before top-ups); upload it again" }]);
+  assert.deepEqual(topUpTargets({ ...input, materialPages: {} }).skipped, [{ objectiveId: "a", reason: "its material's text isn't stored (it was added without its file); upload the file again" }]);
   const authored = objective("a", { materialId: null, signals: [] });
   assert.deepEqual(topUpTargets({ ...input, objectives: { a: authored } }).skipped, [{ objectiveId: "a", reason: "no course material to write from" }]);
 });

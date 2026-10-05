@@ -147,11 +147,10 @@ export async function seedState(student: Student, s: SeedState) {
   }
 }
 
-/** The one thing still kept in the browser (until Task 6): each upload's page text, for top-ups. */
-export async function seedPages(page: Page, pages: Record<string, MaterialPages>) {
-  await page.addInitScript((json) => {
-    if (!window.localStorage.getItem("orca:materialPages")) window.localStorage.setItem("orca:materialPages", json);
-  }, JSON.stringify(pages));
+/** Uploaded materials' pages, as the server leaves them after reading a file (`material_pages`). Seed the materials first. */
+export async function seedPages(student: Student, pages: Record<string, MaterialPages>) {
+  const rows = Object.entries(pages).flatMap(([material_id, list]) => list.map((p) => ({ owner_id: student.id, material_id, n: p.n, text: p.text })));
+  check("material pages", await admin().from("material_pages").insert(rows));
 }
 
 /* ── The fixture course ── */

@@ -1,38 +1,5 @@
 "use client";
 
-import { pageText } from "./material/page-text";
-
-export { pageText };
-
-/** A document's text, slide by slide, read on the device. */
-export interface DocumentText {
-  filename: string;
-  type: string;
-  pages: Array<{ n: number; text: string }>;
-}
-
-/**
- * Read a PDF's text in the browser so the file itself never leaves the device.
- * pdf.js is loaded lazily; the worker ships as a static asset via import.meta.url.
- */
-export async function extractPdfText(file: File, onProgress?: (done: number, total: number) => void): Promise<DocumentText> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
-
-  const data = await file.arrayBuffer();
-  const task = pdfjs.getDocument({ data });
-  const doc = await task.promise;
-  const pages: DocumentText["pages"] = [];
-  for (let n = 1; n <= doc.numPages; n++) {
-    const page = await doc.getPage(n);
-    const content = await page.getTextContent();
-    pages.push({ n, text: pageText(content.items) });
-    onProgress?.(n, doc.numPages);
-  }
-  await task.destroy();
-  return { filename: file.name, type: "PDF", pages };
-}
-
 /** Render one slide to a JPEG data URL (for figures a question depends on). */
 export async function renderPdfSlide(file: File, pageNumber: number, maxWidth = 960, quality = 0.8): Promise<string> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -81,8 +48,4 @@ async function maskProse(
     const h = Math.abs(by - ay);
     ctx.fillRect(left - 2, top - h * 0.3, w + 4, h * 1.6);
   }
-}
-
-export function isPdf(file: File) {
-  return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 }

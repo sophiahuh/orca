@@ -22,9 +22,10 @@
  * `GET /api/state` when stale); the streak, last seen, poor sessions and deep-review cadence are
  * computed from the loaded events, with day boundaries in the profile's timezone.
  *
- * The one thing still in the browser is each upload's page text (`materialPages`, for top-ups)
- * until Task 6 reads material on the server. The bring-your-own model setting is kept in memory
- * only (it holds a key; Task 7 hides it). Older localStorage state (`orca:v3`–`orca:v8`) is removed.
+ * Uploaded files go to Storage and are read on the server (`src/lib/uploads.ts`); their pages are
+ * read back from `material_pages` when needed, never kept here. The bring-your-own model setting is
+ * kept in memory only (it holds a key; Task 7 hides it). Older localStorage state (`orca:v3`–`orca:v8`
+ * and the page text uploads used to keep, `orca:materialPages`) is removed.
  */
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -33,7 +34,6 @@ import {
   type Course,
   type IslandVariant,
   type Material,
-  type MaterialPages,
   type QuizResult,
   type Objective,
   type PipelineRun,
@@ -72,8 +72,6 @@ interface OrcaState {
   courses: Course[];
   events: CalendarEvent[];
   materials: Material[];
-  /** materialId → the upload's text, kept so questions can be topped up after sessions (this browser only, until Task 6). */
-  materialPages: Record<string, MaterialPages>;
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
   results: QuizResult[];
@@ -99,15 +97,12 @@ interface OrcaState {
 /** Where the provider is with the signed-in student's data. */
 export type LoadStatus = "loading" | "signed-out" | "ready" | "failed";
 
-const LEGACY_KEYS = ["orca:v3", "orca:v4", "orca:v5", "orca:v6", "orca:v7", "orca:v8"];
-/** Each upload's page text, until Task 6 moves reading to the server (the only app data left in the browser). */
-const PAGES_KEY = "orca:materialPages";
+const LEGACY_KEYS = ["orca:v3", "orca:v4", "orca:v5", "orca:v6", "orca:v7", "orca:v8", "orca:materialPages"];
 
 const initialState: OrcaState = {
   courses: [],
   events: [],
   materials: [],
-  materialPages: {},
   configs: {},
   weights: {},
   results: [],
@@ -126,8 +121,12 @@ interface OrcaActions {
   addCourse: (name: string) => Course;
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
-  /** Record an uploaded file (and its due date on the calendar), with its text when it was read. The caller picks its id. */
-  addMaterial: (m: Material, pages?: MaterialPages) => void;
+  /**
+   * Add a material to its course (and its due date to the calendar). `saved`: the server already
+   * recorded it (an uploaded file, `src/lib/uploads.ts`); otherwise it's saved here as a record
+   * without a file. The caller picks its id.
+   */
+  addMaterial: (m: Material, opts?: { saved?: boolean }) => void;
   recordQuiz: (r: Omit<QuizResult, "finishedAt">) => void;
   /** Append one graded answer. The only way learner state changes. Not counted if it can't be saved. */
   recordEvidence: (e: Omit<AnswerEvent, "id" | "at" | "kind">) => void;
@@ -206,17 +205,8 @@ async function fetchSnapshots(courseId: string): Promise<Record<string, Objectiv
   return Object.fromEntries(out.objectives.map((o) => [o.objectiveId, o.accumulator]));
 }
 
-function readPages(): Record<string, MaterialPages> {
-  try {
-    const raw = window.localStorage.getItem(PAGES_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, MaterialPages>) : {};
-  } catch {
-    return {};
-  }
-}
-
 /** Everything the signed-in student has, with fresh snapshots for every course. */
-async function loadAll(): Promise<Omit<OrcaState, "materialPages" | "llm">> {
+async function loadAll(): Promise<Omit<OrcaState, "llm">> {
   const data = must(await browserSupabase().rpc("my_data")) as unknown as MyData;
   const loaded = loadedState(data);
   const snapshots: OrcaState["snapshots"] = Object.fromEntries(loaded.courses.map((c) => [c.id, {}]));
@@ -290,7 +280,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const epoch = useRef(0);
   const pathname = usePathname();
 
-  // Old local state is gone for good (accounts start fresh); page text stays until Task 6.
+  // Old local state is gone for good (accounts start fresh).
   useEffect(() => {
     try {
       for (const key of LEGACY_KEYS) window.localStorage.removeItem(key);
@@ -323,7 +313,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     try {
       const loaded = await loadAll();
       if (loadedFor.current !== userId) return; // someone else signed in meanwhile
-      setState((s) => ({ ...initialState, ...loaded, llm: s.llm, materialPages: readPages() }));
+      setState((s) => ({ ...initialState, ...loaded, llm: s.llm }));
       setStatus("ready");
     } catch (e) {
       if (loadedFor.current !== userId) return;
@@ -359,7 +349,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const resync = useCallback(async () => {
     try {
       const loaded = await loadAll();
-      setState((s) => ({ ...initialState, ...loaded, llm: s.llm, materialPages: s.materialPages }));
+      setState((s) => ({ ...initialState, ...loaded, llm: s.llm }));
     } catch (e) {
       loadedFor.current = undefined;
       setState(initialState);
@@ -490,7 +480,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addMaterial = useCallback<OrcaActions["addMaterial"]>(
-    (m, pages) => {
+    (m, opts) => {
       const event: CalendarEvent | null = m.due
         ? {
             id: crypto.randomUUID(),
@@ -500,21 +490,11 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
             courseId: m.courseId,
           }
         : null;
-      setState((s) => {
-        const materialPages = pages ? { ...s.materialPages, [m.id]: pages } : s.materialPages;
-        if (pages) {
-          try {
-            window.localStorage.setItem(PAGES_KEY, JSON.stringify(materialPages));
-          } catch {
-            /* storage may be full or unavailable: top-ups for this file then say they have no text */
-          }
-        }
-        return { ...s, materials: [...s.materials, m], materialPages, events: event ? [...s.events, event] : s.events };
-      });
+      setState((s) => ({ ...s, materials: [...s.materials, m], events: event ? [...s.events, event] : s.events }));
       save(
         async () => {
           const db = browserSupabase();
-          must(await db.from("materials").insert(materialToRow(m)));
+          if (!opts?.saved) must(await db.from("materials").insert(materialToRow(m)));
           if (event) must(await db.from("calendar_events").insert(calendarToRow(event, m.id)));
         },
       );

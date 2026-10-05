@@ -103,7 +103,7 @@ export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">)
     if (!source) {
       skipped.push({
         objectiveId: id,
-        reason: sources.length ? "its material's text wasn't kept (uploaded before top-ups); upload it again" : "no course material to write from",
+        reason: sources.length ? "its material's text isn't stored (it was added without its file); upload the file again" : "no course material to write from",
       });
       continue;
     }

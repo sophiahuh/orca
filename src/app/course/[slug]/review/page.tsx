@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import type { Objective, Topic } from "@/lib/data";
 import { useCourse, useOrca } from "@/lib/store";
 import { pendingReview } from "@/lib/course/review";
+import { hiddenNote } from "@/lib/uploads";
 import { confirmTopic, rejectObjective, rejectTopic, renameTopic, resolveUncertain, resolveUncertainTopic } from "@/lib/course/ops";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -61,6 +62,11 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
                 {run.objectivesCreated.length === 1 ? "" : "s"}, {run.objectivesAttached.length} existing objective{run.objectivesAttached.length === 1 ? "" : "s"} covered again,{" "}
                 {run.questionsAdded} question{run.questionsAdded === 1 ? "" : "s"} added.
               </span>
+              {hiddenNote(material?.hiddenText) && (
+                <span className="text-[14px] font-semibold text-prussian" data-part="hidden-text">
+                  {hiddenNote(material?.hiddenText)} Check what this upload added.
+                </span>
+              )}
               {run.dropped.length > 0 && (
                 <details className="text-[14px] text-prussian/80">
                   <summary className="cursor-pointer font-semibold text-wisteria-deep">
