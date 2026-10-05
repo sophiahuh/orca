@@ -29,12 +29,14 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   when done, as Phase 3 was). `backend-implementation` holds Phases 1–3 (CI runs on it); `main` is
   far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device; the app itself still persists only to localStorage. Phase 4 so far (plan Tasks 1–2
+  on-device; the app itself still persists only to localStorage. Phase 4 so far (plan Tasks 1–3
   plus an isolation audit, local only): the local Supabase stack, the schema with row-level
-  security, the Storage bucket and `save_structure` in `supabase/migrations/`; nothing in the app
-  uses them yet. Checks are green: `npx tsc --noEmit`, `npm run lint`, `npm test` (144 unit
-  tests), `npm run test:e2e` (22 browser tests), `npm run build`, `npm run test:db` (65 pgTAP
-  checks) and `npm run check:isolation` (39 HTTP checks). CI only runs on pushes to `main` and
+  security, the Storage bucket and `save_structure` in `supabase/migrations/`, and the evidence
+  path (`objective_state` snapshots, `record_evidence`, stale marks, `POST /api/evidence`,
+  `GET /api/state`); no screen uses them yet (the store moves over in Task 5). Checks are green:
+  `npx tsc --noEmit`, `npm run lint`, `npm test` (172 unit tests), `npm run test:e2e` (22 browser
+  tests), `npm run build`, `npm run test:db` (108 pgTAP checks), `npm run check:isolation` (40
+  HTTP checks) and `npm run check:evidence` (44 HTTP checks through Orca's own routes). CI only runs on pushes to `main` and
   `backend-implementation` and on pull requests, so `phase-4` isn't checked by CI: run the checks
   yourself. Nothing has run against a hosted Supabase or Trigger.dev project; the owner's setup
   steps are in `docs/SETUP-HOSTED.md`.
@@ -63,8 +65,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`: Tasks 1–2 are done (status notes at the top of the plan), **Task 3
-   (snapshots and `/api/evidence`) is next**. Tasks 1–9 need no hosted projects (local Supabase,
+   progress on branch `phase-4`: Tasks 1–3 are done (status notes at the top of the plan), **Task 4
+   (auth: browser client, proxy, auth screens) is next**. Tasks 1–9 need no hosted projects (local Supabase,
    inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
    `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
    "Watch" for the two to revisit).
@@ -76,7 +78,9 @@ them silently; list what you assumed.
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
   `.env.local`; template in `.env.example`), `npm run db:reset` (re-applies `supabase/migrations/`),
-  `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run check:isolation` (two throwaway
+  `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run check:evidence` (starts its own
+  `next dev` on a free port against the local stack and drives `/api/evidence` and `/api/state`
+  over HTTP; `ORCA_URL=…` uses a running server instead), `npm run check:isolation` (two throwaway
   accounts over the real HTTP API; pass `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and
   `SUPABASE_SECRET_KEY` to run it against a hosted project), `npm run db:types`, `npm run db:stop`.
   After changing a migration, `npm run db:reset`, then `npm run db:types` to refresh
@@ -149,11 +153,17 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   backend being built in Phase 4 (branch `phase-4`): `supabase/` holds `config.toml`, the
   migrations (profiles, courses, materials and their pages, pipeline runs, topics, objectives,
   relations, questions, finished sessions, calendar entries, the evidence log, the `materials`
-  Storage bucket, `save_structure`) and the pgTAP tests; generated types are in
+  Storage bucket, `save_structure`, the `objective_state` snapshots with `record_evidence`,
+  `save_snapshot` and their stale-mark triggers) and the pgTAP tests; generated types are in
   `src/lib/supabase/database.types.ts`; env variables are listed in `.env.example`. Every table is
   owner-only under RLS, children reference parents with the owner or course in the key, and the
-  browser can't write evidence (only the server will, Task 3). Screens only talk to `useOrca()`,
-  so the persistence swap (Task 5) happens behind it.
+  browser can't write evidence or snapshots: only `POST /api/evidence` does, with the service
+  role. `src/lib/supabase/server.ts` has the server client (session cookie or `Authorization:
+  Bearer`) and the secret-key client; `env.ts` throws "isn't connected" when variables are
+  missing (routes answer 503); `rows.ts` maps rows to the mastery types (pure).
+  `src/lib/server/` holds route helpers (`student.ts`: 503/401 and the verified user) and the
+  Supabase `SnapshotStore`. Screens only talk to `useOrca()`, so the persistence swap (Task 5)
+  happens behind it.
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
   any API route. Without a key (and no student model), uploads are saved without generating
   anything and prose answers are self-marked.
@@ -197,7 +207,11 @@ This describes the code as it is.
   from the question stock within the time budget; deep review covers every objective once, by
   priority, before going deeper, and reports its coverage for the length picker), `todo.ts` (sidebar cards from the agenda),
   `streak.ts` (consecutive local days with an unaided graded answer). `catalogue.ts` follows `mergedInto` and leaves archived objectives out; `applyConfusion`
-  resets an objective to learning.
+  resets an objective to learning. `attribution.ts` says which objective each event counts for
+  now (shared by `course-mastery.ts` and the server's snapshots); `snapshots.ts` is the snapshot
+  path (`recordEvent`, `readCourseState`) behind a `SnapshotStore` interface. `RULES_VERSION` and
+  `dayKeyIn(timeZone)` live in `objective-state.ts`: bump the version whenever the fold's result
+  could change, and record its hash and golden replay in `tests/mastery/snapshot.test.ts`.
 - `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
   (key `orca:v8`). Holds per-course `objectives` and `relations`, pipeline `runs`, each upload's
   text (`materialPages`, for top-ups), finished sessions (`results`, with `mode` and `sessionId`),
@@ -224,7 +238,8 @@ This describes the code as it is.
   "how long do you want to study?" picker with the coverage plan), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
 - Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`),
   `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
-  `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`. Dynamic
+  `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`, `/api/evidence`, `/api/state` (the last two
+  need Supabase and a signed-in student; nothing calls them yet). Dynamic
   pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
   (run `npx next typegen` before `tsc`).
 - Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, Settings → "Your AI"): the student picks

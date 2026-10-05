@@ -245,6 +245,17 @@ on branch `phase-4`).
   pass the student's; stored accumulators need a rules version so a rule change (e.g. a new field
   like `checkDueAt`) rebuilds them; old `orca:v3`/`orca:v4` localStorage keys can be removed.
 - Verify live: push migrations, prove RLS with two users, run a real upload.
+- **Dependencies added** (plan decision 14): `@supabase/supabase-js` (the database, Auth and
+  Storage client; the routes write evidence with it) and `@supabase/ssr` (reads the session from
+  Next's cookies on the server). They came in with Task 3 rather than Task 4 because
+  `/api/evidence` and `/api/state` must know who is signed in and write with the service role;
+  nothing in the project already talks to Supabase. `supabase` (CLI) is a dev dependency since
+  Task 1.
+- **Done so far (local only, nothing hosted):** Task 1 (local stack), Task 2 (schema, RLS,
+  Storage, `save_structure`), Task 3 (`objective_state` snapshots written with each event by
+  `record_evidence`, stale marks on merges, re-tags, archives, mechanism-tier changes and timezone
+  changes, `RULES_VERSION`, `dayKeyIn`, `POST /api/evidence`, `GET /api/state`). The store still
+  persists to localStorage until Task 5.
 
 ### Phase 5 — Relation mastery, exams, calendar
 Connection questions record evidence on a relation, which gets its own derived state (weak or

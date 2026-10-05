@@ -60,6 +60,15 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   Supabase project (URL, anon and service-role keys), a Trigger.dev project (secret key), and
   `ANTHROPIC_API_KEY`. Without them the work can only be typechecked, which isn't the same claim.
 
+### Answers to questions not sorted into an objective
+- **Assumed in Phase 4 Task 3 (2026-10-05):** `POST /api/evidence` refuses (422) an answer to a
+  question with no objective, because every evidence row names a real objective (Task 2's schema).
+  In the browser such questions sit in a topic's "not yet sorted" bucket and their answers count
+  there. Today's pipeline always assigns an objective, so nothing should hit this; hand-written or
+  legacy questions would.
+- **Decide:** keep refusing (and stop showing unsorted questions in quizzes in Task 5), or give
+  each topic a real "unsorted" objective row that evidence can name.
+
 ### Relation mastery details
 - **Decided shape:** a relations table (from objective, to objective, type: builds on | implies |
   contrasts with | applies to, anchors, status), filled during uploads from Phase 2.

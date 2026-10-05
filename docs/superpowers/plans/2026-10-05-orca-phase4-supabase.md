@@ -31,6 +31,28 @@
 >   API roles (a guard test checks). By design the secret (service-role) key bypasses RLS: it stays
 >   server-only, and server code that uses it (jobs, Task 7) must scope every query to the
 >   student it's working for.
+> - **Task 3 done (2026-10-05, local):** `objective_state` (one snapshot per objective an event
+>   counts for, readable by its owner, written only by the service role), `record_evidence` (the
+>   event and its snapshot in one transaction, only if the version read is still current) and
+>   `save_snapshot` (a rebuild, same check), both service-role only. Stale marks, each also moving
+>   the version so a writer that read before the change loses: merge and un-merge (both sides and
+>   the chain), archive and restore of an objective or topic, a question re-tag, an objective
+>   gaining its first or losing its last mechanism-tier question, a timezone change. Where events
+>   count is one pure function (`src/lib/mastery/attribution.ts`), used by the browser's fold and
+>   the server; the snapshot path (`src/lib/mastery/snapshots.ts`) sits behind a store interface
+>   and re-reads the structure after the snapshot, so a structure change mid-request starts it
+>   over. `RULES_VERSION` (hash test over `MASTERY_RULES` and the FSRS parameters, plus a golden
+>   replay per version) and `dayKeyIn`. `POST /api/evidence` (answers and confusion; the server
+>   stamps the time and takes topic, objective and tier from the database) and `GET /api/state`.
+>   `@supabase/supabase-js` and `@supabase/ssr` came forward from Task 4 for a server client
+>   (session cookie or a bearer token) and a secret-key client; the proxy and auth screens stay in
+>   Task 4. Proved locally: 43 new pgTAP checks, unit tests with an in-memory database double, and
+>   `npm run check:evidence` (44 checks over HTTP on its own `next dev`: snapshots equal a full
+>   replay after every step, concurrent answers hit and survive a version conflict, a merge, a
+>   mechanism question, an old rules version and a timezone change each rebuild on the next read,
+>   a second account and a signed-out caller are refused). Differences from the plan: an answer to
+>   a question with no objective is refused (422), because evidence rows need a real objective
+>   (in `docs/TO-DISCUSS.md`); the store doesn't call the routes yet (Task 5).
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
