@@ -60,7 +60,11 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,
-  reporter: "list",
+  // On CI (GitHub Actions sets CI): a stray `test.only` fails the run instead of hiding the suite,
+  // and one retry absorbs a slow first dev-server compile; locally, tests fail fast.
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI ? [["list"], ["github"]] : "list",
   use: {
     baseURL: `http://localhost:${PORT}`,
     viewport: { width: 1194, height: 834 },
