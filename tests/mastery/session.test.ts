@@ -115,3 +115,17 @@ test("deep review splits the budget by material sliders, and hands unused time o
   const noExams = assembleDeepReview([cand("a", "learning", [...qs("L", "lec", 6), ...qs("H", "hw", 6)])], { ...ctx(240), sliders, materialTypeOf: (id) => types[id] ?? null });
   assert.equal(noExams.items.length, 8, "the exam share goes to the types that have questions");
 });
+
+test("candidates keep priority order and leave out objectives with no questions; last seen is the latest answer", async () => {
+  const { sessionCandidates, lastSeenOf } = await import("../../src/lib/mastery/session.ts");
+  const ranked = [
+    { objectiveId: "b", topicId: "t", status: "learning" as const },
+    { objectiveId: "a", topicId: "t", status: "unseen" as const },
+    { objectiveId: "z", topicId: "t", status: "unseen" as const },
+  ];
+  const states = new Map([["a", { dueAt: null }], ["b", { dueAt: null }], ["z", { dueAt: null }]]);
+  const c = sessionCandidates(ranked, states, new Map([["a", [mc("a1")]], ["b", [mc("b1")]]]));
+  assert.deepEqual(c.map((x) => x.objectiveId), ["b", "a"]);
+  const answer = (questionId: string, at: string) => ({ kind: "answer" as const, id: at, at, courseId: "c", topicId: "t", objectiveId: "a", questionId, tier: null, outcome: "correct" as const, grader: "exact" as const, source: "quiz" as const, sessionId: "s" });
+  assert.deepEqual([...lastSeenOf([answer("q", "2026-10-02T00:00:00Z"), answer("q", "2026-10-01T00:00:00Z")])], [["q", "2026-10-02T00:00:00Z"]]);
+});

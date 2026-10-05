@@ -49,12 +49,16 @@ export interface DeepReviewDue {
   due: boolean;
   /** Local day it is (or was) due; null when there's nothing to deep review yet. */
   dueDay: string | null;
+  /** Not due yet, and comes due tomorrow. */
+  tomorrow: boolean;
   /** Objectives with at least one answer that aren't retired. */
   candidates: number;
 }
 
 export interface CourseAgenda {
   courseId: string;
+  /** Every objective with questions, highest priority first (deep review and re-quizzes draw from it). */
+  ranked: RankedObjective[];
   /** Fading, mixed-up, learning and unseen objectives with weight > 0, highest priority first. */
   dueToday: RankedObjective[];
   /** Mastered objectives whose check comes due tomorrow. */
@@ -119,6 +123,7 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
     }
   }
   const byPriority = (a: RankedObjective, b: RankedObjective) => b.priority.score - a.priority.score || a.objectiveId.localeCompare(b.objectiveId);
+  ranked.sort(byPriority);
   const dueToday = ranked.filter((r) => DUE_TODAY.includes(r.status) && weights.get(r.objectiveId)! > 0).sort(byPriority);
   const dueTomorrow = ranked
     .filter((r) => {
@@ -155,9 +160,9 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
       if (anchor) dueDay = addDays(anchor, CADENCE_DAYS[config.deep.cadence]);
     }
   }
-  const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, candidates };
+  const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, tomorrow: dueDay === tomorrow, candidates };
 
-  return { courseId, dueToday, dueTomorrow, quickReviewDue, deepReview, study: studyItems(answers, results, mastery, today, dayKey) };
+  return { courseId, ranked, dueToday, dueTomorrow, quickReviewDue, deepReview, study: studyItems(answers, results, mastery, today, dayKey) };
 }
 
 /** Poor finished sessions → one study item per weak objective, until it's answered in a later session on a later day. */

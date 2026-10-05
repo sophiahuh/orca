@@ -80,13 +80,13 @@ test("quick review cadence: daily until one is finished today; weekly within 7 d
 });
 
 test("deep review: nothing to review before any answer; due a cadence after the first answer, then after the last one; stays due", () => {
-  assert.deepEqual(agenda([], "2026-10-05T09:00:00Z").deepReview, { due: false, dueDay: null, candidates: 0 });
+  assert.deepEqual(agenda([], "2026-10-05T09:00:00Z").deepReview, { due: false, dueDay: null, tomorrow: false, candidates: 0 });
   const evidence = [ans("a1", "2026-10-01T10:00:00Z")];
-  assert.deepEqual(agenda(evidence, "2026-10-07T09:00:00Z").deepReview, { due: false, dueDay: "2026-10-08", candidates: 1 });
+  assert.deepEqual(agenda(evidence, "2026-10-07T09:00:00Z").deepReview, { due: false, dueDay: "2026-10-08", tomorrow: true, candidates: 1 });
   assert.equal(agenda(evidence, "2026-10-08T09:00:00Z").deepReview.due, true);
   assert.equal(agenda(evidence, "2026-10-20T09:00:00Z").deepReview.due, true, "missed, still due");
   const results = [finished("d", "2026-10-09T10:00:00Z", "deep")];
-  assert.deepEqual(agenda(evidence, "2026-10-10T09:00:00Z", { results }).deepReview, { due: false, dueDay: "2026-10-16", candidates: 1 });
+  assert.deepEqual(agenda(evidence, "2026-10-10T09:00:00Z", { results }).deepReview, { due: false, dueDay: "2026-10-16", tomorrow: false, candidates: 1 });
   const daily: ReviewConfig = { ...DEFAULT_CONFIG, deep: { duration: "30 min", cadence: "Daily" } };
   assert.equal(agenda(evidence, "2026-10-10T09:00:00Z", { results, config: daily }).deepReview.due, true);
 });
@@ -94,7 +94,7 @@ test("deep review: nothing to review before any answer; due a cadence after the 
 test("deep review before an exam: due from a week before until one is done", () => {
   const evidence = [ans("a1", "2026-10-01T10:00:00Z")];
   const config: ReviewConfig = { ...DEFAULT_CONFIG, deep: { duration: "30 min", cadence: "1 wk before exam" } };
-  assert.deepEqual(agenda(evidence, "2026-10-05T09:00:00Z", { config, examDays: ["2026-10-20"] }).deepReview, { due: false, dueDay: "2026-10-13", candidates: 1 });
+  assert.deepEqual(agenda(evidence, "2026-10-05T09:00:00Z", { config, examDays: ["2026-10-20"] }).deepReview, { due: false, dueDay: "2026-10-13", tomorrow: false, candidates: 1 });
   assert.equal(agenda(evidence, "2026-10-14T09:00:00Z", { config, examDays: ["2026-10-20"] }).deepReview.due, true);
   assert.equal(agenda(evidence, "2026-10-15T09:00:00Z", { config, examDays: ["2026-10-20"], results: [finished("d", "2026-10-14T10:00:00Z", "deep")] }).deepReview.due, false);
   assert.equal(agenda(evidence, "2026-10-14T09:00:00Z", { config }).deepReview.dueDay, null, "no exam, no deep review");

@@ -5,7 +5,7 @@
  */
 import type { Duration, MaterialType, QuestionTier, QuizQuestion, Weights } from "../data.ts";
 import { sliderFor } from "../course/weights.ts";
-import type { ObjectiveStatus } from "./types.ts";
+import type { EvidenceEvent, ObjectiveState, ObjectiveStatus } from "./types.ts";
 
 /** Seconds a student needs per question, by what it asks for. */
 export const QUESTION_SECONDS = { choice: 30, exact: 45, sentence: 90 } as const;
@@ -195,4 +195,29 @@ export function assembleDeepReview(
     .sort((a, b) => a.round - b.round || a.rank - b.rank)
     .map((i): SessionItem => ({ questionId: i.questionId, objectiveId: i.objectiveId, topicId: i.topicId, seenBefore: i.seenBefore }));
   return { items, budgetSeconds: ctx.budgetSeconds, plannedSeconds: time };
+}
+
+/** questionId → ISO time of the latest answer to it. */
+export function lastSeenOf(events: readonly EvidenceEvent[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const e of events) {
+    if (e.kind !== "answer") continue;
+    const prev = out.get(e.questionId);
+    if (prev === undefined || Date.parse(e.at) > Date.parse(prev)) out.set(e.questionId, e.at);
+  }
+  return out;
+}
+
+/** Ranked objectives → session candidates with their questions. An objective with no questions can't be asked and is left out. */
+export function sessionCandidates(
+  ranked: ReadonlyArray<{ objectiveId: string; topicId: string; status: ObjectiveStatus }>,
+  states: ReadonlyMap<string, Pick<ObjectiveState, "dueAt">>,
+  questionsByObjective: ReadonlyMap<string, readonly SessionQuestion[]>,
+): SessionCandidate[] {
+  return ranked.flatMap((r) => {
+    const questions = questionsByObjective.get(r.objectiveId) ?? [];
+    const state = states.get(r.objectiveId);
+    if (!state) throw new Error(`No state computed for objective ${r.objectiveId}`);
+    return questions.length ? [{ objectiveId: r.objectiveId, topicId: r.topicId, status: r.status, dueAt: state.dueAt, questions }] : [];
+  });
 }
