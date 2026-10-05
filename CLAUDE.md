@@ -29,19 +29,20 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   when done, as Phase 3 was). `backend-implementation` holds Phases 1–3 (CI runs on it); `main` is
   far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device; the app itself still persists only to localStorage. Phase 4 so far (plan Tasks 1–3
-  plus an isolation audit, local only): the local Supabase stack, the schema with row-level
-  security, the Storage bucket and `save_structure` in `supabase/migrations/`, and the evidence
-  path (`objective_state` snapshots, `record_evidence`, stale marks, `POST /api/evidence`,
-  `GET /api/state`); no screen uses them yet (the store moves over in Task 5). Checks are green:
-  `npx tsc --noEmit`, `npm run lint`, `npm test` (172 unit tests), `npm run test:e2e` (22 browser
-  tests), `npm run build`, `npm run test:db` (108 pgTAP checks), `npm run check:isolation` (40
+  on-device. Phase 4 so far (plan Tasks 1–5 plus an isolation audit, local only): the local
+  Supabase stack, the schema with row-level security, the Storage bucket and `save_structure` in
+  `supabase/migrations/`, the evidence path (`objective_state` snapshots, `record_evidence`, stale
+  marks, `POST /api/evidence`, `GET /api/state`), auth, and the store on Supabase (Task 5: the app
+  loads and saves the signed-in student's data there; uploads still run the pipeline in the
+  browser until Task 7). Checks are green:
+  `npx tsc --noEmit`, `npm run lint`, `npm test` (181 unit tests), `npm run test:e2e` (29 browser
+  tests), `npm run build`, `npm run test:db` (117 pgTAP checks), `npm run check:isolation` (40
   HTTP checks) and `npm run check:evidence` (44 HTTP checks through Orca's own routes). CI only runs on pushes to `main` and
   `backend-implementation` and on pull requests, so `phase-4` isn't checked by CI: run the checks
   yourself. Nothing has run against a hosted Supabase or Trigger.dev project; the owner's setup
   steps are in `docs/SETUP-HOSTED.md`.
-- **Stopgap to remove in Phase 4:** uploads keep their page text in localStorage
-  (`materialPages`) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
+- **Stopgap to remove in Phase 4 (Task 6):** uploads keep their page text in localStorage
+  (`orca:materialPages`, the only app data left in the browser) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
   files to Supabase Storage and page text to a `material_pages` table, with processing in
   Trigger.dev tasks; don't build more on browser storage.
 - **Never run against a real model.** Every pipeline test stubs the model, and tests can't spend:
@@ -65,8 +66,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`: Tasks 1–4 are done (status notes at the top of the plan), **Task 5
-   (the store on Supabase) is next**. Tasks 1–9 need no hosted projects (local Supabase,
+   progress on branch `phase-4`: Tasks 1–5 are done (status notes at the top of the plan), **Task 6
+   (uploads to Storage) is next**. Tasks 1–9 need no hosted projects (local Supabase,
    inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
    `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
    "Watch" for the two to revisit).
@@ -91,12 +92,13 @@ them silently; list what you assumed.
   pulls; if it answers 429, wait and retry.
 - Run `npx next typegen` before `tsc` after adding a route; delete a stale `.next/dev` if `tsc`
   complains about a route that no longer exists.
-- Playwright's `page.clock.setFixedTime` freezes `motion` animations after the first page, so
-  content can stay invisible (opacity 0) or a quiz can stick on its first question. Set the clock
-  once, before the first navigation, and seed past days' evidence instead of moving the clock
-  mid-test (see `e2e/scheduling.spec.ts`).
-- Changing the persisted state's shape means bumping `STORAGE_KEY` in `src/lib/store.tsx` and
-  `e2e/fixture.ts` together (no migrations; local data is test data).
+- The server stamps answers with its own clock, so e2e tests run on the real clock and seed past
+  days relative to it (`daysAgo` in `e2e/fixture.ts`; see `e2e/scheduling.spec.ts`); freezing the
+  browser's clock wouldn't move the server's. (Playwright's `page.clock.setFixedTime` also freezes
+  `motion` animations after the first page.)
+- e2e: seed with `seedState(student, …)` (secret key), read back with `stored(page, student)`;
+  ids must be UUIDs (`ids(...)` makes fresh ones per spec). `page.goto` waits for the app's saves
+  (`<html data-saving>`) first, since navigating away would cancel one.
 - Pure modules (`src/lib/mastery`, `src/lib/course`, `src/lib/pipeline` except `client.ts`) must
   load under plain Node: relative imports with `.ts`, `import type`, no TS parameter properties.
 - The superpowers skills named below may not be installed in every session; if they aren't,
@@ -149,12 +151,13 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 ## Stack
 
 - Next.js 16 (App Router, `src/` dir, TypeScript), Tailwind v4, `motion` (Framer Motion) for animation.
-- The app still persists to localStorage: a React context (`src/lib/store.tsx`). Supabase is the
-  backend being built in Phase 4 (branch `phase-4`): `supabase/` holds `config.toml`, the
+- The app's data is in Supabase (Phase 4, branch `phase-4`), behind a React context
+  (`src/lib/store.tsx`): `supabase/` holds `config.toml`, the
   migrations (profiles, courses, materials and their pages, pipeline runs, topics, objectives,
   relations, questions, finished sessions, calendar entries, the evidence log, the `materials`
   Storage bucket, `save_structure`, the `objective_state` snapshots with `record_evidence`,
-  `save_snapshot` and their stale-mark triggers) and the pgTAP tests; generated types are in
+  `save_snapshot` and their stale-mark triggers, and the consistent reads `course_structure` and
+  `my_data`) and the pgTAP tests; generated types are in
   `src/lib/supabase/database.types.ts`; env variables are listed in `.env.example`. Every table is
   owner-only under RLS, children reference parents with the owner or course in the key, and the
   browser can't write evidence or snapshots: only `POST /api/evidence` does, with the service
@@ -170,15 +173,15 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   keys from `supabase status` (stack must be up) unless `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`
   and `SUPABASE_SECRET_KEY` are set.
   `src/lib/server/` holds route helpers (`student.ts`: 503/401 and the verified user) and the
-  Supabase `SnapshotStore`. Screens only talk to `useOrca()`, so the persistence swap (Task 5)
-  happens behind it.
+  Supabase `SnapshotStore`. Screens only talk to `useOrca()`. `src/lib/supabase/app-rows.ts`
+  (pure) maps the app's types to rows and back, and computes the changed rows a structure save sends.
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
   any API route. Without a key (and no student model), uploads are saved without generating
   anything and prose answers are self-marked.
 - Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), run with `npm test`.
 - Browser tests: Playwright (`e2e/`, `playwright.config.ts`), run with `npm run test:e2e`. It starts
   `next dev` on port 3100 (reuses a running one locally, never in CI) at the 1194×834 frame size; each test gets a fresh
-  localStorage. First run: `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_PATH` to
+  browser and a fresh throwaway student on local Supabase. First run: `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_PATH` to
   an installed Chromium (cloud containers ship one at `/opt/pw-browsers/chromium-*/chrome-linux/chrome`).
 - CI: `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build, and the Playwright
   suite in a second job (traces uploaded on failure), on pushes to `main` / `backend-implementation`
@@ -220,11 +223,18 @@ This describes the code as it is.
   path (`recordEvent`, `readCourseState`) behind a `SnapshotStore` interface. `RULES_VERSION` and
   `dayKeyIn(timeZone)` live in `objective-state.ts`: bump the version whenever the fold's result
   could change, and record its hash and golden replay in `tests/mastery/snapshot.test.ts`.
-- `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
-  (key `orca:v8`). Holds per-course `objectives` and `relations`, pipeline `runs`, each upload's
-  text (`materialPages`, for top-ups), finished sessions (`results`, with `mode` and `sessionId`),
-  and an append-only `evidence` log (answers and confusion events); `recordEvidence` and
-  `recordReflection` are its only writers. `addQuestions` adds topped-up questions. Course structure changes through `applyUpload` (a
+- `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`, `useDayKey()`. Loads the
+  signed-in student's data once (`my_data()`, one consistent read; `GET /api/state` for courses
+  with stale snapshots) and saves every action optimistically, one save at a time in order: course
+  structure through `save_structure` (only changed rows), evidence through `POST /api/evidence`,
+  the rest by direct writes under RLS. A failed save is undone and shows "Couldn't save: …"
+  (`SaveStatus`, `src/components/store/`); a failed load shows its own screen. Holds per-course
+  `objectives` and `relations`, pipeline `runs`, each upload's text (`materialPages`, the
+  localStorage stopgap), finished sessions (`results`), the `evidence` log (answers and confusion
+  events) and the server's `snapshots`; `recordEvidence` and `recordReflection` are its only
+  evidence writers. Objective state comes from the snapshots; streak, agenda and the rest from
+  the loaded events, with days in the profile's timezone. The bring-your-own model setting is kept
+  in memory only. `orca:v3`–`orca:v8` keys are removed on load. `addQuestions` adds topped-up questions. Course structure changes through `applyUpload` (a
   pipeline plan) and `editStructure` (an op from `src/lib/course/ops.ts`). Derived reads:
   `useMasteryByCourse()`, `useAgenda()`, `useTodos()`, `useStreak()`.
 - `src/lib/course/` — pure course-structure modules (tested with `npm test`): `ops.ts` (confirm,
@@ -279,8 +289,10 @@ This describes the code as it is.
   answers writing evidence), `upload.spec.ts` (a real ALD deck through pdf.js and the pipeline with
   `/api/pipeline/*` stubbed; re-uploading adds nothing), `review.spec.ts` (review screen and
   objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective),
-  `scheduling.spec.ts` (quick review, poor-quiz to-dos and re-quiz, deep review cadence, top-up).
-  `e2e/fixture.ts` seeds state into localStorage.
+  `scheduling.spec.ts` (quick review, poor-quiz to-dos and re-quiz, deep review cadence, top-up),
+  `store.spec.ts` (a second browser sees the same data; a failed save is undone and not counted;
+  old local state cleared), `auth.spec.ts`. `e2e/fixture.ts` signs in a throwaway student and
+  seeds through the secret key.
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app; last deployed before Phase 1). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy

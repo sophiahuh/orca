@@ -70,6 +70,29 @@
 >   so Settings → "Your AI" browser calls are blocked until Task 9 removes them; a reused dev server
 >   on port 3100 must have been started with the same Supabase keys. Hosted: the redirect URL list in
 >   `docs/SETUP-HOSTED.md` already covers `/auth/callback`; not run against a hosted project.
+> - **Task 5 done (2026-10-05, local):** `OrcaProvider` loads the signed-in student's data once
+>   through `my_data()` (one SQL statement, so one consistent read; `GET /api/state` only for
+>   courses with a stale snapshot) and saves every action as an optimistic update plus a save, one
+>   at a time in order: structure through `save_structure` (only the rows that changed, from the
+>   pure `src/lib/supabase/app-rows.ts`; a row that vanished is refused), evidence through
+>   `POST /api/evidence` (the server's copy and snapshot replace the local one), the rest by RLS
+>   writes. A failed save is undone and shows "Couldn't save: …"; an answer that couldn't be saved
+>   isn't counted. Objective state comes from snapshots, re-read after structure saves and a
+>   timezone change; streak and agenda from the loaded events, with days in the profile's timezone
+>   (decision 11). Course and calendar ids are UUIDs; a repeated course name gets a `-2` slug. The
+>   server's fold reads `course_structure()` (one consistent read) instead of four parallel ones,
+>   and an objective's first mechanism-tier question now leaves a stale placeholder (the race left
+>   from Task 3). The e2e fixture seeds through the secret key (seeded evidence gets stale
+>   placeholders, so the first read rebuilds from the log) and reads back through the student's
+>   session; `e2e/store.spec.ts` proves a second browser sees the same courses and progress, a
+>   failed answer save is undone and not counted, and old keys are cleared. Proved locally: all 29
+>   e2e, 117 pgTAP, 181 unit, `check:evidence` (44) and `check:isolation` (40). Differences: the
+>   upload's page text stays in localStorage (`orca:materialPages`) until Task 6, the only app data
+>   left in the browser; the "Your AI" setting is kept in memory only (it holds a key; Task 7 hides
+>   it); uploads still run the pipeline in the browser until Task 7 (material rows are marked
+>   `ready`, with no Storage path); finished sessions take the database's `finished_at`; the
+>   scheduling e2e runs on the real clock, since the server stamps answers (a run that straddles
+>   midnight can fail).
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
