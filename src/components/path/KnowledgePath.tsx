@@ -4,7 +4,8 @@ import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
 import { pathCanvasHeight, trailFromPoints } from "@/lib/data";
 import { Wave } from "@/components/brand/Decor";
-import { PathNode } from "@/components/ui/PathNode";
+import type { TopicProgress } from "@/lib/mastery/progress";
+import { type NodeVisual, PathNode } from "@/components/ui/PathNode";
 import { useFitScale } from "@/hooks/useFitScale";
 import { revealDown } from "@/lib/motion";
 
@@ -17,14 +18,27 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 640, y: 150, w: 60 },
 ];
 
-function statusLine(t: Topic) {
-  if (t.status === "done") return "Complete";
-  if (t.status === "locked") return "Locked";
-  return `${t.lessonsDone} of ${t.lessons} lessons`;
+function statusLine(p: TopicProgress) {
+  if (p.total === 0) return "No questions yet";
+  if (p.status === "done") return "Complete";
+  if (p.status === "not-started") return `${p.total} ${p.total === 1 ? "objective" : "objectives"}`;
+  return `${p.mastered} of ${p.total} objectives mastered`;
 }
 
 /** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
-export function KnowledgePath({ course, onStart }: { course: Course; onStart: (topic: Topic) => void }) {
+export function KnowledgePath({ course, progress, onStart }: {
+  course: Course;
+  progress: ReadonlyMap<string, TopicProgress>;
+  onStart: (topic: Topic) => void;
+}) {
+  const progressOf = (t: Topic) => {
+    const p = progress.get(t.id);
+    if (!p) throw new Error(`No progress computed for topic ${t.id}`);
+    return p;
+  };
+  const firstOpen = course.topics.findIndex((t) => progressOf(t).status !== "done");
+  const visualOf = (t: Topic, i: number): NodeVisual =>
+    progressOf(t).status === "done" ? "done" : i === firstOpen ? "current" : "upcoming";
   const PATH_H = pathCanvasHeight(course.topics.length);
   // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
   const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
@@ -60,12 +74,12 @@ export function KnowledgePath({ course, onStart }: { course: Course; onStart: (t
           <PathNode
             key={t.id}
             index={i}
-            status={t.status}
+            visual={visualOf(t, i)}
             x={t.pos.x}
             y={t.pos.y}
             name={t.name}
-            sub={statusLine(t)}
-            onClick={t.status === "locked" ? undefined : () => onStart(t)}
+            sub={statusLine(progressOf(t))}
+            onClick={() => onStart(t)}
           />
         ))}
       </div>

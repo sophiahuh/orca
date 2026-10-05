@@ -64,7 +64,7 @@ interface OrcaState {
   evidence: EvidenceEvent[];
 }
 
-const STORAGE_KEY = "orca:v3"; // v3: ALD trail without the background topic; built-in bank merged on load
+const STORAGE_KEY = "orca:v4"; // v4: topics no longer store status; learner state comes from the evidence log
 
 const initialState: OrcaState = {
   courses: SEED_COURSES,
@@ -150,7 +150,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const addCourse = useCallback<OrcaActions["addCourse"]>(
     (name) => {
       const id = `${slugify(name)}-${Date.now().toString(36)}`;
-      const positions = defaultTopicPositions(4);
       const course: Course = {
         id,
         slug: slugify(name),
@@ -158,14 +157,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         short: shortName(name),
         variant: VARIANT_CYCLE[state.courses.length % VARIANT_CYCLE.length],
         pos: OPEN_SLOTS[state.courses.length % OPEN_SLOTS.length] ?? { x: 300, y: 300 },
-        topics: ["Intro", "Foundations", "Practice", "Review"].map((n, i) => ({
-          id: slugify(n),
-          name: n,
-          status: i === 0 ? "current" : "locked",
-          lessons: 4,
-          lessonsDone: 0,
-          pos: positions[i],
-        })),
+        topics: [],
       };
       setState((s) => ({
         ...s,
@@ -205,28 +197,11 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const recordQuiz = useCallback<OrcaActions["recordQuiz"]>((r) => {
-    setState((s) => {
-      const courses = s.courses.map((c) => {
-        if (c.id !== r.courseId) return c;
-        const topics = c.topics.map((t) => {
-          if (t.id !== r.topicId) return t;
-          const lessonsDone = Math.min(t.lessons, t.lessonsDone + 1);
-          return { ...t, lessonsDone, status: lessonsDone >= t.lessons ? ("done" as const) : t.status };
-        });
-        // Unlock the next topic once the current one is done.
-        const idx = topics.findIndex((t) => t.id === r.topicId);
-        if (idx >= 0 && topics[idx].status === "done" && topics[idx + 1]?.status === "locked") {
-          topics[idx + 1] = { ...topics[idx + 1], status: "current" };
-        }
-        return { ...c, topics };
-      });
-      return {
-        ...s,
-        courses,
-        streak: s.streak + (s.results.length === 0 ? 1 : 0),
-        results: [...s.results, { ...r, finishedAt: new Date().toISOString() }],
-      };
-    });
+    setState((s) => ({
+      ...s,
+      streak: s.streak + (s.results.length === 0 ? 1 : 0),
+      results: [...s.results, { ...r, finishedAt: new Date().toISOString() }],
+    }));
   }, []);
 
   const recordEvidence = useCallback<OrcaActions["recordEvidence"]>((e) => {
@@ -249,8 +224,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
           if (i >= 0) {
             topics[i] = { ...topics[i], summary: t.summary ?? topics[i].summary, source: t.source ?? topics[i].source };
           } else {
-            const hasCurrent = topics.some((x) => x.status === "current");
-            topics.push({ ...t, status: hasCurrent ? "locked" : "current", lessonsDone: 0, pos: { x: 0, y: 0 } });
+            topics.push({ ...t, pos: { x: 0, y: 0 } });
             topicsAdded++;
           }
         }

@@ -146,12 +146,11 @@ export function questionsByTopic(x: Extraction, filename: string, figures: Recor
   return out;
 }
 
-export function topicsFrom(x: Extraction, filename: string): Array<Omit<Topic, "status" | "pos" | "lessonsDone">> {
+export function topicsFrom(x: Extraction, filename: string): Array<Omit<Topic, "pos">> {
   return x.topics.map((t) => ({
     id: slugifyTopic(t.name),
     name: t.name,
     summary: t.summary,
-    lessons: 1,
     source: { filename, slideStart: t.slideStart, slideEnd: t.slideEnd },
   }));
 }

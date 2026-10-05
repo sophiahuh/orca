@@ -39,7 +39,7 @@ export function Sidebar() {
     const c = byId.get(d.courseId);
     if (!c) return "/home";
     const topic = c.topics.find((t) => t.id === d.topicId);
-    return topic && topic.status !== "locked" ? `/quiz/${c.slug}/${topic.id}` : `/course/${c.slug}`;
+    return topic ? `/quiz/${c.slug}/${topic.id}` : `/course/${c.slug}`;
   };
   const labelFor = (d: DueItem) => byId.get(d.courseId)?.short ?? "";
 

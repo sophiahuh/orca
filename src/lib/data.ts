@@ -14,14 +14,9 @@ export const PATH_TOP = 240;
 
 export type IslandVariant = "ald" | "circuit" | "signals" | "linear" | "stats";
 
-export type TopicStatus = "done" | "current" | "locked";
-
 export interface Topic {
   id: string;
   name: string;
-  status: TopicStatus;
-  lessons: number;
-  lessonsDone: number;
   /** Node centre in the 854-wide path canvas. */
   pos: { x: number; y: number };
   /** One-paragraph summary (from extracted course material). */
@@ -173,14 +168,11 @@ export const DEFAULT_WEIGHTS: Weights = {
   lectures: 10,
 };
 
-/** ALD's trail comes from the authored lecture content; the first two topics start complete. */
+/** ALD's trail comes from the authored lecture content. Progress is derived from evidence, so it starts empty. */
 const ALD_POSITIONS = defaultTopicPositions(ALD_TOPICS.length);
 const ALD_SEED_TOPICS: Topic[] = ALD_TOPICS.map((t, i) => ({
   id: t.id,
   name: t.name,
-  status: i < 1 ? "done" : i === 1 ? "current" : "locked",
-  lessons: 1,
-  lessonsDone: i < 1 ? 1 : 0,
   pos: ALD_POSITIONS[i],
   summary: t.summary,
   source: t.source,
@@ -196,85 +188,23 @@ export const SEED_COURSES: Course[] = [
     pos: { x: 70, y: 110 },
     topics: ALD_SEED_TOPICS,
   },
-  {
-    id: "circuit",
-    slug: "circuit-analysis",
-    name: "Circuit Analysis",
-    short: "Circuit Analysis",
-    variant: "circuit",
-    pos: { x: 500, y: 80 },
-    topics: [
-      { id: "ohm", name: "Ohm's Law", status: "done", lessons: 3, lessonsDone: 3, pos: { x: 330, y: 240 } },
-      { id: "kcl-kvl", name: "KCL & KVL", status: "current", lessons: 5, lessonsDone: 1, pos: { x: 450, y: 350 } },
-      { id: "thevenin", name: "Thévenin", status: "locked", lessons: 4, lessonsDone: 0, pos: { x: 330, y: 480 } },
-      { id: "rc", name: "RC Circuits", status: "locked", lessons: 4, lessonsDone: 0, pos: { x: 210, y: 610 } },
-      { id: "ac", name: "AC Analysis", status: "locked", lessons: 5, lessonsDone: 0, pos: { x: 330, y: 725 } },
-    ],
-  },
-  {
-    id: "signals",
-    slug: "signals",
-    name: "Signals & Systems",
-    short: "Signals",
-    variant: "signals",
-    pos: { x: 290, y: 330 },
-    topics: [
-      { id: "lti", name: "LTI Systems", status: "current", lessons: 4, lessonsDone: 0, pos: { x: 330, y: 240 } },
-      { id: "convolution", name: "Convolution", status: "locked", lessons: 5, lessonsDone: 0, pos: { x: 450, y: 350 } },
-      { id: "fourier", name: "Fourier", status: "locked", lessons: 6, lessonsDone: 0, pos: { x: 330, y: 480 } },
-      { id: "laplace", name: "Laplace", status: "locked", lessons: 4, lessonsDone: 0, pos: { x: 210, y: 610 } },
-    ],
-  },
-  {
-    id: "linear",
-    slug: "linear-algebra",
-    name: "Linear Algebra",
-    short: "Linear Algebra",
-    variant: "linear",
-    pos: { x: 40, y: 470 },
-    topics: [
-      { id: "vectors", name: "Vectors", status: "current", lessons: 3, lessonsDone: 0, pos: { x: 330, y: 240 } },
-      { id: "matrices", name: "Matrices", status: "locked", lessons: 5, lessonsDone: 0, pos: { x: 450, y: 350 } },
-      { id: "eigen", name: "Eigenvalues", status: "locked", lessons: 4, lessonsDone: 0, pos: { x: 330, y: 480 } },
-    ],
-  },
-  {
-    id: "stats",
-    slug: "statistics",
-    name: "Statistics",
-    short: "Statistics",
-    variant: "stats",
-    pos: { x: 540, y: 450 },
-    topics: [
-      { id: "prob", name: "Probability", status: "current", lessons: 4, lessonsDone: 0, pos: { x: 330, y: 240 } },
-      { id: "dist", name: "Distributions", status: "locked", lessons: 5, lessonsDone: 0, pos: { x: 450, y: 350 } },
-      { id: "inference", name: "Inference", status: "locked", lessons: 5, lessonsDone: 0, pos: { x: 330, y: 480 } },
-    ],
-  },
 ];
 
 export const SEED_DUE: DueItem[] = [
-  { id: "d1", courseId: "circuit", title: "Quick review", when: "today", topicId: "kcl-kvl" },
   { id: "d2", courseId: "ald", title: "Boolean Algebra", when: "today", topicId: "boolean-algebra" },
   { id: "d3", courseId: "ald", title: "Review Logic Circuits", when: "tomorrow", topicId: "logic-circuits-switches" },
   { id: "d4", courseId: "ald", title: "Exam 1 prep", when: "tomorrow", topicId: "karnaugh-maps" },
 ];
 
 export const SEED_EVENTS: CalendarEvent[] = [
-  { id: "e1", date: "2026-09-03", kind: "hw", title: "Circuits HW", courseId: "circuit" },
   { id: "e2", date: "2026-09-08", kind: "lab", title: "ALD Lab 2", courseId: "ald" },
   { id: "e3", date: "2026-09-10", kind: "hw", title: "ALD HW 3", courseId: "ald" },
   { id: "e4", date: "2026-09-15", kind: "rev", title: "Review Intro", courseId: "ald" },
   { id: "e5", date: "2026-09-17", kind: "exam", title: "ALD midterm", courseId: "ald" },
-  { id: "e6", date: "2026-09-22", kind: "hw", title: "Circuits HW 4", courseId: "circuit" },
   { id: "e7", date: "2026-09-24", kind: "rev", title: "K-Maps quiz", courseId: "ald" },
-  { id: "e8", date: "2026-09-30", kind: "rev", title: "Quick review", courseId: "circuit" },
   { id: "e9", date: "2026-10-01", kind: "rev", title: "Exam 1 prep", courseId: "ald" },
-  { id: "e10", date: "2026-10-06", kind: "hw", title: "Circuits HW 5", courseId: "circuit" },
   { id: "e11", date: "2026-10-08", kind: "lab", title: "ALD Lab 3", courseId: "ald" },
   { id: "e12", date: "2026-10-13", kind: "rev", title: "Verilog review", courseId: "ald" },
-  { id: "e13", date: "2026-10-20", kind: "exam", title: "Circuits midterm", courseId: "circuit" },
-  { id: "e14", date: "2026-10-27", kind: "rev", title: "Fourier review", courseId: "signals" },
 ];
 
 export const MATERIAL_TYPES: readonly MaterialType[] = ["Past exam", "Practice problems", "Practice exam", "Homework", "Lecture", "Other"];
@@ -305,11 +235,6 @@ export const SEED_MATERIALS: Material[] = [
 ];
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
-
-export function courseProgress(course: Course) {
-  const done = course.topics.filter((t) => t.status === "done").length;
-  return { done, total: course.topics.length, pct: course.topics.length ? done / course.topics.length : 0 };
-}
 
 export function slugify(name: string) {
   return name

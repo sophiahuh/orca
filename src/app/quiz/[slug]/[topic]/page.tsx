@@ -215,17 +215,6 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
     );
   }
 
-  if (topic.status === "locked") {
-    return (
-      <Screen bg="parchment" className="items-start gap-4 p-[32px]">
-        <BackButton href={backHref} />
-        <p className="text-[22px] font-bold text-prussian">{topic.name} is still locked.</p>
-        <p className="text-[16px] text-wisteria-deep">Finish the topic before it on the path and it will open up.</p>
-      </Screen>
-    );
-  }
-
-
   const restart = (set: QuizQuestion[]) => {
     setSubset(set);
     setIndex(0);
