@@ -22,25 +22,15 @@ async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data
   }
 }
 
-function must<T>(result: { data: T | null; error: { message: string } | null }, what: string): T {
-  if (result.error) throw new Error(`Couldn't read ${what}: ${result.error.message}`);
-  if (result.data === null) throw new Error(`Couldn't read ${what}: nothing came back`);
-  return result.data;
-}
-
 export function supabaseSnapshotStore(db: OrcaSupabase, ownerId: string, courseId: string): SnapshotStore {
   return {
     async view(): Promise<CourseView> {
-      const [topics, objectives, questions, profile] = await Promise.all([
-        readAll((a, b) => db.from("topics").select("id, review, sort_order").eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "topics"),
-        readAll((a, b) => db.from("objectives").select("id, topic_id, name, review, merged_into").eq("owner_id", ownerId).eq("course_id", courseId).order("id").range(a, b), "objectives"),
-        readAll(
-          (a, b) => db.from("questions").select("id, topic_id, objective_id, tier, sort_order").eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b),
-          "questions",
-        ),
-        db.from("profiles").select("timezone").eq("owner_id", ownerId).single(),
-      ]);
-      return courseView({ topics, objectives, questions, timezone: must(profile, "the student's profile").timezone });
+      // One SQL statement, so one consistent snapshot: a structure save landing mid-read can't mix
+      // old and new rows (parallel reads could, and objectivesForTopic would then throw).
+      const { data, error } = await db.rpc("course_structure", { course: courseId, owner: ownerId });
+      if (error) throw new Error(`Couldn't read the course's structure: ${error.message}`);
+      if (data === null) throw new Error(`Couldn't read the course's structure: course ${courseId} isn't this student's`);
+      return courseView(data as unknown as Parameters<typeof courseView>[0]);
     },
 
     async snapshot(objectiveId) {

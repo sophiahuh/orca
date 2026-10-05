@@ -366,7 +366,13 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "record_evidence":
+            "course_structure":
+{ Args: { "course": string,"owner": string }; Returns: Json
+                           },
+"my_data":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"record_evidence":
 { Args: { "accumulator": Json,"event": Json,"expected_version": number,"objective": string,"owner": string,"rules_version": number }; Returns: boolean
                            },
 "save_snapshot":
