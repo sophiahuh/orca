@@ -124,3 +124,30 @@ test("questions of unreviewed objectives are tagged; rejected ones are never ask
   await expect(page.getByText("Smallest group size?")).toBeVisible();
   await expect(page.getByText("How many ones in a quad?")).toHaveCount(0);
 });
+
+test("when a save fails, the change queued behind it is cancelled too and the screen matches the database", async ({ page, student }) => {
+  await page.goto(`/course/${SLUG}/review`);
+  const duplicates = page.locator("[data-part=duplicate]");
+  await expect(duplicates).toHaveCount(2);
+  let calls = 0;
+  await page.route("**/rest/v1/rpc/save_structure", async (route) => {
+    calls += 1;
+    // The first save is slow and then fails, so the second action is queued behind it.
+    await new Promise((r) => setTimeout(r, 800));
+    await route.fulfill({ status: 500, json: { message: "the database is down", code: "XX000" } });
+  });
+  await duplicates.filter({ hasText: "K Maps" }).getByRole("button", { name: "Same topic: merge" }).click();
+  await duplicates.filter({ hasText: "Form K-map groups" }).getByRole("button", { name: "Keep separate" }).click();
+  await expect(duplicates).toHaveCount(0);
+
+  await expect(page.locator('[data-part="save-error"]')).toContainText("Couldn't save: the database is down");
+  await page.waitForFunction(() => document.documentElement.dataset.saving === "0");
+  expect(calls, "the save queued behind the failed one never ran").toBe(1);
+  // Both changes are gone from the screen, as they are from the database.
+  await expect(duplicates).toHaveCount(2);
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(page.locator('[data-part="save-error"]')).toHaveCount(0);
+  const s = await stored(page, student);
+  expect(s.courses[0].topics.find((t: Topic) => t.id === id.C)).toMatchObject({ review: "proposed", uncertain: { candidateId: id.B } });
+  expect(s.objectives[ID][id.b3].uncertain).toMatchObject({ candidateId: id.b1 });
+});

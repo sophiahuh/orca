@@ -6,8 +6,9 @@
  * `OrcaProvider` loads everything the signed-in student has once (`my_data()`, one consistent
  * read) into the same state screens read before, and every action is an optimistic local update
  * plus a save, run one at a time in order (a course is saved before its upload, an upload's
- * material before its run). A save that fails rolls its update back and shows "Couldn't save: …";
- * an answer that couldn't be saved isn't counted.
+ * material before its run). A save that fails shows "Couldn't save: …", cancels the saves queued
+ * behind it (they may build on it), and reads everything again from the database, so the screen
+ * matches what was saved; an answer that couldn't be saved isn't counted.
  *
  * Where each kind of data is saved:
  * - course structure (topics, objectives, questions, relations, runs): `save_structure`, only the
@@ -155,7 +156,7 @@ type OrcaContextValue = OrcaState &
     loadError: string | null;
     /** Saves still in flight. */
     saving: number;
-    /** "Couldn't save: …" for the last save that failed (its change was rolled back). */
+    /** "Couldn't save: …" for the last save that failed (the state was then read again from the database). */
     saveError: string | null;
   };
 
@@ -174,6 +175,12 @@ const OPEN_SLOTS = [
 ];
 
 /* ── Talking to Supabase ──────────────────────────────────────────────── */
+
+/** An update's result (with `.select("id")`): it must have changed a row, or the save didn't happen. */
+function mustChange(result: { data: unknown[] | null; error: { message: string } | null }): void {
+  if (result.error) throw new Error(result.error.message);
+  if (!result.data?.length) throw new Error("nothing was changed (it may be gone, or not yours)");
+}
 
 /** A Supabase result's data, or a thrown Error with its message. */
 function must<T>(result: { data: T; error: { message: string } | null }): T {
@@ -225,6 +232,12 @@ async function loadAll(): Promise<Omit<OrcaState, "materialPages" | "llm">> {
   return { ...rest, snapshots };
 }
 
+async function sessionUser(): Promise<string | null> {
+  const { data, error } = await browserSupabase().auth.getSession();
+  if (error) throw new Error(error.message);
+  return data.session?.user.id ?? null;
+}
+
 /** The next free slug for a new course ("logic", then "logic-2", …). */
 function freeSlug(name: string, taken: readonly string[]): string {
   const base = slugify(name) || "course";
@@ -273,6 +286,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   /** The user the state belongs to (null: signed out), and the one a load is running for. */
   const loadedFor = useRef<string | null | undefined>(undefined);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  /** Moves on when a save fails (and again when the resync after it lands); saves from an older epoch are cancelled. */
+  const epoch = useRef(0);
   const pathname = usePathname();
 
   // Old local state is gone for good (accounts start fresh); page text stays until Task 6.
@@ -285,8 +300,16 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const load = useCallback(async (force = false) => {
-    const { data } = await browserSupabase().auth.getSession();
-    const userId = data.session?.user.id ?? null;
+    let userId: string | null;
+    try {
+      userId = await sessionUser();
+    } catch (e) {
+      loadedFor.current = undefined;
+      setState(initialState);
+      setLoadError(`Couldn't load your courses: ${message(e)}`);
+      setStatus("failed");
+      return;
+    }
     if (!force && loadedFor.current === userId) return;
     loadedFor.current = userId;
     if (userId === null) {
@@ -321,28 +344,59 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     return () => data.subscription.unsubscribe();
   }, [load]);
 
-  /**
-   * Run a save after the ones before it. If it throws, `undo` reverses this action's local change
-   * and the error is shown. Nothing is retried: the student sees that it failed.
-   */
-  const save = useCallback((run: () => Promise<void>, undo: (s: OrcaState) => OrcaState) => {
-    const count = (delta: number) => {
-      inFlight.current += delta;
-      document.documentElement.dataset.saving = String(inFlight.current);
-      setSaving(inFlight.current);
-    };
-    count(1);
-    queue.current = queue.current.then(async () => {
-      try {
-        await run();
-      } catch (e) {
-        setState(undo);
-        setSaveError(`Couldn't save: ${message(e)}`);
-      } finally {
-        count(-1);
-      }
-    });
+  const count = useCallback((delta: number) => {
+    inFlight.current += delta;
+    document.documentElement.dataset.saving = String(inFlight.current);
+    setSaving(inFlight.current);
   }, []);
+
+  /**
+   * Put the screen back in step with the database after a failed save: read everything again and
+   * replace the local state (an answer that wasn't saved disappears, so it isn't counted). Runs in
+   * the queue, after the saves it cancelled. Everything done on screen before it finishes is
+   * replaced by what it read, so those actions' saves are cancelled too (the epoch moves on again).
+   */
+  const resync = useCallback(async () => {
+    try {
+      const loaded = await loadAll();
+      setState((s) => ({ ...initialState, ...loaded, llm: s.llm, materialPages: s.materialPages }));
+    } catch (e) {
+      loadedFor.current = undefined;
+      setState(initialState);
+      setLoadError(`Couldn't load your courses after a failed save: ${message(e)}`);
+      setStatus("failed");
+    } finally {
+      epoch.current += 1;
+    }
+  }, []);
+
+  /**
+   * Run a save after the ones before it. Nothing is retried and nothing is undone by hand: if it
+   * throws, the error is shown, every save queued behind it is cancelled (they may build on it),
+   * and the state is read again from the database, so the screen matches what was saved.
+   */
+  const save = useCallback(
+    (run: () => Promise<void>) => {
+      const mine = epoch.current;
+      count(1);
+      queue.current = queue.current.then(async () => {
+        try {
+          if (mine !== epoch.current) return; // cancelled by an earlier failure
+          try {
+            await run();
+          } catch (e) {
+            epoch.current += 1;
+            setSaveError(`Couldn't save: ${message(e)}${inFlight.current > 1 ? " (changes made after it weren't saved either)" : ""}`);
+            count(1);
+            queue.current = queue.current.then(resync).finally(() => count(-1));
+          }
+        } finally {
+          count(-1);
+        }
+      });
+    },
+    [count, resync],
+  );
 
   /** Re-read one course's snapshots after a change that can mark them stale (merges, re-tags, archives). */
   const refreshSnapshots = useCallback(async (courseId: string) => {
@@ -368,10 +422,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         async () => {
           must(await browserSupabase().rpc("save_structure", { course: courseId, rows: rows as unknown as Json }));
           await refreshAfterSave([courseId]);
-        },
-        (s) => {
-          const runIds = new Set(runs.map((r) => r.id));
-          return { ...withStructure(s, courseId, before), runs: s.runs.filter((r) => !runIds.has(r.id)) };
         },
       );
     },
@@ -403,7 +453,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       }));
       save(
         async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, DEFAULT_CONFIG, DEFAULT_WEIGHTS))),
-        (s) => ({ ...s, courses: s.courses.filter((c) => c.id !== id) }),
       );
       return course;
     },
@@ -412,16 +461,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setConfig = useCallback<OrcaActions["setConfig"]>(
     (courseId, config) => {
-      const before = stateRef.current.configs[courseId];
       setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: config } }));
       const course = stateRef.current.courses.find((c) => c.id === courseId);
       if (!course) throw new Error(`No course ${courseId}`);
       save(
         async () => {
           const row = courseToRow(course, config, stateRef.current.weights[courseId] ?? DEFAULT_WEIGHTS);
-          must(await browserSupabase().from("courses").update({ review_config: row.review_config }).eq("id", courseId));
+          mustChange(await browserSupabase().from("courses").update({ review_config: row.review_config }).eq("id", courseId).select("id"));
         },
-        (s) => ({ ...s, configs: { ...s.configs, [courseId]: before } }),
       );
     },
     [save],
@@ -429,16 +476,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setWeights = useCallback<OrcaActions["setWeights"]>(
     (courseId, weights) => {
-      const before = stateRef.current.weights[courseId];
       setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: weights } }));
       const course = stateRef.current.courses.find((c) => c.id === courseId);
       if (!course) throw new Error(`No course ${courseId}`);
       save(
         async () => {
           const row = courseToRow(course, stateRef.current.configs[courseId] ?? DEFAULT_CONFIG, weights);
-          must(await browserSupabase().from("courses").update({ weights: row.weights }).eq("id", courseId));
+          mustChange(await browserSupabase().from("courses").update({ weights: row.weights }).eq("id", courseId).select("id"));
         },
-        (s) => ({ ...s, weights: { ...s.weights, [courseId]: before } }),
       );
     },
     [save],
@@ -472,7 +517,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
           must(await db.from("materials").insert(materialToRow(m)));
           if (event) must(await db.from("calendar_events").insert(calendarToRow(event, m.id)));
         },
-        (s) => ({ ...s, materials: s.materials.filter((x) => x.id !== m.id), events: s.events.filter((e) => e !== event) }),
       );
     },
     [save],
@@ -490,7 +534,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
           const stored = sessionFromRow(row);
           setState((s) => ({ ...s, results: s.results.map((x) => (x === local ? stored : x)) }));
         },
-        (s) => ({ ...s, results: s.results.filter((x) => x !== local) }),
       );
     },
     [save],
@@ -524,8 +567,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
             source: e.source,
             sessionId: e.sessionId,
           }),
-        // Not saved, not counted.
-        (s) => ({ ...s, evidence: s.evidence.filter((x) => x.id !== event.id) }),
       );
     },
     [save, postEvidence],
@@ -536,27 +577,18 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       const at = new Date().toISOString();
       const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: crypto.randomUUID(), at, materialId, note }));
       const reflection = { at, note, objectiveIds: events.map((e) => e.objectiveId) };
-      const before = stateRef.current.materials.find((m) => m.id === materialId)?.reflection;
       setState((s) => ({
         ...s,
         evidence: [...s.evidence, ...confusion],
         materials: s.materials.map((m) => (m.id === materialId ? { ...m, reflection } : m)),
       }));
-      const saved = new Set<string>();
       save(
         async () => {
           for (const c of confusion) {
             await postEvidence(c, { kind: "confusion", id: c.id, courseId: c.courseId, objectiveId: c.objectiveId, materialId, note });
-            saved.add(c.id);
           }
-          must(await browserSupabase().from("materials").update({ reflection: reflection as unknown as Json }).eq("id", materialId));
+          mustChange(await browserSupabase().from("materials").update({ reflection: reflection as unknown as Json }).eq("id", materialId).select("id"));
         },
-        // Events already in the log stay (the log is append-only); the rest and the note are undone.
-        (s) => ({
-          ...s,
-          evidence: s.evidence.filter((x) => !confusion.some((c) => c.id === x.id && !saved.has(c.id))),
-          materials: s.materials.map((m) => (m.id === materialId ? { ...m, reflection: before } : m)),
-        }),
       );
     },
     [save, postEvidence],
@@ -564,15 +596,13 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setOnboarded = useCallback(
     (v: boolean) => {
-      const before = stateRef.current.onboarded;
       setState((s) => ({ ...s, onboarded: v }));
       save(
         async () => {
           const { data } = await browserSupabase().auth.getSession();
           if (!data.session) throw new Error("you're signed out");
-          must(await browserSupabase().from("profiles").update({ onboarded: v }).eq("owner_id", data.session.user.id));
+          mustChange(await browserSupabase().from("profiles").update({ onboarded: v }).eq("owner_id", data.session.user.id).select("owner_id"));
         },
-        (s) => ({ ...s, onboarded: before }),
       );
     },
     [save],
@@ -580,17 +610,15 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setTimezone = useCallback(
     (timezone: string) => {
-      const before = stateRef.current.timezone;
       setState((s) => ({ ...s, timezone }));
       save(
         async () => {
           const { data } = await browserSupabase().auth.getSession();
           if (!data.session) throw new Error("you're signed out");
-          must(await browserSupabase().from("profiles").update({ timezone }).eq("owner_id", data.session.user.id));
+          mustChange(await browserSupabase().from("profiles").update({ timezone }).eq("owner_id", data.session.user.id).select("owner_id"));
           // A new timezone can move answers to other days: every snapshot is rebuilt.
           await refreshAfterSave(stateRef.current.courses.map((c) => c.id));
         },
-        (s) => ({ ...s, timezone: before }),
       );
     },
     [save, refreshAfterSave],

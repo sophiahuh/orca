@@ -9,8 +9,8 @@ import { popIn } from "@/lib/motion";
 import { useOrca } from "@/lib/store";
 
 /**
- * Whether changes are saving, and the last save that failed ("Couldn't save: …"; its change was
- * undone). Fixed at the bottom of every screen.
+ * Whether changes are saving, and the last save that failed ("Couldn't save: …"; the screen was
+ * then reloaded from the database). Fixed at the bottom of every screen.
  */
 export function SaveStatus() {
   const { saving, saveError, dismissSaveError } = useOrca();
