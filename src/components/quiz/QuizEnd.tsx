@@ -19,10 +19,12 @@ export interface QuizEndProps {
   onContinue: () => void;
   onReview?: () => void;
   onClose: () => void;
+  /** A line under the buttons (e.g. new questions being written). */
+  extra?: React.ReactNode;
 }
 
 /** Figma: Quiz End. Centred 640px result card on an alice sea. */
-export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue, onReview, onClose }: QuizEndProps) {
+export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue, onReview, onClose, extra }: QuizEndProps) {
   const misses = total - correct;
   const accuracy = total ? Math.round((correct / total) * 100) : 0;
 
@@ -71,6 +73,7 @@ export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue
               </Button>
             )}
           </motion.div>
+          {extra}
         </motion.div>
       </motion.div>
     </div>

@@ -11,7 +11,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import {
   type CalendarEvent,
   type Course,
-  type DueItem,
   type IslandVariant,
   type Material,
   type MaterialPages,
@@ -36,7 +35,7 @@ import type { QuizQuestion } from "./data";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types";
 import type { CourseStructure } from "./course/ops";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
-import { dueTopics } from "./mastery/due";
+import { type TodoCard, todoCards } from "./mastery/todo";
 import { type CourseAgenda, courseAgenda, withNeutralWeights } from "./mastery/agenda";
 import { isUnsortedObjectiveId } from "./mastery/catalogue";
 import { courseObjectiveWeights } from "./course/weights";
@@ -324,23 +323,31 @@ export function useMasteryByCourse(): Record<string, CourseMastery> {
   );
 }
 
-/** Topics with reviews due today or tomorrow, across every course. */
-export function useDueItems(): DueItem[] {
-  const { courses } = useOrca();
-  const mastery = useMasteryByCourse();
-  const nowMs = useNow();
+/** The sidebar's to-do cards for every course, today's first. */
+export function useTodos(): TodoCard[] {
+  const { courses, objectives, configs } = useOrca();
+  const agenda = useAgenda();
   return useMemo(
     () =>
       courses.flatMap((c) => {
-        const m = mastery[c.id];
-        if (!m) throw new Error(`No mastery computed for course ${c.id}`);
-        return dueTopics(c.id, m, new Date(nowMs)).map((d) => {
-          const topic = c.topics.find((t) => t.id === d.topicId);
-          if (!topic) throw new Error(`Due topic ${d.topicId} is not in course ${c.id}`);
-          return { id: `${c.id}:${d.topicId}:${d.when}`, courseId: c.id, topicId: d.topicId, title: topic.name, when: d.when, count: d.objectiveIds.length };
+        const a = agenda[c.id];
+        if (!a) throw new Error(`No agenda computed for course ${c.id}`);
+        const catalogue = objectives[c.id] ?? {};
+        return todoCards(a, configs[c.id] ?? DEFAULT_CONFIG, {
+          objective: (id) => {
+            if (isUnsortedObjectiveId(id)) return "Questions not yet sorted into objectives";
+            const o = catalogue[id];
+            if (!o) throw new Error(`Objective ${id} is not in course ${c.id}`);
+            return o.name;
+          },
+          topic: (id) => {
+            const t = c.topics.find((x) => x.id === id);
+            if (!t) throw new Error(`Topic ${id} is not in course ${c.id}`);
+            return t.name;
+          },
         });
       }),
-    [courses, mastery, nowMs],
+    [courses, objectives, configs, agenda],
   );
 }
 

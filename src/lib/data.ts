@@ -55,19 +55,6 @@ export interface Course {
   trail?: string;
 }
 
-export type DueWhen = "today" | "tomorrow";
-
-/** A topic with reviews due, derived from objective due times (never stored). */
-export interface DueItem {
-  id: string;
-  courseId: string;
-  topicId: string;
-  title: string;
-  when: DueWhen;
-  /** How many of the topic's objectives are due. */
-  count: number;
-}
-
 export type Cadence = "Daily" | "Weekly" | "1 wk before exam";
 export type Duration = "5 min" | "10 min" | "15 min" | "30 min" | "1 hour" | "3 hours" | "10 hours";
 
