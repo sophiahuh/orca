@@ -8,13 +8,36 @@ Design source of truth: Figma file `Xt9CiD6SpdN0BPma1q2pzZ` ("Orca – Study App
 Reference renders live in `docs/figma/` (`screens.png` = all 11 screens, `styleguide.png`, and the
 traced SVG assets in `docs/figma/assets/`). Frames are 1194×834; v1 ships as a laptop website.
 
+## Product model (the vision the backend is built toward)
+
+Full detail: `docs/BACKEND-ROADMAP.md` (decisions and phases), `docs/MASTERY-PLAN.md` (learner
+model), `docs/TO-DISCUSS.md` (open questions). In short:
+
+- **Course → topic → objective → questions.** An objective is a "can do X" statement and the unit
+  of mastery. Every question belongs to one objective.
+- **Objectives are created once per course**, when material is uploaded: extraction proposes new
+  topics and objectives against the course's existing list, reconciliation matches duplicates,
+  and the student reviews topics. Inferred objectives (from general knowledge, not the material)
+  are allowed and labelled. Unreviewed objectives are quizzable, with an "unreviewed" tag.
+- **Learner state is derived, never stored.** Every graded answer appends an evidence event;
+  objective status (unseen → learning → mastered → fading → retired, plus mixed-up), topic
+  progress and the island's mastery level are computed from the events and the clock.
+- **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
+- **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
+  growing, thriving) from the share of its course's objectives that are mastered.
+- **No in-app AI chat.** Claude is used for extracting material, generating questions and grading
+  short answers. Students' own Claude/ChatGPT can connect through an MCP connector (planned) that
+  logs study activity as a priority signal, never as mastery.
+
 ## Stack
 
 - Next.js 16 (App Router, `src/` dir, TypeScript), Tailwind v4, `motion` (Framer Motion) for animation.
 - No backend yet. State is a React context persisted to localStorage (`src/lib/store.tsx`).
-  Supabase is the planned backend; the types in `src/lib/data.ts` are the future table shapes.
-- AI chat / quiz generation will use the Claude API (`claude-opus-5-5`). Load the `claude-api`
-  skill before writing any API route. Until a key exists, `/api/chat` must return a canned reply.
+  Supabase is the planned backend (Phase 3 of the roadmap); screens only talk to `useOrca()`, so
+  the persistence swap happens behind it.
+- Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
+  any API route. Without a key, routes fall back to demo mode.
+- Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), added in Phase 1.
 
 ## Design tokens (already in `src/app/globals.css`)
 
@@ -31,45 +54,68 @@ Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 re
 
 ## What exists (all 11 Figma screens are built)
 
+This describes the code as it is. Phase 1 (`docs/superpowers/plans/2026-10-04-orca-phase1-mastery-core.md`)
+changes the items marked †.
+
 - `src/lib/motion.ts` — every spring/variant/loop preset. All animation pulls from here.
-- `src/lib/data.ts` — model + seed (5 courses, due items, calendar events, K-Maps quiz, `quizFor`,
-  weight + date helpers).
+- `src/lib/data.ts` — model + seed (5 courses†, due items, calendar events, K-Maps quiz†, `quizFor`†,
+  weight + date helpers). Topics carry a hand-set `status`†.
 - `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage.
 - `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
 - `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date).
-- `src/components/icons.tsx`, `brand/` (OrcaLogo, Island, Wave, Bubble).
+- `src/components/icons.tsx`, `brand/` (OrcaLogo, Island†, Wave, Bubble).
 - `src/components/ui/` — Button, Chip/ContextPill, RoundButton, ProgressBar, Card, Tag, Stat, Select,
-  Toggle, Slider, AnswerOption, DueCard, PathNode (barrel in `ui/index.ts`).
+  Toggle, Slider, AnswerOption, DueCard, PathNode† (barrel in `ui/index.ts`).
 - `src/components/layout/` — AppShell (main + 340px Sidebar with NavBar), BackButton, Screen.
 - Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (TruthTable,
-  QuizEnd), `chat/ChatBubble`, `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
-- Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/chat` + `/api/chat`, `/settings`,
-  `/calendar`, `/add-material`, `/new-course`. Dynamic pages read `params`/`searchParams` with
-  React `use()` and the generated `PageProps<...>` types (run `npx next typegen` before `tsc`).
+  QuizEnd, ShortAnswer), `chat/ChatBubble`†, `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
+- Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/chat` + `/api/chat`†, `/settings`,
+  `/calendar`, `/add-material`, `/new-course`, `/api/extract`, `/api/grade`, `/api/llm/*`. Dynamic
+  pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
+  (run `npx next typegen` before `tsc`).
 - Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, Settings → "Your AI"): the student picks
   Anthropic / OpenAI / Gemini / OpenRouter / Ollama + a key; it lives in the store (browser only) and
   rides along with each request. Anthropic goes through `@anthropic-ai/sdk`; the rest use the
-  OpenAI-compatible chat.completions shape; Ollama is called from the browser. `/api/chat` and
-  `/api/extract` fall back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`) and then to demo mode.
-- Material pipeline: `src/lib/pdf-text.ts` reads PDFs on-device with pdf.js → `/api/extract` asks the
-  model for topics + source-anchored quiz questions (`src/lib/extraction.ts`, zod schema, Anthropic
-  structured outputs or JSON mode) → `importExtraction` in the store appends topics to the trail and
-  fills `questionBank[courseId][topicId]`, which the quiz page prefers over the seed quiz.
-- Sample material: `docs/samples/ald/L01–L04` (real ALD lecture decks; syllabus in L01).
+  OpenAI-compatible chat.completions shape; Ollama is called from the browser. Model routes fall
+  back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`) and then to demo mode. Whether to keep
+  this is open (`docs/TO-DISCUSS.md`).
+- Material pipeline (on-device stopgap until Phase 4): `src/lib/pdf-text.ts` reads PDFs with pdf.js
+  → `/api/extract` asks the model for topics + source-anchored quiz questions (`src/lib/extraction.ts`,
+  zod schema) → `importExtraction` in the store appends topics and fills
+  `questionBank[courseId][topicId]`. It does not create objectives yet.
+- Built-in ALD content: `src/lib/content/ald.ts` (topics + 69 questions); draft objectives in
+  `docs/OBJECTIVES-ALD.md`. Sample material: `docs/samples/ald/L01–L04` (real ALD lecture decks;
+  syllabus in L01).
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
   is not linked yet. `.vercelignore` keeps docs/ out of uploads.
 
 ## What to build next
 
-1. Backend: Supabase auth + tables matching `src/lib/data.ts`; swap the store's persistence layer.
-2. Real spaced repetition: a scheduler that turns `ReviewConfig` + `Weights` + quiz results into
-   `DueItem`s (today/tomorrow) and calendar reviews. See `docs/BACKEND-NOTES.md` once written.
-3. Pipeline polish: chunk very long PDFs, let the student review/rename extracted topics before
-   they land, merge near-duplicate topics (e.g. "K-Maps" vs "Karnaugh Maps"), image-only slides via
-   vision, HW/exam PDFs as practice sets.
-4. Streaming chat replies; chat that can schedule reviews and start quizzes.
-5. Animation next steps listed in `docs/ANIMATION.md`.
+`docs/BACKEND-ROADMAP.md` is the plan. Phases: (1) mastery core on-device, (2) scheduling,
+(3) Supabase, (4) server-side material pipeline that creates objectives, (5) deep review,
+relationships and exams, (6) ALD drills, (7) MCP connector. Build each phase with
+`superpowers:writing-plans` → `superpowers:subagent-driven-development`; plans go in
+`docs/superpowers/plans/`. Animation next steps are in `docs/ANIMATION.md`.
+
+## Invariants (ported from ai-native-learning-platform)
+
+- Learner state is derived. Every answer appends an `EvidenceEvent`; objective state, topic progress
+  and island level are computed from events and the clock. Never store or write mastery directly.
+- Exposure is not mastery. Uploads, reading and connector signals may raise priority; only scored
+  answers count toward mastery, and self-marked answers count half. A grading failure records nothing.
+- Check exactly when the domain allows (bit strings, numbers, Boolean expressions by truth table).
+  Use a model grader only with a structured rubric.
+- Course-specific questions carry a source anchor into the course material. Questions for inferred
+  objectives have no anchor and must not present themselves as course-specific.
+- No silent placeholders: a fallback or unknown value must never look like a computed one. Throw, or
+  show an explicit empty or unknown state. This applies to existing code you touch.
+- When live credentials exist (Supabase, Anthropic), run the live check. A typecheck around a live
+  dependency is not the same claim.
+- Don't add a dependency when an existing one solves the problem. Don't add a persistence layer
+  without recording why in `docs/BACKEND-ROADMAP.md`.
+- Pure domain modules (`src/lib/mastery/`, content catalogues) use relative imports ending in `.ts`
+  and `import type`, so `npm test` runs them with Node's type stripping.
 
 ## Animation architecture (the "clear path forward")
 
@@ -79,11 +125,13 @@ Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 re
   `driftWave(seed)`, `swimOrca`, `pulseHalo`, `drawTrail`. Add new ones there, never inline.
 - Buttons/chips/cards press via CSS (`pressable`), not JS, so they stay cheap.
 - Lists use `stagger()` parents with `fadeUp` children; modals/result cards use `popIn` + `AnimatePresence`.
-- Next steps when ready: orca follows a path on the map (`offsetPath`), islands "grow" trees as topics
-  complete (animate tree `r`/`height` from 0), trail segments fill as nodes complete, confetti on quiz end.
+- Next steps when ready: orca follows a path on the map (`offsetPath`), islands animate between their
+  four mastery looks (trees sprout from `r` 0 when a level is reached), trail segments fill as topics
+  complete, confetti on quiz end.
 
 ## Conventions
 
 - Keep screens thin: data from `useOrca()`, visuals from components, timing from `motion.ts`.
 - Pixel values from Figma are fine inline (`text-[22px]`, `rounded-[20px]`); colors must be tokens.
-- Run `npx tsc --noEmit` and `npm run lint` before committing. `npm run dev` for the preview.
+- Run `npx tsc --noEmit` and `npm run lint` before committing (and `npm test` once Phase 1 adds it).
+  `npm run dev` for the preview.

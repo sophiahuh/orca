@@ -53,6 +53,8 @@ revealDown(height)                   – clip-rect reveal for dotted paths (path
 ## Next steps when ready
 
 - Orca follows a path across the map (`offsetPath` on the `OrcaLogo` wrapper).
-- Islands grow trees as topics complete: animate tree `r` / `height` from 0 inside `Island`.
+- Islands have four fixed mastery looks (uncharted, sprouting, growing, thriving; Phase 1). Animate
+  the change between them: trees sprout from `r` 0 when a level is reached and shrink away when an
+  island drops a level. Trees are `data-part="tree"` inside `Island`.
 - Trail segments fill between nodes as they complete (second path, `pathLength` per segment).
 - Confetti / bubble burst on a perfect quiz.

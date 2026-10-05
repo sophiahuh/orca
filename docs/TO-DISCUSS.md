@@ -21,7 +21,25 @@ the outcome in the doc it affects.
   "don't re-quiz the intro" work.
 - **Decide:** together with the frontier term.
 
+### What the material-type weight sliders do
+- **Now:** Settings has per-course sliders (homework, practice exams, practice problems,
+  lectures). Nothing reads them, and the priority formula in `docs/MASTERY-PLAN.md` §2.6 has no
+  term for them.
+- **Options:** scale an objective's `importance` by the weight of the material types it was
+  extracted from (the platform notes' suggestion); or use them only to weight question
+  generation (more practice-exam-style questions); or remove them.
+- **Decide before:** Phase 2 (priority).
+
 ## Mastery
+
+### Do inferred objectives count toward the island?
+- **Now (as decided):** every non-archived objective counts, including inferred ones (from
+  general knowledge, not the material).
+- **Risk:** an inferred objective the course never actually covers still sits in the
+  denominator, so the island can't reach "thriving" and the topic can't be "done" until the
+  student masters something the class didn't teach.
+- **Options:** count them; count them only once confirmed by the student; or never count them.
+- **Decide before:** Phase 4.
 
 ### Island mastery levels: names and thresholds
 - **Decided:** each island shows one of four fixed visuals for its course's mastery level.
@@ -52,6 +70,20 @@ the outcome in the doc it affects.
 - Should a student be able to mark "I know this"? (The proposal there: it schedules one check
   tomorrow, never mastery directly.)
 - How visible should the objective list be?
+
+## Backend
+
+### Existing local data at first sign-in
+- When accounts arrive (Phase 3), a student may already have answers in localStorage.
+- **Options:** import them into the new account once; or start fresh. Importing is cheap because
+  evidence events are self-contained, but imported timestamps can't be verified.
+- **Decide before:** Phase 3.
+
+### How relationships between objectives are stored
+- Phase 5 adds connection questions whose answers count toward a *pair* of objectives, plus
+  `implies` links. Neither has a data shape yet (a relationship table, typed like the platform's
+  concept edges, is the obvious start).
+- **Decide in:** Phase 5's brainstorming.
 
 ## Product
 

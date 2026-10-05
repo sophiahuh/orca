@@ -82,9 +82,11 @@ test("gradeExact accepts an equivalent spelling and rejects a different answer",
 Run: `npm test`
 Expected: `# pass 2`, `# fail 0` (an `ExperimentalWarning` about type stripping is normal).
 
-- [ ] **Step 5: Add the invariants to CLAUDE.md**
+- [ ] **Step 5: Confirm the invariants are in CLAUDE.md**
 
-Insert this section in `CLAUDE.md` directly before `## Conventions`:
+`CLAUDE.md` already has an `## Invariants (ported from ai-native-learning-platform)` section (added
+with the docs update on 2026-10-04). Check it contains the points below; add any that are missing.
+For reference, the intended content:
 ```markdown
 ## Invariants (ported from ai-native-learning-platform)
 
@@ -1865,23 +1867,26 @@ git commit -m "Islands: four fixed looks by course mastery level"
 **Files:**
 - Modify: `CLAUDE.md`, `README.md`, `docs/MASTERY-PLAN.md` (top note)
 
-- [ ] **Step 1: Update CLAUDE.md**
+- [ ] **Step 1: Update CLAUDE.md's "What exists"**
 
-- Stack bullet on AI: `- Quiz generation and short-answer grading use the Claude API (claude-opus-5-5). Load the claude-api skill before writing any API route. There is no in-app chat.`
-- "What exists": add `src/lib/mastery/` (evidence types, objective state, topic progress, island level, course roll-up, catalogue helpers), `src/lib/content/ald-objectives.ts`, `useMasteryByCourse()` / `recordEvidence` in the store, and `npm test` (node:test, Node ≥ 22.6). Remove `chat/ChatBubble` and `/chat` + `/api/chat` from the components and routes lists, and `/api/chat` from the bring-your-own-LLM bullet.
-- Replace the "What to build next" list with: `See docs/BACKEND-ROADMAP.md (phases) and docs/TO-DISCUSS.md (open questions). Phase 1 (mastery core) is done; Phase 2 is scheduling.`
+The section marks every item Phase 1 changes with †. Rewrite those items to describe the new
+code and remove the † marks and the sentence that explains them:
+- `data.ts`: ALD-only seed, topics without status, no `quizFor` / K-Maps quiz.
+- Add `src/lib/mastery/` (evidence types, objective state, topic progress, island level, course
+  roll-up, catalogue helpers), `src/lib/content/ald-objectives.ts`, `useMasteryByCourse()` /
+  `recordEvidence` and per-course `objectives` in the store, `src/hooks/useNow.ts`, and `npm test`.
+- `Island`: four mastery looks. `PathNode`: done / current / upcoming, no locks.
+- Remove `chat/ChatBubble` and `/chat` + `/api/chat`.
+- In "What to build next", note that Phase 1 is done and Phase 2 (scheduling) is next.
 
 - [ ] **Step 2: Update README.md**
 
-Delete the `/chat` row from the routes table and the paragraph about `/chat` and the canned reply. Add under "Checks": `npm test        # unit tests (Node ≥ 22.6)`.
+Delete the `/chat` row from the routes table (it currently says "Being removed in Phase 1"). Add under "Checks": `npm test        # unit tests (Node ≥ 22.6)`.
 
-- [ ] **Step 3: Note the parked terms in MASTERY-PLAN**
+- [ ] **Step 3: Update the MASTERY-PLAN status note**
 
-Add under the title of `docs/MASTERY-PLAN.md`:
-```markdown
-> Status 2026-10-04: §2.3–2.5 are implemented in `src/lib/mastery/` (Phase 1). The frontier term
-> and distance discount in §2.5–2.6 are parked; see `docs/TO-DISCUSS.md`.
-```
+In the status note at the top of `docs/MASTERY-PLAN.md`, change "Phase 1 builds §2.2–2.5
+on-device" to "§2.2–2.5 are implemented in `src/lib/mastery/` (Phase 1, on-device)".
 
 - [ ] **Step 4: Full verification**
 

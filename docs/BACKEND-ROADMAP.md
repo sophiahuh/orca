@@ -53,7 +53,8 @@ evidence; the trail and islands read derived state. Still localStorage.
 
 ### Phase 2 — Scheduling, on-device
 Priority (`docs/MASTERY-PLAN.md` §2.6 minus the frontier and distance terms) with a reason
-sentence per term. `Due today / Due tomorrow` derived from objective due dates, replacing
+sentence per term. Decide how the Settings material-type weights feed in (TO-DISCUSS); today the
+sliders change nothing. `Due today / Due tomorrow` derived from objective due dates, replacing
 `SEED_DUE`. Quick-review session composed from `ReviewConfig.quick.duration`, preferring unseen
 questions and including at least one mechanism question. The poor-quiz loop: a Review to-do with the
 slide range and missed explanations, and a re-quiz the next day. The streak decision from
@@ -66,6 +67,9 @@ middleware). Tables: `courses`, `topics`, `objectives`, `questions`, `evidence_e
 every table. Start from the platform's migrations 0001/0004/0015/0016/0017 and their policies; its
 `artifacts` bugs (no student UPDATE policy; the `status` column excluded from the column grant)
 are the checklist. Swap the store's persistence behind `useOrca()` so screens don't change.
+Store the student's timezone on their profile: "credit on 2 different days" and due dates use the
+student's calendar days, and the server must compute them the same way the device did.
+Decide what happens to a student's existing localStorage data at first sign-in (TO-DISCUSS).
 Verify live: push migrations, prove RLS with two users, run a real upload.
 
 ### Phase 4 — Material pipeline, server-side
@@ -76,8 +80,8 @@ Verify live: push migrations, prove RLS with two users, run a real upload.
 2. Reconciliation labels each proposed objective `same as <existing id> | new | uncertain` (the
    platform's `merge | distinct | uncertain` prompt, applied to objectives). Matches attach to the
    existing objective; nothing gets a new id if it already exists.
-3. The student reviews the proposals (rename, merge, drop) before they land; `uncertain` ones are
-   highlighted.
+3. The student reviews new topics (rename, merge, drop); `uncertain` objective matches are
+   highlighted. Nothing waits on review to be practised (see the confirmation rule below).
 4. Questions are generated per objective (aim: 6+), validated (port the ambiguity check and
    answer agreement), and attached.
 
@@ -103,6 +107,10 @@ Rules decided 2026-10-04:
   adding practice-style questions), and create a new objective only when it's clearly new.
 - Answers are filed by each question's current objective, so the rare merge, split or re-tag
   after reconciliation re-files past answers automatically.
+
+Homework uploads keep the "reflect" toggle: the student's note ("I guessed on the K-map question")
+is stored as a priority signal on the objectives it mentions, never as evidence (the platform's
+Phase 5 rule).
 
 Also in this phase: upload to Storage, concept tags on objectives for duplicate detection, and a
 decision on where long jobs run (Vercel function limits vs Trigger.dev vs Supabase functions),

@@ -50,6 +50,9 @@ file, and the checker pass (planned) grades each generated question against it.
 
 6. **Every claim traces to a slide.** The anchor is the slide the answer comes from, quoted or
    closely paraphrased. If the slide is only a picture, cite it and attach it as the figure.
+   The one exception is a question for an *inferred* objective (one drawn from general knowledge
+   of the subject, not the uploaded material): it has no anchor, and its wording must not claim
+   the course covered it ("In lecture…", "As the slides show…").
 7. **Don't paraphrase the slide's sentence as the prompt.** Apply the idea instead, so reading the
    slide isn't enough; understanding it is.
 
