@@ -304,63 +304,6 @@ export const SEED_MATERIALS: Material[] = [
   },
 ];
 
-export const KMAPS_QUIZ: QuizQuestion[] = [
-  {
-    id: "q1",
-    kind: "Multiple choice",
-    topic: "K-Maps",
-    prompt: "Is this XOR truth table accurate?",
-    table: {
-      headers: ["A", "B", "Y"],
-      rows: [{ cells: ["0", "0", "0"] }, { cells: ["0", "1", "1"] }, { cells: ["1", "0", "1"] }, { cells: ["1", "1", "1"] }],
-    },
-    options: ["Yes", "No"],
-    answer: 1,
-    explanation: "XOR is 1 only when the inputs differ, so the last row (1, 1) should output 0.",
-  },
-  {
-    id: "q2",
-    kind: "Multiple choice",
-    topic: "K-Maps",
-    prompt: "In a 4-variable K-map, how many cells are there?",
-    options: ["8", "12", "16", "32"],
-    answer: 2,
-    explanation: "A 4-variable map has 2⁴ = 16 cells, one per minterm.",
-  },
-  {
-    id: "q3",
-    kind: "Multiple choice",
-    topic: "K-Maps",
-    prompt: "Why are K-map rows and columns labelled in Gray code order?",
-    options: [
-      "So adjacent cells differ in exactly one variable",
-      "To sort minterms numerically",
-      "Because Gray code is faster to compute",
-      "It is only a convention with no effect",
-    ],
-    answer: 0,
-    explanation: "Gray ordering makes neighbours differ by one bit, which is what lets you group and cancel a variable.",
-  },
-  {
-    id: "q4",
-    kind: "True or false",
-    topic: "K-Maps",
-    prompt: "A group of 4 adjacent 1s in a K-map eliminates two variables from the term.",
-    options: ["True", "False"],
-    answer: 0,
-    explanation: "Each doubling of the group size removes one variable: 2 cells → 1 variable, 4 cells → 2 variables.",
-  },
-  {
-    id: "q5",
-    kind: "Multiple choice",
-    topic: "K-Maps",
-    prompt: "Which grouping is NOT valid in a K-map?",
-    options: ["A group of 2", "A group of 3", "A group of 4", "A group of 8"],
-    answer: 1,
-    explanation: "Groups must be powers of two: 1, 2, 4, 8, 16. A group of 3 cannot be expressed as a single product term.",
-  },
-];
-
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 export function courseProgress(course: Course) {
@@ -405,40 +348,6 @@ export function defaultTopicPositions(n: number) {
   const out: { x: number; y: number }[] = [];
   for (let i = 0; i < n; i++) out.push({ x: xs[i % xs.length], y: PATH_TOP + i * PATH_NODE_GAP });
   return out;
-}
-
-/** Fallback quiz for a topic with nothing in the question bank. */
-export function quizFor(topicId: string, topicName: string): QuizQuestion[] {
-  if (topicId === "k-maps" || topicId === "karnaugh-maps") return KMAPS_QUIZ;
-  return [
-    {
-      id: `${topicId}-1`,
-      kind: "Multiple choice",
-      topic: topicName,
-      prompt: `Which habit builds lasting mastery of ${topicName}?`,
-      options: ["Cramming the night before", "Short, spaced review sessions", "Re-reading notes once", "Skipping practice problems"],
-      answer: 1,
-      explanation: "Spacing short sessions over days beats one long session: each recall strengthens the memory trace.",
-    },
-    {
-      id: `${topicId}-2`,
-      kind: "True or false",
-      topic: topicName,
-      prompt: `Testing yourself on ${topicName} is more effective than re-reading the material.`,
-      options: ["True", "False"],
-      answer: 0,
-      explanation: "Retrieval practice is one of the most reliable findings in learning science.",
-    },
-    {
-      id: `${topicId}-3`,
-      kind: "Multiple choice",
-      topic: topicName,
-      prompt: `When should Orca schedule your next ${topicName} review?`,
-      options: ["Right now, again", "Just before you would forget it", "Never, once is enough", "Only the day of the exam"],
-      answer: 1,
-      explanation: "Reviewing right at the edge of forgetting gives the biggest boost per minute spent.",
-    },
-  ];
 }
 
 export function formatSeconds(total: number) {

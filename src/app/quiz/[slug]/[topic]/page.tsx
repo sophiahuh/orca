@@ -3,7 +3,9 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { type QuizQuestion, quizFor } from "@/lib/data";
+import type { QuizQuestion } from "@/lib/data";
+import { objectiveIdOf } from "@/lib/mastery/catalogue";
+import type { Grader, Outcome } from "@/lib/mastery/types";
 import { useCourse, useOrca } from "@/lib/store";
 import { IconClose } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
@@ -25,16 +27,13 @@ const LETTERS = "ABCDEFGH";
 export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) {
   const { slug, topic: topicId } = use(params);
   const router = useRouter();
-  const { hydrated, streak, recordQuiz, questionBank, llm } = useOrca();
+  const { hydrated, streak, recordQuiz, recordEvidence, questionBank, llm } = useOrca();
   const serverModel = useServerModel();
   const course = useCourse(slug);
   const topic = course?.topics.find((t) => t.id === topicId);
 
   const generated = course ? questionBank[course.id]?.[topicId] : undefined;
-  const fullSet = useMemo(
-    () => (generated && generated.length > 0 ? generated.slice(0, 8) : quizFor(topicId, topic?.name ?? "this topic")),
-    [generated, topicId, topic?.name],
-  );
+  const fullSet = useMemo(() => (generated ?? []).slice(0, 8), [generated]);
   // null = the full set for this topic (derived, so it follows store hydration); a list = a review subset.
   const [subset, setSubset] = useState<QuizQuestion[] | null>(null);
   const questions = subset ?? fullSet;
@@ -69,31 +68,52 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const q = questions[index];
   const total = questions.length;
 
+  /** One graded answer → one evidence event. Called only after grading has finished. */
+  const logAnswer = useCallback(
+    (question: QuizQuestion, outcome: Outcome, grader: Grader) => {
+      if (!course || !topic) return;
+      recordEvidence({
+        courseId: course.id,
+        topicId: topic.id,
+        objectiveId: objectiveIdOf(question, topic.id),
+        questionId: question.id,
+        tier: question.tier ?? null,
+        outcome,
+        grader,
+        source: "quiz",
+      });
+    },
+    [course, topic, recordEvidence],
+  );
+
   const check = useCallback(() => {
     if (!q || selected === null || checked) return;
     setChecked(true);
-    if (selected === q.answer) setCorrect((c) => c + 1);
+    const ok = selected === q.answer;
+    if (ok) setCorrect((c) => c + 1);
     else setMissed((m) => [...m, q]);
-  }, [selected, checked, q]);
+    logAnswer(q, ok ? "correct" : "incorrect", "choice");
+  }, [selected, checked, q, logAnswer]);
 
   const noModel: string | null = llmReady(llm) || serverModel ? null : serverModel === undefined ? null : "no AI connected";
 
   const settle = useCallback(
-    (result: GradeResult) => {
+    (result: GradeResult, grader: Grader | null) => {
       if (!q) return;
       setGrade(result);
       setChecked(true);
       if (result.outcome === "correct") setCorrect((c) => c + 1);
       else setMissed((m) => [...m, q]);
+      if (grader) logAnswer(q, result.outcome, grader);
     },
-    [q],
+    [q, logAnswer],
   );
 
   const submitShort = useCallback(
     async (response: string) => {
       if (!q || checked || grading) return;
       if (q.exact?.length) {
-        settle(gradeExact(response, q.exact));
+        settle(gradeExact(response, q.exact), "exact");
         return;
       }
       if (!q.rubric) return;
@@ -112,9 +132,15 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
           if (!res.ok || data.error) throw new Error(data.error ?? "Grading failed.");
           result = data;
         }
-        settle(result);
+        settle(result, "rubric");
       } catch (error) {
-        settle({ outcome: "incorrect", feedback: `Couldn't grade this one (${error instanceof Error ? error.message : "error"}). Compare with the key below.` });
+        settle(
+          {
+            outcome: "incorrect",
+            feedback: `Couldn't grade this one (${error instanceof Error ? error.message : "error"}), so it wasn't counted. Compare with the key below.`,
+          },
+          null,
+        );
       } finally {
         setGrading(false);
       }
@@ -171,6 +197,23 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   }
 
   const backHref = `/course/${course.slug}`;
+
+  if (questions.length === 0) {
+    return (
+      <Screen bg="parchment" className="items-start gap-4 p-[32px]">
+        <BackButton href={backHref} />
+        {hydrated && (
+          <>
+            <p className="text-[22px] font-bold text-prussian">No questions for {topic.name} yet.</p>
+            <p className="text-[16px] text-wisteria-deep">Add course material for this topic and Orca will write some.</p>
+            <Button size="sm" onClick={() => router.push("/add-material")}>
+              Add material
+            </Button>
+          </>
+        )}
+      </Screen>
+    );
+  }
 
   if (topic.status === "locked") {
     return (
@@ -264,7 +307,9 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
                   result={grade}
                   noModel={noModel}
                   onSubmit={(r) => void submitShort(r)}
-                  onSelfReport={(ok) => settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." })}
+                  onSelfReport={(ok) =>
+                    settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." }, "self")
+                  }
                 />
               </div>
             ) : (
