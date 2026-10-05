@@ -8,7 +8,7 @@
  *   SUPABASE_URL=… SUPABASE_PUBLISHABLE_KEY=… SUPABASE_SECRET_KEY=… npm run check:isolation   # hosted
  *
  * Exits non-zero if any check fails. The secret key is used only to create, confirm and delete the
- * test accounts and the file, never for a check.
+ * test accounts, the file and A's pipeline run (runs are written by the server), never for a check.
  */
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -92,13 +92,17 @@ async function main() {
     check("A cannot give a material a file path", refused(climb), climb);
     const restatus = await call("/rest/v1/materials", { method: "POST", token: A.token, body: { id: randomUUID(), course_id: ids.course, filename: "x.pdf", type: "Lecture", status: "uploaded" } });
     check("A cannot set a material's reading status", refused(restatus), restatus);
+    // Runs are the server's (its jobs write them): A can't, so the setup writes A's run as the server would.
+    const ownRun = await call("/rest/v1/pipeline_runs", { method: "POST", token: A.token, body: { id: randomUUID(), course_id: ids.course, material_id: ids.material, kind: "upload", at: new Date().toISOString(), model: "stub" } });
+    check("A cannot write a run (runs are the server's)", refused(ownRun), ownRun);
+    const serverRun = await call("/rest/v1/pipeline_runs", { method: "POST", key: SECRET, body: { id: ids.run, owner_id: A.id, course_id: ids.course, material_id: ids.material, kind: "upload", at: new Date().toISOString(), model: "stub" } });
+    if (serverRun.status >= 300) throw new Error(`Couldn't write A's run with the secret key: ${JSON.stringify(serverRun)}`);
     const saved = await call("/rest/v1/rpc/save_structure", {
       method: "POST",
       token: A.token,
       body: {
         course: ids.course,
         rows: {
-          runs: [{ id: ids.run, material_id: ids.material, kind: "upload", at: new Date().toISOString(), model: "stub" }],
           topics: [{ id: ids.topic, sort_order: 0, name: "Boolean algebra", review: "proposed", pos_x: 0, pos_y: 0 }],
           objectives: [{ id: ids.objective, topic_id: ids.topic, name: "Simplify", description: "d", origin: "material", review: "proposed", material_id: ids.material, run_id: ids.run }],
           questions: [{ id: ids.question, topic_id: ids.topic, sort_order: 0, objective_id: ids.objective, kind: "Short answer", topic_name: "Boolean algebra", prompt: "Simplify x + xy.", answer: -1, exact: ["x"], explanation: "e", anchor: { locator: "slide 3", excerpt: "x + xy = x" } }],
