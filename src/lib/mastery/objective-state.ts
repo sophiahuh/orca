@@ -103,6 +103,12 @@ export interface ObjectiveAccumulator {
   mixedUp: boolean;
   lastMissQuestion: string | null;
   mastered: boolean;
+  /**
+   * ISO due time of the current spaced check. Set when mastered, after a passed check and after a
+   * miss; only a genuine pass (unaided correct at or after it) moves it forward. FSRS's own `card.due`
+   * also moves on partial, self-marked or early answers, so it can't be the check by itself.
+   */
+  checkDueAt: string | null;
   spacedChecks: number;
   /** A check was missed after mastery and hasn't been passed since. */
   missPending: boolean;
@@ -121,6 +127,7 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   mixedUp: false,
   lastMissQuestion: null,
   mastered: false,
+  checkDueAt: null,
   spacedChecks: 0,
   missPending: false,
   retired: false,
@@ -149,10 +156,11 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
   }
   const dayKey = options.dayKey ?? localDayKey;
   const assisted = e.grader === "self";
-  const checkWasDue = acc.mastered && acc.card !== null && t >= Date.parse(acc.card.due);
+  const checkWasDue = acc.checkDueAt !== null && t >= Date.parse(acc.checkDueAt);
   const before = acc.card === null ? createEmptyCard(new Date(t)) : toCard(acc.card);
   const card = capInterval(scheduler.next(before, new Date(t), gradeOf(e)).card, t);
-  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: toStored(card) };
+  const stored = toStored(card);
+  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: stored };
 
   if (!next.mastered) {
     if (e.outcome === "incorrect" && !assisted) {
@@ -177,16 +185,22 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
     const lastTwoCorrect = next.lastTwo.length === 2 && next.lastTwo.every((o) => o === "correct");
     if (next.credit >= R.requiredCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
       next.mastered = true;
+      next.checkDueAt = stored.due;
     }
     return next;
   }
 
-  if (e.outcome === "incorrect" && !assisted) {
+  // After mastery only two answers change the check: any miss (the student's own "I missed it"
+  // included) and a genuine pass. Partial, self-marked-correct and early answers update FSRS's
+  // memory estimate but leave the check where it is.
+  if (e.outcome === "incorrect") {
     next.missPending = true;
     next.retired = false;
+    next.checkDueAt = stored.due;
   } else if (e.outcome === "correct" && !assisted && checkWasDue) {
     next.spacedChecks += 1;
     next.missPending = false;
+    next.checkDueAt = stored.due;
     if (card.stability >= R.retireStabilityDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
   }
   return next;
@@ -198,7 +212,7 @@ export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Dat
   if (acc.answered === 0 || acc.card === null) status = "unseen";
   else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
   else if (acc.retired) status = "retired";
-  else if (acc.missPending || now.getTime() >= Date.parse(acc.card.due)) status = "fading";
+  else if (acc.missPending || (acc.checkDueAt !== null && now.getTime() >= Date.parse(acc.checkDueAt))) status = "fading";
   else status = "mastered";
 
   return {
@@ -207,7 +221,7 @@ export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Dat
     credit: acc.credit,
     creditDays: acc.creditDays.length,
     stabilityDays: acc.mastered && acc.card ? acc.card.stability : null,
-    dueAt: acc.mastered && acc.card ? acc.card.due : null,
+    dueAt: acc.mastered ? acc.checkDueAt : null,
     spacedChecks: acc.spacedChecks,
     recall: acc.card === null ? null : scheduler.get_retrievability(toCard(acc.card), now, false),
     lastEvidenceAt: acc.lastAt,

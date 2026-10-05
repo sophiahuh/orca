@@ -41,6 +41,7 @@ const state = (events: EvidenceEvent[], now: Date, hasMechanismQuestions = false
 const masteredOnDay2 = () => [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
 const dueAfter = (events: EvidenceEvent[]) => state(events, at(2)).dueAt!;
 
+
 /* ── The mastery bar (Orca's rule) ─────────────────────────────────── */
 
 test("no answers is unseen", () => {
@@ -188,6 +189,27 @@ test("a miss after mastery fades it and cuts stability; passing the next check r
   assert.equal(state(events, new Date(due)).status, "mastered");
 });
 
+test("only an unaided correct answer passes a due check; partial and self-marked answers don't", () => {
+  const due = dueAfter(masteredOnDay2());
+  const partial = state([...masteredOnDay2(), ev("q4", due, { outcome: "partial", grader: "rubric" })], new Date(due));
+  assert.equal(partial.status, "fading");
+  assert.equal(partial.spacedChecks, 0);
+  assert.equal(partial.dueAt, due);
+  const selfMarked = state([...masteredOnDay2(), ev("q4", due, { grader: "self" })], new Date(due));
+  assert.equal(selfMarked.status, "fading");
+  assert.equal(selfMarked.spacedChecks, 0);
+});
+
+test("an early correct answer doesn't push the check later", () => {
+  const due = dueAfter(masteredOnDay2());
+  assert.equal(state([...masteredOnDay2(), ev("q4", day(3))], at(3)).dueAt, due);
+});
+
+test("a self-marked miss after mastery fades it at once", () => {
+  const s = state([...masteredOnDay2(), ev("q4", day(3), { outcome: "incorrect", grader: "self" })], at(3));
+  assert.equal(s.status, "fading");
+});
+
 test("FSRS tracks difficulty from the first answer: a hard-won objective gets a shorter first interval", () => {
   const clean = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
   const struggled = [
@@ -235,6 +257,24 @@ test("passing every check on time eventually retires the objective", () => {
   assert.ok(s.spacedChecks >= MASTERY_RULES.retireAfterChecks);
   assert.ok(s.stabilityDays! >= MASTERY_RULES.retireStabilityDays);
   assert.ok(checks <= 6, `took ${checks} checks`);
+});
+
+test("a retired objective comes back as fading after any miss, aided or not", () => {
+  const retire = () => {
+    const events = masteredOnDay2();
+    let s = state(events, at(2));
+    while (s.status !== "retired") {
+      events.push(ev(`check${events.length}`, s.dueAt!));
+      s = state(events, new Date(s.dueAt!));
+    }
+    return { events, at: Date.parse(s.lastEvidenceAt!) };
+  };
+  for (const grader of ["choice", "self"] as const) {
+    const { events, at: last } = retire();
+    const when = new Date(last + 86_400_000).toISOString();
+    events.push(ev("late", when, { outcome: "incorrect", grader }));
+    assert.equal(state(events, new Date(when)).status, "fading", grader);
+  }
 });
 
 /* ── The fold ──────────────────────────────────────────────────────── */
