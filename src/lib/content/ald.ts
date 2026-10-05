@@ -4,7 +4,8 @@
  * comes from. This is what a student gets before connecting their own model; the
  * live pipeline (/api/extract) produces the same shape.
  */
-import type { QuizQuestion } from "../data";
+import type { QuizQuestion } from "../data.ts";
+import { ALD_QUESTION_OBJECTIVE } from "./ald-objectives.ts";
 
 export interface ContentTopic {
   id: string;
@@ -750,10 +751,15 @@ export const ALD_TOPICS: ContentTopic[] = [
   },
 ];
 
-/** Question bank in the store's shape: topicId → questions with ids. */
+/** Question bank in the store's shape: topicId → questions with ids and objectives. */
 export const ALD_QUESTION_BANK: Record<string, QuizQuestion[]> = Object.fromEntries(
   ALD_TOPICS.map((t) => [
     t.id,
-    t.questions.map((q, i) => ({ id: `${t.id}-${i + 1}`, topic: t.name, ...q })),
+    t.questions.map((q, i) => {
+      const id = `${t.id}-${i + 1}`;
+      const objectiveId = ALD_QUESTION_OBJECTIVE[id];
+      if (!objectiveId) throw new Error(`ALD question ${id} has no objective in ald-objectives.ts`);
+      return { id, topic: t.name, objectiveId, ...q };
+    }),
   ]),
 );
