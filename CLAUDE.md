@@ -35,7 +35,11 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   (`materialPages`) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
   files to Supabase Storage and page text to a `material_pages` table, with processing in
   Trigger.dev tasks; don't build more on browser storage.
-- **Never run against a real model.** Every pipeline test stubs the model. No session so far has
+- **Never run against a real model.** Every pipeline test stubs the model, and tests can't spend:
+  Playwright starts the dev server with model keys blanked (beating `.env.local` too), and
+  `e2e/global-setup.ts` stops the run if the server reports a model (e.g. a reused local dev
+  server started with a key). Only `npm run score:extraction` and uploading in `npm run dev`
+  spend money. No session so far has
   had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` are untested against
   Claude, `npm run score:extraction` has no baseline (`scripts/extraction-baseline.json` doesn't
   exist), and the weight constants are untuned.

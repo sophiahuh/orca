@@ -9,8 +9,16 @@ import { defineConfig, devices } from "@playwright/test";
  */
 const PORT = 3100;
 
+/**
+ * Tests never spend money on a model: the dev server starts with every model key blanked (an empty
+ * value also beats `.env.local`), and `e2e/global-setup.ts` refuses to run against a server that
+ * says a model is connected (e.g. a reused local dev server started with a key).
+ */
+const NO_MODEL_KEYS = { ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "" };
+
 export default defineConfig({
   testDir: "e2e",
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,
   reporter: "list",
@@ -25,6 +33,7 @@ export default defineConfig({
     command: `npm run dev -- --port ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
+    env: NO_MODEL_KEYS,
     timeout: 120_000,
   },
 });
