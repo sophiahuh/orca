@@ -105,6 +105,12 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   mastered (no grace period).
 - 2026-10-04: spacing uses FSRS via `ts-fsrs` (from the first answer, 90% target recall,
   intervals capped at 60 days), replacing the hand-written ×2.2 / ÷3 rule.
+- 2026-10-05: a missed review check is due again at once, for the course's next review session;
+  a retry in the same session (each quiz visit is a session) doesn't pass it.
+- 2026-10-05: mastery needs at least 2 of its 3 credit from graded answers (self-marks can't carry it).
+- 2026-10-05: the trail's START goes to the first in-progress topic (else the first not-started),
+  in-progress topics use full-colour labels, and each topic says how many of its objectives need
+  more questions before they can be mastered.
 - 2026-10-05: only a genuine pass (unaided correct at or after the due time) clears a review
   check; any miss after mastery, self-marked included, fades the objective and un-retires a
   retired one. A partial answer on a retired objective doesn't un-retire it.

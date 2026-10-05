@@ -29,7 +29,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
   clock. An answer counts toward its question's current objective, so merging or re-tagging
   questions re-files past answers.
 - **Mastery is a decision, not an average:** 3 credited answers on 3 different questions, on at
-  least 2 days, last two correct, no open mix-up. The bar is the same for every objective: weights
+  least 2 days, last two correct, no open mix-up, and at least 2 of the credit from graded (not
+  self-marked) answers. The bar is the same for every objective: weights
   change priority (what gets practised first), never what counts as mastered. Spacing after that is **FSRS** (`ts-fsrs`,
   Anki's scheduler): fed every answer from the first, 90% target recall, intervals capped at 60
   days; retired at 60-day stability with 3 passed checks. Details: `docs/MASTERY-PLAN.md` §2.5.
