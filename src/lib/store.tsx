@@ -14,6 +14,8 @@ import {
   type DueItem,
   type IslandVariant,
   type Material,
+  type MaterialPages,
+  type QuizResult,
   type Objective,
   type PipelineRun,
   type Relation,
@@ -37,19 +39,12 @@ import { dueTopics } from "./mastery/due";
 import { streakDays } from "./mastery/streak";
 import { useNow } from "@/hooks/useNow";
 
-interface QuizResult {
-  courseId: string;
-  topicId: string;
-  correct: number;
-  total: number;
-  seconds: number;
-  finishedAt: string;
-}
-
 interface OrcaState {
   courses: Course[];
   events: CalendarEvent[];
   materials: Material[];
+  /** materialId → the upload's text, kept so questions can be topped up after sessions. */
+  materialPages: Record<string, MaterialPages>;
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
   results: QuizResult[];
@@ -68,13 +63,14 @@ interface OrcaState {
   evidence: EvidenceEvent[];
 }
 
-const STORAGE_KEY = "orca:v7"; // v7: course structure from uploads (review status, aliases, merges, relations)
+const STORAGE_KEY = "orca:v8"; // v8: finished sessions carry mode and sessionId; uploads keep their text
 
 const initialState: OrcaState = {
   // No built-in courses: every course is created by the student and filled from their uploads.
   courses: [],
   events: [],
   materials: [],
+  materialPages: {},
   configs: {},
   weights: {},
   results: [],
@@ -91,8 +87,8 @@ interface OrcaActions {
   addCourse: (name: string) => Course;
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
-  /** Record an uploaded file (and its due date on the calendar). The caller picks its id. */
-  addMaterial: (m: Material) => void;
+  /** Record an uploaded file (and its due date on the calendar), with its text when it was read. The caller picks its id. */
+  addMaterial: (m: Material, pages?: MaterialPages) => void;
   recordQuiz: (r: Omit<QuizResult, "finishedAt">) => void;
   /** Append one graded answer. The only way learner state changes. */
   recordEvidence: (e: Omit<AnswerEvent, "id" | "at" | "kind">) => void;
@@ -186,7 +182,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: weights } }));
   }, []);
 
-  const addMaterial = useCallback<OrcaActions["addMaterial"]>((m) => {
+  const addMaterial = useCallback<OrcaActions["addMaterial"]>((m, pages) => {
     const id = m.id;
     setState((s) => {
       const events = [...s.events];
@@ -199,7 +195,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
           courseId: m.courseId,
         });
       }
-      return { ...s, materials: [...s.materials, m], events };
+      const materialPages = pages ? { ...s.materialPages, [id]: pages } : s.materialPages;
+      return { ...s, materials: [...s.materials, m], materialPages, events };
     });
   }, []);
 

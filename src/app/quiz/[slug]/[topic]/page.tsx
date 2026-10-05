@@ -70,7 +70,8 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   useEffect(() => {
     if (!finished || recorded.current || !course || !topic) return;
     recorded.current = true;
-    recordQuiz({ courseId: course.id, topicId: topic.id, correct, total: questions.length, seconds });
+    sessionId.current ??= crypto.randomUUID();
+    recordQuiz({ courseId: course.id, topicId: topic.id, mode: "topic", sessionId: sessionId.current, correct, total: questions.length, seconds });
   }, [finished, course, topic, correct, questions.length, seconds, recordQuiz]);
 
   const q = questions[index];

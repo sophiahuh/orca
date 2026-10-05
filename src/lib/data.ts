@@ -140,6 +140,32 @@ export function trailTopics(course: Pick<Course, "topics">): Topic[] {
   return course.topics.filter((t) => t.review !== "archived");
 }
 
+/* ── Sessions ──────────────────────────────────────────────────────────── */
+
+/** `topic`: one topic's quiz from the trail. The rest are scheduled sessions (docs/MASTERY-PLAN.md §3). */
+export type SessionMode = "topic" | "quick" | "deep" | "requiz";
+
+/**
+ * A finished session. Answers record evidence as they're graded; this records that the session was
+ * finished, which is what "the last deep review" and quick-review cadence read.
+ */
+export interface QuizResult {
+  courseId: string;
+  /** The topic for a topic quiz; null for a scheduled session. */
+  topicId: string | null;
+  mode: SessionMode;
+  /** The `sessionId` on this session's answer events. */
+  sessionId: string;
+  correct: number;
+  total: number;
+  seconds: number;
+  /** ISO time. */
+  finishedAt: string;
+}
+
+/** An upload's text, one entry per page or slide, kept so questions can be topped up later. */
+export type MaterialPages = Array<{ n: number; text: string }>;
+
 /* ── Course structure from uploads ─────────────────────────────────────── */
 
 /** A quote from course material: "slide 14" plus a short excerpt. */

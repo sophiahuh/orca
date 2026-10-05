@@ -142,7 +142,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const submit = async () => {
     const material = { id: crypto.randomUUID(), courseId: course.id, filename: chosenName ?? "material.pdf", type, assigned, due, reflect };
     if (!doc || !connected) {
-      addMaterial(material);
+      addMaterial(material, doc?.pages);
       router.push(due ? "/calendar" : `/course/${course.slug}`);
       return;
     }
@@ -167,7 +167,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           onProgress: (p) => setPhase({ kind: "working", message: progressMessage(p) }),
         },
       );
-      addMaterial(material);
+      addMaterial(material, doc.pages);
       applyUpload(course.id, plan);
       setPhase({ kind: "done", topics: plan.newTopics.length, objectives: plan.newObjectives.length, questions: plan.run.questionsAdded });
       window.setTimeout(() => router.push(`/course/${course.slug}/review?run=${plan.run.id}`), 1400);

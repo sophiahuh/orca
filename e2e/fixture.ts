@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { type Objective, type QuizQuestion, type Topic, defaultTopicPositions } from "../src/lib/data";
 
 /** Must match STORAGE_KEY in src/lib/store.tsx. */
-export const STORAGE_KEY = "orca:v7";
+export const STORAGE_KEY = "orca:v8";
 
 /**
  * A tiny course as if a student had created it and uploaded one deck: two topics, three
