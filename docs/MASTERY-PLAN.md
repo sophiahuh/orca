@@ -1,7 +1,10 @@
 # Mastery, progress and spaced repetition: implementation plan
 
 > **Status 2026-10-04.** This is the learner model. How and when it gets built is in
-> `docs/BACKEND-ROADMAP.md` (§2.2–2.5 are implemented in `src/lib/mastery/` (Phase 1, on-device); self-reported confusion (§2.2) is `applyConfusion` (Phase 2); Phase 3 builds §2.6 and §3).
+> `docs/BACKEND-ROADMAP.md` (§2.2–2.5 are implemented in `src/lib/mastery/` (Phase 1, on-device); self-reported confusion (§2.2) is `applyConfusion` (Phase 2); §2.6 priority and the §3 loops are built in Phase 3: `priority.ts`, `agenda.ts`, `session.ts`, `src/lib/pipeline/topup.ts`).
+> Not built from §2.6/§3: exam proximity and exam review (Phase 5); deep review counting as a spaced
+> check at double weight, and the 60–80% / "quick but not deep mastery" deep-review nudges (open in
+> `docs/TO-DISCUSS.md`); slide images in the Review to-do (text only until files are stored, Phase 4).
 > Changes since it was written: the frontier term and distance discount are parked (§2.5–2.6,
 > `docs/TO-DISCUSS.md`); mix-ups are detected without a confidence rating (§2.3); a review that
 > comes due stops counting as mastered (§2.3, `fading`); self-reported confusion

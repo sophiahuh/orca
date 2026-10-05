@@ -23,7 +23,13 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   branch **`phase-3`** (from `backend-implementation`), not merged yet.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
   on-device, with localStorage as the only persistence. Checks are green: `npx tsc --noEmit`,
-  `npm run lint`, `npm test` (140 unit tests), `npm run test:e2e` (22 browser tests), `npm run build`.
+  `npm run lint`, `npm test` (142 unit tests), `npm run test:e2e` (22 browser tests), `npm run build`.
+  CI only runs on pushes to `main` and `backend-implementation` and on pull requests, so pushes to
+  `phase-3` alone aren't checked by CI: run the checks yourself.
+- **Stopgap to remove in Phase 4:** uploads keep their page text in localStorage
+  (`materialPages`) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
+  files to Supabase Storage and page text to a `material_pages` table, with processing in
+  Trigger.dev tasks; don't build more on browser storage.
 - **Never run against a real model.** Every pipeline test stubs the model. No session so far has
   had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` are untested against
   Claude, `npm run score:extraction` has no baseline (`scripts/extraction-baseline.json` doesn't
@@ -39,8 +45,9 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 2. Merge `phase-3` into `backend-implementation` once reviewed; settle the Phase 3 numbers in
    `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review as a spaced check").
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
-   storage as decided in the roadmap). Write its plan in
-   `docs/superpowers/plans/` first, in the style of the Phase 2 and 3 plans.
+   storage as decided in the roadmap). Not started and no plan yet: don't start it until the
+   owner says so. First settle "Before Phase 4" in `docs/TO-DISCUSS.md`, then write the plan in
+   `docs/superpowers/plans/` in the style of the Phase 2 and 3 plans.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
 

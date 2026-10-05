@@ -55,6 +55,19 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   The Settings sliders default to equal (25 each, decided 2026-10-05), so by default every
   material type's coverage counts the same; the student's sliders are what make one type count more.
 
+### Before Phase 4 (Supabase + Trigger.dev)
+- **Bring-your-own model under a server pipeline** (see "Bring-your-own model" below): once
+  uploads and top-ups run as Trigger.dev tasks, a student's key would have to be stored on the
+  server (encrypted, e.g. Supabase Vault) to be used there, and Ollama (browser-only) can't run
+  server-side at all. Options: Orca's server key only (simplest; BYO off or later), or encrypted
+  student keys for cloud providers only.
+- **Sign-in method:** email magic link only, or Google too (most students have school Google
+  accounts).
+- **Local data at first sign-in:** see the next entry (recommendation: start fresh).
+- **Credentials a Phase 4 session needs** to run the live checks the invariants require: a
+  Supabase project (URL, anon and service-role keys), a Trigger.dev project (secret key), and
+  `ANTHROPIC_API_KEY`. Without them the work can only be typechecked, which isn't the same claim.
+
 ### Existing local data at first sign-in
 - When accounts arrive (Phase 4), a browser may already hold courses and answers in localStorage
   from testing.

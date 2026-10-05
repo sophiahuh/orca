@@ -6,7 +6,9 @@
 > (`src/lib/mastery/todo.ts`); "where it's taught" is `src/lib/course/study.ts`; the topic quiz
 > and sessions share `components/quiz/QuizRunner.tsx`, and topic quizzes count as finished
 > sessions for top-ups and the poor-quiz loop too; the session buttons sit top-right on the
-> course page. Top-ups have only run against a stubbed model.
+> course page. A top-up sends only the pages each objective is anchored to (plus one either side;
+> its topic's range without anchors; a file over 60 pages is never sent whole), not the whole
+> material (decision 8 said whole). Top-ups have only run against a stubbed model.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 3. Learner model: `docs/MASTERY-PLAN.md` §2.6 and §3.
 Still on-device: everything is derived from the evidence log and the store; model calls go through
