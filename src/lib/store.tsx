@@ -30,6 +30,10 @@ import type { LlmConfig } from "./llm";
 import { type Extraction, questionsByTopic, topicsFrom } from "./extraction";
 import type { QuizQuestion } from "./data";
 import { ALD_QUESTION_BANK } from "./content/ald";
+import type { EvidenceEvent, ObjectiveInfo } from "./mastery/types";
+import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
+import { ALD_OBJECTIVES } from "./content/ald-objectives";
+import { useNow } from "@/hooks/useNow";
 
 interface QuizResult {
   courseId: string;
@@ -54,6 +58,10 @@ interface OrcaState {
   llm: LlmConfig | null;
   /** Generated questions: courseId → topicId → questions. */
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
+  /** Course structure: courseId → objectiveId → objective. Created once (built-in content now, uploads from Phase 2), never regenerated. */
+  objectives: Record<string, Record<string, ObjectiveInfo>>;
+  /** Append-only answer log. Every learner-facing state is computed from it. */
+  evidence: EvidenceEvent[];
 }
 
 const STORAGE_KEY = "orca:v3"; // v3: ALD trail without the background topic; built-in bank merged on load
@@ -70,6 +78,8 @@ const initialState: OrcaState = {
   onboarded: false,
   llm: null,
   questionBank: { ald: ALD_QUESTION_BANK },
+  objectives: { ald: ALD_OBJECTIVES },
+  evidence: [],
 };
 
 interface OrcaActions {
@@ -78,6 +88,8 @@ interface OrcaActions {
   setWeights: (courseId: string, weights: Weights) => void;
   addMaterial: (m: Omit<Material, "id">) => void;
   recordQuiz: (r: Omit<QuizResult, "finishedAt">) => void;
+  /** Append one graded answer. The only way learner state changes. */
+  recordEvidence: (e: Omit<EvidenceEvent, "id" | "at">) => void;
   setOnboarded: (v: boolean) => void;
   setLlm: (c: LlmConfig | null) => void;
   /** Merge an extraction into a course: new topics on the trail, questions in the bank, material recorded. */
@@ -113,6 +125,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         // Built-in content always wins for its own topic ids, so authored fixes reach existing browsers.
         const savedBank = saved.questionBank ?? {};
         saved.questionBank = { ...savedBank, ald: { ...(savedBank.ald ?? {}), ...ALD_QUESTION_BANK } };
+        saved.objectives = { ...(saved.objectives ?? {}), ald: ALD_OBJECTIVES };
         // Hydrating persisted state after mount is intentional: reading
         // localStorage during render would mismatch the server HTML.
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -159,6 +172,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         courses: [...s.courses, course],
         configs: { ...s.configs, [id]: DEFAULT_CONFIG },
         weights: { ...s.weights, [id]: DEFAULT_WEIGHTS },
+        objectives: { ...s.objectives, [id]: {} },
       }));
       return course;
     },
@@ -215,6 +229,11 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const recordEvidence = useCallback<OrcaActions["recordEvidence"]>((e) => {
+    const event: EvidenceEvent = { ...e, id: crypto.randomUUID(), at: new Date().toISOString() };
+    setState((s) => ({ ...s, evidence: [...s.evidence, event] }));
+  }, []);
+
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
   const importExtraction = useCallback<OrcaActions["importExtraction"]>((courseId, material, extraction, figures = {}) => {
     const newTopics = topicsFrom(extraction, material.filename);
@@ -266,8 +285,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo<OrcaContextValue>(
-    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, importExtraction, reset }),
-    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, setOnboarded, setLlm, importExtraction, reset],
+    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, importExtraction, reset }),
+    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, importExtraction, reset],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
@@ -282,4 +301,27 @@ export function useOrca() {
 export function useCourse(idOrSlug: string | undefined) {
   const { courses } = useOrca();
   return courses.find((c) => c.id === idOrSlug || c.slug === idOrSlug);
+}
+
+/** Derived learner state for every course: objective states, topic progress, island level. */
+export function useMasteryByCourse(): Record<string, CourseMastery> {
+  const { courses, questionBank, objectives, evidence } = useOrca();
+  const nowMs = useNow();
+  return useMemo(
+    () =>
+      Object.fromEntries(
+        courses.map((c) => [
+          c.id,
+          courseMastery({
+            courseId: c.id,
+            topicIds: c.topics.map((t) => t.id),
+            bank: questionBank[c.id] ?? {},
+            catalogue: objectives[c.id] ?? {},
+            evidence,
+            now: new Date(nowMs),
+          }),
+        ]),
+      ),
+    [courses, questionBank, objectives, evidence, nowMs],
+  );
 }
