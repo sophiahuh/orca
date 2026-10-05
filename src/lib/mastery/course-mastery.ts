@@ -15,6 +15,8 @@ export interface CourseMastery {
    */
   objectivesNeedingQuestions: Map<string, number>;
   island: IslandLevel;
+  /** This course's evidence, each event filed under the objective it counts for now (merges and re-sorting followed). */
+  events: EvidenceEvent[];
 }
 
 export interface CourseMasteryInput {
@@ -57,5 +59,5 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
     topics.set(topicId, topicProgress(ids, objectives));
     objectivesNeedingQuestions.set(topicId, list.filter((o) => o.questionIds.length < MASTERY_RULES.requiredCredit).length);
   }
-  return { objectives, topicObjectives, topics, objectivesNeedingQuestions, island: islandLevel([...objectives.values()]) };
+  return { objectives, topicObjectives, topics, objectivesNeedingQuestions, island: islandLevel([...objectives.values()]), events };
 }

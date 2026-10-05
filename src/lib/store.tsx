@@ -36,6 +36,9 @@ import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types
 import type { CourseStructure } from "./course/ops";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { dueTopics } from "./mastery/due";
+import { type CourseAgenda, courseAgenda, withNeutralWeights } from "./mastery/agenda";
+import { isUnsortedObjectiveId } from "./mastery/catalogue";
+import { courseObjectiveWeights } from "./course/weights";
 import { streakDays } from "./mastery/streak";
 import { useNow } from "@/hooks/useNow";
 
@@ -335,4 +338,33 @@ export function useStreak(): number {
   const { evidence } = useOrca();
   const nowMs = useNow();
   return useMemo(() => streakDays(evidence, new Date(nowMs)), [evidence, nowMs]);
+}
+
+/** What's due, per course: ranked objectives, quick and deep review, review to-dos and re-quizzes. */
+export function useAgenda(): Record<string, CourseAgenda> {
+  const { courses, objectives, relations, weights, configs, results, events } = useOrca();
+  const mastery = useMasteryByCourse();
+  const nowMs = useNow();
+  return useMemo(
+    () =>
+      Object.fromEntries(
+        courses.map((c) => {
+          const m = mastery[c.id];
+          if (!m) throw new Error(`No mastery computed for course ${c.id}`);
+          const sliders = weights[c.id] ?? DEFAULT_WEIGHTS;
+          const computed = courseObjectiveWeights(objectives[c.id] ?? {}, relations[c.id] ?? [], sliders);
+          const agenda = courseAgenda({
+            courseId: c.id,
+            mastery: m,
+            weights: withNeutralWeights(m.objectives.keys(), computed, isUnsortedObjectiveId),
+            config: configs[c.id] ?? DEFAULT_CONFIG,
+            results,
+            examDays: events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date),
+            now: new Date(nowMs),
+          });
+          return [c.id, agenda];
+        }),
+      ),
+    [courses, objectives, relations, weights, configs, results, events, mastery, nowMs],
+  );
 }

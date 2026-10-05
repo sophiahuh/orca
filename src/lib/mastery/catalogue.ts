@@ -14,6 +14,10 @@ export function unsortedObjectiveId(topicId: string) {
   return `${topicId}#unsorted`;
 }
 
+export function isUnsortedObjectiveId(id: string) {
+  return id.endsWith("#unsorted");
+}
+
 export function objectiveIdOf(q: { objectiveId?: string }, topicId: string) {
   return q.objectiveId ?? unsortedObjectiveId(topicId);
 }
