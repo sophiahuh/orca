@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# subagent-driven-development scratch (ledgers, briefs, reports)
+.superpowers/
