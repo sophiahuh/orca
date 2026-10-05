@@ -109,7 +109,7 @@ async function main() {
     check("A cannot write evidence directly", refused(ownEvidence), ownEvidence);
 
     /* ── B can't read any of it ── */
-    for (const table of ["courses", "materials", "material_pages", "pipeline_runs", "topics", "objectives", "relations", "questions", "session_results", "calendar_events", "evidence_events"]) {
+    for (const table of ["courses", "materials", "material_pages", "pipeline_runs", "topics", "objectives", "relations", "questions", "session_results", "calendar_events", "evidence_events", "objective_state"]) {
       const r = await call(`/rest/v1/${table}?select=owner_id`, { token: B.token });
       check(`B reads no ${table}`, isEmptyList(r), r);
     }

@@ -15,7 +15,8 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
     "test:db": "supabase test db",
-    "check:isolation": "node --experimental-strip-types --no-warnings scripts/check-isolation.ts"
+    "check:isolation": "node --experimental-strip-types --no-warnings scripts/check-isolation.ts",
+    "check:evidence": "node --experimental-strip-types --no-warnings scripts/check-evidence.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
