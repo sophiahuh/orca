@@ -136,14 +136,6 @@ export function IconGear({ size = 26, ...props }: IconProps) {
   );
 }
 
-export function IconChat({ size = 26, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 26 26" {...base(size, props)} strokeWidth={2.71}>
-      <path d="M4.33 6.5a3.25 3.25 0 0 1 3.25-3.25h10.84A3.25 3.25 0 0 1 21.67 6.5v8.67a3.25 3.25 0 0 1-3.25 3.25H13l-5.42 4.33v-4.33a3.25 3.25 0 0 1-3.25-3.25V6.5Z" />
-    </svg>
-  );
-}
-
 export function IconBell({ size = 20, ...props }: IconProps) {
   return (
     <svg viewBox="0 0 20 20" {...base(size, props)} strokeWidth={2.08}>

@@ -102,45 +102,11 @@ export function modelLabel(id: string) {
     .replace(/\bGpt\b/, "GPT");
 }
 
-/* ── Prompting (shared so the browser-only path matches the server) ──── */
-
-export interface ChatCourseContext {
-  name: string;
-  short: string;
-  topics: Array<{ name: string; status: string }>;
-}
+/* ── Extraction and grading wire helpers ──── */
 
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
-}
-
-export const SYSTEM_BASE = `You are Orca, a calm, encouraging study tutor inside a spaced-repetition app for college students.
-Keep answers short and concrete (usually under 120 words). Prefer one worked example over a lecture.
-When asked to quiz, ask ONE question at a time and wait for the answer before revealing anything.
-When explaining, start from what the student likely already knows and build up.
-Never pretend to have read course files you were not given.`;
-
-export function systemFor(course: ChatCourseContext | null | undefined) {
-  if (!course) return SYSTEM_BASE;
-  const topics = course.topics.map((t) => `${t.name} (${t.status})`).join(", ");
-  return `${SYSTEM_BASE}\n\nThe student is working in "${course.name}" (${course.short}). Topics on their path: ${topics}. "current" is what they are studying now.`;
-}
-
-/** Demo-mode replies when no model is connected. */
-export function cannedReply(messages: ChatTurn[], course: ChatCourseContext | null | undefined) {
-  const last = messages.at(-1)?.content.toLowerCase() ?? "";
-  const topic = course?.topics.find((t) => t.status === "current")?.name ?? "your current topic";
-  if (last.includes("quiz")) {
-    return `Let's warm up on ${topic}. First question: in one sentence, what problem does ${topic} solve, and when would you reach for it? Answer in your own words and I'll check it.`;
-  }
-  if (last.includes("plan")) {
-    return `Here's a light plan for the week: two 5-minute quick reviews on ${topic} (today and Thursday), one 30-minute deep session on the weekend, and a quick pass over anything you missed the night before class. Want me to put those on your calendar?`;
-  }
-  if (last.includes("explain")) {
-    return `Think of ${topic} as a shortcut: instead of checking every case by hand, you look for patterns that let you collapse several cases into one rule. Start with the simplest example you can, write out every case, then circle the ones that behave the same. That circling is the whole idea.`;
-  }
-  return `I'm in demo mode: no AI is connected yet. Connect the model you already use under Settings → Your AI and I'll answer for real. Until then, ask me to "quiz me", "explain it simply", or "plan my week".`;
 }
 
 /* ── OpenAI-compatible wire helpers (used by the server route and the Ollama browser path) ── */

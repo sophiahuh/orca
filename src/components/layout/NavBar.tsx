@@ -2,17 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconCalendar, IconChat, IconGear, IconUpload } from "@/components/icons";
+import { IconCalendar, IconGear, IconUpload } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 const ITEMS = [
   { href: "/calendar", label: "Calendar", Icon: IconCalendar },
   { href: "/add-material", label: "Add material", Icon: IconUpload },
   { href: "/settings", label: "Configurations", Icon: IconGear },
-  { href: "/chat", label: "Ask Orca", Icon: IconChat },
 ] as const;
 
-/** Four-icon nav pinned to the bottom of the sidebar. */
+/** Three-icon nav pinned to the bottom of the sidebar. */
 export function NavBar({ className }: { className?: string }) {
   const pathname = usePathname();
   return (
