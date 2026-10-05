@@ -95,7 +95,7 @@ Open questions live in `docs/TO-DISCUSS.md`.
 
 ## Phases
 
-### Phase 1 — Mastery core, on-device
+### Phase 1 — Mastery core, on-device ✅
 Plan: `docs/superpowers/plans/2026-10-04-orca-phase1-mastery-core.md`.
 Remove the AI chat. Test runners (`node:test` units, Playwright browser walkthrough). Built-in ALD questions tagged with objectives, ALD kept as a
 labelled sample course, fabricated seed data removed. Evidence log in the store; the mastery rule

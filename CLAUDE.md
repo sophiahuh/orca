@@ -8,6 +8,61 @@ Design source of truth: Figma file `Xt9CiD6SpdN0BPma1q2pzZ` ("Orca – Study App
 Reference renders live in `docs/figma/` (`screens.png` = all 11 screens, `styleguide.png`, and the
 traced SVG assets in `docs/figma/assets/`). Frames are 1194×834; v1 ships as a laptop website.
 
+## Start here (handoff, updated 2026-10-05)
+
+**Who it's for.** A college student who wants to actually master their classes, not cram. They
+create a course, upload its material (lecture decks, syllabus, homework, past exams), and Orca
+turns it into objectives ("can do X") with checked quiz questions, then tracks mastery per
+objective from their answers and spaces reviews (FSRS) until each one sticks. The test course is
+Advanced Logic Design (ALD, Columbia ELEN); `docs/samples/ald/` has its real decks, and Sophia
+authored and reviewed the reference objectives, questions and quiz rubric.
+
+**Where things stand.**
+- Work happens on branch **`backend-implementation`** (CI runs on it); `main` is far behind (still
+  at the pre-Phase-1 prototype) and nothing has been merged or opened as a PR. Push finished work
+  to `backend-implementation`.
+- Phases 1 (mastery core) and 2 (uploads build the course) are built on-device, with localStorage
+  as the only persistence. Checks are green: `npx tsc --noEmit`, `npm run lint`, `npm test` (~99
+  unit tests), `npm run test:e2e` (17 browser tests), `npm run build`, and CI.
+- **Never run against a real model.** Every pipeline test stubs the model. No session so far has
+  had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` are untested against
+  Claude, `npm run score:extraction` has no baseline (`scripts/extraction-baseline.json` doesn't
+  exist), and the weight constants are untuned.
+- The Vercel deploy (https://orca-lake-omega.vercel.app) is from before Phase 1; it doesn't show
+  any of this.
+
+**Next, in order.**
+1. With a key: `ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline`, then upload
+   an ALD deck in `npm run dev` and look at the review screen. Fix prompts where extraction or
+   question checks go wrong; commit the baseline.
+2. Phase 3, scheduling and sessions (`docs/BACKEND-ROADMAP.md`): priority, a due list that
+   includes new and weak material, quick-review sessions sized to the course's time budget,
+   question top-ups, deep review. No plan written yet: write
+   `docs/superpowers/plans/<date>-orca-phase3-…md` first, in the style of the Phase 2 plan.
+3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline).
+Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
+them silently; list what you assumed.
+
+**Environment gotchas.**
+- Cloud containers: Playwright's Chromium build doesn't match; run e2e with
+  `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
+- Run `npx next typegen` before `tsc` after adding a route; delete a stale `.next/dev` if `tsc`
+  complains about a route that no longer exists.
+- Changing the persisted state's shape means bumping `STORAGE_KEY` in `src/lib/store.tsx` and
+  `e2e/fixture.ts` together (no migrations; local data is test data).
+- Pure modules (`src/lib/mastery`, `src/lib/course`, `src/lib/pipeline` except `client.ts`) must
+  load under plain Node: relative imports with `.ts`, `import type`, no TS parameter properties.
+- The superpowers skills named below may not be installed in every session; if they aren't,
+  follow the same flow by hand (plan doc first, then task-by-task commits with tests).
+
+**Map of the docs.** `docs/BACKEND-ROADMAP.md` (decisions + phases, what's done), `docs/MASTERY-PLAN.md`
+(learner model), `docs/TO-DISCUSS.md` (open questions), `docs/superpowers/plans/` (per-phase plans
+with status notes), `docs/QUIZ-RUBRIC.md` (what makes a good question), `docs/OBJECTIVES-ALD.md`
+(reference objectives / evaluation benchmark), `docs/BACKEND-NOTES.md` (what to port from the
+earlier `ai-native-learning-platform` repo), `docs/ANIMATION.md`. Repo-local skills:
+`.claude/skills/learner-evidence` and `.claude/skills/assessment` (load before touching mastery
+or question code).
+
 ## Product model (the vision the backend is built toward)
 
 Full detail: `docs/BACKEND-ROADMAP.md` (decisions and phases), `docs/MASTERY-PLAN.md` (learner
@@ -79,8 +134,8 @@ This describes the code as it is.
 
 - `src/lib/motion.ts` — every spring/variant/loop preset. All animation pulls from here.
 - `src/lib/data.ts` — model + defaults + weight and date helpers. No seed courses, due items,
-  calendar events, materials or streak (nothing built in or fabricated). `Topic` has no status or
-  lessons; there is no `quizFor` or K-Maps quiz.
+  calendar events, materials or streak (nothing built in or fabricated). `Topic`'s only status is its
+  review status (`proposed | confirmed | archived`); progress is derived, never stored.
 - `src/lib/mastery/` — pure domain modules (tested with `npm test`): `types.ts` (evidence events,
   objective info and state), `catalogue.ts` (objectives per topic, unsorted bucket),
   `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
@@ -141,7 +196,7 @@ This describes the code as it is.
   objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective).
   `e2e/fixture.ts` seeds state into localStorage.
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
-- Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app). Deploy with
+- Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app; last deployed before Phase 1). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
   is not linked yet. `.vercelignore` keeps docs/ out of uploads.
 
