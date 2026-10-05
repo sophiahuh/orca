@@ -2163,7 +2163,10 @@ export function dueTopics(
   dayKey: (iso: string) => string = localDayKey,
 ): DueTopic[] {
   const today = dayKey(now.toISOString());
-  const tomorrow = dayKey(new Date(now.getTime() + DAY_MS).toISOString());
+  // Add the day from local noon so a 23/25-hour daylight-saving day can't land on the same date (same as streak.ts).
+  const noon = new Date(now);
+  noon.setHours(12, 0, 0, 0);
+  const tomorrow = dayKey(new Date(noon.getTime() + DAY_MS).toISOString());
   const out: DueTopic[] = [];
   for (const [topicId, ids] of mastery.topicObjectives) {
     const buckets = { today: [] as string[], tomorrow: [] as string[] };
