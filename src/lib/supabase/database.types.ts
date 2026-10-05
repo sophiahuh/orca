@@ -1,0 +1,468 @@
+
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export type Database = {
+  
+  "public": {
+          Tables: {
+            "calendar_events": {
+                  Row: {
+                    "course_id": string | null,"created_at": string,"date": string,"id": string,"kind": string,"material_id": string | null,"owner_id": string,"title": string
+                  }
+                  Insert: {
+                    "course_id"?: string | null,"created_at"?: string,"date": string,"id": string,"kind": string,"material_id"?: string | null,"owner_id"?: string,"title": string
+                  }
+                  Update: {
+                    "course_id"?: string | null,"created_at"?: string,"date"?: string,"id"?: string,"kind"?: string,"material_id"?: string | null,"owner_id"?: string,"title"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "calendar_events_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "calendar_events_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
+                },"courses": {
+                  Row: {
+                    "created_at": string,"id": string,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": NonNullable<Json>,"short": string,"slug": string,"trail": string | null,"variant": string,"weights": NonNullable<Json>
+                  }
+                  Insert: {
+                    "created_at"?: string,"id": string,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config": NonNullable<Json>,"short": string,"slug": string,"trail"?: string | null,"variant": string,"weights": NonNullable<Json>
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: NonNullable<Json>,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string,"weights"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"evidence_events": {
+                  Row: {
+                    "at": string,"course_id": string,"grader": string | null,"id": string,"kind": string,"material_id": string | null,"note": string | null,"objective_id": string,"outcome": string | null,"owner_id": string,"question_id": string | null,"session_id": string | null,"source": string | null,"tier": string | null,"topic_id": string
+                  }
+                  Insert: {
+                    "at": string,"course_id": string,"grader"?: string | null,"id": string,"kind": string,"material_id"?: string | null,"note"?: string | null,"objective_id": string,"outcome"?: string | null,"owner_id": string,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id": string
+                  }
+                  Update: {
+                    "at"?: string,"course_id"?: string,"grader"?: string | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"note"?: string | null,"objective_id"?: string,"outcome"?: string | null,"owner_id"?: string,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "evidence_events_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "evidence_events_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "evidence_events_objective_id_course_id_fkey"
+      columns: ["objective_id","course_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id","course_id"]
+    },{
+      foreignKeyName: "evidence_events_question_id_owner_id_fkey"
+      columns: ["question_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "questions"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "evidence_events_topic_id_course_id_fkey"
+      columns: ["topic_id","course_id"]
+isOneToOne: false
+      referencedRelation: "topics"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
+                },"material_pages": {
+                  Row: {
+                    "material_id": string,"n": number,"owner_id": string,"text": string
+                  }
+                  Insert: {
+                    "material_id": string,"n": number,"owner_id"?: string,"text": string
+                  }
+                  Update: {
+                    "material_id"?: string,"n"?: number,"owner_id"?: string,"text"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "material_pages_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
+                },"materials": {
+                  Row: {
+                    "assigned": string | null,"content_hash": string | null,"course_id": string,"created_at": string,"due": string | null,"error": string | null,"filename": string,"id": string,"mime": string | null,"owner_id": string,"reflect": boolean,"reflection": Json | null,"size_bytes": number | null,"status": string,"storage_path": string | null,"type": string
+                  }
+                  Insert: {
+                    "assigned"?: string | null,"content_hash"?: string | null,"course_id": string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename": string,"id": string,"mime"?: string | null,"owner_id"?: string,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type": string
+                  }
+                  Update: {
+                    "assigned"?: string | null,"content_hash"?: string | null,"course_id"?: string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename"?: string,"id"?: string,"mime"?: string | null,"owner_id"?: string,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "materials_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
+                },"objectives": {
+                  Row: {
+                    "aliases": (string)[],"archived_with_topic": boolean,"course_id": string,"created_at": string,"description": string,"id": string,"material_id": string | null,"merged_into": string | null,"name": string,"origin": string,"owner_id": string,"review": string,"run_id": string | null,"signals": NonNullable<Json>,"topic_id": string,"uncertain": Json | null
+                  }
+                  Insert: {
+                    "aliases"?: (string)[],"archived_with_topic"?: boolean,"course_id": string,"created_at"?: string,"description": string,"id": string,"material_id"?: string | null,"merged_into"?: string | null,"name": string,"origin": string,"owner_id"?: string,"review": string,"run_id"?: string | null,"signals"?: NonNullable<Json>,"topic_id": string,"uncertain"?: Json | null
+                  }
+                  Update: {
+                    "aliases"?: (string)[],"archived_with_topic"?: boolean,"course_id"?: string,"created_at"?: string,"description"?: string,"id"?: string,"material_id"?: string | null,"merged_into"?: string | null,"name"?: string,"origin"?: string,"owner_id"?: string,"review"?: string,"run_id"?: string | null,"signals"?: NonNullable<Json>,"topic_id"?: string,"uncertain"?: Json | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "objectives_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "objectives_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "objectives_merged_into_course_id_fkey"
+      columns: ["merged_into","course_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id","course_id"]
+    },{
+      foreignKeyName: "objectives_run_id_owner_id_fkey"
+      columns: ["run_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "objectives_topic_id_course_id_fkey"
+      columns: ["topic_id","course_id"]
+isOneToOne: false
+      referencedRelation: "topics"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
+                },"pipeline_runs": {
+                  Row: {
+                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"id": string,"job_id": string | null,"kind": string,"material_id": string,"model": string,"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"status": string,"topics_created": (string)[]
+                  }
+                  Insert: {
+                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"id": string,"job_id"?: string | null,"kind": string,"material_id": string,"model": string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
+                  }
+                  Update: {
+                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string,"model"?: string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_runs_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "pipeline_runs_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
+                },"profiles": {
+                  Row: {
+                    "created_at": string,"onboarded": boolean,"owner_id": string,"timezone": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"onboarded"?: boolean,"owner_id": string,"timezone"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"onboarded"?: boolean,"owner_id"?: string,"timezone"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"questions": {
+                  Row: {
+                    "anchor": Json | null,"answer": number,"course_id": string,"created_at": string,"exact": (string)[] | null,"explanation": string,"figure": Json | null,"id": string,"kind": string,"material_id": string | null,"objective_id": string | null,"options": (string)[],"owner_id": string,"prompt": string,"rubric": Json | null,"sort_order": number,"table": Json | null,"tier": string | null,"topic_id": string,"topic_name": string
+                  }
+                  Insert: {
+                    "anchor"?: Json | null,"answer": number,"course_id": string,"created_at"?: string,"exact"?: (string)[] | null,"explanation": string,"figure"?: Json | null,"id": string,"kind": string,"material_id"?: string | null,"objective_id"?: string | null,"options"?: (string)[],"owner_id"?: string,"prompt": string,"rubric"?: Json | null,"sort_order": number,"table"?: Json | null,"tier"?: string | null,"topic_id": string,"topic_name": string
+                  }
+                  Update: {
+                    "anchor"?: Json | null,"answer"?: number,"course_id"?: string,"created_at"?: string,"exact"?: (string)[] | null,"explanation"?: string,"figure"?: Json | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"objective_id"?: string | null,"options"?: (string)[],"owner_id"?: string,"prompt"?: string,"rubric"?: Json | null,"sort_order"?: number,"table"?: Json | null,"tier"?: string | null,"topic_id"?: string,"topic_name"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "questions_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "questions_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "questions_objective_id_course_id_fkey"
+      columns: ["objective_id","course_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id","course_id"]
+    },{
+      foreignKeyName: "questions_topic_id_course_id_fkey"
+      columns: ["topic_id","course_id"]
+isOneToOne: false
+      referencedRelation: "topics"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
+                },"relations": {
+                  Row: {
+                    "anchor": Json | null,"course_id": string,"created_at": string,"from_objective": string,"id": string,"material_id": string,"owner_id": string,"review": string,"to_objective": string,"type": string
+                  }
+                  Insert: {
+                    "anchor"?: Json | null,"course_id": string,"created_at"?: string,"from_objective": string,"id": string,"material_id": string,"owner_id"?: string,"review": string,"to_objective": string,"type": string
+                  }
+                  Update: {
+                    "anchor"?: Json | null,"course_id"?: string,"created_at"?: string,"from_objective"?: string,"id"?: string,"material_id"?: string,"owner_id"?: string,"review"?: string,"to_objective"?: string,"type"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "relations_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "relations_from_objective_course_id_fkey"
+      columns: ["from_objective","course_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id","course_id"]
+    },{
+      foreignKeyName: "relations_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "relations_to_objective_course_id_fkey"
+      columns: ["to_objective","course_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
+                },"session_results": {
+                  Row: {
+                    "correct": number,"course_id": string,"finished_at": string,"id": string,"mode": string,"owner_id": string,"seconds": number,"session_id": string,"topic_id": string | null,"total": number
+                  }
+                  Insert: {
+                    "correct": number,"course_id": string,"finished_at"?: string,"id"?: string,"mode": string,"owner_id"?: string,"seconds": number,"session_id": string,"topic_id"?: string | null,"total": number
+                  }
+                  Update: {
+                    "correct"?: number,"course_id"?: string,"finished_at"?: string,"id"?: string,"mode"?: string,"owner_id"?: string,"seconds"?: number,"session_id"?: string,"topic_id"?: string | null,"total"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "session_results_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "session_results_topic_id_course_id_fkey"
+      columns: ["topic_id","course_id"]
+isOneToOne: false
+      referencedRelation: "topics"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
+                },"topics": {
+                  Row: {
+                    "aliases": (string)[],"course_id": string,"created_at": string,"id": string,"material_id": string | null,"merged_into": string | null,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review": string,"sort_order": number,"source": Json | null,"summary": string | null,"uncertain": Json | null
+                  }
+                  Insert: {
+                    "aliases"?: (string)[],"course_id": string,"created_at"?: string,"id": string,"material_id"?: string | null,"merged_into"?: string | null,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review": string,"sort_order": number,"source"?: Json | null,"summary"?: string | null,"uncertain"?: Json | null
+                  }
+                  Update: {
+                    "aliases"?: (string)[],"course_id"?: string,"created_at"?: string,"id"?: string,"material_id"?: string | null,"merged_into"?: string | null,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review"?: string,"sort_order"?: number,"source"?: Json | null,"summary"?: string | null,"uncertain"?: Json | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "topics_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "topics_material_id_owner_id_fkey"
+      columns: ["material_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "topics_merged_into_course_id_fkey"
+      columns: ["merged_into","course_id"]
+isOneToOne: false
+      referencedRelation: "topics"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
+                }
+          }
+          Views: {
+            [_ in never]: never
+          }
+          Functions: {
+            "save_structure":
+{ Args: { "course": string,"rows": Json }; Returns: undefined
+                           }
+          }
+          Enums: {
+            [_ in never]: never
+          }
+          CompositeTypes: {
+            [_ in never]: never
+          }
+        }
+}
+
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
+
+export const Constants = {
+  "public": {
+          Enums: {
+            
+          }
+        }
+} as const

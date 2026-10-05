@@ -12,6 +12,17 @@
 >   where this plan says anon and service-role keys; they do the same jobs. The guard tests
 >   (`supabase/tests/00_guards.test.sql`: RLS and a non-null `owner_id` on every public table, the
 >   `private` schema closed to API roles) were checked to fail on a bad table.
+> - **Task 2 done (2026-10-05, local):** five migrations (profiles, courses and materials,
+>   structure, activity, storage) and 64 pgTAP checks. Differences from the plan: every id is a
+>   UUID, so course ids (now `slug-time`) and calendar ids (`ev-…`) switch to UUIDs in Task 5;
+>   children reference their parent by (id, owner_id) or (id, course_id), so a row can't hang off
+>   another student's course or another course's topic; the browser can't insert evidence at all
+>   (only `/api/evidence` will, Task 3) nor change a finished session; nothing has a delete policy
+>   except calendar entries (deleting the account removes everything); topics and questions carry
+>   a `sort_order` (the trail and the stock are ordered lists); a question with no objective needs
+>   an anchor. `save_structure` upserts only the keys a row gives (a left-out key keeps its value),
+>   so the store can send just what changed. `supabase db lint` reports one false positive on
+>   `save_structure` (it can't follow the dynamic table name).
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
