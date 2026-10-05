@@ -1,5 +1,6 @@
 import type { AnswerEvent } from "../src/lib/mastery/types";
 import { expect, test, F, FIXTURE_STATE, daysAgo, ids, seedState, stored } from "./fixture";
+import { fakeCalls, fakeModel } from "./fake-model";
 
 const COURSE = "logic-e2e";
 const hw = ids("material");
@@ -25,21 +26,14 @@ test("a homework reflection sends the confirmed objectives back to learning", as
     evidence: [answer(F.tc1, daysAgo(3)), answer(F.tc2, daysAgo(3)), answer(F.tc3, daysAgo(2))],
     materials: [...FIXTURE_STATE.materials, { id: hw.material, courseId: F.course, filename: "HW1.pdf", type: "Homework", assigned: null, due: null, reflect: true }],
   });
-  await page.route("**/api/pipeline/reflect", async (route) => {
-    const { input } = route.request().postDataJSON() as { input: { note: string; objectives: Array<{ id: string }> } };
-    expect(input.note).toContain("sign");
-    expect(input.objectives.map((o) => o.id)).toContain(F.convert);
-    await route.fulfill({
-      json: {
-        output: {
-          matches: [
-            { objectiveId: F.convert, sure: true, reasoning: "“converting negatives”" },
-            { objectiveId: F.signExtend, sure: false, reasoning: "“sign stuff” might mean sign extension" },
-            { objectiveId: "made-up", sure: true, reasoning: "not a real objective" },
-          ],
-        },
-      },
-    });
+  // The fake API matches by objective name; the server sends it the course's live objectives.
+  await fakeModel({
+    reflect: {
+      matches: [
+        { name: "Convert to 2's complement", sure: true, reasoning: "“converting negatives”" },
+        { name: "Sign-extend a number", sure: false, reasoning: "“sign stuff” might mean sign extension" },
+      ],
+    },
   });
 
   await page.goto(`/course/${COURSE}/objectives`);
@@ -49,6 +43,7 @@ test("a homework reflection sends the confirmed objectives back to learning", as
   await page.getByRole("link", { name: "Reflect on HW1" }).click();
   await page.getByPlaceholder(/K-map groups/).fill("Converting negatives kept going wrong, and the sign stuff.");
   await page.getByRole("button", { name: "Find what this is about" }).click();
+  await expect.poll(fakeCalls).toEqual(["reflect"]);
 
   const sure = page.locator('[data-match="Convert to 2\'s complement"] input');
   const unsure = page.locator('[data-match="Sign-extend a number"] input');

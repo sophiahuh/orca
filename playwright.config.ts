@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { defineConfig, devices } from "@playwright/test";
+import { FAKE_MODEL_PORT } from "./e2e/fake-model";
 
 /**
  * End-to-end tests in a real browser against the dev server and local Supabase. Each test gets a
@@ -11,11 +12,17 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = 3100;
 
 /**
- * Tests never spend money on a model: the dev server starts with every model key blanked (an empty
- * value also beats `.env.local`), and `e2e/global-setup.ts` refuses to run against a server that
- * says a model is connected (e.g. a reused local dev server started with a key).
+ * Tests never spend money on a model: the app's model calls go to a fake Messages API on this
+ * machine (`e2e/fake-anthropic.ts`, started below) with a fake key, model keys from `.env.local`
+ * are overridden, and `e2e/global-setup.ts` refuses to run against a server whose model calls
+ * aren't local (e.g. a reused dev server started with a real key). Jobs run inline.
  */
-const NO_MODEL_KEYS = { ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "" };
+const FAKE_MODEL = {
+  ANTHROPIC_API_KEY: "e2e-fake-key",
+  ANTHROPIC_BASE_URL: `http://127.0.0.1:${FAKE_MODEL_PORT}`,
+  OPENAI_API_KEY: "",
+  ORCA_JOBS: "inline",
+};
 
 /**
  * Supabase for the browser tests: the local stack's values from `supabase status` (so a stale
@@ -61,11 +68,19 @@ export default defineConfig({
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {},
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1194, height: 834 } } }],
-  webServer: {
-    command: `npm run dev -- --port ${PORT}`,
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    env: { ...NO_MODEL_KEYS, ...SUPABASE },
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: `node --experimental-strip-types --no-warnings e2e/fake-anthropic.ts ${FAKE_MODEL_PORT}`,
+      url: `http://127.0.0.1:${FAKE_MODEL_PORT}/__health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: `npm run dev -- --port ${PORT}`,
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: !process.env.CI,
+      env: { ...FAKE_MODEL, ...SUPABASE },
+      timeout: 120_000,
+    },
+  ],
 });

@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { fakeModel } from "./fake-model";
 import { type SupabaseClient, createClient } from "@supabase/supabase-js";
 import { test as base, expect } from "@playwright/test";
 import type { BrowserContext, Page } from "@playwright/test";
@@ -67,6 +68,7 @@ export async function settled(page: Page) {
 export const test = base.extend<{ student: Student }>({
   student: [
     async ({ context, baseURL }, use) => {
+      await fakeModel(); // the fake API's default answers; a test sets its own scenario after this
       const email = `e2e-${crypto.randomUUID()}@example.test`;
       const password = "e2e-password-1";
       const { data, error } = await admin().auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { timezone: TIMEZONE } });

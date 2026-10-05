@@ -1,6 +1,7 @@
-import type { Page, Route } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import type { AnswerEvent } from "../src/lib/mastery/types";
 import { expect, test, F, FIXTURE_STATE, daysAgo, seedPages, seedState, stored } from "./fixture";
+import { fakeCalls, fakeModel } from "./fake-model";
 
 const COURSE = "logic-e2e";
 const bank = FIXTURE_STATE.questionBank[F.course];
@@ -185,53 +186,17 @@ test.describe("scheduling", () => {
   });
 
   test("after a session, objectives short of unseen questions are topped up from the material's stored pages", async ({ page, student }) => {
-    const generated = [
-      { prompt: "Simplify x·x + x.", exact: ["x"] },
-      { prompt: "Simplify ab + ab'.", exact: ["a"] },
-    ];
-    await page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: "claude-opus-5-5" } }));
-    const steps: string[] = [];
-    await page.route("**/api/pipeline/*", async (route: Route) => {
-      const step = new URL(route.request().url()).pathname.split("/").pop()!;
-      steps.push(step);
-      const { input } = route.request().postDataJSON() as { input: Record<string, unknown> };
-      if (step === "generate") {
-        const objectiveId = (input.objectives as Array<{ id: string }>)[0].id;
-        return route.fulfill({
-          json: {
-            output: {
-              questions: generated.map((g) => ({
-                objectiveId,
-                kind: "Short answer",
-                tier: "retrieval",
-                prompt: g.prompt,
-                options: [],
-                answer: -1,
-                exact: g.exact,
-                rubric: null,
-                explanation: "Absorption.",
-                anchor: { locator: "slide 2", excerpt: "x + xy = x" },
-                figureSlide: null,
-              })),
-            },
-          },
-        });
-      }
-      if (step === "solve") {
-        const qs = input.questions as Array<{ id: string; prompt: string }>;
-        return route.fulfill({ json: { output: { answers: qs.map((q) => ({ id: q.id, choice: null, text: generated.find((g) => g.prompt === q.prompt)!.exact[0] })) } } });
-      }
-      return route.fulfill({ status: 500, json: { error: `no stub for ${step}` } });
-    });
+    await fakeModel({ perObjective: 2 });
     await seedState(student, FIXTURE_STATE);
     await seedPages(student, { [F.material]: [{ n: 2, text: "x + xy = x (absorption)" }] });
 
     await page.goto(`/quiz/${COURSE}/${F.booleanAlgebra}`);
     await answerAll(page, true);
-    await expect(page.locator('[data-part="top-up"]')).toHaveText("2 new questions written and checked for next time.");
-    expect(steps).toEqual(["generate", "solve"]);
+    await expect(page.locator('[data-part="top-up"]')).toHaveText("2 new questions written and checked for next time.", { timeout: 30_000 });
+    // A job on the server wrote them, from the stored page, through the fake API.
+    expect(await fakeCalls()).toEqual(["generate", "solve"]);
     const s = await stored(page, student);
-    expect(s.questionBank[F.course][F.booleanAlgebra].map((q) => q.prompt)).toEqual(["Simplify x + xy.", "Simplify a + a'c.", ...generated.map((g) => g.prompt)]);
-    expect(s.runs).toEqual([expect.objectContaining({ kind: "top-up", questionsAdded: 2 })]);
+    expect(s.questionBank[F.course][F.booleanAlgebra].map((q) => q.prompt)).toEqual(["Simplify x + xy.", "Simplify a + a'c.", "Simplify an expression: case 1?", "Simplify an expression: case 2?"]);
+    expect(s.runs).toEqual([expect.objectContaining({ kind: "top-up", status: "done", materialId: F.material, questionsAdded: 2 })]);
   });
 });

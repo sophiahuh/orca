@@ -1,69 +1,41 @@
-import type { APIRequestContext, Page, Route } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { type Student, admin, expect, test, stored } from "./fixture";
 import { lines, makePdf } from "../tests/fixtures/pdf";
+import { fakeCalls, fakeModel } from "./fake-model";
 
 /**
  * Uploads end to end: a real ALD deck goes to Supabase Storage, the server reads it with pdf.js
- * into `material_pages`, and the browser runs the pipeline on those pages with the model steps
- * answered by stubs at /api/pipeline/*. What's under test is the upload path, the orchestration
- * and the store, not the model's judgement (scripts/score-extraction.ts covers that with a key).
- * The limits and isolation are checked against the routes directly.
+ * into `material_pages`, and a job on the server (inline) runs the pipeline on those pages against
+ * the fake Anthropic API (e2e/fake-anthropic.ts); the review screen follows the job's run. What's
+ * under test is the upload path, the job, the orchestration and the store, not the model's
+ * judgement (scripts/score-extraction.ts covers that with a key). The limits and isolation are
+ * checked against the routes directly.
  */
 const DECK = path.join(process.cwd(), "docs/samples/ald/L02_Combinational.pdf");
 const anchor = { locator: "slide 12", excerpt: "x + xy = x" };
 
-type Handler = (input: Record<string, unknown>) => unknown;
+const LECTURE = {
+  topics: [
+    { localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "Theorems.", slideStart: 10, slideEnd: 20 },
+    { localId: "t2", existingId: null, name: "Karnaugh Maps", aliases: ["K-Maps"], summary: "Grouping.", slideStart: 30, slideEnd: 40 },
+  ],
+  objectives: [
+    { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
+    { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
+    { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
+  ],
+  relations: [{ from: "o2", to: "o1", type: "builds-on", anchor: null }],
+};
 
-async function stubModel(page: Page, handlers: Record<string, Handler>) {
-  await page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: "claude-opus-5-5" } }));
-  await page.route("**/api/pipeline/*", async (route: Route) => {
-    const step = new URL(route.request().url()).pathname.split("/").pop()!;
-    const handler = handlers[step];
-    if (!handler) return route.fulfill({ status: 500, json: { error: `no stub for ${step}` } });
-    const { input } = route.request().postDataJSON() as { input: Record<string, unknown> };
-    return route.fulfill({ json: { output: handler(input), model: "claude-opus-5-5" } });
-  });
-}
-
-const shortQ = (objectiveId: string, prompt: string, exact: string) => ({
-  objectiveId,
-  kind: "Short answer",
-  tier: "retrieval",
-  prompt,
-  options: [],
-  answer: -1,
-  exact: [exact],
-  rubric: null,
-  explanation: "Because.",
-  anchor,
-  figureSlide: null,
-});
-
-/** Answers every generate call with `perObjective` short questions per objective, and solves them all correctly. */
-function honestGenerator(perObjective: number) {
-  const answers = new Map<string, string>();
-  return {
-    generate: (input: Record<string, unknown>) => {
-      const objectives = input.objectives as Array<{ id: string; name: string; need: number }>;
-      return {
-        questions: objectives.flatMap((o) =>
-          Array.from({ length: Math.min(perObjective, o.need) }, (_, i) => {
-            const prompt = `${o.name}: case ${i + 1}?`;
-            answers.set(prompt, String(i + 1));
-            return shortQ(o.id, prompt, String(i + 1));
-          }),
-        ),
-      };
-    },
-    solve: (input: Record<string, unknown>) => ({
-      answers: (input.questions as Array<{ id: string; prompt: string }>).map((q) => ({ id: q.id, choice: null, text: answers.get(q.prompt) ?? "?" })),
-    }),
-  };
-}
+const ONE_TOPIC = {
+  topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "", slideStart: 1, slideEnd: 2 }],
+  objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
+  relations: [],
+};
 
 async function createCourse(page: Page, name: string) {
   await page.goto("/new-course");
@@ -76,30 +48,23 @@ async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
   await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
+  await expect(page.locator("[data-part=model-note]")).toHaveText("Orca (Claude Opus 5.5) will build topics and quizzes from this file.");
   await page.getByRole("button", { name: type, exact: true }).click();
   await page.getByRole("button", { name: /generate quizzes/ }).click();
 }
 
-test("a lecture upload maps topics and objectives, writes checked questions and lands them on the trail", async ({ page, student }) => {
-  const gen = honestGenerator(2);
-  await stubModel(page, {
-    extract: () => ({
-      topics: [
-        { localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "Theorems.", slideStart: 10, slideEnd: 20 },
-        { localId: "t2", existingId: null, name: "Karnaugh Maps", aliases: ["K-Maps"], summary: "Grouping.", slideStart: 30, slideEnd: 40 },
-      ],
-      objectives: [
-        { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-        { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-        { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-      ],
-      relations: [{ from: "o2", to: "o1", type: "builds-on", anchor: null }],
-    }),
-    ...gen,
-  });
+test("a lecture upload is built by a job on the server; the review screen follows it and lands the questions on the trail", async ({ page, student }) => {
+  // Each model call takes a moment, so the review screen shows the job working first.
+  await fakeModel({ extract: LECTURE, perObjective: 2, delayMs: 800 });
   await createCourse(page, "Logic");
   await upload(page);
-  await expect(page.getByText("Added 2 topics, 3 objectives and 6 questions.")).toBeVisible({ timeout: 30_000 });
+
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  await expect(page.locator("[data-part=run-progress]")).toBeVisible();
+  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
+  await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
+  expect(await fakeCalls()).toEqual(["extract", "generate", "generate", "solve"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -109,7 +74,7 @@ test("a lecture upload maps topics and objectives, writes checked questions and 
   ]);
   expect(Object.values(state.objectives[course.id]).map((o) => (o as { review: string }).review)).toEqual(["proposed", "proposed", "proposed"]);
   expect(state.relations[course.id]).toHaveLength(1);
-  expect(state.runs).toHaveLength(1);
+  expect(state.runs).toEqual([expect.objectContaining({ kind: "upload", status: "done", model: "claude-opus-5-5", questionsAdded: 6 })]);
   expect(state.materials[0].filename).toBe("L02_Combinational.pdf");
 
   // The file is in the student's folder in Storage, and its pages were read on the server.
@@ -126,10 +91,10 @@ test("a lecture upload maps topics and objectives, writes checked questions and 
   const { data: pages } = await student.db.from("material_pages").select("n, text").order("n");
   expect(pages!.length).toBeGreaterThan(20);
   expect(pages!.map((p) => p.n)).toEqual(pages!.map((_, i) => i + 1));
+  // The run is the server's: the student can read it but not change it.
+  const forged = await student.db.from("pipeline_runs").update({ questions_added: 99 }).eq("id", state.runs[0].id).select("id");
+  expect(forged.data ?? []).toEqual([]);
 
-  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.");
-  await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
   await page.goto("/course/logic");
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
   await page.goto(`/quiz/logic/${course.topics[0].id}`);
@@ -137,29 +102,39 @@ test("a lecture upload maps topics and objectives, writes checked questions and 
 });
 
 test("re-uploading the same deck is recognised by its content and adds nothing", async ({ page, student }) => {
-  let extracts = 0;
-  await stubModel(page, {
-    extract: () => {
-      extracts += 1;
-      return {
-        topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "", slideStart: 1, slideEnd: 2 }],
-        objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
-        relations: [],
-      };
-    },
-    ...honestGenerator(6),
-  });
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
-  await expect(page.getByText("Added 1 topic, 1 objective and 6 questions.")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
   await upload(page);
   await expect(page.getByText("Logic already has this file (L02_Combinational.pdf), so there's nothing new to add.")).toBeVisible({ timeout: 30_000 });
-  expect(extracts).toBe(1);
+  expect((await fakeCalls()).filter((s) => s === "extract")).toHaveLength(1);
   const state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
   expect(state.runs).toHaveLength(1);
   const { count } = await student.db.from("materials").select("id", { count: "exact", head: true });
   expect(count).toBe(1);
+});
+
+test("a job that fails says why on the review screen, saves nothing, and uploading again retries it", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, fail: { step: "extract", message: "The fake API is having a bad day." } });
+  await createCourse(page, "Logic");
+  await upload(page);
+  const failed = page.locator("[data-part=run-failed]");
+  await expect(failed).toContainText("Nothing was added from L02_Combinational.pdf.", { timeout: 60_000 });
+  await expect(failed).toContainText("Orca couldn't build this upload: Anthropic rejected the request");
+  await expect(failed).toContainText("The fake API is having a bad day.");
+  let state = await stored(page, student);
+  expect(state.courses[0].topics).toEqual([]);
+  expect(state.runs).toEqual([expect.objectContaining({ status: "failed", error: expect.stringContaining("bad day") })]);
+
+  // The file is kept; uploading it again (now that the model answers) builds it.
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await upload(page);
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
+  state = await stored(page, student);
+  expect(state.materials).toHaveLength(1);
+  expect(state.runs.map((r) => r.status)).toEqual(["failed", "done"]);
 });
 
 /* ── The routes directly: limits, a failed read, hidden text, another student ── */
