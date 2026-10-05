@@ -30,8 +30,9 @@ Open questions live in `docs/TO-DISCUSS.md`.
   questions re-files past answers.
 - **Mastery is a decision, not an average:** 3 credited answers on 3 different questions, on at
   least 2 days, last two correct, no open mix-up. The bar is the same for every objective: weights
-  change priority (what gets practised first), never what counts as mastered. Stability grows ×2.2 per successful spaced check
-  (cap 60 days); a miss cuts it to a third; capped with 3 checks = retired.
+  change priority (what gets practised first), never what counts as mastered. Spacing after that is **FSRS** (`ts-fsrs`,
+  Anki's scheduler): fed every answer from the first, 90% target recall, intervals capped at 60
+  days; retired at 60-day stability with 3 passed checks. Details: `docs/MASTERY-PLAN.md` §2.5.
 - **A check coming due means fading.** When a mastered objective's spaced check comes due (or is
   missed), it's `fading` and stops counting as mastered until answered correctly again. States
   table: `docs/MASTERY-PLAN.md` §2.3.

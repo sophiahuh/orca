@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Node ≥ 22.6. On this machine the default `node` is v16 (nvm). In every shell run `export PATH=/usr/local/bin:$PATH` (Node 22.13), or `nvm install 22 && nvm use`.
-- No new npm dependencies in this phase.
+- One new npm dependency in this phase: `ts-fsrs` (Task 4; decided 2026-10-04). No others.
 - Pure modules (`src/lib/mastery/*.ts`, `src/lib/content/ald-objectives.ts`, `src/lib/content/ald.ts`) import each other with relative paths ending in `.ts`, use `import type` for anything type-only, and never use the `@/` alias, enums or namespaces. This is what lets `npm test` run them without a build step.
 - Learner state is never written directly. Only `recordEvidence` changes it; everything else is computed.
 - No silent placeholders: a missing value throws or renders an explicit empty state. Never invent a stand-in.
@@ -310,12 +310,14 @@ export interface ObjectiveState {
   credit: number;
   /** Distinct calendar days on which credit was earned. */
   creditDays: number;
-  /** Days until the next spaced check is due; null until mastered. */
+  /** FSRS stability (days for predicted recall to fall to 90%); null until mastered. */
   stabilityDays: number | null;
   /** ISO time the next spaced check is due; null until mastered. */
   dueAt: string | null;
   /** Successful unaided checks made at or after their due time. */
   spacedChecks: number;
+  /** FSRS's predicted chance of recalling it right now (0–1); null before any answer. */
+  recall: number | null;
   lastEvidenceAt: string | null;
 }
 ```
@@ -607,26 +609,34 @@ git commit -m "Objectives: evidence types, catalogue helpers, and every built-in
 
 ---
 
-### Task 4: Objective state from evidence
+### Task 4: Objective state from evidence (FSRS spacing + Orca's mastery rules)
 
 **Files:**
 - Create: `src/lib/mastery/objective-state.ts`, `tests/mastery/objective-state.test.ts`
+- Modify: `package.json`, `package-lock.json` (add `ts-fsrs`)
 
 **Interfaces:**
 - Consumes: `EvidenceEvent`, `ObjectiveState`, `ObjectiveStatus`, `Outcome` from Task 3.
-- Produces: `MASTERY_RULES`, `localDayKey(iso: string): string`, `interface ObjectiveStateOptions { hasMechanismQuestions: boolean; dayKey?: (iso: string) => string }`, `interface ObjectiveAccumulator` (plain JSON), `EMPTY_ACCUMULATOR`, `applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator`, `stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState`, `replayObjective(objectiveId: string, events: readonly EvidenceEvent[], options: ObjectiveStateOptions): ObjectiveAccumulator`, `computeObjectiveState(objectiveId: string, events: readonly EvidenceEvent[], now: Date, options: ObjectiveStateOptions): ObjectiveState`.
+- Produces: `MASTERY_RULES`, `localDayKey(iso: string): string`, `interface ObjectiveStateOptions { hasMechanismQuestions: boolean; dayKey?: (iso: string) => string }`, `interface StoredCard`, `interface ObjectiveAccumulator` (plain JSON), `EMPTY_ACCUMULATOR`, `applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator`, `stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState`, `replayObjective(objectiveId: string, events: readonly EvidenceEvent[], options: ObjectiveStateOptions): ObjectiveAccumulator`, `computeObjectiveState(objectiveId: string, events: readonly EvidenceEvent[], now: Date, options: ObjectiveStateOptions): ObjectiveState`.
 
-**Why a step function.** The rule is written as `applyAnswer(state, answer) → state` (a fold over the log) plus `stateAt(state, now)`. Phase 1 still replays the whole log in the browser, which is cheap at this size. In the Supabase phase the accumulator becomes a stored snapshot updated in the same transaction as each new answer (event sourcing with snapshots), so reads stop replaying the log. The time-based state (fading) is computed at read from the stored due time, never by a timer.
+**Design (decided 2026-10-04).**
+- **Spacing is FSRS** (the Free Spaced Repetition Scheduler, Anki's default since 23.10) via the official `ts-fsrs` library (MIT, no dependencies). It's fed every graded answer from the first one, so it learns how hard the objective is before mastery. Grades: wrong → Again; partial or self-marked → Hard; unaided correct → Good. Settings: 90% target recall; no fuzz (deterministic); no same-day learning steps (sessions are daily; same-day repeats don't inflate stability); intervals capped at 60 days so everything mastered is checked within a semester.
+- **Orca's rules sit on top** (`docs/MASTERY-PLAN.md` §2.3–2.4):
+  - Credit counts only a question's **first** attempt: unaided correct = 1, self-marked correct = 0.5, partial = 0.5, incorrect = 0.
+  - **Mastered** when credit ≥ 3, earned on ≥ 2 calendar days, the last two non-partial answers correct, and no open mix-up.
+  - **Mix-up:** two unaided misses in a row on different questions. Cleared by an unaided correct on a mechanism-tier question, or any unaided correct if the objective has none (provisional, TO-DISCUSS).
+  - After mastery, **fading** = FSRS's due time has arrived, or a check was missed and hasn't been passed since. An unaided correct at or after the due time is a **spaced check**. **Retired** = FSRS stability ≥ 60 days with ≥ 3 spaced checks.
+- **A step function.** `applyAnswer(state, answer) → state` folds one answer in; `stateAt(state, now)` reads it against the clock (fading is computed at read, never by a timer). Phase 1 replays the log in the browser; in Supabase the accumulator becomes a stored snapshot updated with each answer. `applyAnswer` throws on an answer older than the last one applied, telling the caller to rebuild from the log.
 
-Rules being implemented (from `docs/MASTERY-PLAN.md` §2.3–2.5):
-- Credit counts only a question's **first** attempt: unaided correct = 1, self-marked correct = 0.5, partial = 0.5, incorrect = 0. Repeats never add.
-- Mastered when credit ≥ 3, credit earned on ≥ 2 calendar days, the last two non-partial answers are correct, and there's no open mix-up.
-- Mix-up: two unaided misses in a row on different questions. Cleared by an unaided correct on a mechanism-tier question, or any unaided correct if the objective has no mechanism question (provisional, see TO-DISCUSS).
-- On mastery: stability 3 days, due 3 days later. An unaided correct at or after the due time is a spaced check: stability × 2.2 (cap 60), due again after the new stability. Early answers don't change it. An unaided miss: stability ÷ 3 (min 2), due tomorrow, fading until the next check. Stability at the cap with ≥ 3 checks = retired.
-- Status at `now`: `unseen` (no answers) → `learning` / `mixed-up` → `mastered` (check not due yet) → `fading` (check due or overdue, or a check missed; stops counting as mastered) → `retired`.
-- Answers must be applied in time order. `applyAnswer` throws on an answer older than the last one applied, telling the caller to rebuild from the log.
+For reference, a clean run (mastered Tue Oct 6, every check passed on time): next checks Oct 13, Nov 14, Jan 13 (capped at 60 days), then retired. A miss at a check drops stability to about 4 days and it climbs back (4 → 10 → 23 → 50 days).
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Add the library**
+
+```bash
+npm install ts-fsrs@^5.4.2
+```
+
+- [ ] **Step 2: Write the failing tests**
 
 `tests/mastery/objective-state.test.ts`:
 ```ts
@@ -645,6 +655,7 @@ import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
 const day = (n: number, hour = 12) => new Date(Date.UTC(2026, 9, n, hour)).toISOString();
 const at = (n: number, hour = 13) => new Date(day(n, hour));
 const utcDay = (iso: string) => iso.slice(0, 10);
+const msBefore = (iso: string) => new Date(Date.parse(iso) - 1);
 
 let seq = 0;
 function ev(questionId: string, when: string, over: Partial<EvidenceEvent> = {}): EvidenceEvent {
@@ -668,14 +679,18 @@ const opts = (hasMechanismQuestions = false) => ({ hasMechanismQuestions, dayKey
 const state = (events: EvidenceEvent[], now: Date, hasMechanismQuestions = false) =>
   computeObjectiveState("t/o", events, now, opts(hasMechanismQuestions));
 
-/** Mastered on day 2: q1, q2 on day 1 and q3 on day 2. Due on day 5. */
+/** Mastered on day 2: q1, q2 on day 1 and q3 on day 2. */
 const masteredOnDay2 = () => [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
+const dueAfter = (events: EvidenceEvent[]) => state(events, at(2)).dueAt!;
+
+/* ── The mastery bar (Orca's rule) ─────────────────────────────────── */
 
 test("no answers is unseen", () => {
   const s = state([], at(1));
   assert.equal(s.status, "unseen");
   assert.equal(s.credit, 0);
   assert.equal(s.dueAt, null);
+  assert.equal(s.recall, null);
   assert.equal(s.lastEvidenceAt, null);
 });
 
@@ -688,13 +703,14 @@ test("three correct answers on one day is still learning", () => {
   assert.equal(s.status, "learning");
   assert.equal(s.credit, 3);
   assert.equal(s.creditDays, 1);
+  assert.equal(s.dueAt, null);
 });
 
 test("three credited answers over two days with the last two correct is mastered", () => {
   const s = state(masteredOnDay2(), at(2));
   assert.equal(s.status, "mastered");
-  assert.equal(s.stabilityDays, MASTERY_RULES.initialStabilityDays);
-  assert.equal(s.dueAt, day(5));
+  assert.ok(s.dueAt && Date.parse(s.dueAt) > Date.parse(day(2)), "a check is scheduled after mastery");
+  assert.ok(s.stabilityDays && s.stabilityDays > 0);
   assert.equal(s.spacedChecks, 0);
 });
 
@@ -728,6 +744,8 @@ test("partial answers count half and don't break the streak", () => {
   assert.equal(s.credit, 3);
   assert.equal(s.status, "mastered");
 });
+
+/* ── Mix-ups ───────────────────────────────────────────────────────── */
 
 test("two misses in a row on different questions is a mix-up, cleared only by a mechanism question", () => {
   const misses = [ev("q1", day(1), { outcome: "incorrect" }), ev("q2", day(1), { outcome: "incorrect" })];
@@ -768,51 +786,100 @@ test("an open mix-up blocks mastery", () => {
   assert.equal(s.status, "mixed-up");
 });
 
-test("a correct answer before the due time is not a spaced check", () => {
-  const s = state([...masteredOnDay2(), ev("q4", day(3))], at(3));
+/* ── Spacing (FSRS) ────────────────────────────────────────────────── */
+
+test("a mastered objective fades the moment its check is due", () => {
+  const due = dueAfter(masteredOnDay2());
+  assert.equal(state(masteredOnDay2(), msBefore(due)).status, "mastered");
+  assert.equal(state(masteredOnDay2(), new Date(due)).status, "fading");
+});
+
+test("a correct answer before the check is due is not a spaced check", () => {
+  const events = [...masteredOnDay2(), ev("q4", day(3))];
+  const s = state(events, at(3));
   assert.equal(s.status, "mastered");
-  assert.equal(s.stabilityDays, 3);
   assert.equal(s.spacedChecks, 0);
-  assert.equal(s.dueAt, day(5));
 });
 
-test("an unaided correct answer at the due time grows stability", () => {
-  const s = state([...masteredOnDay2(), ev("q4", day(5))], at(5));
-  assert.equal(s.status, "mastered");
-  assert.ok(Math.abs(s.stabilityDays! - 6.6) < 1e-9);
-  assert.equal(s.spacedChecks, 1);
-});
-
-test("a mastered objective fades as soon as its check is due", () => {
-  // Due day 5 at noon.
-  assert.equal(state(masteredOnDay2(), at(5, 11)).status, "mastered");
-  assert.equal(state(masteredOnDay2(), at(5, 12)).status, "fading");
-});
-
-test("a miss after mastery cuts stability, fades at once, and recovers on the next check", () => {
-  const missed = [...masteredOnDay2(), ev("q4", day(3), { outcome: "incorrect" })];
-  const s = state(missed, at(3));
-  assert.equal(s.status, "fading");
-  assert.equal(s.stabilityDays, MASTERY_RULES.minStabilityDays);
-  assert.equal(s.dueAt, day(4));
-  const recovered = state([...missed, ev("q5", day(4))], at(4));
-  assert.equal(recovered.status, "mastered");
-  assert.ok(Math.abs(recovered.stabilityDays! - 4.4) < 1e-9);
-});
-
-test("stability capped with at least three checks is retired", () => {
+test("passing a check that was due counts it, grows stability and pushes the next check further out", () => {
   const events = masteredOnDay2();
-  const statuses: string[] = [];
-  for (let i = 0; i < 4; i += 1) {
-    const due = state(events, at(2)).dueAt!;
-    events.push(ev(`check${i}`, due));
-    statuses.push(state(events, new Date(due)).status);
-  }
-  assert.deepEqual(statuses, ["mastered", "mastered", "mastered", "retired"]);
-  const s = state(events, at(2));
-  assert.equal(s.stabilityDays, MASTERY_RULES.stabilityCapDays);
-  assert.equal(s.spacedChecks, 4);
+  const first = state(events, at(2));
+  events.push(ev("q4", first.dueAt!));
+  const after = state(events, new Date(first.dueAt!));
+  assert.equal(after.status, "mastered");
+  assert.equal(after.spacedChecks, 1);
+  assert.ok(after.stabilityDays! > first.stabilityDays!);
+  const firstGap = Date.parse(first.dueAt!) - Date.parse(day(2));
+  const secondGap = Date.parse(after.dueAt!) - Date.parse(first.dueAt!);
+  assert.ok(secondGap > firstGap, "intervals grow");
 });
+
+test("a miss after mastery fades it and cuts stability; passing the next check restores it", () => {
+  const events = masteredOnDay2();
+  const before = state(events, at(2));
+  events.push(ev("q4", day(3), { outcome: "incorrect" }));
+  const missed = state(events, at(3));
+  assert.equal(missed.status, "fading");
+  assert.ok(missed.stabilityDays! < before.stabilityDays!);
+  // Answering right again before the new check is due doesn't clear it...
+  events.push(ev("q5", day(3, 14)));
+  assert.equal(state(events, at(3, 15)).status, "fading");
+  // ...passing the check once it's due does.
+  const due = state(events, at(3, 15)).dueAt!;
+  events.push(ev("q6", due));
+  assert.equal(state(events, new Date(due)).status, "mastered");
+});
+
+test("FSRS tracks difficulty from the first answer: a hard-won objective gets a shorter first interval", () => {
+  const clean = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
+  const struggled = [
+    ev("x1", day(1), { outcome: "incorrect" }),
+    ev("q1", day(1)),
+    ev("q2", day(1)),
+    ev("q3", day(2)),
+  ];
+  const cleanGap = Date.parse(state(clean, at(2)).dueAt!) - Date.parse(day(2));
+  const struggledGap = Date.parse(state(struggled, at(2)).dueAt!) - Date.parse(day(2));
+  assert.equal(state(struggled, at(2)).status, "mastered");
+  assert.ok(struggledGap < cleanGap, `struggled ${struggledGap} vs clean ${cleanGap}`);
+});
+
+test("predicted recall is near 1 right after an answer and falls over time", () => {
+  const events = masteredOnDay2();
+  const soon = state(events, at(2)).recall!;
+  const later = state(events, at(30)).recall!;
+  assert.ok(soon > 0.95, `soon ${soon}`);
+  assert.ok(later < soon, `later ${later}`);
+});
+
+test("no check is ever scheduled more than the maximum interval out", () => {
+  const events = masteredOnDay2();
+  let s = state(events, at(2));
+  for (let i = 0; i < 4; i += 1) {
+    const from = Date.parse(s.dueAt!);
+    events.push(ev(`c${i}`, s.dueAt!));
+    s = state(events, new Date(from));
+    if (s.status === "retired") break;
+    assert.ok(Date.parse(s.dueAt!) - from <= MASTERY_RULES.maxIntervalDays * 86_400_000, `check ${i + 1}`);
+  }
+});
+
+test("passing every check on time eventually retires the objective", () => {
+  const events = masteredOnDay2();
+  let s = state(events, at(2));
+  let checks = 0;
+  while (s.status !== "retired" && checks < 10) {
+    events.push(ev(`check${checks}`, s.dueAt!));
+    checks += 1;
+    s = state(events, new Date(s.dueAt!));
+  }
+  assert.equal(s.status, "retired");
+  assert.ok(s.spacedChecks >= MASTERY_RULES.retireAfterChecks);
+  assert.ok(s.stabilityDays! >= MASTERY_RULES.retireStabilityDays);
+  assert.ok(checks <= 6, `took ${checks} checks`);
+});
+
+/* ── The fold ──────────────────────────────────────────────────────── */
 
 test("events are ordered by time, not by array position", () => {
   const s = state([ev("q3", day(2)), ev("q1", day(1)), ev("q2", day(1))], at(2));
@@ -825,14 +892,14 @@ test("applying answers one at a time gives the same state as replaying the log",
     ev("q2", day(1)),
     ev("q3", day(2)),
     ev("q4", day(2)),
-    ev("q5", day(5)),
-    ev("q6", day(9), { outcome: "incorrect" }),
-    ev("q7", day(10)),
+    ev("q5", day(9)),
+    ev("q6", day(12), { outcome: "incorrect" }),
+    ev("q7", day(14)),
   ];
   let acc = EMPTY_ACCUMULATOR;
   for (let i = 0; i < events.length; i += 1) {
     acc = applyAnswer(acc, events[i], opts());
-    const now = at(12);
+    const now = at(20);
     assert.deepEqual(stateAt("t/o", acc, now), state(events.slice(0, i + 1), now), `after answer ${i + 1}`);
   }
 });
@@ -841,7 +908,7 @@ test("the accumulator survives a JSON round trip, so it can be stored as a snaps
   const acc = masteredOnDay2().reduce((a, e) => applyAnswer(a, e, opts()), EMPTY_ACCUMULATOR);
   const restored = JSON.parse(JSON.stringify(acc));
   assert.deepEqual(restored, acc);
-  const next = ev("q4", day(5));
+  const next = ev("q4", day(9));
   assert.deepEqual(applyAnswer(restored, next, opts()), applyAnswer(acc, next, opts()));
 });
 
@@ -862,20 +929,22 @@ test("an unparseable timestamp throws", () => {
 });
 ```
 
-- [ ] **Step 2: Run to confirm they fail**
+- [ ] **Step 3: Run to confirm they fail**
 
 Run: `npm test`
 Expected: FAIL, `Cannot find module '.../objective-state.ts'`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 4: Implement**
 
 `src/lib/mastery/objective-state.ts`:
 ```ts
 /**
  * Objective state as a fold over evidence (docs/MASTERY-PLAN.md §2.3–2.5).
+ * Spacing comes from FSRS (ts-fsrs), fed every graded answer from the first one.
+ * Orca's own rules sit on top: the mastery bar, mix-ups and retirement.
  * applyAnswer is the step; stateAt reads the result against the clock.
- * Nothing here is stored in Phase 1; the accumulator is shaped so it can be.
  */
+import { type Card, type Grade, Rating, type State, createEmptyCard, fsrs, generatorParameters } from "ts-fsrs";
 import type { EvidenceEvent, ObjectiveState, ObjectiveStatus, Outcome } from "./types.ts";
 
 export const MASTERY_RULES = {
@@ -883,18 +952,36 @@ export const MASTERY_RULES = {
   requiredCredit: 3,
   /** Distinct days that credit must come from. */
   requiredDays: 2,
-  initialStabilityDays: 3,
-  stabilityGrowth: 2.2,
-  stabilityCapDays: 60,
-  missDivisor: 3,
-  minStabilityDays: 2,
+  /** FSRS schedules a check when predicted recall falls to this. */
+  targetRetention: 0.9,
+  /** Longest gap between checks, so everything mastered is checked within a semester. */
+  maxIntervalDays: 60,
+  /** Retired once FSRS stability reaches this many days... */
+  retireStabilityDays: 60,
+  /** ...with at least this many successful spaced checks since mastery. */
   retireAfterChecks: 3,
 } as const;
 
+/** Deterministic (no fuzz), day-based (no same-day learning steps; sessions are daily), capped at 60 days. */
+const scheduler = fsrs(
+  generatorParameters({
+    request_retention: MASTERY_RULES.targetRetention,
+    maximum_interval: MASTERY_RULES.maxIntervalDays,
+    enable_fuzz: false,
+    enable_short_term: false,
+  }),
+);
+
 const DAY_MS = 86_400_000;
 
-/** Whole milliseconds, so a due time survives a round trip through an ISO string exactly. */
-const after = (t: number, days: number) => t + Math.round(days * DAY_MS);
+/**
+ * Enforce the maximum interval ourselves. ts-fsrs applies `maximum_interval` before it forces
+ * Good to be at least Hard + 1 day, so a Good answer can land one day past the cap (61 for 60).
+ */
+function capInterval(card: Card, t: number): Card {
+  const latest = t + MASTERY_RULES.maxIntervalDays * DAY_MS;
+  return card.due.getTime() > latest ? { ...card, due: new Date(latest), scheduled_days: MASTERY_RULES.maxIntervalDays } : card;
+}
 
 export interface ObjectiveStateOptions {
   /** True when the objective has a mechanism-tier question; a mix-up then needs one to clear. */
@@ -907,6 +994,40 @@ export function localDayKey(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+/** An FSRS card as plain JSON (dates as ISO strings). */
+export interface StoredCard {
+  due: string;
+  stability: number;
+  difficulty: number;
+  elapsed_days: number;
+  scheduled_days: number;
+  learning_steps: number;
+  reps: number;
+  lapses: number;
+  state: number;
+  last_review: string | null;
+}
+
+const toCard = (c: StoredCard): Card => ({
+  ...c,
+  due: new Date(c.due),
+  state: c.state as State,
+  last_review: c.last_review === null ? undefined : new Date(c.last_review),
+});
+
+const toStored = (c: Card): StoredCard => ({
+  due: c.due.toISOString(),
+  stability: c.stability,
+  difficulty: c.difficulty,
+  elapsed_days: c.elapsed_days,
+  scheduled_days: c.scheduled_days,
+  learning_steps: c.learning_steps,
+  reps: c.reps,
+  lapses: c.lapses,
+  state: c.state,
+  last_review: c.last_review ? c.last_review.toISOString() : null,
+});
 
 /** Everything the rules remember about one objective's history. Plain JSON, so it can be stored as a snapshot. */
 export interface ObjectiveAccumulator {
@@ -922,12 +1043,12 @@ export interface ObjectiveAccumulator {
   mixedUp: boolean;
   lastMissQuestion: string | null;
   mastered: boolean;
-  stabilityDays: number;
-  /** Epoch ms; meaningful once mastered. */
-  dueAt: number;
   spacedChecks: number;
+  /** A check was missed after mastery and hasn't been passed since. */
   missPending: boolean;
   retired: boolean;
+  /** FSRS memory state; null before the first answer. */
+  card: StoredCard | null;
 }
 
 export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
@@ -940,17 +1061,23 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   mixedUp: false,
   lastMissQuestion: null,
   mastered: false,
-  stabilityDays: 0,
-  dueAt: 0,
   spacedChecks: 0,
   missPending: false,
   retired: false,
+  card: null,
 }) as ObjectiveAccumulator;
 
 function timeOf(e: EvidenceEvent) {
   const t = Date.parse(e.at);
   if (Number.isNaN(t)) throw new Error(`Evidence ${e.id} has an unparseable timestamp: "${e.at}"`);
   return t;
+}
+
+/** How an answer grades for FSRS: wrong → Again; partial or self-marked → Hard; unaided correct → Good. */
+function gradeOf(e: EvidenceEvent): Grade {
+  if (e.outcome === "incorrect") return Rating.Again;
+  if (e.outcome === "partial" || e.grader === "self") return Rating.Hard;
+  return Rating.Good;
 }
 
 /** One step of the fold. Returns a new accumulator; never mutates the one it was given. */
@@ -962,7 +1089,10 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
   }
   const dayKey = options.dayKey ?? localDayKey;
   const assisted = e.grader === "self";
-  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at };
+  const checkWasDue = acc.mastered && acc.card !== null && t >= Date.parse(acc.card.due);
+  const before = acc.card === null ? createEmptyCard(new Date(t)) : toCard(acc.card);
+  const card = capInterval(scheduler.next(before, new Date(t), gradeOf(e)).card, t);
+  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: toStored(card) };
 
   if (!next.mastered) {
     if (e.outcome === "incorrect" && !assisted) {
@@ -987,35 +1117,28 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
     const lastTwoCorrect = next.lastTwo.length === 2 && next.lastTwo.every((o) => o === "correct");
     if (next.credit >= R.requiredCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
       next.mastered = true;
-      next.stabilityDays = R.initialStabilityDays;
-      next.dueAt = after(t, next.stabilityDays);
     }
     return next;
   }
 
   if (e.outcome === "incorrect" && !assisted) {
-    next.stabilityDays = Math.max(R.minStabilityDays, next.stabilityDays / R.missDivisor);
-    next.dueAt = after(t, 1);
     next.missPending = true;
     next.retired = false;
-  } else if (e.outcome === "correct" && !assisted && t >= next.dueAt) {
-    next.stabilityDays = Math.min(R.stabilityCapDays, next.stabilityDays * R.stabilityGrowth);
+  } else if (e.outcome === "correct" && !assisted && checkWasDue) {
     next.spacedChecks += 1;
-    next.dueAt = after(t, next.stabilityDays);
     next.missPending = false;
-    if (next.stabilityDays >= R.stabilityCapDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
+    if (card.stability >= R.retireStabilityDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
   }
   return next;
 }
 
 /** Read an accumulator against the clock. Fading is computed here, never by a timer. */
 export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState {
-  const t = now.getTime();
   let status: ObjectiveStatus;
-  if (acc.answered === 0) status = "unseen";
+  if (acc.answered === 0 || acc.card === null) status = "unseen";
   else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
   else if (acc.retired) status = "retired";
-  else if (acc.missPending || t >= acc.dueAt) status = "fading";
+  else if (acc.missPending || now.getTime() >= Date.parse(acc.card.due)) status = "fading";
   else status = "mastered";
 
   return {
@@ -1023,9 +1146,10 @@ export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Dat
     status,
     credit: acc.credit,
     creditDays: acc.creditDays.length,
-    stabilityDays: acc.mastered ? acc.stabilityDays : null,
-    dueAt: acc.mastered ? new Date(acc.dueAt).toISOString() : null,
+    stabilityDays: acc.mastered && acc.card ? acc.card.stability : null,
+    dueAt: acc.mastered && acc.card ? acc.card.due : null,
     spacedChecks: acc.spacedChecks,
+    recall: acc.card === null ? null : scheduler.get_retrievability(toCard(acc.card), now, false),
     lastEvidenceAt: acc.lastAt,
   };
 }
@@ -1049,17 +1173,17 @@ export function computeObjectiveState(
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 5: Run tests**
 
 Run: `npm test`
 Expected: PASS (all objective-state tests).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 npx tsc --noEmit && npm run lint
-git add src/lib/mastery/objective-state.ts tests/mastery/objective-state.test.ts
-git commit -m "Mastery: objective state as a fold over evidence (criteria, mix-ups, spaced checks, fading, retirement)"
+git add package.json package-lock.json src/lib/mastery/objective-state.ts tests/mastery/objective-state.test.ts
+git commit -m "Mastery: objective state as a fold over evidence; FSRS spacing (ts-fsrs) under Orca's mastery bar, mix-ups and retirement"
 ```
 
 ---
@@ -1092,6 +1216,7 @@ const s = (objectiveId: string, status: ObjectiveStatus): ObjectiveState => ({
   stabilityDays: null,
   dueAt: null,
   spacedChecks: 0,
+  recall: null,
   lastEvidenceAt: null,
 });
 const map = (...states: ObjectiveState[]) => new Map(states.map((x) => [x.objectiveId, x]));
@@ -1881,6 +2006,7 @@ const s = (objectiveId: string, status: ObjectiveStatus, dueAt: string | null): 
   stabilityDays: dueAt ? 3 : null,
   dueAt,
   spacedChecks: 0,
+  recall: null,
   lastEvidenceAt: null,
 });
 const now = new Date("2026-10-05T09:00:00Z");

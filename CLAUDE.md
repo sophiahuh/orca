@@ -23,8 +23,9 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   objective status (unseen → learning → mastered → fading → retired, plus mixed-up; table in
   `docs/MASTERY-PLAN.md` §2.3), topic
   progress, the island's mastery level, the due list and the streak are computed from the events
-  and the clock. The mastery rule is a fold (`applyAnswer`), so the server can keep snapshots
-  instead of replaying the log.
+  and the clock. Spacing uses FSRS (`ts-fsrs`, Anki's scheduler) under Orca's own mastery bar.
+  The mastery rule is a fold (`applyAnswer`), so the server can keep snapshots instead of
+  replaying the log.
 - **Weights.** Every topic and objective has a weight (neutral 1.0). Claude records signals from the
   material (coverage, material type, explicit emphasis, what builds on what); code computes the
   weight. The Settings material-type sliders feed it and set deep review's question mix.

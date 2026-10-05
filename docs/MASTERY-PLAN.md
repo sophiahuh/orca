@@ -36,7 +36,7 @@ concrete rules for ALD and a build order.
   reached by meeting criteria, not an average that a question type caps.
 - *Interval = 3 + score × 27 days, from last evidence.* One linear formula with no memory of how
   many successful spaced checks have happened, so a concept checked ten times gets the same
-  interval as one checked once with the same score. Spaced repetition needs **stability that
+  interval as one checked once with the same score. (Resolved by adopting FSRS, §2.5.) Spaced repetition needs **stability that
   grows with each successful spaced recall** and shrinks on a miss.
 - *No notion of "retired".* Everything stays in rotation forever, which is exactly the "re-quizzed
   on intro slides in week 12" problem.
@@ -144,12 +144,25 @@ procedural ones. Today's bank has 4–6 per *topic*; generation must become per-
 drills are the cheap way to cover the arithmetic half of ALD.
 
 ### 2.5 Spacing, expiry, and the "don't re-quiz the intro" rule
-When an objective becomes mastered it gets stability `S = 3` days and `dueAt = now + S`.
-- **Successful spaced check** (an unaided correct on a check at or after dueAt): `S ← S × 2.2`,
-  capped at 60 days inside a semester. Checking early (before dueAt) does not grow S.
-- **Miss on a check**: state → `fading` with `S ← max(2, S / 3)`; the objective re-enters the quick
-  queue tomorrow with fresh questions and a pointer to the material (section 3).
-- **Retire** after S reaches the cap with ≥ 3 successful spaced checks. Retired objectives leave
+**Spacing uses FSRS** (Free Spaced Repetition Scheduler, Anki's default since 23.10) through the
+official `ts-fsrs` library, instead of a hand-written rule (decided 2026-10-04). FSRS models each
+objective's *stability* (days until predicted recall falls to 90%), *difficulty*, and
+*retrievability* (predicted recall right now), with parameters fitted on hundreds of millions of
+real reviews.
+- **Fed from the first answer.** Every graded answer updates the objective's FSRS state: wrong →
+  Again, partial or self-marked → Hard, unaided correct → Good. So FSRS learns how hard an
+  objective is before mastery, and a hard-won objective gets shorter intervals once mastered.
+  Orca's mastery bar (§2.4) still decides *when* an objective counts as mastered.
+- **Settings:** 90% target recall; intervals capped at 60 days so everything mastered is checked
+  within a semester (enforced after scheduling, because `ts-fsrs` can overshoot its own cap by a
+  day); no fuzz; no same-day learning steps (sessions are daily).
+- **Fading:** a mastered objective is `fading` from the moment FSRS's due time arrives, or after a
+  missed check until the next one is passed. A correct answer at or after the due time is a
+  **spaced check**; answering early doesn't count as one.
+- **Example** (mastered Tue Oct 6, every check passed on time): checks Oct 13, Nov 14, Jan 13
+  (capped), then retired. A miss drops stability to about 4 days, and it climbs back
+  (4 → 10 → 23 → 50 days).
+- **Retire** once FSRS stability reaches 60 days with ≥ 3 successful spaced checks. Retired objectives leave
   quick review entirely. They come back only if (a) exam review's scope includes them, or
   (b) a dependent objective fails, which triggers one diagnostic question on the prerequisite.
 - **Shielding through `implies`**: an unaided correct on an objective counts as a half-strength
