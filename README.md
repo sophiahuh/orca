@@ -19,13 +19,14 @@ npm run dev        # http://localhost:3000
 
 Optional: put `ANTHROPIC_API_KEY=...` in `.env.local` so material extraction and short-answer
 grading use Claude (`claude-opus-5-5`). Without a key those routes run in demo mode. Next 16 needs
-Node ≥ 20.9; the unit tests added in Phase 1 need Node ≥ 22.6 (`.nvmrc`).
+Node ≥ 20.9; the unit tests need Node ≥ 22.6 (`.nvmrc`).
 
 ## Checks
 
 ```bash
 npx tsc --noEmit
 npm run lint
+npm test        # unit tests (Node ≥ 22.6)
 npm run build
 ```
 
@@ -37,7 +38,6 @@ npm run build
 | `/home` | Knowledge map (islands, due sidebar, class config modal) |
 | `/course/[slug]` | Knowledge path (dotted trail, topic nodes) |
 | `/quiz/[slug]/[topic]` | Quiz, then the quiz-end card |
-| `/chat` | Ask Orca (POST `/api/chat`). Being removed in Phase 1; Orca has no in-app chat. |
 | `/settings` | Review configurations + material-type weights |
 | `/calendar` | Month view with HW / Lab / Review / Exam tags |
 | `/add-material` | Upload a document with type, dates, reflect toggle |

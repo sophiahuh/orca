@@ -1,7 +1,7 @@
 # Mastery, progress and spaced repetition: implementation plan
 
 > **Status 2026-10-04.** This is the learner model. How and when it gets built is in
-> `docs/BACKEND-ROADMAP.md` (Phase 1 builds §2.2–2.5 on-device; Phase 3 builds §2.6 and §3).
+> `docs/BACKEND-ROADMAP.md` (§2.2–2.5 are implemented in `src/lib/mastery/` (Phase 1, on-device); Phase 3 builds §2.6 and §3).
 > Changes since it was written: the frontier term and distance discount are parked (§2.5–2.6,
 > `docs/TO-DISCUSS.md`); mix-ups are detected without a confidence rating (§2.3); a review that
 > comes due stops counting as mastered (§2.3, `fading`); self-reported confusion

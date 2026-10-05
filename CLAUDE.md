@@ -50,7 +50,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   the persistence swap happens behind it.
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
   any API route. Without a key, routes fall back to demo mode.
-- Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), added in Phase 1.
+- Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), run with `npm test`.
 
 ## Design tokens (already in `src/app/globals.css`)
 
@@ -67,22 +67,32 @@ Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 re
 
 ## What exists (all 11 Figma screens are built)
 
-This describes the code as it is. Phase 1 (`docs/superpowers/plans/2026-10-04-orca-phase1-mastery-core.md`)
-changes the items marked †.
+This describes the code as it is.
 
 - `src/lib/motion.ts` — every spring/variant/loop preset. All animation pulls from here.
-- `src/lib/data.ts` — model + seed (5 courses†, due items, calendar events, K-Maps quiz†, `quizFor`†,
-  weight + date helpers). Topics carry a hand-set `status`†.
-- `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage.
+- `src/lib/data.ts` — model + seed + weight and date helpers. ALD is the only seed course and is
+  labelled a sample course (`sample: true`). No seed due items, calendar events, materials or streak
+  (nothing fabricated). `Topic` has no status or lessons; there is no `quizFor` or K-Maps quiz.
+- `src/lib/mastery/` — pure domain modules (tested with `npm test`): `types.ts` (evidence events,
+  objective info and state), `catalogue.ts` (objectives per topic, unsorted bucket),
+  `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
+  fold), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
+  `due.ts` (due today/tomorrow by topic), `streak.ts` (consecutive local days with an unaided graded
+  answer). `src/lib/content/ald-objectives.ts` maps the 69 ALD questions to 40 objectives.
+- `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
+  (key `orca:v5`). Holds per-course `objectives` and an append-only `evidence` log; `recordEvidence`
+  is the only writer of learner state. Derived reads: `useMasteryByCourse()`, `useDueItems()`,
+  `useStreak()`.
 - `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
-- `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date).
-- `src/components/icons.tsx`, `brand/` (OrcaLogo, Island†, Wave, Bubble).
+- `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date),
+  `src/hooks/useNow.ts` (clock for derived state).
+- `src/components/icons.tsx`, `brand/` (OrcaLogo, Island with four mastery looks, Wave, Bubble).
 - `src/components/ui/` — Button, Chip/ContextPill, RoundButton, ProgressBar, Card, Tag, Stat, Select,
-  Toggle, Slider, AnswerOption, DueCard, PathNode† (barrel in `ui/index.ts`).
+  Toggle, Slider, AnswerOption, DueCard, PathNode (done / current / upcoming, no locks) (barrel in `ui/index.ts`).
 - `src/components/layout/` — AppShell (main + 340px Sidebar with NavBar), BackButton, Screen.
 - Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (TruthTable,
-  QuizEnd, ShortAnswer), `chat/ChatBubble`†, `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
-- Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/chat` + `/api/chat`†, `/settings`,
+  QuizEnd, ShortAnswer), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
+- Routes: `/`, `/home`, `/course/[slug]`, `/quiz/[slug]/[topic]`, `/settings`,
   `/calendar`, `/add-material`, `/new-course`, `/api/extract`, `/api/grade`, `/api/llm/*`. Dynamic
   pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
   (run `npx next typegen` before `tsc`).
@@ -105,7 +115,8 @@ changes the items marked †.
 
 ## What to build next
 
-`docs/BACKEND-ROADMAP.md` is the plan. Phases: (1) mastery core on-device, (2) uploads create
+`docs/BACKEND-ROADMAP.md` is the plan. Phase 1 (mastery core on-device) is done; Phase 2 (uploads
+create the course structure) is next. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase
 (auth, tables, Storage, snapshots, server-side pipeline), (5) relation mastery, exams and calendar,
 (6) ALD drills, (7) MCP connector. Build each phase with
@@ -147,5 +158,5 @@ topics, objectives, weights and relations (on-device), (3) scheduling and sessio
 
 - Keep screens thin: data from `useOrca()`, visuals from components, timing from `motion.ts`.
 - Pixel values from Figma are fine inline (`text-[22px]`, `rounded-[20px]`); colors must be tokens.
-- Run `npx tsc --noEmit` and `npm run lint` before committing (and `npm test` once Phase 1 adds it).
+- Run `npx tsc --noEmit` and `npm run lint` before committing and `npm test`.
   `npm run dev` for the preview.
