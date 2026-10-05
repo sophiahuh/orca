@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
+import { AccountCard } from "@/components/settings/Account";
 import { YourAI } from "@/components/settings/YourAI";
 import { fadeUp, stagger } from "@/lib/motion";
 
@@ -61,6 +62,9 @@ export default function SettingsPage() {
         </motion.div>
 
         <motion.div variants={stagger(0.1, 0.08)} initial="hidden" animate="show" className="flex w-[418px] max-w-full flex-col gap-[24px]">
+          <motion.div variants={fadeUp}>
+            <AccountCard />
+          </motion.div>
           <motion.div variants={fadeUp}>
             <YourAI />
           </motion.div>
