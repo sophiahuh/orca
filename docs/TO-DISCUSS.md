@@ -85,6 +85,26 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Decide:** keep batching (fewer calls, faster uploads) unless the evaluation shows batched
   checks letting bad questions through.
 
+### Phase 3 scheduling numbers (provisional)
+- **Set (Phase 3):** priority coefficients are 1 for overdue, weight, gap and open confusion and
+  2 for a mix-up (MASTERY-PLAN §2.6); a poor session is ≥ 3 answers under 60% correct, or two
+  misses on one objective (`AGENDA_RULES`); top-up when an objective has < 3 unseen questions,
+  back to 6 (`TOP_UP_RULES`); question time 30 s choice, 45 s exact answer, 90 s one sentence.
+- **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Weekly` =
+  due until one is finished in the last 7 days; `1 wk before exam` = daily within 7 days of an
+  exam on the calendar. Extra practice is always available from the course page.
+- **Decide:** whether these feel right in use; whether the default deep review (3 hours, the
+  existing Settings default) should be shorter (MASTERY-PLAN §3 says 10–15 minutes).
+
+### Deep review as a spaced check
+- **Source:** MASTERY-PLAN §3: "Deep review success counts as a spaced check for every objective
+  it touches, at double weight."
+- **Meanwhile:** not built. Deep review answers record evidence like any other answer, so a
+  genuine pass at or after a check's due time already passes the check; "double weight" would
+  be a change to the mastery fold (`MASTERY_RULES`).
+- **Decide:** what "double weight" means under FSRS (e.g. one Easy rating instead of Good), or
+  drop it.
+
 ## Watch
 
 ### Mix-ups without a confidence rating

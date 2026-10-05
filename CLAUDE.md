@@ -19,11 +19,11 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 
 **Where things stand.**
 - Work happens on branch **`backend-implementation`** (CI runs on it); `main` is far behind (still
-  at the pre-Phase-1 prototype) and nothing has been merged or opened as a PR. Push finished work
-  to `backend-implementation`.
-- Phases 1 (mastery core) and 2 (uploads build the course) are built on-device, with localStorage
-  as the only persistence. Checks are green: `npx tsc --noEmit`, `npm run lint`, `npm test` (~99
-  unit tests), `npm run test:e2e` (17 browser tests), `npm run build`, and CI.
+  at the pre-Phase-1 prototype) and nothing has been merged or opened as a PR. Phase 3 is on
+  branch **`phase-3`** (from `backend-implementation`), not merged yet.
+- Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
+  on-device, with localStorage as the only persistence. Checks are green: `npx tsc --noEmit`,
+  `npm run lint`, `npm test` (140 unit tests), `npm run test:e2e` (22 browser tests), `npm run build`.
 - **Never run against a real model.** Every pipeline test stubs the model. No session so far has
   had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` are untested against
   Claude, `npm run score:extraction` has no baseline (`scripts/extraction-baseline.json` doesn't
@@ -34,12 +34,12 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 **Next, in order.**
 1. With a key: `ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline`, then upload
    an ALD deck in `npm run dev` and look at the review screen. Fix prompts where extraction or
-   question checks go wrong; commit the baseline.
-2. Phase 3, scheduling and sessions (`docs/BACKEND-ROADMAP.md`): priority, a due list that
-   includes new and weak material, quick-review sessions sized to the course's time budget,
-   question top-ups, deep review. No plan written yet: write
-   `docs/superpowers/plans/<date>-orca-phase3-…md` first, in the style of the Phase 2 plan.
-3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline).
+   question checks go wrong; commit the baseline. Then finish a session in `npm run dev` and check
+   the top-up writes sensible questions (it has only run against a stubbed model).
+2. Merge `phase-3` into `backend-implementation` once reviewed; settle the Phase 3 numbers in
+   `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review as a spaced check").
+3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline). Write its plan in
+   `docs/superpowers/plans/` first, in the style of the Phase 2 and 3 plans.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
 
@@ -48,6 +48,10 @@ them silently; list what you assumed.
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
 - Run `npx next typegen` before `tsc` after adding a route; delete a stale `.next/dev` if `tsc`
   complains about a route that no longer exists.
+- Playwright's `page.clock.setFixedTime` freezes `motion` animations after the first page, so
+  content can stay invisible (opacity 0) or a quiz can stick on its first question. Set the clock
+  once, before the first navigation, and seed past days' evidence instead of moving the clock
+  mid-test (see `e2e/scheduling.spec.ts`).
 - Changing the persisted state's shape means bumping `STORAGE_KEY` in `src/lib/store.tsx` and
   `e2e/fixture.ts` together (no migrations; local data is test data).
 - Pure modules (`src/lib/mastery`, `src/lib/course`, `src/lib/pipeline` except `client.ts`) must
@@ -140,31 +144,37 @@ This describes the code as it is.
   objective info and state), `catalogue.ts` (objectives per topic, unsorted bucket),
   `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
   fold), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
-  `due.ts` (due today/tomorrow by topic), `streak.ts` (consecutive local days with an unaided graded
-  answer). `catalogue.ts` follows `mergedInto` and leaves archived objectives out; `applyConfusion`
+  `priority.ts` (overdue, weight, gap, mix-up and open confusion, each with a reason sentence),
+  `agenda.ts` (per course: ranked due list, quick- and deep-review cadence, poor-session review
+  to-dos and next-day re-quizzes), `session.ts` (quick review, re-quiz and deep review assembled
+  from the question stock within the time budget), `todo.ts` (sidebar cards from the agenda),
+  `streak.ts` (consecutive local days with an unaided graded answer). `catalogue.ts` follows `mergedInto` and leaves archived objectives out; `applyConfusion`
   resets an objective to learning.
 - `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
-  (key `orca:v7`). Holds per-course `objectives` and `relations`, pipeline `runs`, and an
-  append-only `evidence` log (answers and confusion events); `recordEvidence` and
-  `recordReflection` are its only writers. Course structure changes through `applyUpload` (a
+  (key `orca:v8`). Holds per-course `objectives` and `relations`, pipeline `runs`, each upload's
+  text (`materialPages`, for top-ups), finished sessions (`results`, with `mode` and `sessionId`),
+  and an append-only `evidence` log (answers and confusion events); `recordEvidence` and
+  `recordReflection` are its only writers. `addQuestions` adds topped-up questions. Course structure changes through `applyUpload` (a
   pipeline plan) and `editStructure` (an op from `src/lib/course/ops.ts`). Derived reads:
-  `useMasteryByCourse()`, `useDueItems()`, `useStreak()`.
+  `useMasteryByCourse()`, `useAgenda()`, `useTodos()`, `useStreak()`.
 - `src/lib/course/` — pure course-structure modules (tested with `npm test`): `ops.ts` (confirm,
   reject, restore, rename, merge and un-merge topics and objectives; settle uncertain duplicates),
   `match.ts` (name normalisation, exact name/alias matching that follows merges and reports
   rejected matches, shortlist for reconciliation), `weights.ts` (weights from upload signals,
-  `WEIGHT_RULES`), `review.ts` (what still needs review).
+  `WEIGHT_RULES`), `review.ts` (what still needs review), `study.ts` (where an objective is taught,
+  as "file, slides 18–20").
 - `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
 - `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date),
-  `src/hooks/useNow.ts` (clock for derived state).
+  `src/hooks/useNow.ts` (clock for derived state), `src/hooks/useTopUp.ts` (tops up a finished
+  session's objectives in the background).
 - `src/components/icons.tsx`, `brand/` (OrcaLogo, Island with four mastery looks, Wave, Bubble).
 - `src/components/ui/` — Button, Chip/ContextPill, RoundButton, ProgressBar, Card, Tag, Stat, Select,
   Toggle, Slider, AnswerOption, DueCard, PathNode (done / current / upcoming, no locks) (barrel in `ui/index.ts`).
 - `src/components/layout/` — AppShell (main + 340px Sidebar with NavBar), BackButton, Screen.
-- Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (TruthTable,
-  QuizEnd, ShortAnswer), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
-- Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`),
-  `/quiz/[slug]/[topic]`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
+- Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (QuizRunner,
+  shared by topic quizzes and sessions; TruthTable, QuizEnd, ShortAnswer), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
+- Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`),
+  `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
   `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`. Dynamic
   pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
   (run `npx next typegen` before `tsc`).
@@ -184,7 +194,9 @@ This describes the code as it is.
   dropped with a reason in the run record. Prompts (`prompts.ts`) and zod schemas (`schemas.ts`)
   are shared by `/api/pipeline/[step]` (builds the prompt server-side from structured input) and
   `client.ts` (browser-only providers). `apply.ts` merges the plan; uploads land on
-  `/course/[slug]/review`. `npm run score:extraction` scores extraction on the ALD decks against
+  `/course/[slug]/review`. `writeQuestions` (generate + checks) is shared with `topup.ts`, which
+  writes more questions after a session for objectives under 3 unseen, from the stored text of
+  the material that teaches them. `npm run score:extraction` scores extraction on the ALD decks against
   `docs/OBJECTIVES-ALD.md` (needs `ANTHROPIC_API_KEY`; `--dry` checks the decks without a model).
 - ALD reference material (not shipped in the app): `docs/samples/ald/L01–L04` (real ALD lecture
   decks; syllabus in L01) to upload, and draft objectives in `docs/OBJECTIVES-ALD.md`. The 69
@@ -193,7 +205,8 @@ This describes the code as it is.
 - `e2e/` — browser tests: `mastery-core.spec.ts` (fresh browser, empty states, the trail, quiz
   answers writing evidence), `upload.spec.ts` (a real ALD deck through pdf.js and the pipeline with
   `/api/pipeline/*` stubbed; re-uploading adds nothing), `review.spec.ts` (review screen and
-  objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective).
+  objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective),
+  `scheduling.spec.ts` (quick review, poor-quiz to-dos and re-quiz, deep review cadence, top-up).
   `e2e/fixture.ts` seeds state into localStorage.
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app; last deployed before Phase 1). Deploy with
@@ -202,8 +215,9 @@ This describes the code as it is.
 
 ## What to build next
 
-`docs/BACKEND-ROADMAP.md` is the plan. Phases 1 (mastery core) and 2 (uploads create the course
-structure) are done on-device; Phase 3 (scheduling and sessions) is next. Before tuning anything in
+`docs/BACKEND-ROADMAP.md` is the plan. Phases 1 (mastery core), 2 (uploads create the course
+structure) and 3 (scheduling and sessions, branch `phase-3`) are done on-device; Phase 4
+(Supabase) is next. Before tuning anything in
 Phase 2, run `npm run score:extraction` with a key and record a baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase
 (auth, tables, Storage, snapshots, server-side pipeline), (5) relation mastery, exams and calendar,

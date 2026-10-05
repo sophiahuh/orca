@@ -5,9 +5,10 @@ Duolingo-style trail of topics inside each island, quizzes you, and nudges revie
 you configure per class. Mastery is tracked per learning objective from your answers, with spaced
 checks, and each island's look shows how much of its course you've mastered.
 
-**Status (2026-10-05):** no backend yet. Mastery tracking (Phase 1) and building a course from
-uploads (Phase 2) work on-device, but the pipeline hasn't been run against a real model yet.
-Active branch: `backend-implementation`. New here, human or agent? Read `CLAUDE.md` → "Start here".
+**Status (2026-10-05):** no backend yet. Mastery tracking (Phase 1), building a course from
+uploads (Phase 2) and scheduling with quick, deep and re-quiz sessions (Phase 3, branch `phase-3`)
+work on-device, but the pipeline hasn't been run against a real model yet.
+Active branch: `backend-implementation` (Phase 3 on `phase-3` until merged). New here, human or agent? Read `CLAUDE.md` → "Start here".
 
 This is the v1 web prototype: Next.js 16 (App Router) + Tailwind v4 + `motion`. State lives in a
 React context persisted to `localStorage`; Supabase is the planned backend. See `CLAUDE.md` for
@@ -48,7 +49,9 @@ npm run build
 | `/course/[slug]/review` | After an upload: confirm, rename or reject new topics; settle possible duplicates |
 | `/course/[slug]/objectives` | Every objective: review status, origin, mastery, weight; reject, restore, merge |
 | `/course/[slug]/reflect` | Homework reflection: what tripped you up goes back to practice |
+| `/course/[slug]/study` | After a poor quiz: where to re-read, what was missed, the next-day re-quiz |
 | `/quiz/[slug]/[topic]` | Quiz, then the quiz-end card |
+| `/session/[slug]?kind=quick\|deep\|requiz` | A scheduled session, assembled at start from the question stock |
 | `/settings` | Review configurations + material-type weights |
 | `/calendar` | Month view with HW / Lab / Review / Exam tags |
 | `/add-material` | Upload a PDF: Orca maps it onto the course, writes and checks questions |

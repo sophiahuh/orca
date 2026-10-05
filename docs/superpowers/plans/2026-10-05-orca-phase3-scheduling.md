@@ -1,7 +1,12 @@
 # Orca Phase 3: Scheduling and Sessions
 
-> **Status: planned 2026-10-05.** Built task by task on branch `phase-3` (from
-> `backend-implementation`).
+> **Status: built 2026-10-05** on branch `phase-3` (from `backend-implementation`). Differences from
+> the plan below: the agenda also carries the full ranked list (deep review and re-quizzes draw
+> from it) and whether deep review lands tomorrow; to-do cards are their own module
+> (`src/lib/mastery/todo.ts`); "where it's taught" is `src/lib/course/study.ts`; the topic quiz
+> and sessions share `components/quiz/QuizRunner.tsx`, and topic quizzes count as finished
+> sessions for top-ups and the poor-quiz loop too; the session buttons sit top-right on the
+> course page. Top-ups have only run against a stubbed model.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 3. Learner model: `docs/MASTERY-PLAN.md` §2.6 and §3.
 Still on-device: everything is derived from the evidence log and the store; model calls go through
