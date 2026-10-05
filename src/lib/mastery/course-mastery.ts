@@ -1,7 +1,7 @@
 /** Everything learner-facing about one course, derived in one pass. */
 import { attribution } from "./attribution.ts";
 import type { QuestionRef } from "./catalogue.ts";
-import { MASTERY_RULES, computeObjectiveState } from "./objective-state.ts";
+import { EMPTY_ACCUMULATOR, MASTERY_RULES, type ObjectiveAccumulator, computeObjectiveState, stateAt } from "./objective-state.ts";
 import { type IslandLevel, type TopicProgress, islandLevel, topicProgress } from "./progress.ts";
 import type { EvidenceEvent, ObjectiveInfo, ObjectiveState } from "./types.ts";
 
@@ -29,9 +29,15 @@ export interface CourseMasteryInput {
   evidence: readonly EvidenceEvent[];
   now: Date;
   dayKey?: (iso: string) => string;
+  /**
+   * Stored snapshots (objectiveId → accumulator), from the server's objective_state. When given,
+   * objective state is read from them (an objective without one is unseen) instead of folding
+   * `evidence`; `evidence` still gives the events the agenda reads.
+   */
+  snapshots?: ReadonlyMap<string, ObjectiveAccumulator>;
 }
 
-export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, now, dayKey }: CourseMasteryInput): CourseMastery {
+export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, now, dayKey, snapshots }: CourseMasteryInput): CourseMastery {
   // An answer counts toward its question's *current* objective, so re-sorting questions into
   // objectives re-files past answers too. Otherwise the objective recorded at answer time is used,
   // following merges. Answers on archived objectives (or archived topics' objectives) match no
@@ -50,7 +56,12 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
   const objectivesNeedingQuestions = new Map<string, number>();
   for (const { topicId, list } of perTopic) {
     for (const o of list) {
-      objectives.set(o.id, computeObjectiveState(o.id, events, now, { hasMechanismQuestions: o.hasMechanismQuestions, dayKey }));
+      objectives.set(
+        o.id,
+        snapshots
+          ? stateAt(o.id, snapshots.get(o.id) ?? EMPTY_ACCUMULATOR, now)
+          : computeObjectiveState(o.id, events, now, { hasMechanismQuestions: o.hasMechanismQuestions, dayKey }),
+      );
     }
     const ids = list.map((o) => o.id);
     topicObjectives.set(topicId, ids);

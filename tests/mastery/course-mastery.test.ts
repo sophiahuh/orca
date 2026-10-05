@@ -77,3 +77,17 @@ test("answers on a merged objective count for the survivor; answers on an archiv
   assert.equal(a.objectives.has("t2/b"), false);
   assert.deepEqual(a.topics.get("t2"), { status: "not-started", mastered: 0, total: 0 });
 });
+
+test("with stored snapshots, objective state is read from them, and an objective without one is unseen", async () => {
+  const { replayObjective } = await import("../../src/lib/mastery/objective-state.ts");
+  const evidence = [ev("q1", "2026-10-01T12:00:00Z"), ev("q2", "2026-10-01T12:00:00Z"), ev("q3", "2026-10-02T12:00:00Z")];
+  const now = new Date("2026-10-02T13:00:00Z");
+  const folded = courseMastery({ ...base, evidence, now });
+  const snapshots = new Map([["t1/a", replayObjective("t1/a", evidence, { hasMechanismQuestions: false, dayKey: base.dayKey })]]);
+  const read = courseMastery({ ...base, evidence, now, snapshots });
+  assert.deepEqual(read.objectives, folded.objectives, "a snapshot equal to the replay gives the same states");
+  assert.equal(read.island, folded.island);
+  const none = courseMastery({ ...base, evidence, now, snapshots: new Map() });
+  assert.equal(none.objectives.get("t1/a")!.status, "unseen", "events alone don't make state when snapshots are given");
+  assert.equal(none.events.length, 3, "the events are still there for the agenda");
+});
