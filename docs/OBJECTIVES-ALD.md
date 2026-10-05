@@ -136,10 +136,10 @@ weights (RTL labs 21%, HW 10%, exams 40%, FIR-filter project 25%).
 
 ## What this changes in the app
 
-1. Each question carries an `objectiveId`. Phase 1 tags the 69 built-in questions with 40 of the
-   objectives below (`src/lib/content/ald-objectives.ts`); the rest arrive with question generation
-   (Phase 2) and drills (Phase 6). ALD ships as a labelled sample course; uploading these decks
-   is also how extraction gets scored against this list (roadmap Phase 2, "Evaluation").
+1. Each question carries an `objectiveId`. Phase 1 tagged the 69 built-in questions with 40 of the
+   objectives below; that built-in ALD course has since been removed from the app (it's in git
+   history at 89e042b). ALD now comes from uploading these decks, which is also how extraction
+   gets scored against this list (roadmap Phase 2, "Evaluation").
 2. A topic is *done* when every objective in it is mastered (3 different questions answered
    correctly over at least 2 days, last two correct; `docs/MASTERY-PLAN.md` §2.4), not after one
    quiz. Only 7 of the 40 tagged objectives have 3 or more questions today, so most ALD topics

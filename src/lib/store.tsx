@@ -18,7 +18,6 @@ import {
   type Weights,
   DEFAULT_CONFIG,
   DEFAULT_WEIGHTS,
-  SEED_COURSES,
   defaultTopicPositions,
   shortName,
   slugify,
@@ -26,12 +25,10 @@ import {
 import type { LlmConfig } from "./llm";
 import { type Extraction, questionsByTopic, topicsFrom } from "./extraction";
 import type { QuizQuestion } from "./data";
-import { ALD_QUESTION_BANK } from "./content/ald";
 import type { EvidenceEvent, ObjectiveInfo } from "./mastery/types";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { dueTopics } from "./mastery/due";
 import { streakDays } from "./mastery/streak";
-import { ALD_OBJECTIVES } from "./content/ald-objectives";
 import { useNow } from "@/hooks/useNow";
 
 interface QuizResult {
@@ -61,19 +58,20 @@ interface OrcaState {
   evidence: EvidenceEvent[];
 }
 
-const STORAGE_KEY = "orca:v5"; // v5: due list and streak are derived; no fabricated seed data
+const STORAGE_KEY = "orca:v6"; // v6: no built-in courses (the ALD sample is gone)
 
 const initialState: OrcaState = {
-  courses: SEED_COURSES,
+  // No built-in courses: every course is created by the student and filled from their uploads.
+  courses: [],
   events: [],
   materials: [],
-  configs: Object.fromEntries(SEED_COURSES.map((c) => [c.id, DEFAULT_CONFIG])),
-  weights: Object.fromEntries(SEED_COURSES.map((c) => [c.id, DEFAULT_WEIGHTS])),
+  configs: {},
+  weights: {},
   results: [],
   onboarded: false,
   llm: null,
-  questionBank: { ald: ALD_QUESTION_BANK },
-  objectives: { ald: ALD_OBJECTIVES },
+  questionBank: {},
+  objectives: {},
   evidence: [],
 };
 
@@ -100,6 +98,7 @@ const VARIANT_CYCLE: IslandVariant[] = ["ald", "circuit", "signals", "linear", "
 
 /** Free slots on the map for newly created islands (854×834 canvas). */
 const OPEN_SLOTS = [
+  { x: 70, y: 110 },
   { x: 560, y: 260 },
   { x: 120, y: 290 },
   { x: 330, y: 20 },
@@ -117,10 +116,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as Partial<OrcaState>;
-        // Built-in content always wins for its own topic ids, so authored fixes reach existing browsers.
-        const savedBank = saved.questionBank ?? {};
-        saved.questionBank = { ...savedBank, ald: { ...(savedBank.ald ?? {}), ...ALD_QUESTION_BANK } };
-        saved.objectives = { ...(saved.objectives ?? {}), ald: ALD_OBJECTIVES };
         // Hydrating persisted state after mount is intentional: reading
         // localStorage during render would mismatch the server HTML.
         // eslint-disable-next-line react-hooks/set-state-in-effect

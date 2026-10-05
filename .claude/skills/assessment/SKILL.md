@@ -7,8 +7,8 @@ description: Use when building or changing question generation, question validat
 
 ## Rules
 
-- Every question belongs to one objective (`objectiveId`). Built-in content maps questions to
-  objectives in a catalogue (`src/lib/content/ald-objectives.ts`); a question with no objective
+- Every question belongs to one objective (`objectiveId`), recorded in the course's objective
+  catalogue (`objectives[courseId]` in the store); a question with no objective
   falls into its topic's explicit "unsorted" objective, never a guessed one.
 - Prefer exact checkers (bit strings, numbers, Boolean expressions by truth table). Model grading
   needs a structured rubric (`requiredIdeas`, `acceptableAlternatives`, `knownMisconceptions`).

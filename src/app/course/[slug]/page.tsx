@@ -54,9 +54,6 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           <BackButton />
         </motion.div>
         <div className="flex flex-col gap-[6px] pt-[2px]">
-          {course.sample && (
-            <motion.span variants={fadeUp} className="eyebrow">Sample course</motion.span>
-          )}
           <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-none text-prussian">
             {course.name}
           </motion.h1>

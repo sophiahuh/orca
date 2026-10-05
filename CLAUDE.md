@@ -36,8 +36,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
 - **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
   growing, thriving) from the share of its course's objectives that are mastered.
-- **Nothing hardcoded or faked.** ALD is a labelled sample course; everything else starts empty and
-  comes from uploads. Missing data shows as an explicit empty or error state.
+- **Nothing hardcoded or faked.** The app ships no courses; every course starts empty and its
+  content comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** Claude is used for extracting material, generating questions and grading
   short answers. Students' own Claude/ChatGPT can connect through an MCP connector (planned) that
   logs study activity as a priority signal, never as mastery.
@@ -77,17 +77,17 @@ Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 re
 This describes the code as it is.
 
 - `src/lib/motion.ts` — every spring/variant/loop preset. All animation pulls from here.
-- `src/lib/data.ts` — model + seed + weight and date helpers. ALD is the only seed course and is
-  labelled a sample course (`sample: true`). No seed due items, calendar events, materials or streak
-  (nothing fabricated). `Topic` has no status or lessons; there is no `quizFor` or K-Maps quiz.
+- `src/lib/data.ts` — model + defaults + weight and date helpers. No seed courses, due items,
+  calendar events, materials or streak (nothing built in or fabricated). `Topic` has no status or
+  lessons; there is no `quizFor` or K-Maps quiz.
 - `src/lib/mastery/` — pure domain modules (tested with `npm test`): `types.ts` (evidence events,
   objective info and state), `catalogue.ts` (objectives per topic, unsorted bucket),
   `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
   fold), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
   `due.ts` (due today/tomorrow by topic), `streak.ts` (consecutive local days with an unaided graded
-  answer). `src/lib/content/ald-objectives.ts` maps the 69 ALD questions to 40 objectives.
+  answer).
 - `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`; persisted to localStorage
-  (key `orca:v5`). Holds per-course `objectives` and an append-only `evidence` log; `recordEvidence`
+  (key `orca:v6`). Holds per-course `objectives` and an append-only `evidence` log; `recordEvidence`
   is the only writer of learner state. Derived reads: `useMasteryByCourse()`, `useDueItems()`,
   `useStreak()`.
 - `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
@@ -113,12 +113,14 @@ This describes the code as it is.
   → `/api/extract` asks the model for topics + source-anchored quiz questions (`src/lib/extraction.ts`,
   zod schema) → `importExtraction` in the store appends topics and fills
   `questionBank[courseId][topicId]`. It does not create objectives yet.
-- Built-in ALD content: `src/lib/content/ald.ts` (topics + 69 questions); draft objectives in
-  `docs/OBJECTIVES-ALD.md`. Sample material: `docs/samples/ald/L01–L04` (real ALD lecture decks;
-  syllabus in L01).
-- `e2e/mastery-core.spec.ts` — the Phase 1 walkthrough in a real browser: fresh state, no chat,
-  island looks, the sample trail (START, objective counts, no locks), empty calendar, quiz answers
-  writing evidence and moving the trail, island and streak, and a new course starting uncharted.
+- ALD reference material (not shipped in the app): `docs/samples/ald/L01–L04` (real ALD lecture
+  decks; syllabus in L01) to upload, and draft objectives in `docs/OBJECTIVES-ALD.md`. The 69
+  questions Sophia authored from them were removed from the app; they're in git history
+  (`src/lib/content/ald.ts` at 89e042b) for evaluating extraction.
+- `e2e/mastery-core.spec.ts` — the Phase 1 walkthrough in a real browser: a fresh browser (no
+  courses, empty states, no chat, island looks, empty calendar, a new course starting uncharted),
+  then a fixture course seeded into localStorage by `e2e/fixture.ts` (trail with START, objective
+  counts and no locks; quiz answers writing evidence and moving the trail, island and streak).
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy

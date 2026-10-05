@@ -116,7 +116,7 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   retired one. A partial answer on a retired objective doesn't un-retire it.
 - 2026-10-04: island cut-offs: no answers → look 1; under ⅓ held → 2; ⅓ or more → 3; ⅔ or more → 4.
 - 2026-10-04: streak = consecutive local days with an unaided graded answer.
-- 2026-10-04: ALD stays as a labelled sample course; all other seed data is removed; uploads
-  (Phase 2) come before Supabase so extraction can be tested on real files.
-- 2026-10-04: most ALD objectives can't be mastered until question generation adds supply; write
-  more ALD questions rather than weakening the rule if a demo needs it sooner.
+- 2026-10-04: all fabricated seed data is removed; uploads (Phase 2) come before Supabase so
+  extraction can be tested on real files.
+- 2026-10-05: the built-in ALD sample course is removed too; the app ships no courses. ALD is
+  reached by uploading `docs/samples/ald/`. The e2e suite seeds its own fixture course.

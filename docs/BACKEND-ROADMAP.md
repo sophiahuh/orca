@@ -20,8 +20,9 @@ Open questions live in `docs/TO-DISCUSS.md`.
 - **Relations between objectives** (builds on, implies, contrasts with, applies to) are extracted
   with uploads, because weights need "how many objectives build on this". Relation mastery comes
   later (Phase 5).
-- **Only ALD ships seeded, labelled as a sample course.** Everything else starts empty: no
-  fabricated due items, calendar events, materials or streak.
+- **Nothing ships seeded.** Every course is created by the student and filled from uploads: no
+  built-in courses, due items, calendar events, materials or streak. (Phase 1 kept ALD as a
+  labelled sample; it was removed after Phase 1.)
 
 **Learner state**
 - **Derived, never written.** Every graded answer appends an evidence event; objective state,
@@ -129,8 +130,9 @@ Rules:
   mastery state, with reject and merge actions. This is where an inferred objective the course
   never covers gets rejected.
 - **Evaluation:** upload the real ALD decks (`docs/samples/ald/`) and score the extracted
-  objectives and questions against Sophia's authored set, following the platform's scoring
-  harness (`scripts/score-extraction.ts`).
+  objectives and questions against Sophia's authored set (objectives in `docs/OBJECTIVES-ALD.md`;
+  the 69 authored questions are in git history at `src/lib/content/ald.ts`, last present in
+  commit 89e042b), following the platform's scoring harness (`scripts/score-extraction.ts`).
 
 #### Weight signals and formula
 Claude reports facts; code computes weights. Per objective and per upload, extraction records:
@@ -150,12 +152,9 @@ signals. A topic's weight is the mean of its objectives'. Exact curve constants 
 Phase 2 plan, with tests.
 
 Carry-overs from the Phase 1 review (fix in this phase):
-- Merge the built-in ALD bank into saved state per question id, not per topic; today an upload into
-  an existing ALD topic is replaced on reload, and its answers are then dropped silently.
 - Make extracted question ids content-stable (today `${topic}-${filename}-${i}` can collide when the
   same filename is re-uploaded) and enforce unique question ids across a course.
 - Surface answers whose question and objective no longer exist, instead of dropping them silently.
-- Built-in ALD objectives are replaced wholesale on load; keep student-added ALD objectives.
 
 ### Phase 3 — Scheduling, on-device
 - **Priority** (`docs/MASTERY-PLAN.md` §2.6 minus the parked terms), with objective weight as its

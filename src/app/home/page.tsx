@@ -22,6 +22,13 @@ export default function HomePage() {
     <AppShell bg="parchment">
       <KnowledgeMap courses={courses} dueCount={dueCount} onConfigure={setConfiguring} />
 
+      {hydrated && courses.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[8px] text-center">
+          <p className="text-[22px] font-bold text-prussian">No islands yet.</p>
+          <p className="text-[16px] text-wisteria-deep">Add a course, then upload its slides to map its topics.</p>
+        </div>
+      )}
+
       <Link
         href="/new-course"
         className="pressable absolute left-[28px] top-[28px] inline-flex items-center gap-2 rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink"

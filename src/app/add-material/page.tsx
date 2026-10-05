@@ -67,7 +67,7 @@ function DateField({ label, value, onChange, noneLabel }: { label: string; value
 export default function AddMaterialPage({ searchParams }: PageProps<"/add-material">) {
   const sp = use(searchParams);
   const router = useRouter();
-  const { courses, addMaterial, importExtraction, llm } = useOrca();
+  const { courses, addMaterial, importExtraction, llm, hydrated } = useOrca();
   const serverModel = useServerModel();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -83,7 +83,23 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [reflect, setReflect] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  if (!course) return null;
+  if (!course) {
+    if (!hydrated) return null;
+    return (
+      <Screen>
+        <header className="px-[28px] pt-[28px]">
+          <BackButton />
+        </header>
+        <div className="flex flex-1 flex-col items-center justify-center gap-[12px] text-center">
+          <p className="text-[22px] font-bold text-prussian">No course to add material to.</p>
+          <p className="text-[16px] text-wisteria-deep">Create a course first; its uploads go on its island.</p>
+          <Link href="/new-course" className="pressable rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink">
+            Add Course
+          </Link>
+        </div>
+      </Screen>
+    );
+  }
   const filename = chosenName ?? "Choose a PDF…";
   const ownModel = llmReady(llm);
   const connected = ownModel || Boolean(serverModel);

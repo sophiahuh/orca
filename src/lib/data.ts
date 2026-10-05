@@ -6,7 +6,6 @@
  * table shapes and the seed becomes a migration.
  */
 
-import { ALD_TOPICS } from "./content/ald";
 
 /** Path canvas layout: first node y and vertical gap between nodes (854-wide canvas). */
 export const PATH_NODE_GAP = 120;
@@ -37,8 +36,6 @@ export interface Course {
   topics: Topic[];
   /** Optional hand-tuned trail path. Generated from topic positions if absent. */
   trail?: string;
-  /** Built-in sample content rather than material the student uploaded. */
-  sample?: boolean;
 }
 
 export type DueWhen = "today" | "tomorrow";
@@ -158,7 +155,7 @@ export interface QuizQuestion {
   objectiveId?: string;
 }
 
-/* ── Seed ─────────────────────────────────────────────────────────────── */
+/* ── Defaults ─────────────────────────────────────────────────────────── */
 
 export const DEFAULT_CONFIG: ReviewConfig = {
   quick: { duration: "10 min", cadence: "Daily" },
@@ -172,29 +169,6 @@ export const DEFAULT_WEIGHTS: Weights = {
   practiceProblems: 25,
   lectures: 10,
 };
-
-/** ALD's trail comes from the authored lecture content. Progress is derived from evidence, so it starts empty. */
-const ALD_POSITIONS = defaultTopicPositions(ALD_TOPICS.length);
-const ALD_SEED_TOPICS: Topic[] = ALD_TOPICS.map((t, i) => ({
-  id: t.id,
-  name: t.name,
-  pos: ALD_POSITIONS[i],
-  summary: t.summary,
-  source: t.source,
-}));
-
-export const SEED_COURSES: Course[] = [
-  {
-    id: "ald",
-    slug: "ald",
-    name: "Advanced Logic Design",
-    short: "ALD",
-    variant: "ald",
-    pos: { x: 70, y: 110 },
-    topics: ALD_SEED_TOPICS,
-    sample: true,
-  },
-];
 
 export const MATERIAL_TYPES: readonly MaterialType[] = ["Past exam", "Practice problems", "Practice exam", "Homework", "Lecture", "Other"];
 
