@@ -124,6 +124,31 @@ isOneToOne: false
       referencedColumns: ["id","owner_id"]
     }
                   ]
+                },"objective_state": {
+                  Row: {
+                    "accumulator": Json | null,"course_id": string,"last_event_at": string | null,"objective_id": string,"owner_id": string,"rules_version": number | null,"stale": boolean,"updated_at": string,"version": number
+                  }
+                  Insert: {
+                    "accumulator"?: Json | null,"course_id": string,"last_event_at"?: string | null,"objective_id": string,"owner_id": string,"rules_version"?: number | null,"stale"?: boolean,"updated_at"?: string,"version"?: number
+                  }
+                  Update: {
+                    "accumulator"?: Json | null,"course_id"?: string,"last_event_at"?: string | null,"objective_id"?: string,"owner_id"?: string,"rules_version"?: number | null,"stale"?: boolean,"updated_at"?: string,"version"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "objective_state_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "objective_state_objective_id_course_id_fkey"
+      columns: ["objective_id","course_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id","course_id"]
+    }
+                  ]
                 },"objectives": {
                   Row: {
                     "aliases": (string)[],"archived_with_topic": boolean,"course_id": string,"created_at": string,"description": string,"id": string,"material_id": string | null,"merged_into": string | null,"name": string,"origin": string,"owner_id": string,"review": string,"run_id": string | null,"signals": NonNullable<Json>,"topic_id": string,"uncertain": Json | null
@@ -341,7 +366,13 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "save_structure":
+            "record_evidence":
+{ Args: { "accumulator": Json,"event": Json,"expected_version": number,"objective": string,"owner": string,"rules_version": number }; Returns: boolean
+                           },
+"save_snapshot":
+{ Args: { "accumulator": Json,"expected_version": number,"objective": string,"owner": string,"rules_version": number }; Returns: boolean
+                           },
+"save_structure":
 { Args: { "course": string,"rows": Json }; Returns: undefined
                            }
           }
