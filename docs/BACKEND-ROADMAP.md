@@ -82,10 +82,22 @@ Verify live: push migrations, prove RLS with two users, run a real upload.
    answer agreement), and attached.
 
 Rules decided 2026-10-04:
+- **Every objective belongs to the course whose material was uploaded**, and records the upload
+  and extraction run that created it (`createdFrom: { materialId, extractionRunId }`), even when it
+  has no source anchor. There is no cross-course objective list.
 - **Inferred objectives are allowed, flagged.** An objective that comes from general knowledge
-  rather than the uploaded material is created and quizzable, marked `origin: "inferred"`, and its
-  questions carry no source anchor, so they're never presented as course-specific. Objectives
-  from the material are `origin: "material"` with anchors; built-in content is `"authored"`.
+  rather than the uploaded material is marked `origin: "inferred"`, and its questions carry no
+  source anchor, so they're never presented as course-specific. Objectives from the material are
+  `origin: "material"` with anchors; built-in content is `"authored"`. The platform's database
+  check (at least one source anchor per row) becomes "at least one unless inferred".
+- **Review and confirmation follow the platform's model.** Status is `proposed | confirmed |
+  archived`. The student reviews topics; an objective under a confirmed topic auto-confirms unless
+  reconciliation said `uncertain`, and inferred objectives follow the same rule as extracted ones.
+  Objectives still `proposed` (uncertain matches, or under a topic not yet confirmed) are
+  **quizzable everywhere** (questions generated, quizzed, shown as due, counted for the island) with
+  a visible "unreviewed" tag. So review removes flags and catches mistakes; it isn't a gate on
+  practice. `archived` objectives are never given questions or quizzed. (The platform currently
+  generates questions for archived concepts, which is the bug to avoid here.)
 - **Material type limits what an upload creates.** Lectures and syllabi create topics and
   objectives. Homework and exams mostly attach to existing objectives (marking them as tested, and
   adding practice-style questions), and create a new objective only when it's clearly new.
