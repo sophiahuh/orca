@@ -183,8 +183,8 @@ no orphaned answers to surface because nothing is deleted; Phase 2's reject and 
 archive or set `mergedInto`, never remove.
 
 ### Phase 3 — Scheduling, on-device ✅
-Plan: `docs/superpowers/plans/2026-10-05-orca-phase3-scheduling.md`. Built 2026-10-05 on branch
-`phase-3`: priority with reason sentences (`src/lib/mastery/priority.ts`), the per-course agenda
+Plan: `docs/superpowers/plans/2026-10-05-orca-phase3-scheduling.md`. Built 2026-10-05 (branch `phase-3`, merged
+into `backend-implementation`): priority with reason sentences (`src/lib/mastery/priority.ts`), the per-course agenda
 (`agenda.ts`: ranked due list, quick- and deep-review cadence, poor-session review to-dos and
 next-day re-quizzes), session assembly (`session.ts`), top-up after every finished session
 (`src/lib/pipeline/topup.ts`, reusing the upload's write-and-check step), `/session/[slug]`, the

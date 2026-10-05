@@ -19,13 +19,13 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 
 **Where things stand.**
 - Work happens on branch **`backend-implementation`** (CI runs on it); `main` is far behind (still
-  at the pre-Phase-1 prototype) and nothing has been merged or opened as a PR. Phase 3 is on
-  branch **`phase-3`** (from `backend-implementation`), not merged yet.
+  at the pre-Phase-1 prototype) and nothing has been merged into it or opened as a PR. Phase 3 was
+  built on branch `phase-3` and merged (fast-forward) into `backend-implementation` on 2026-10-05.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
   on-device, with localStorage as the only persistence. Checks are green: `npx tsc --noEmit`,
   `npm run lint`, `npm test` (142 unit tests), `npm run test:e2e` (22 browser tests), `npm run build`.
-  CI only runs on pushes to `main` and `backend-implementation` and on pull requests, so pushes to
-  `phase-3` alone aren't checked by CI: run the checks yourself.
+  CI only runs on pushes to `main` and `backend-implementation` and on pull requests, so a push to
+  any other branch isn't checked by CI: run the checks yourself.
 - **Stopgap to remove in Phase 4:** uploads keep their page text in localStorage
   (`materialPages`) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
   files to Supabase Storage and page text to a `material_pages` table, with processing in
@@ -42,8 +42,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
    an ALD deck in `npm run dev` and look at the review screen. Fix prompts where extraction or
    question checks go wrong; commit the baseline. Then finish a session in `npm run dev` and check
    the top-up writes sensible questions (it has only run against a stubbed model).
-2. Merge `phase-3` into `backend-implementation` once reviewed; settle the Phase 3 numbers in
-   `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review as a spaced check").
+2. Settle the Phase 3 numbers in `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review
+   as a spaced check").
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). Not started and no plan yet: don't start it until the
    owner says so. First settle "Before Phase 4" in `docs/TO-DISCUSS.md`, then write the plan in
@@ -224,7 +224,7 @@ This describes the code as it is.
 ## What to build next
 
 `docs/BACKEND-ROADMAP.md` is the plan. Phases 1 (mastery core), 2 (uploads create the course
-structure) and 3 (scheduling and sessions, branch `phase-3`) are done on-device; Phase 4
+structure) and 3 (scheduling and sessions) are done on-device; Phase 4
 (Supabase) is next. Before tuning anything in
 Phase 2, run `npm run score:extraction` with a key and record a baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase

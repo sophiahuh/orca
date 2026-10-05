@@ -1,6 +1,6 @@
 # Orca Phase 3: Scheduling and Sessions
 
-> **Status: built 2026-10-05** on branch `phase-3` (from `backend-implementation`). Differences from
+> **Status: built 2026-10-05** on branch `phase-3`, merged into `backend-implementation`. Differences from
 > the plan below: the agenda also carries the full ranked list (deep review and re-quizzes draw
 > from it) and whether deep review lands tomorrow; to-do cards are their own module
 > (`src/lib/mastery/todo.ts`); "where it's taught" is `src/lib/course/study.ts`; the topic quiz
