@@ -151,7 +151,7 @@ This describes the code as it is.
 - `src/lib/mastery/` — pure domain modules (tested with `npm test`): `types.ts` (evidence events,
   objective info and state), `catalogue.ts` (objectives per topic, unsorted bucket),
   `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
-  fold), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
+  fold; a check passed in a deep review stretches the next one 1.5×), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
   `priority.ts` (overdue, weight, gap, mix-up and open confusion, each with a reason sentence),
   `agenda.ts` (per course: ranked due list, quick- and deep-review cadence, poor-session review
   to-dos and next-day re-quizzes), `session.ts` (quick review, re-quiz and deep review assembled

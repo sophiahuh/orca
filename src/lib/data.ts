@@ -271,7 +271,7 @@ export interface QuizQuestion {
 
 export const DEFAULT_CONFIG: ReviewConfig = {
   quick: { duration: "10 min", cadence: "Daily" },
-  deep: { duration: "3 hours", cadence: "Weekly" },
+  deep: { duration: "30 min", cadence: "Weekly" },
   exam: { duration: "10 hours", cadence: "1 wk before exam" },
 };
 

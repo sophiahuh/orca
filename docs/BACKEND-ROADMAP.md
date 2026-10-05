@@ -191,8 +191,7 @@ next-day re-quizzes), session assembly (`session.ts`), top-up after every finish
 study page and sidebar to-do cards. Finished sessions are recorded (`results`, with `mode` and
 `sessionId`), because "the last deep review" can't be derived from answers alone; uploads keep
 their page text (`materialPages`) so questions can be topped up later, which is why the store
-holds it (no new persistence layer). Not done: deep review counting as a spaced check at double
-weight (a mastery-rule change, TO-DISCUSS), slide images in the review to-do (needs stored files,
+holds it (no new persistence layer). Deep review counts as a spaced check stretched 1.5× (`MASTERY_RULES.deepReviewStretch`, decided 2026-10-05). Not done: slide images in the review to-do (needs stored files,
 Phase 4), exam proximity in priority (Phase 5). Never run against a real model yet.
 - **Priority** (`docs/MASTERY-PLAN.md` §2.6 minus the parked terms), with objective weight as its
   importance term and confusion signals as a boost; a reason sentence per term.

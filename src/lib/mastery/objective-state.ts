@@ -22,6 +22,14 @@ export const MASTERY_RULES = {
   retireStabilityDays: 60,
   /** ...with at least this many successful spaced checks since mastery. */
   retireAfterChecks: 3,
+  /**
+   * A spaced check passed in a deep review sets the next check this many times further out than
+   * FSRS's Good interval (still capped at maxIntervalDays). Deep review asks harder questions, and a
+   * harder successful retrieval is stronger evidence. Between Anki's SM-2 easy bonus (1.3) and what
+   * FSRS's own Easy rating gives after the first review (about 1.6–1.7× Good). FSRS's memory
+   * estimate stays a Good, so later intervals and retirement aren't inflated.
+   */
+  deepReviewStretch: 1.5,
 } as const;
 
 /** Deterministic (no fuzz), day-based (no same-day learning steps; sessions are daily), capped at 60 days. */
@@ -43,6 +51,12 @@ const DAY_MS = 86_400_000;
 function capInterval(card: Card, t: number): Card {
   const latest = t + MASTERY_RULES.maxIntervalDays * DAY_MS;
   return card.due.getTime() > latest ? { ...card, due: new Date(latest), scheduled_days: MASTERY_RULES.maxIntervalDays } : card;
+}
+
+/** The next check `stretch` times further out than the card's interval, in whole days, capped. */
+function stretchedDue(card: Card, t: number, stretch: number): string {
+  const days = Math.min(MASTERY_RULES.maxIntervalDays, Math.round(card.scheduled_days * stretch));
+  return new Date(t + days * DAY_MS).toISOString();
 }
 
 export interface ObjectiveStateOptions {
@@ -214,7 +228,7 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
     next.spacedChecks += 1;
     next.missPending = false;
     next.missSessionId = null;
-    next.checkDueAt = stored.due;
+    next.checkDueAt = e.source === "deep-review" ? stretchedDue(card, t, R.deepReviewStretch) : stored.due;
     if (card.stability >= R.retireStabilityDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
   }
   return next;

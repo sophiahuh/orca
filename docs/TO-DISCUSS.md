@@ -109,16 +109,7 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   exam on the calendar. Extra practice is always available from the course page.
 - **Decide:** whether these feel right in use. (Deep review length is now picked by the student at
   the start of each deep review; see Decided. The Settings value is only the starting suggestion,
-  still 3 hours by default; whether that suggestion should be shorter is minor now.)
-
-### Deep review as a spaced check
-- **Source:** MASTERY-PLAN §3: "Deep review success counts as a spaced check for every objective
-  it touches, at double weight."
-- **Meanwhile:** not built. Deep review answers record evidence like any other answer, so a
-  genuine pass at or after a check's due time already passes the check; "double weight" would
-  be a change to the mastery fold (`MASTERY_RULES`).
-- **Decide:** what "double weight" means under FSRS (e.g. one Easy rating instead of Good), or
-  drop it.
+  30 minutes by default, decided 2026-10-05.)
 
 ## Watch
 
@@ -170,5 +161,12 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   questions, minutes, how many objectives get a question and, when some don't fit, how long
   covers them all. Assembly covers every objective once, highest priority first, before going
   deeper on any. The end card offers "Start another deep review".
+- 2026-10-05: deep review's suggested length is 30 minutes (was 3 hours).
+- 2026-10-05: a spaced check passed in a deep review sets the next check 1.5× further out than
+  FSRS's Good interval, capped at 60 days; FSRS's memory estimate stays a Good, so later
+  intervals and retirement aren't inflated (`MASTERY_RULES.deepReviewStretch`). Replaces "double
+  weight". For reference: Anki's SM-2 easy bonus is 1.3×; FSRS's Easy rating gives about
+  1.6–1.7× Good after the first review. Because checks reach the 60-day cap by about the second
+  pass, the stretch mostly lengthens the first check after mastery (about 32 → 48 days).
 - 2026-10-05: the built-in ALD sample course is removed too; the app ships no courses. ALD is
   reached by uploading `docs/samples/ald/`. The e2e suite seeds its own fixture course.

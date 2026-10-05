@@ -2,8 +2,7 @@
 
 > **Status 2026-10-04.** This is the learner model. How and when it gets built is in
 > `docs/BACKEND-ROADMAP.md` (§2.2–2.5 are implemented in `src/lib/mastery/` (Phase 1, on-device); self-reported confusion (§2.2) is `applyConfusion` (Phase 2); §2.6 priority and the §3 loops are built in Phase 3: `priority.ts`, `agenda.ts`, `session.ts`, `src/lib/pipeline/topup.ts`).
-> Not built from §2.6/§3: exam proximity and exam review (Phase 5); deep review counting as a spaced
-> check at double weight, and the 60–80% / "quick but not deep mastery" deep-review nudges (open in
+> Not built from §2.6/§3: exam proximity and exam review (Phase 5); the 60–80% / "quick but not deep mastery" deep-review nudges (open in
 > `docs/TO-DISCUSS.md`); slide images in the Review to-do (text only until files are stored, Phase 4).
 > Changes since it was written: the frontier term and distance discount are parked (§2.5–2.6,
 > `docs/TO-DISCUSS.md`); mix-ups are detected without a confidence rating (§2.3); a review that
@@ -214,7 +213,9 @@ one seen longest ago. Mix tiers: ≥ 1 mechanism question per session.
 or rubric-graded, 10–15 minutes. Nudged when: an objective has quick mastery but no deep
 mastery; a topic's quick quizzes keep landing at 60–80% (knows the moves, not the reasons); or
 an exam is ≤ 3 weeks away. Deep review success counts as a spaced check for every objective it
-touches, at double weight.
+touches, stretched: a check passed in a deep review sets the next one 1.5× further out than
+FSRS's Good interval, capped at 60 days (`MASTERY_RULES.deepReviewStretch`, decided 2026-10-05;
+replaces "double weight"). The student picks the length at the start (30 minutes suggested).
 
 **Exam review.** Scope = objectives marked `tested` (professor notes) ∪ topics in the exam's
 range. Retired objectives are re-activated inside the scope. Ramps retrieval → mixed → transfer

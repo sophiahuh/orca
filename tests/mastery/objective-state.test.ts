@@ -184,6 +184,27 @@ test("passing a check that was due counts it, grows stability and pushes the nex
   assert.ok(secondGap > firstGap, "intervals grow");
 });
 
+test("a check passed in a deep review sets the next one 1.5× further out, capped at 60 days; FSRS memory is unchanged", () => {
+  const events = masteredOnDay2();
+  const first = state(events, at(2));
+  const quiz = state([...events, ev("q4", first.dueAt!)], new Date(first.dueAt!));
+  const deep = state([...events, ev("q4", first.dueAt!, { source: "deep-review" })], new Date(first.dueAt!));
+  const gapDays = (s: { dueAt: string | null }) => (Date.parse(s.dueAt!) - Date.parse(first.dueAt!)) / 86_400_000;
+  assert.equal(gapDays(deep), Math.round(gapDays(quiz) * 1.5));
+  assert.equal(deep.stabilityDays, quiz.stabilityDays);
+  assert.equal(deep.spacedChecks, 1);
+
+  // Late in the schedule the cap still holds.
+  const long = [...masteredOnDay2()];
+  let s = state(long, at(2));
+  for (let i = 0; i < 6; i++) {
+    long.push(ev(`q${10 + i}`, s.dueAt!, { source: "deep-review" }));
+    s = state(long, new Date(s.dueAt!));
+    if (s.status === "retired") break;
+    assert.ok((Date.parse(s.dueAt!) - Date.parse(long.at(-1)!.at)) / 86_400_000 <= 60);
+  }
+});
+
 test("a miss after mastery fades it, cuts stability and is due again at once", () => {
   const events = masteredOnDay2();
   const before = state(events, at(2));
