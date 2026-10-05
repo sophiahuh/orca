@@ -29,6 +29,8 @@ function ev(questionId: string, when: string, over: Partial<EvidenceEvent> = {})
     outcome: "correct",
     grader: "choice",
     source: "quiz",
+    // One session per calendar day unless a test says otherwise.
+    sessionId: when.slice(0, 10),
     ...over,
   };
 }
@@ -89,6 +91,14 @@ test("self-marked answers count half", () => {
   const s = state(events, at(2));
   assert.equal(s.credit, 3);
   assert.equal(s.status, "mastered");
+});
+
+test("self-marked answers alone can't master an objective", () => {
+  const selfOnly = ["q1", "q2", "q3", "q4"].map((q) => ev(q, day(1), { grader: "self" }));
+  const events = [...selfOnly, ev("q5", day(2), { grader: "self" }), ev("q6", day(2), { grader: "self" })];
+  const s = state(events, at(2));
+  assert.equal(s.credit, 3);
+  assert.equal(s.status, "learning");
 });
 
 test("the last two answers must be correct", () => {
@@ -173,20 +183,24 @@ test("passing a check that was due counts it, grows stability and pushes the nex
   assert.ok(secondGap > firstGap, "intervals grow");
 });
 
-test("a miss after mastery fades it and cuts stability; passing the next check restores it", () => {
+test("a miss after mastery fades it, cuts stability and is due again at once", () => {
   const events = masteredOnDay2();
   const before = state(events, at(2));
   events.push(ev("q4", day(3), { outcome: "incorrect" }));
   const missed = state(events, at(3));
   assert.equal(missed.status, "fading");
   assert.ok(missed.stabilityDays! < before.stabilityDays!);
-  // Answering right again before the new check is due doesn't clear it...
-  events.push(ev("q5", day(3, 14)));
-  assert.equal(state(events, at(3, 15)).status, "fading");
-  // ...passing the check once it's due does.
-  const due = state(events, at(3, 15)).dueAt!;
-  events.push(ev("q6", due));
-  assert.equal(state(events, new Date(due)).status, "mastered");
+  assert.equal(missed.dueAt, day(3), "due for the next review session, not held back");
+});
+
+test("a missed check is passed only in a later session, not by a retry in the same one", () => {
+  const events = [...masteredOnDay2(), ev("q4", day(3), { outcome: "incorrect", sessionId: "morning" })];
+  events.push(ev("q5", day(3, 13), { sessionId: "morning" }));
+  assert.equal(state(events, at(3, 14)).status, "fading");
+  events.push(ev("q6", day(3, 18), { sessionId: "evening" }));
+  const s = state(events, at(3, 19));
+  assert.equal(s.status, "mastered");
+  assert.equal(s.spacedChecks, 1);
 });
 
 test("only an unaided correct answer passes a due check; partial and self-marked answers don't", () => {

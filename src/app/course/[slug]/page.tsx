@@ -46,7 +46,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </Button>
         </div>
       ) : (
-        <KnowledgePath course={course} progress={m.topics} onStart={(t) => router.push(`/quiz/${course.slug}/${t.id}`)} />
+        <KnowledgePath course={course} progress={m.topics} needingQuestions={m.objectivesNeedingQuestions} onStart={(t) => router.push(`/quiz/${course.slug}/${t.id}`)} />
       )}
 
       <motion.header variants={stagger()} initial="hidden" animate="show" className="absolute left-[28px] top-[28px] flex items-start gap-[16px]">

@@ -8,12 +8,12 @@ import { popIn, pulseHalo, springBouncy } from "@/lib/motion";
 /**
  * Figma: Knowledge Path node. done = periwinkle + check, current = large
  * wisteria + play with a pulsing halo and a START bubble (the first topic not
- * yet done), upcoming = parchment + small play. Topics are never locked.
+ * yet done), in-progress = parchment + small play with full-colour label, upcoming = parchment + small play with faded label. Topics are never locked.
  * Positioned absolutely by its centre inside the 854×834 path canvas.
  */
-export type NodeVisual = "done" | "current" | "upcoming";
+export type NodeVisual = "done" | "current" | "in-progress" | "upcoming";
 
-export const NODE_SIZE: Record<NodeVisual, number> = { done: 72, current: 104, upcoming: 72 };
+export const NODE_SIZE: Record<NodeVisual, number> = { done: 72, current: 104, "in-progress": 72, upcoming: 72 };
 const HALO = 150;
 
 export interface PathNodeProps {
@@ -29,6 +29,7 @@ export interface PathNodeProps {
 export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNodeProps) {
   const size = NODE_SIZE[visual];
   const clickable = Boolean(onClick);
+  const faded = visual === "upcoming";
 
   const face =
     visual === "done"
@@ -83,7 +84,7 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
       >
         {visual === "done" && <IconCheck size={30} />}
         {visual === "current" && <IconPlay size={44} />}
-        {visual === "upcoming" && <IconPlay size={30} />}
+        {(visual === "upcoming" || visual === "in-progress") && <IconPlay size={30} />}
       </motion.button>
 
       <motion.div
@@ -95,8 +96,8 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
         className="absolute flex flex-col gap-[2px] whitespace-nowrap"
         style={{ left: size / 2 + 18, top: -22 }}
       >
-        <span className={cn("text-[22px] font-bold leading-tight", visual === "upcoming" ? "text-periwinkle-deep" : "text-prussian")}>{name}</span>
-        <span className={cn("text-[15px] font-medium", visual === "upcoming" ? "text-periwinkle-deep" : "text-wisteria-deep")}>{sub}</span>
+        <span className={cn("text-[22px] font-bold leading-tight", faded ? "text-periwinkle-deep" : "text-prussian")}>{name}</span>
+        <span className={cn("text-[15px] font-medium", faded ? "text-periwinkle-deep" : "text-wisteria-deep")}>{sub}</span>
       </motion.div>
     </div>
   );

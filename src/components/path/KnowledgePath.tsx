@@ -18,17 +18,19 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 640, y: 150, w: 60 },
 ];
 
-function statusLine(p: TopicProgress) {
+function statusLine(p: TopicProgress, needing: number) {
   if (p.total === 0) return "No questions yet";
-  if (p.status === "done") return "Complete";
-  if (p.status === "not-started") return `${p.total} ${p.total === 1 ? "objective" : "objectives"}`;
-  return `${p.mastered} of ${p.total} objectives mastered`;
+  const gap = needing > 0 ? ` · ${needing} ${needing === 1 ? "needs" : "need"} more questions` : "";
+  if (p.status === "done") return `Complete${gap}`;
+  if (p.status === "not-started") return `${p.total} ${p.total === 1 ? "objective" : "objectives"}${gap}`;
+  return `${p.mastered} of ${p.total} objectives mastered${gap}`;
 }
 
 /** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
-export function KnowledgePath({ course, progress, onStart }: {
+export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
   course: Course;
   progress: ReadonlyMap<string, TopicProgress>;
+  needingQuestions: ReadonlyMap<string, number>;
   onStart: (topic: Topic) => void;
 }) {
   const progressOf = (t: Topic) => {
@@ -36,9 +38,20 @@ export function KnowledgePath({ course, progress, onStart }: {
     if (!p) throw new Error(`No progress computed for topic ${t.id}`);
     return p;
   };
-  const firstOpen = course.topics.findIndex((t) => progressOf(t).status !== "done");
-  const visualOf = (t: Topic, i: number): NodeVisual =>
-    progressOf(t).status === "done" ? "done" : i === firstOpen ? "current" : "upcoming";
+  const needingOf = (t: Topic) => {
+    const n = needingQuestions.get(t.id);
+    if (n === undefined) throw new Error(`No question-gap count computed for topic ${t.id}`);
+    return n;
+  };
+  // START goes to the first topic in progress, else the first not started; none when everything is done.
+  const firstInProgress = course.topics.findIndex((t) => progressOf(t).status === "in-progress");
+  const current = firstInProgress >= 0 ? firstInProgress : course.topics.findIndex((t) => progressOf(t).status === "not-started");
+  const visualOf = (t: Topic, i: number): NodeVisual => {
+    const status = progressOf(t).status;
+    if (status === "done") return "done";
+    if (i === current) return "current";
+    return status === "in-progress" ? "in-progress" : "upcoming";
+  };
   const PATH_H = pathCanvasHeight(course.topics.length);
   // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
   const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
@@ -78,7 +91,7 @@ export function KnowledgePath({ course, progress, onStart }: {
             x={t.pos.x}
             y={t.pos.y}
             name={t.name}
-            sub={statusLine(progressOf(t))}
+            sub={statusLine(progressOf(t), needingOf(t))}
             onClick={() => onStart(t)}
           />
         ))}

@@ -50,6 +50,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const startedAt = useRef<number | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const recorded = useRef(false);
+  const sessionId = useRef<string | null>(null);
 
   // Tick the clock while the quiz is live.
   useEffect(() => {
@@ -73,7 +74,10 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const logAnswer = useCallback(
     (question: QuizQuestion, outcome: Outcome, grader: Grader) => {
       if (!course || !topic) return;
+      // One id per visit to this page; the "review missed" restart stays in the same session.
+      sessionId.current ??= crypto.randomUUID();
       recordEvidence({
+        sessionId: sessionId.current,
         courseId: course.id,
         topicId: topic.id,
         objectiveId: objectiveIdOf(question, topic.id),
@@ -100,14 +104,14 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
 
   const settle = useCallback(
     (result: GradeResult, grader: Grader | null) => {
-      if (!q) return;
+      if (!q || checked) return;
       setGrade(result);
       setChecked(true);
       if (result.outcome === "correct") setCorrect((c) => c + 1);
       else setMissed((m) => [...m, q]);
       if (grader) logAnswer(q, result.outcome, grader);
     },
-    [q, logAnswer],
+    [q, checked, logAnswer],
   );
 
   const submitShort = useCallback(

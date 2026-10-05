@@ -15,6 +15,7 @@ const ev = (at: string, grader: EvidenceEvent["grader"] = "choice"): EvidenceEve
   outcome: "incorrect",
   grader,
   source: "quiz",
+  sessionId: "s1",
 });
 const now = new Date("2026-10-05T20:00:00Z");
 

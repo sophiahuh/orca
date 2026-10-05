@@ -11,7 +11,7 @@ import { IconPlus } from "@/components/icons";
 import { useDueItems, useOrca, useStreak } from "@/lib/store";
 
 export default function HomePage() {
-  const { courses } = useOrca();
+  const { courses, hydrated } = useOrca();
   const due = useDueItems();
   const streak = useStreak();
   const [configuring, setConfiguring] = useState<Course | null>(null);
@@ -32,7 +32,7 @@ export default function HomePage() {
 
       <div className="absolute bottom-[28px] left-[28px] inline-flex items-center gap-[10px] rounded-pill border-2 border-alice-deep bg-parchment py-[8px] pl-[12px] pr-[18px] lip-3 lip-alice">
         <OrcaLogo width={38} shadow={false} />
-        <span className="text-[15px] font-bold text-prussian">{streak} day streak</span>
+        {hydrated && <span className="text-[15px] font-bold text-prussian">{streak} day streak</span>}
       </div>
 
       <ClassConfigModal course={configuring} onClose={close} />

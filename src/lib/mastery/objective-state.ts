@@ -12,6 +12,8 @@ export const MASTERY_RULES = {
   requiredCredit: 3,
   /** Distinct days that credit must come from. */
   requiredDays: 2,
+  /** Of the credit, at least this much must come from graded answers (not self-marked). */
+  requiredGradedCredit: 2,
   /** FSRS schedules a check when predicted recall falls to this. */
   targetRetention: 0.9,
   /** Longest gap between checks, so everything mastered is checked within a semester. */
@@ -97,6 +99,8 @@ export interface ObjectiveAccumulator {
   /** Questions already attempted; only first attempts earn credit. */
   attempted: string[];
   credit: number;
+  /** The part of `credit` earned from graded (not self-marked) answers. */
+  gradedCredit: number;
   creditDays: string[];
   /** The last two non-partial outcomes. */
   lastTwo: Outcome[];
@@ -112,6 +116,8 @@ export interface ObjectiveAccumulator {
   spacedChecks: number;
   /** A check was missed after mastery and hasn't been passed since. */
   missPending: boolean;
+  /** The session the last miss happened in; the retry must come from a later session. */
+  missSessionId: string | null;
   retired: boolean;
   /** FSRS memory state; null before the first answer. */
   card: StoredCard | null;
@@ -122,6 +128,7 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   lastAt: null,
   attempted: [],
   credit: 0,
+  gradedCredit: 0,
   creditDays: [],
   lastTwo: [],
   mixedUp: false,
@@ -130,6 +137,7 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   checkDueAt: null,
   spacedChecks: 0,
   missPending: false,
+  missSessionId: null,
   retired: false,
   card: null,
 }) as ObjectiveAccumulator;
@@ -176,6 +184,7 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
       const value = e.outcome === "correct" ? (assisted ? 0.5 : 1) : e.outcome === "partial" ? 0.5 : 0;
       if (value > 0) {
         next.credit += value;
+        if (!assisted) next.gradedCredit += value;
         const d = dayKey(e.at);
         if (!next.creditDays.includes(d)) next.creditDays = [...next.creditDays, d];
       }
@@ -183,7 +192,8 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
 
     if (e.outcome !== "partial") next.lastTwo = [...next.lastTwo, e.outcome].slice(-2);
     const lastTwoCorrect = next.lastTwo.length === 2 && next.lastTwo.every((o) => o === "correct");
-    if (next.credit >= R.requiredCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
+    const enoughCredit = next.credit >= R.requiredCredit && next.gradedCredit >= R.requiredGradedCredit;
+    if (enoughCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
       next.mastered = true;
       next.checkDueAt = stored.due;
     }
@@ -192,14 +202,18 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
 
   // After mastery only two answers change the check: any miss (the student's own "I missed it"
   // included) and a genuine pass. Partial, self-marked-correct and early answers update FSRS's
-  // memory estimate but leave the check where it is.
+  // memory estimate but leave the check where it is. A missed check is due again at once, for the
+  // course's next review session; a retry in the same session doesn't pass it.
+  const sameSessionAsMiss = next.missSessionId !== null && e.sessionId === next.missSessionId;
   if (e.outcome === "incorrect") {
     next.missPending = true;
+    next.missSessionId = e.sessionId;
     next.retired = false;
-    next.checkDueAt = stored.due;
-  } else if (e.outcome === "correct" && !assisted && checkWasDue) {
+    next.checkDueAt = e.at;
+  } else if (e.outcome === "correct" && !assisted && checkWasDue && !sameSessionAsMiss) {
     next.spacedChecks += 1;
     next.missPending = false;
+    next.missSessionId = null;
     next.checkDueAt = stored.due;
     if (card.stability >= R.retireStabilityDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
   }

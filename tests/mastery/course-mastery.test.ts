@@ -22,6 +22,7 @@ const ev = (questionId: string, at: string, courseId = "c"): EvidenceEvent => ({
   outcome: "correct",
   grader: "choice",
   source: "quiz",
+  sessionId: "s1",
 });
 
 const base = { courseId: "c", topicIds: ["t1", "t2", "t3"], bank, catalogue, dayKey: (iso: string) => iso.slice(0, 10) };
@@ -36,6 +37,9 @@ test("rolls evidence up into objectives, topics and an island level", () => {
   assert.deepEqual(m.topics.get("t3"), { status: "not-started", mastered: 0, total: 0 });
   assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a"]);
   assert.deepEqual(m.topicObjectives.get("t3"), []);
+  assert.equal(m.objectivesNeedingQuestions.get("t1"), 0, "t1/a has 3 questions");
+  assert.equal(m.objectivesNeedingQuestions.get("t2"), 1, "t2/b has only 1 question");
+  assert.equal(m.objectivesNeedingQuestions.get("t3"), 0);
   assert.equal(m.island, "growing");
 });
 

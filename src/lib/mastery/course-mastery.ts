@@ -1,6 +1,6 @@
 /** Everything learner-facing about one course, derived in one pass. */
 import { objectivesForTopic, type QuestionRef } from "./catalogue.ts";
-import { computeObjectiveState } from "./objective-state.ts";
+import { MASTERY_RULES, computeObjectiveState } from "./objective-state.ts";
 import { type IslandLevel, type TopicProgress, islandLevel, topicProgress } from "./progress.ts";
 import type { EvidenceEvent, ObjectiveInfo, ObjectiveState } from "./types.ts";
 
@@ -9,6 +9,11 @@ export interface CourseMastery {
   /** topicId → its objective ids, in first-seen order. */
   topicObjectives: Map<string, string[]>;
   topics: Map<string, TopicProgress>;
+  /**
+   * topicId → how many of its objectives have fewer questions than the mastery bar needs
+   * (3 different questions), so they can't be mastered until more questions exist.
+   */
+  objectivesNeedingQuestions: Map<string, number>;
   island: IslandLevel;
 }
 
@@ -41,6 +46,7 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
   const objectives = new Map<string, ObjectiveState>();
   const topicObjectives = new Map<string, string[]>();
   const topics = new Map<string, TopicProgress>();
+  const objectivesNeedingQuestions = new Map<string, number>();
   for (const { topicId, list } of perTopic) {
     for (const o of list) {
       objectives.set(o.id, computeObjectiveState(o.id, events, now, { hasMechanismQuestions: o.hasMechanismQuestions, dayKey }));
@@ -48,6 +54,7 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
     const ids = list.map((o) => o.id);
     topicObjectives.set(topicId, ids);
     topics.set(topicId, topicProgress(ids, objectives));
+    objectivesNeedingQuestions.set(topicId, list.filter((o) => o.questionIds.length < MASTERY_RULES.requiredCredit).length);
   }
-  return { objectives, topicObjectives, topics, island: islandLevel([...objectives.values()]) };
+  return { objectives, topicObjectives, topics, objectivesNeedingQuestions, island: islandLevel([...objectives.values()]) };
 }

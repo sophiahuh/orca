@@ -9,8 +9,9 @@ import { NavBar } from "./NavBar";
 
 export const SIDEBAR_W = 340;
 
-function Section({ title, items, hrefFor, labelFor }: {
+function Section({ title, items, hydrated, hrefFor, labelFor }: {
   title: string;
+  hydrated: boolean;
   items: DueItem[];
   hrefFor: (d: DueItem) => string;
   labelFor: (d: DueItem) => string;
@@ -21,9 +22,11 @@ function Section({ title, items, hrefFor, labelFor }: {
         {title}
       </motion.h2>
       {items.length === 0 ? (
-        <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep">
-          Nothing due. Nice.
-        </motion.p>
+        hydrated && (
+          <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep">
+            Nothing due. Nice.
+          </motion.p>
+        )
       ) : (
         items.map((d) => <DueCard key={d.id} course={labelFor(d)} title={`${d.title} · ${d.count} to review`} href={hrefFor(d)} />)
       )}
@@ -33,7 +36,7 @@ function Section({ title, items, hrefFor, labelFor }: {
 
 /** 340px right rail: Due today / Due tomorrow + bottom nav. */
 export function Sidebar() {
-  const { courses } = useOrca();
+  const { courses, hydrated } = useOrca();
   const due = useDueItems();
   const byId = new Map(courses.map((c) => [c.id, c]));
   const hrefFor = (d: DueItem) => {
@@ -50,8 +53,8 @@ export function Sidebar() {
       style={{ width: SIDEBAR_W }}
     >
       <div className="flex flex-col gap-[28px] overflow-y-auto">
-        <Section title="Due today" items={due.filter((d) => d.when === "today")} hrefFor={hrefFor} labelFor={labelFor} />
-        <Section title="Due tomorrow" items={due.filter((d) => d.when === "tomorrow")} hrefFor={hrefFor} labelFor={labelFor} />
+        <Section title="Due today" hydrated={hydrated} items={due.filter((d) => d.when === "today")} hrefFor={hrefFor} labelFor={labelFor} />
+        <Section title="Due tomorrow" hydrated={hydrated} items={due.filter((d) => d.when === "tomorrow")} hrefFor={hrefFor} labelFor={labelFor} />
       </div>
       <NavBar className="pt-[20px]" />
     </aside>

@@ -24,6 +24,8 @@ export interface EvidenceEvent {
   outcome: Outcome;
   grader: Grader;
   source: EvidenceSource;
+  /** One quiz run. A review check missed in a session can only be passed in a later session. */
+  sessionId: string;
 }
 
 /** A "can do X" statement. Questions belong to exactly one. */
