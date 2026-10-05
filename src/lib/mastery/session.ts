@@ -131,7 +131,8 @@ export function assembleQuickReview(candidates: readonly SessionCandidate[], ctx
     }
   }
 
-  return { items: items.map(({ seconds: _s, mechanism: _m, ...item }) => item), budgetSeconds: ctx.budgetSeconds, plannedSeconds: time };
+  const toItem = (i: SessionItem): SessionItem => ({ questionId: i.questionId, objectiveId: i.objectiveId, topicId: i.topicId, seenBefore: i.seenBefore });
+  return { items: items.map(toItem), budgetSeconds: ctx.budgetSeconds, plannedSeconds: time };
 }
 
 /** A re-quiz after a poor session: a quick review of only those objectives. */
@@ -190,6 +191,8 @@ export function assembleDeepReview(
   for (const b of buckets) fill(b, (ctx.budgetSeconds * sliderOf(b)) / total);
   fill(null, ctx.budgetSeconds);
 
-  const items = chosen.sort((a, b) => a.round - b.round || a.rank - b.rank).map(({ rank: _r, round: _o, ...item }) => item);
+  const items = chosen
+    .sort((a, b) => a.round - b.round || a.rank - b.rank)
+    .map((i): SessionItem => ({ questionId: i.questionId, objectiveId: i.objectiveId, topicId: i.topicId, seenBefore: i.seenBefore }));
   return { items, budgetSeconds: ctx.budgetSeconds, plannedSeconds: time };
 }
