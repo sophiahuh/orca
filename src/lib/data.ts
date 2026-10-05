@@ -151,6 +151,8 @@ export interface QuizQuestion {
   anchor?: { locator: string; excerpt: string };
   /** A figure the student needs to see (cropped slide or redrawn diagram). */
   figure?: { src: string; alt: string };
+  /** The upload this question was extracted from; absent for hand-written questions. */
+  materialId?: string;
   /** The objective this question tests. Missing on generated questions until extraction assigns one. */
   objectiveId?: string;
 }

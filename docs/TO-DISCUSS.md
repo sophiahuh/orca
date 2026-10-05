@@ -118,5 +118,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - 2026-10-04: streak = consecutive local days with an unaided graded answer.
 - 2026-10-04: all fabricated seed data is removed; uploads (Phase 2) come before Supabase so
   extraction can be tested on real files.
+- 2026-10-05: question and objective ids are random UUIDs, never derived from content or position;
+  nothing is deleted (archive or merge), and rejected objectives are kept so later uploads don't
+  re-propose them. Duplicates are caught by a normalised prompt, separately from ids.
 - 2026-10-05: the built-in ALD sample course is removed too; the app ships no courses. ALD is
   reached by uploading `docs/samples/ald/`. The e2e suite seeds its own fixture course.

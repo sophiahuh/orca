@@ -120,16 +120,36 @@ export function slugifyTopic(name: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-export function questionsByTopic(x: Extraction, filename: string, figures: Record<number, string> = {}): Record<string, QuizQuestion[]> {
+/**
+ * The key for spotting a question the course already has: case, Unicode forms and spacing don't
+ * matter, symbols do ("a + ac" and "a + a'c" stay different). A duplicate check, never an id.
+ */
+export function promptKey(prompt: string) {
+  return prompt
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\s*([^\p{L}\p{N}\s])\s*/gu, "$1")
+    .replace(/\s+/g, " ")
+    .replace(/[.?!]+$/, "")
+    .trim();
+}
+
+/**
+ * Questions grouped by topic id. Each gets a random, permanent id: answers point at it, and the
+ * mastery fold uses it to find the question's current objective and to count distinct questions,
+ * so it must never be derived from position or text. Where it came from is `materialId`.
+ */
+export function questionsByTopic(x: Extraction, materialId: string, filename: string, figures: Record<number, string> = {}): Record<string, QuizQuestion[]> {
   const out: Record<string, QuizQuestion[]> = {};
   const topicIds = new Map(x.topics.map((t) => [t.name.toLowerCase(), slugifyTopic(t.name)]));
-  x.questions.forEach((q, i) => {
+  x.questions.forEach((q) => {
     const id = topicIds.get(q.topic.toLowerCase()) ?? slugifyTopic(q.topic);
     const short = q.kind === "Short answer";
     if (!short && (q.answer < 0 || q.answer >= q.options.length)) return; // malformed; skip rather than teach the wrong thing
     if (short && !(q.exact && q.exact.length) && !q.rubric) return; // ungradable
     (out[id] ??= []).push({
-      id: `${id}-${filename}-${i}`.replace(/[^a-z0-9-]+/gi, "-").toLowerCase(),
+      id: crypto.randomUUID(),
+      materialId,
       kind: q.kind,
       tier: q.tier,
       topic: q.topic,

@@ -23,7 +23,7 @@ import {
   slugify,
 } from "./data";
 import type { LlmConfig } from "./llm";
-import { type Extraction, questionsByTopic, topicsFrom } from "./extraction";
+import { type Extraction, promptKey, questionsByTopic, topicsFrom } from "./extraction";
 import type { QuizQuestion } from "./data";
 import type { EvidenceEvent, ObjectiveInfo } from "./mastery/types";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
@@ -201,7 +201,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
   const importExtraction = useCallback<OrcaActions["importExtraction"]>((courseId, material, extraction, figures = {}) => {
     const newTopics = topicsFrom(extraction, material.filename);
-    const byTopic = questionsByTopic(extraction, material.filename, figures);
+    const id = crypto.randomUUID();
+    const byTopic = questionsByTopic(extraction, id, material.filename, figures);
     let topicsAdded = 0;
     let questionsAdded = 0;
     setState((s) => {
@@ -221,14 +222,19 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         return { ...c, trail: undefined, topics: topics.map((t, i) => ({ ...t, pos: positions[i] })) };
       });
       const bank = { ...(s.questionBank[courseId] ?? {}) };
+      // Skip questions the course already has anywhere (or that repeat within this upload): a
+      // re-uploaded question would otherwise count as a "different" question toward mastery.
+      const seen = new Set(Object.values(bank).flat().map((q) => promptKey(q.prompt)));
       for (const [topicId, qs] of Object.entries(byTopic)) {
-        const existing = bank[topicId] ?? [];
-        const seen = new Set(existing.map((q) => q.prompt));
-        const fresh = qs.filter((q) => !seen.has(q.prompt));
+        const fresh = qs.filter((q) => {
+          const key = promptKey(q.prompt);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
         questionsAdded += fresh.length;
-        bank[topicId] = [...existing, ...fresh];
+        bank[topicId] = [...(bank[topicId] ?? []), ...fresh];
       }
-      const id = `m-${Date.now().toString(36)}`;
       const events = [...s.events];
       if (material.due) {
         events.push({

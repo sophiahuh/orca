@@ -14,6 +14,17 @@ Open questions live in `docs/TO-DISCUSS.md`.
   Objectives are course data, created once per course (at upload) and never regenerated. Concepts
   from extraction are tags on objectives, used for duplicate detection and grounding, not shown
   as the unit students see.
+- **Ids are random and permanent; nothing is deleted.** Questions and objectives get a random UUID
+  when created, never derived from text, position or filename: every answer points at its
+  question by id, and the mastery fold uses that id to find the question's current objective and
+  to count distinct questions. Questions and objectives are archived or merged, never deleted,
+  so no answer outlives what it answered. An archived (rejected) objective stays so it can be
+  restored, so the mastery fold can skip its answers explicitly, and so duplicate detection
+  drops it when a later upload proposes it again. A merged one keeps a pointer to the survivor
+  (`mergedInto`) and its name as an alias. Duplicate detection is separate from identity: a
+  normalised prompt (`promptKey`) for questions, names and aliases then reconciliation for
+  objectives, and it checks archived and merged ones too. Where a question came from is a field
+  (`materialId`), not part of its id.
 - **Every topic and objective has a weight**, starting at a neutral 1.0. Claude records signals
   (coverage, material type, explicit emphasis, what builds on what); code turns them into weights
   with a fixed formula (Phase 2).
@@ -151,10 +162,11 @@ on it) × emphasis (×1.5 tested, ×0 skipped), clamped to 0.5–2 and recompute
 signals. A topic's weight is the mean of its objectives'. Exact curve constants are set in the
 Phase 2 plan, with tests.
 
-Carry-overs from the Phase 1 review (fix in this phase):
-- Make extracted question ids content-stable (today `${topic}-${filename}-${i}` can collide when the
-  same filename is re-uploaded) and enforce unique question ids across a course.
-- Surface answers whose question and objective no longer exist, instead of dropping them silently.
+Carry-overs from the Phase 1 review, both resolved before Phase 2 by the "ids are random and
+permanent" decision: extracted questions get UUIDs plus `materialId`, and imports skip prompts the
+course already has (`promptKey`), so re-uploading a file can't collide or double-count. There are
+no orphaned answers to surface because nothing is deleted; Phase 2's reject and merge actions must
+archive or set `mergedInto`, never remove.
 
 ### Phase 3 — Scheduling, on-device
 - **Priority** (`docs/MASTERY-PLAN.md` §2.6 minus the parked terms), with objective weight as its
