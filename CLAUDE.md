@@ -18,14 +18,19 @@ Advanced Logic Design (ALD, Columbia ELEN); `docs/samples/ald/` has its real dec
 authored and reviewed the reference objectives, questions and quiz rubric.
 
 **Where things stand.**
-- Work happens on branch **`backend-implementation`** (CI runs on it); `main` is far behind (still
-  at the pre-Phase-1 prototype) and nothing has been merged into it or opened as a PR. Phase 3 was
-  built on branch `phase-3` and merged (fast-forward) into `backend-implementation` on 2026-10-05.
+- **Phase 4 is in progress on branch `phase-4`** (from `backend-implementation`; merge it back
+  when done, as Phase 3 was). `backend-implementation` holds Phases 1–3 (CI runs on it); `main` is
+  far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device, with localStorage as the only persistence. Checks are green: `npx tsc --noEmit`,
-  `npm run lint`, `npm test` (142 unit tests), `npm run test:e2e` (22 browser tests), `npm run build`.
-  CI only runs on pushes to `main` and `backend-implementation` and on pull requests, so a push to
-  any other branch isn't checked by CI: run the checks yourself.
+  on-device; the app itself still persists only to localStorage. Phase 4 so far (plan Tasks 1–2
+  plus an isolation audit, local only): the local Supabase stack, the schema with row-level
+  security, the Storage bucket and `save_structure` in `supabase/migrations/`; nothing in the app
+  uses them yet. Checks are green: `npx tsc --noEmit`, `npm run lint`, `npm test` (144 unit
+  tests), `npm run test:e2e` (22 browser tests), `npm run build`, `npm run test:db` (65 pgTAP
+  checks) and `npm run check:isolation` (39 HTTP checks). CI only runs on pushes to `main` and
+  `backend-implementation` and on pull requests, so `phase-4` isn't checked by CI: run the checks
+  yourself. Nothing has run against a hosted Supabase or Trigger.dev project; the owner's setup
+  steps are in `docs/SETUP-HOSTED.md`.
 - **Stopgap to remove in Phase 4:** uploads keep their page text in localStorage
   (`materialPages`) so top-ups can write from it. The decided design (roadmap, Phase 4) moves
   files to Supabase Storage and page text to a `material_pages` table, with processing in
@@ -42,13 +47,16 @@ authored and reviewed the reference objectives, questions and quiz rubric.
    an ALD deck in `npm run dev` and look at the review screen. Fix prompts where extraction or
    question checks go wrong; commit the baseline. Then finish a session in `npm run dev` and check
    the top-up writes sensible questions (it has only run against a stubbed model).
-2. Settle the Phase 3 numbers in `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers", "Deep review
-   as a spaced check").
+2. The Phase 3 numbers in `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers") still need real
+   use before anyone can judge them; deep review's length and its check stretch are decided.
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`. Tasks 1–9 need no hosted projects (local
-   Supabase, inline jobs, a fake Anthropic API); only Task 10's live checks do.
+   progress on branch `phase-4`: Tasks 1–2 are done (status notes at the top of the plan), **Task 3
+   (snapshots and `/api/evidence`) is next**. Tasks 1–9 need no hosted projects (local Supabase,
+   inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
+   `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
+   "Watch" for the two to revisit).
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
 
@@ -59,8 +67,10 @@ them silently; list what you assumed.
   `.env.local`; template in `.env.example`), `npm run db:reset` (re-applies `supabase/migrations/`),
   `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run check:isolation` (two throwaway
   accounts over the real HTTP API; pass `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and
-  `SUPABASE_SECRET_KEY` to run it against a hosted project), `npm run db:types`, `npm run db:stop`. In a
-  cloud container, start the daemon first (`sudo dockerd > /tmp/dockerd.log 2>&1 &`) and pull from
+  `SUPABASE_SECRET_KEY` to run it against a hosted project), `npm run db:types`, `npm run db:stop`.
+  After changing a migration, `npm run db:reset`, then `npm run db:types` to refresh
+  `src/lib/supabase/database.types.ts`. In a cloud container, start the daemon first
+  (`sudo dockerd > /tmp/dockerd.log 2>&1 &`) and pull from
   Docker Hub, since the CLI's default AWS registry is blocked there:
   `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npm run db:start`. Docker Hub rate-limits anonymous
   pulls; if it answers 429, wait and retry.
@@ -81,7 +91,9 @@ them silently; list what you assumed.
 (learner model), `docs/TO-DISCUSS.md` (open questions), `docs/superpowers/plans/` (per-phase plans
 with status notes), `docs/QUIZ-RUBRIC.md` (what makes a good question), `docs/OBJECTIVES-ALD.md`
 (reference objectives / evaluation benchmark), `docs/BACKEND-NOTES.md` (what to port from the
-earlier `ai-native-learning-platform` repo), `docs/ANIMATION.md`. Repo-local skills:
+earlier `ai-native-learning-platform` repo), `docs/ANIMATION.md`, `docs/SETUP-HOSTED.md` (what the
+owner sets up in Supabase, Trigger.dev, Anthropic, Vercel and the cloud environment for live
+checks). Repo-local skills:
 `.claude/skills/learner-evidence` and `.claude/skills/assessment` (load before touching mastery
 or question code).
 
@@ -122,9 +134,15 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 ## Stack
 
 - Next.js 16 (App Router, `src/` dir, TypeScript), Tailwind v4, `motion` (Framer Motion) for animation.
-- No backend yet. State is a React context persisted to localStorage (`src/lib/store.tsx`).
-  Supabase is the planned backend (Phase 4 of the roadmap); screens only talk to `useOrca()`, so
-  the persistence swap happens behind it.
+- The app still persists to localStorage: a React context (`src/lib/store.tsx`). Supabase is the
+  backend being built in Phase 4 (branch `phase-4`): `supabase/` holds `config.toml`, the
+  migrations (profiles, courses, materials and their pages, pipeline runs, topics, objectives,
+  relations, questions, finished sessions, calendar entries, the evidence log, the `materials`
+  Storage bucket, `save_structure`) and the pgTAP tests; generated types are in
+  `src/lib/supabase/database.types.ts`; env variables are listed in `.env.example`. Every table is
+  owner-only under RLS, children reference parents with the owner or course in the key, and the
+  browser can't write evidence (only the server will, Task 3). Screens only talk to `useOrca()`,
+  so the persistence swap (Task 5) happens behind it.
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
   any API route. Without a key (and no student model), uploads are saved without generating
   anything and prose answers are self-marked.
