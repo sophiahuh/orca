@@ -105,6 +105,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   mastered (no grace period).
 - 2026-10-04: spacing uses FSRS via `ts-fsrs` (from the first answer, 90% target recall,
   intervals capped at 60 days), replacing the hand-written ×2.2 / ÷3 rule.
+- 2026-10-05: only a genuine pass (unaided correct at or after the due time) clears a review
+  check; any miss after mastery, self-marked included, fades the objective and un-retires a
+  retired one. A partial answer on a retired objective doesn't un-retire it.
 - 2026-10-04: island cut-offs: no answers → look 1; under ⅓ held → 2; ⅓ or more → 3; ⅔ or more → 4.
 - 2026-10-04: streak = consecutive local days with an unaided graded answer.
 - 2026-10-04: ALD stays as a labelled sample course; all other seed data is removed; uploads

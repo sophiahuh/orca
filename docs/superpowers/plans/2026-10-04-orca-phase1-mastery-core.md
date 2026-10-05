@@ -625,7 +625,8 @@ git commit -m "Objectives: evidence types, catalogue helpers, and every built-in
   - Credit counts only a question's **first** attempt: unaided correct = 1, self-marked correct = 0.5, partial = 0.5, incorrect = 0.
   - **Mastered** when credit ≥ 3, earned on ≥ 2 calendar days, the last two non-partial answers correct, and no open mix-up.
   - **Mix-up:** two unaided misses in a row on different questions. Cleared by an unaided correct on a mechanism-tier question, or any unaided correct if the objective has none (provisional, TO-DISCUSS).
-  - After mastery, **fading** = FSRS's due time has arrived, or a check was missed and hasn't been passed since. An unaided correct at or after the due time is a **spaced check**. **Retired** = FSRS stability ≥ 60 days with ≥ 3 spaced checks.
+  - After mastery, a **check** is due at a stored time (`checkDueAt`). **Fading** = that time has arrived, or a check was missed and hasn't been passed since. Only a **genuine pass** clears a check: an unaided correct answer at or after its due time (counted as a spaced check). Partial, self-marked-correct and early answers still update FSRS's memory estimate but never clear or move the check (decided 2026-10-05).
+  - **Any miss after mastery**, the student's own "I missed it" included, fades the objective at once. **Retired** = FSRS stability ≥ 60 days with ≥ 3 spaced checks; any miss un-retires it (back to fading).
 - **A step function.** `applyAnswer(state, answer) → state` folds one answer in; `stateAt(state, now)` reads it against the clock (fading is computed at read, never by a timer). Phase 1 replays the log in the browser; in Supabase the accumulator becomes a stored snapshot updated with each answer. `applyAnswer` throws on an answer older than the last one applied, telling the caller to rebuild from the log.
 
 For reference, a clean run (mastered Tue Oct 6, every check passed on time): next checks Oct 13, Nov 14, Jan 13 (capped at 60 days), then retired. A miss at a check drops stability to about 4 days and it climbs back (4 → 10 → 23 → 50 days).
@@ -830,6 +831,27 @@ test("a miss after mastery fades it and cuts stability; passing the next check r
   assert.equal(state(events, new Date(due)).status, "mastered");
 });
 
+test("only an unaided correct answer passes a due check; partial and self-marked answers don't", () => {
+  const due = dueAfter(masteredOnDay2());
+  const partial = state([...masteredOnDay2(), ev("q4", due, { outcome: "partial", grader: "rubric" })], new Date(due));
+  assert.equal(partial.status, "fading");
+  assert.equal(partial.spacedChecks, 0);
+  assert.equal(partial.dueAt, due);
+  const selfMarked = state([...masteredOnDay2(), ev("q4", due, { grader: "self" })], new Date(due));
+  assert.equal(selfMarked.status, "fading");
+  assert.equal(selfMarked.spacedChecks, 0);
+});
+
+test("an early correct answer doesn't push the check later", () => {
+  const due = dueAfter(masteredOnDay2());
+  assert.equal(state([...masteredOnDay2(), ev("q4", day(3))], at(3)).dueAt, due);
+});
+
+test("a self-marked miss after mastery fades it at once", () => {
+  const s = state([...masteredOnDay2(), ev("q4", day(3), { outcome: "incorrect", grader: "self" })], at(3));
+  assert.equal(s.status, "fading");
+});
+
 test("FSRS tracks difficulty from the first answer: a hard-won objective gets a shorter first interval", () => {
   const clean = [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
   const struggled = [
@@ -877,6 +899,24 @@ test("passing every check on time eventually retires the objective", () => {
   assert.ok(s.spacedChecks >= MASTERY_RULES.retireAfterChecks);
   assert.ok(s.stabilityDays! >= MASTERY_RULES.retireStabilityDays);
   assert.ok(checks <= 6, `took ${checks} checks`);
+});
+
+test("a retired objective comes back as fading after any miss, aided or not", () => {
+  const retire = () => {
+    const events = masteredOnDay2();
+    let s = state(events, at(2));
+    while (s.status !== "retired") {
+      events.push(ev(`check${events.length}`, s.dueAt!));
+      s = state(events, new Date(s.dueAt!));
+    }
+    return { events, at: Date.parse(s.lastEvidenceAt!) };
+  };
+  for (const grader of ["choice", "self"] as const) {
+    const { events, at: last } = retire();
+    const when = new Date(last + 86_400_000).toISOString();
+    events.push(ev("late", when, { outcome: "incorrect", grader }));
+    assert.equal(state(events, new Date(when)).status, "fading", grader);
+  }
 });
 
 /* ── The fold ──────────────────────────────────────────────────────── */
@@ -1043,6 +1083,12 @@ export interface ObjectiveAccumulator {
   mixedUp: boolean;
   lastMissQuestion: string | null;
   mastered: boolean;
+  /**
+   * ISO due time of the current spaced check. Set when mastered, after a passed check and after a
+   * miss; only a genuine pass (unaided correct at or after it) moves it forward. FSRS's own `card.due`
+   * also moves on partial, self-marked or early answers, so it can't be the check by itself.
+   */
+  checkDueAt: string | null;
   spacedChecks: number;
   /** A check was missed after mastery and hasn't been passed since. */
   missPending: boolean;
@@ -1061,6 +1107,7 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   mixedUp: false,
   lastMissQuestion: null,
   mastered: false,
+  checkDueAt: null,
   spacedChecks: 0,
   missPending: false,
   retired: false,
@@ -1089,10 +1136,11 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
   }
   const dayKey = options.dayKey ?? localDayKey;
   const assisted = e.grader === "self";
-  const checkWasDue = acc.mastered && acc.card !== null && t >= Date.parse(acc.card.due);
+  const checkWasDue = acc.checkDueAt !== null && t >= Date.parse(acc.checkDueAt);
   const before = acc.card === null ? createEmptyCard(new Date(t)) : toCard(acc.card);
   const card = capInterval(scheduler.next(before, new Date(t), gradeOf(e)).card, t);
-  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: toStored(card) };
+  const stored = toStored(card);
+  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: stored };
 
   if (!next.mastered) {
     if (e.outcome === "incorrect" && !assisted) {
@@ -1117,16 +1165,22 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
     const lastTwoCorrect = next.lastTwo.length === 2 && next.lastTwo.every((o) => o === "correct");
     if (next.credit >= R.requiredCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
       next.mastered = true;
+      next.checkDueAt = stored.due;
     }
     return next;
   }
 
-  if (e.outcome === "incorrect" && !assisted) {
+  // After mastery only two answers change the check: any miss (the student's own "I missed it"
+  // included) and a genuine pass. Partial, self-marked-correct and early answers update FSRS's
+  // memory estimate but leave the check where it is.
+  if (e.outcome === "incorrect") {
     next.missPending = true;
     next.retired = false;
+    next.checkDueAt = stored.due;
   } else if (e.outcome === "correct" && !assisted && checkWasDue) {
     next.spacedChecks += 1;
     next.missPending = false;
+    next.checkDueAt = stored.due;
     if (card.stability >= R.retireStabilityDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
   }
   return next;
@@ -1138,7 +1192,7 @@ export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Dat
   if (acc.answered === 0 || acc.card === null) status = "unseen";
   else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
   else if (acc.retired) status = "retired";
-  else if (acc.missPending || now.getTime() >= Date.parse(acc.card.due)) status = "fading";
+  else if (acc.missPending || (acc.checkDueAt !== null && now.getTime() >= Date.parse(acc.checkDueAt))) status = "fading";
   else status = "mastered";
 
   return {
@@ -1147,7 +1201,7 @@ export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Dat
     credit: acc.credit,
     creditDays: acc.creditDays.length,
     stabilityDays: acc.mastered && acc.card ? acc.card.stability : null,
-    dueAt: acc.mastered && acc.card ? acc.card.due : null,
+    dueAt: acc.mastered ? acc.checkDueAt : null,
     spacedChecks: acc.spacedChecks,
     recall: acc.card === null ? null : scheduler.get_retrievability(toCard(acc.card), now, false),
     lastEvidenceAt: acc.lastAt,

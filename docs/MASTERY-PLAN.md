@@ -103,9 +103,9 @@ summarise them.
 | `unseen` | Never answered | No | Any graded answer |
 | `learning` | Answered, mastery bar not met yet | No | The bar is met (→ mastered), or a mix-up is detected (→ mixed-up) |
 | `mixed-up` | Two unaided wrong answers in a row on different questions: probably a wrong idea, not a slip (no confidence rating is captured; see TO-DISCUSS) | No | An unaided correct answer on a "why" (mechanism) question, or any unaided correct answer if the objective has none (→ learning) |
-| `mastered` | Bar met (§2.4); its next spaced check isn't due yet | **Yes** | The check comes due, or an unaided miss (→ fading) |
-| `fading` | Its spaced check is due or overdue, or it was just missed; it's in the review queue | No | An unaided correct answer at or after the due time (→ mastered, with a longer interval) |
-| `retired` | Stable: interval at the 60-day cap with 3+ successful checks; out of daily review | **Yes** | An unaided miss (→ fading), or an exam covering it brings it back |
+| `mastered` | Bar met (§2.4); its next spaced check isn't due yet | **Yes** | The check comes due, or any miss, including a self-marked one (→ fading) |
+| `fading` | Its spaced check is due or overdue, or it was just missed; it's in the review queue | No | A genuine pass: an unaided correct answer at or after the due time (→ mastered, with a longer interval). Partial or self-marked answers don't clear it |
+| `retired` | Stable: FSRS stability ≥ 60 days with 3+ passed checks; out of daily review | **Yes** | Any miss, including a self-marked one (→ fading), or an exam covering it brings it back |
 
 A self-reported "I don't understand this" sends any of these back to `learning` (§2.2).
 
@@ -156,9 +156,10 @@ real reviews.
 - **Settings:** 90% target recall; intervals capped at 60 days so everything mastered is checked
   within a semester (enforced after scheduling, because `ts-fsrs` can overshoot its own cap by a
   day); no fuzz; no same-day learning steps (sessions are daily).
-- **Fading:** a mastered objective is `fading` from the moment FSRS's due time arrives, or after a
-  missed check until the next one is passed. A correct answer at or after the due time is a
-  **spaced check**; answering early doesn't count as one.
+- **Checks:** when an objective is mastered, its next check is due at FSRS's due time. It's
+  `fading` from that moment, and after any miss, until a **genuine pass**: an unaided correct
+  answer at or after the due time. Partial, self-marked-correct and early answers update FSRS's
+  memory estimate but never clear or postpone a check.
 - **Example** (mastered Tue Oct 6, every check passed on time): checks Oct 13, Nov 14, Jan 13
   (capped), then retired. A miss drops stability to about 4 days, and it climbs back
   (4 → 10 → 23 → 50 days).
