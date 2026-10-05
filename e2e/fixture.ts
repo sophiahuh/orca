@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import type { Objective, QuizQuestion, Topic } from "../src/lib/data";
+import { type Objective, type QuizQuestion, type Topic, defaultTopicPositions } from "../src/lib/data";
 
 /** Must match STORAGE_KEY in src/lib/store.tsx. */
 export const STORAGE_KEY = "orca:v7";
@@ -11,7 +11,7 @@ export const STORAGE_KEY = "orca:v7";
 const COURSE_ID = "logic-e2e";
 const DECK = "L01_Fixture.pdf";
 
-const short = (id: string, topic: string, objectiveId: string, prompt: string, exact: string[]): QuizQuestion => ({
+export const short = (id: string, topic: string, objectiveId: string, prompt: string, exact: string[]): QuizQuestion => ({
   id,
   kind: "Short answer",
   tier: "retrieval",
@@ -25,7 +25,7 @@ const short = (id: string, topic: string, objectiveId: string, prompt: string, e
   objectiveId,
 });
 
-const objective = (id: string, topicId: string, name: string): Objective => ({
+export const objective = (id: string, topicId: string, name: string, extra: Partial<Objective> = {}): Objective => ({
   id,
   topicId,
   name,
@@ -36,6 +36,7 @@ const objective = (id: string, topicId: string, name: string): Objective => ({
   materialId: "fixture-material",
   runId: "fixture-run",
   signals: [],
+  ...extra,
 });
 
 export const FIXTURE_STATE = {
@@ -47,10 +48,10 @@ export const FIXTURE_STATE = {
       short: "LOG",
       variant: "circuit",
       pos: { x: 70, y: 110 },
-      topics: [
+      topics: laidOut([
         { id: "boolean-algebra", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 1, slideEnd: 5 } },
         { id: "twos-complement", name: "Two's Complement", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 6, slideEnd: 9 } },
-      ] satisfies Topic[],
+      ] satisfies Topic[]),
     },
   ],
   configs: { [COURSE_ID]: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "3 hours", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } } },
@@ -79,12 +80,22 @@ export const FIXTURE_STATE = {
   evidence: [],
 };
 
-/** Seed the fixture course before the app loads. Only the first load seeds, so answers persist across navigations. */
-export async function seedFixtureCourse(page: Page) {
+/** Seed app state before the app loads. Only the first load seeds, so changes persist across navigations. */
+/** Lay seeded topics out the way the store does after an upload. */
+export function laidOut<T extends { pos: Topic["pos"] }>(topics: T[]): T[] {
+  const positions = defaultTopicPositions(topics.length);
+  return topics.map((t, i) => ({ ...t, pos: positions[i] }));
+}
+
+export async function seedState(page: Page, state: object) {
   await page.addInitScript(
-    ([key, state]) => {
-      if (!window.localStorage.getItem(key)) window.localStorage.setItem(key, state);
+    ([key, json]) => {
+      if (!window.localStorage.getItem(key)) window.localStorage.setItem(key, json);
     },
-    [STORAGE_KEY, JSON.stringify(FIXTURE_STATE)] as const,
+    [STORAGE_KEY, JSON.stringify(state)] as const,
   );
+}
+
+export async function seedFixtureCourse(page: Page) {
+  await seedState(page, FIXTURE_STATE);
 }

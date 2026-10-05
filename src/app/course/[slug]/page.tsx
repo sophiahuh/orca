@@ -11,11 +11,13 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { fadeUp, stagger } from "@/lib/motion";
 import { trailTopics } from "@/lib/data";
+import { pendingReview } from "@/lib/course/review";
+import Link from "next/link";
 
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
   const router = useRouter();
-  const { hydrated } = useOrca();
+  const { hydrated, objectives } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
 
@@ -36,6 +38,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const total = topics.length;
   const done = topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
   const pct = total ? done / total : 0;
+  const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
 
   return (
     <AppShell bg="alice">
@@ -65,6 +68,16 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
             <ProgressBar value={pct} height={12} label="Course progress" />
           </motion.div>
+          <motion.nav variants={fadeUp} aria-label="Course structure" className="mt-[4px] flex items-center gap-[10px]">
+            {toReview > 0 && (
+              <Link href={`/course/${course.slug}/review`} className="pressable rounded-pill bg-wisteria px-[12px] py-[6px] text-[13px] font-bold text-parchment lip-2 lip-wisteria">
+                {toReview} to review
+              </Link>
+            )}
+            <Link href={`/course/${course.slug}/objectives`} className="text-[13px] font-bold text-wisteria-deep hover:underline">
+              Objectives
+            </Link>
+          </motion.nav>
         </div>
       </motion.header>
     </AppShell>

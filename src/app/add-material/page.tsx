@@ -170,7 +170,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       addMaterial(material);
       applyUpload(course.id, plan);
       setPhase({ kind: "done", topics: plan.newTopics.length, objectives: plan.newObjectives.length, questions: plan.run.questionsAdded });
-      window.setTimeout(() => router.push(`/course/${course.slug}`), 1400);
+      window.setTimeout(() => router.push(`/course/${course.slug}/review?run=${plan.run.id}`), 1400);
     } catch (error) {
       setPhase({ kind: "error", message: error instanceof Error ? error.message : "The upload failed." });
     }
@@ -334,7 +334,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
               )}
               {phase.kind === "done" && (
                 <motion.span key="d" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-wisteria-deep">
-                  Added {phase.topics} topic{phase.topics === 1 ? "" : "s"}, {phase.objectives} objective{phase.objectives === 1 ? "" : "s"} and {phase.questions} question{phase.questions === 1 ? "" : "s"}. Opening the path…
+                  Added {phase.topics} topic{phase.topics === 1 ? "" : "s"}, {phase.objectives} objective{phase.objectives === 1 ? "" : "s"} and {phase.questions} question{phase.questions === 1 ? "" : "s"}. Opening the review…
                 </motion.span>
               )}
               {phase.kind === "error" && (

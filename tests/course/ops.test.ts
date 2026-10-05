@@ -114,3 +114,14 @@ test("an uncertain duplicate resolves to a merge or a separate objective", () =>
 test("an objective under an archived topic can't be restored on its own", () => {
   assert.throws(() => restoreObjective(rejectTopic(base(), "t1"), "a"), /Restore topic/);
 });
+
+test("pending review lists proposed topics and open duplicate questions, not archived ones", async () => {
+  const { pendingReview } = await import("../../src/lib/course/review.ts");
+  const s = base();
+  const p = pendingReview(s.topics, s.objectives);
+  assert.deepEqual(p.topics.map((t) => t.id), ["t1", "t2"]);
+  assert.deepEqual(p.uncertainObjectives.map((o) => o.id), ["b"]);
+  assert.equal(p.count, 3);
+  const after = rejectTopic(s, "t1");
+  assert.equal(pendingReview(after.topics, after.objectives).count, 1);
+});

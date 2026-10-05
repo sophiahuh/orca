@@ -110,7 +110,10 @@ test("a lecture upload maps topics and objectives, writes checked questions and 
   expect(state.runs).toHaveLength(1);
   expect(state.materials[0].filename).toBe("L02_Combinational.pdf");
 
-  await expect(page).toHaveURL(/\/course\/logic/);
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/);
+  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.");
+  await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
+  await page.goto("/course/logic");
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
   await page.goto(`/quiz/logic/${course.topics[0].id}`);
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();

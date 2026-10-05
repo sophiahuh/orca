@@ -20,6 +20,7 @@ import { GRADE_SYSTEM, type GradeResult, gradeExact, gradePrompt, parseGradeLoos
 import { PROVIDERS, compatChat, llmReady } from "@/lib/llm";
 import { useServerModel } from "@/hooks/useServerModel";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
+import { Pill } from "@/components/review/parts";
 import { fadeUp, stagger } from "@/lib/motion";
 
 const LETTERS = "ABCDEFGH";
@@ -280,9 +281,16 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
       <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[100px] pb-[24px] pt-[32px]">
         <AnimatePresence mode="wait">
           <motion.div key={q.id} variants={stagger(0.05, 0.07)} initial="hidden" animate="show" exit="exit" className="flex max-w-[800px] flex-col">
-            <motion.span variants={fadeUp} className="eyebrow">
-              {q.kind}{q.tier ? ` · ${q.tier}` : ""} · {q.topic}
-            </motion.span>
+            <motion.div variants={fadeUp} className="flex items-center gap-[10px]">
+              <span className="eyebrow">
+                {q.kind}{q.tier ? ` · ${q.tier}` : ""} · {q.topic}
+              </span>
+              {topic && liveObjectiveOf(q, topic.id, catalogue ?? {})?.review === "proposed" && (
+                <Pill tone="strong" className="normal-case">
+                  Unreviewed
+                </Pill>
+              )}
+            </motion.div>
             <motion.h1 variants={fadeUp} className="mt-[10px] text-[34px] font-bold leading-tight text-prussian">
               {q.prompt}
             </motion.h1>
