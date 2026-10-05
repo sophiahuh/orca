@@ -211,8 +211,8 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   the next day.
 
 ### Phase 4 — Supabase
-Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (written 2026-10-05, waiting for
-review; not started).
+Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; in progress
+on branch `phase-4`).
 - Auth screens in Orca's style; `proxy.ts` session refresh (Next 16's name for middleware).
   Email + password through Supabase Auth (email confirmation, password reset, custom SMTP before
   real students); Google sign-in later as a second provider (decided 2026-10-05).

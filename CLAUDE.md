@@ -46,8 +46,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
    as a spaced check").
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
-   (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`) and waits for the owner's review;
-   don't start building until the owner says so. Tasks 1–9 need no hosted projects (local
+   (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
+   progress on branch `phase-4`. Tasks 1–9 need no hosted projects (local
    Supabase, inline jobs, a fake Anthropic API); only Task 10's live checks do.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.

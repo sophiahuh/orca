@@ -96,6 +96,23 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Watch
 
+### Loading all of a student's data at sign-in (revisit)
+- **Decided for Phase 4 (2026-10-05):** the browser loads everything a student has (courses,
+  structure, materials, finished sessions, every evidence event, snapshots) once at sign-in, so
+  screens keep reading the same in-memory state.
+- **Revisit when:** a student's evidence log reaches tens of thousands of events, sign-in gets
+  slow, or the MCP connector (Phase 7) needs state without a browser. Then load per course and
+  only the events derived reads need (the last N days for streak, poor sessions and last seen),
+  with objective state from snapshots alone.
+
+### Daily processing limit: 300 pages per student (revisit)
+- **Decided for Phase 4 (2026-10-05):** the model processes at most 300 pages a day per student,
+  uploads and top-ups together; past that, a file is stored and read but waits until the next
+  day with "Daily limit reached, processing resumes tomorrow".
+- **Revisit:** once real costs per page are measured (Task 10's live upload), and if students hit
+  it in normal use (a textbook upload would). Options: a higher limit, a per-course one, or
+  limits by plan.
+
 ### Mix-ups without a confidence rating
 - **Decided:** two unaided misses in a row on different questions marks an objective mixed-up.
   The quiz doesn't ask how sure the student was.
@@ -152,6 +169,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   later as a second provider on the same accounts. Password emails need a custom SMTP provider
   before real students use it (Supabase's built-in sender is for testing only).
 - 2026-10-05: local test data is not imported at first sign-in; accounts start fresh.
+- 2026-10-05: no guest or offline mode: every page needs sign-in, and without a database
+  connection the app says so instead of saving in the browser.
 - 2026-10-05: deep review's suggested length is 30 minutes (was 3 hours).
 - 2026-10-05: a spaced check passed in a deep review sets the next check 1.5× further out than
   FSRS's Good interval, capped at 60 days; FSRS's memory estimate stays a Good, so later

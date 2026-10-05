@@ -1,8 +1,9 @@
 # Orca Phase 4: Accounts, Supabase and the Server Pipeline
 
-> **Status: plan, not started (2026-10-05).** Waiting for the owner's review. Build on a branch
-> `phase-4` and merge into `backend-implementation`, as Phase 3 was. CI doesn't run on `phase-4`,
-> so run every check by hand.
+> **Status: approved 2026-10-05, in progress on branch `phase-4`** (from `backend-implementation`;
+> merge back into it, as Phase 3 was). CI doesn't run on `phase-4`, so run every check by hand.
+> The owner accepted decisions 4 (load everything, revisit later), 5 (no guest mode) and 10 (300
+> pages a day, revisit later); 4 and 10 are under "Watch" in `docs/TO-DISCUSS.md`.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
@@ -104,13 +105,13 @@ Ones marked **(review)** are judgement calls worth a second look; they go into
    that fails rolls the update back and shows "Couldn't save: …"; an answer that couldn't be saved
    isn't counted. Objective state comes from snapshots; the other derived reads (streak, last
    seen, poor sessions, deep-review cadence) still compute from the loaded events. Loading every
-   event is fine at one student's scale (thousands of rows); windowing it is later work.
-   **(review)**
+   event is fine at one student's scale (thousands of rows); windowing it is later work
+   (accepted; "Watch" in `docs/TO-DISCUSS.md` says when to revisit).
 5. **No signed-out mode in the product.** With Supabase configured, every page except sign-in,
    sign-up, reset and the email callback redirects to sign-in. Without the env vars the app shows
    "Orca isn't connected to its database" instead of falling back to the browser. localStorage
    keeps only per-device conveniences (none today); `orca:v3`–`orca:v8` keys are cleared on load,
-   and `materialPages` in the browser is removed. **(review: no offline or guest mode.)**
+   and `materialPages` in the browser is removed. No offline or guest mode (accepted).
 6. **Auth** (Supabase Auth, `@supabase/ssr`): sign up with email and password (minimum 8
    characters; Supabase's leaked-password check too if the project's plan includes it), confirm by email,
    sign in, sign out, forgot and reset password. Errors are generic ("Invalid email or
@@ -141,7 +142,8 @@ Ones marked **(review)** are judgement calls worth a second look; they go into
    generated, and prose answers are self-marked, as today.
 10. **Cost guard.** Each student can have the model process at most 300 pages a day (uploads and
     top-ups together); past that, an upload is stored and read but waits with "Daily limit
-    reached, processing resumes tomorrow". **(review: the number.)**
+    reached, processing resumes tomorrow". (Accepted for now; "Watch" in `docs/TO-DISCUSS.md`
+    says when to revisit the number.)
 11. **Day boundaries** use the student's timezone from their profile everywhere, including the
     server's fold: `localDayKey` gets a `dayKeyIn(timeZone)` sibling built on `Intl`, and the
     server always passes it (the Phase 1 carry-over).
