@@ -17,7 +17,7 @@ import Link from "next/link";
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
   const router = useRouter();
-  const { hydrated, objectives } = useOrca();
+  const { hydrated, objectives, materials } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
 
@@ -39,6 +39,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const done = topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
   const pct = total ? done / total : 0;
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
+  const toReflect = materials.filter((x) => x.courseId === course.id && x.reflect && !x.reflection);
 
   return (
     <AppShell bg="alice">
@@ -77,6 +78,11 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
             <Link href={`/course/${course.slug}/objectives`} className="text-[13px] font-bold text-wisteria-deep hover:underline">
               Objectives
             </Link>
+            {toReflect.map((x) => (
+              <Link key={x.id} href={`/course/${course.slug}/reflect?material=${x.id}`} className="text-[13px] font-bold text-wisteria-deep hover:underline">
+                Reflect on {x.filename.replace(/\.[a-z0-9]+$/i, "")}
+              </Link>
+            ))}
           </motion.nav>
         </div>
       </motion.header>

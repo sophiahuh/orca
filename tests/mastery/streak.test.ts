@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { streakDays } from "../../src/lib/mastery/streak.ts";
-import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
+import type { AnswerEvent as EvidenceEvent } from "../../src/lib/mastery/types.ts";
 
 const utcDay = (iso: string) => iso.slice(0, 10);
 const ev = (at: string, grader: EvidenceEvent["grader"] = "choice"): EvidenceEvent => ({
@@ -14,6 +14,7 @@ const ev = (at: string, grader: EvidenceEvent["grader"] = "choice"): EvidenceEve
   tier: null,
   outcome: "incorrect",
   grader,
+  kind: "answer",
   source: "quiz",
   sessionId: "s1",
 });
@@ -38,4 +39,9 @@ test("a gap ends the streak", () => {
 
 test("self-marked answers don't keep a streak alive", () => {
   assert.equal(streakDays([ev("2026-10-05T10:00:00Z", "self")], now, utcDay), 0);
+});
+
+test("confusion events don't count toward the streak", () => {
+  const confusion = { kind: "confusion" as const, id: "c", at: "2026-10-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "" };
+  assert.equal(streakDays([confusion], new Date("2026-10-05T15:00:00.000Z"), (iso) => iso.slice(0, 10)), 0);
 });

@@ -131,6 +131,8 @@ export interface Material {
   assigned: string | null;
   due: string | null;
   reflect: boolean;
+  /** The student's reflection, once given: their note and the objectives they confirmed it was about. */
+  reflection?: { at: string; note: string; objectiveIds: string[] };
 }
 
 /** The topics a student sees: everything except archived (rejected or merged-away) ones. */

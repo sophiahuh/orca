@@ -12,7 +12,9 @@ export type Grader = "choice" | "exact" | "rubric" | "self";
 /** Where the answer happened. Later phases add deep review, exam review, drills and the connector. */
 export type EvidenceSource = "quiz";
 
-export interface EvidenceEvent {
+/** One graded answer to one question. */
+export interface AnswerEvent {
+  kind: "answer";
   id: string;
   /** ISO timestamp. */
   at: string;
@@ -27,6 +29,28 @@ export interface EvidenceEvent {
   /** One quiz run. A review check missed in a session can only be passed in a later session. */
   sessionId: string;
 }
+
+/**
+ * The student said they don't understand an objective (a homework reflection matched to it). It
+ * resets the objective to learning; it never adds credit ("I don't get it" is believed, "I get it"
+ * is not).
+ */
+export interface ConfusionEvent {
+  kind: "confusion";
+  id: string;
+  /** ISO timestamp. */
+  at: string;
+  courseId: string;
+  topicId: string;
+  objectiveId: string;
+  /** The upload the reflection was about. */
+  materialId: string;
+  /** The student's own words. */
+  note: string;
+}
+
+/** The append-only learner log. Every learner-facing state is computed from it. */
+export type EvidenceEvent = AnswerEvent | ConfusionEvent;
 
 /** The part of an objective the mastery code reads. */
 export type ObjectiveInfo = Pick<Objective, "id" | "topicId" | "name" | "review" | "mergedInto">;

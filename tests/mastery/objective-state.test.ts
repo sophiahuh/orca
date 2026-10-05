@@ -7,7 +7,7 @@ import {
   computeObjectiveState,
   stateAt,
 } from "../../src/lib/mastery/objective-state.ts";
-import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
+import type { AnswerEvent as EvidenceEvent, ConfusionEvent } from "../../src/lib/mastery/types.ts";
 
 /** Noon UTC on 2026-10-<n>. */
 const day = (n: number, hour = 12) => new Date(Date.UTC(2026, 9, n, hour)).toISOString();
@@ -28,6 +28,7 @@ function ev(questionId: string, when: string, over: Partial<EvidenceEvent> = {})
     tier: null,
     outcome: "correct",
     grader: "choice",
+    kind: "answer",
     source: "quiz",
     // One session per calendar day unless a test says otherwise.
     sessionId: when.slice(0, 10),
@@ -338,4 +339,48 @@ test("applyAnswer never mutates the state it was given", () => {
 
 test("an unparseable timestamp throws", () => {
   assert.throws(() => state([ev("q1", "garbage")], at(1)), /unparseable timestamp/);
+});
+
+/* ── Self-reported confusion (homework reflection) ─────────────────── */
+
+const confused = (when: string, objectiveId = "t/o"): ConfusionEvent => ({
+  kind: "confusion",
+  id: `c-${when}`,
+  at: when,
+  courseId: "ald",
+  topicId: "t",
+  objectiveId,
+  materialId: "hw1",
+  note: "I don't get K-map groups",
+});
+const fold = (events: Array<EvidenceEvent | ConfusionEvent>, now: Date) => computeObjectiveState("t/o", events, now, opts());
+
+test("confusion on a mastered objective resets it to learning with no credit and no check", () => {
+  const s = fold([...masteredOnDay2(), confused(day(3))], at(3));
+  assert.equal(s.status, "learning");
+  assert.equal(s.credit, 0);
+  assert.equal(s.creditDays, 0);
+  assert.equal(s.dueAt, null);
+  assert.equal(s.spacedChecks, 0);
+  assert.equal(s.lastEvidenceAt, day(3));
+});
+
+test("after confusion the same questions earn credit again, and mastery needs two fresh days", () => {
+  const again = [ev("q1", day(4)), ev("q2", day(4)), ev("q3", day(4))];
+  assert.equal(fold([...masteredOnDay2(), confused(day(3)), ...again], at(4)).status, "learning", "one day isn't enough");
+  const s = fold([...masteredOnDay2(), confused(day(3)), ...again, ev("q1", day(5))], at(5));
+  assert.equal(s.credit, 3, "attempted questions were cleared, so q1–q3 credit again; the day-5 repeat doesn't");
+  assert.equal(s.status, "learning", "credit came from one day only");
+  assert.equal(fold([...masteredOnDay2(), confused(day(3)), ev("q1", day(4)), ev("q2", day(4)), ev("q3", day(5))], at(5)).status, "mastered");
+});
+
+test("confusion un-retires and un-fades, and does nothing to an objective with no answers", () => {
+  assert.equal(fold([confused(day(1))], at(1)).status, "unseen");
+  const missedCheck = [...masteredOnDay2(), ev("q1", day(30), { outcome: "incorrect" })];
+  assert.equal(fold(missedCheck, at(30)).status, "fading");
+  assert.equal(fold([...missedCheck, confused(day(31))], at(31)).status, "learning");
+});
+
+test("confusion is never credit: a confusion-only log stays unseen and other objectives are untouched", () => {
+  assert.equal(fold([...masteredOnDay2(), confused(day(3), "t/other")], at(3)).status, "mastered");
 });

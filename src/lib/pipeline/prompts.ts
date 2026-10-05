@@ -3,7 +3,7 @@
  * the long, repeated part (the material's text) and goes first so a provider with prompt caching
  * reuses it across the calls of one upload.
  */
-import type { AgreementInput, AmbiguityInput, ExtractInput, GenerateInput, ReconcileInput, SolveInput, StepInput, StepName } from "./schemas.ts";
+import type { AgreementInput, AmbiguityInput, ExtractInput, GenerateInput, ReconcileInput, ReflectInput, SolveInput, StepInput, StepName } from "./schemas.ts";
 
 export interface BuiltPrompt {
   system: string;
@@ -151,6 +151,20 @@ ${input.items.map((i) => `[${i.id}] ${i.prompt}\nRubric: ${JSON.stringify(i.rubr
   };
 }
 
+export function reflectPrompt(input: ReflectInput): BuiltPrompt {
+  return {
+    system: "You match a student's reflection on their coursework to the course's objectives. Return JSON only, matching the schema.",
+    context: null,
+    prompt: `Course: ${input.course.name} (${input.course.short}). After finishing "${input.material.filename}" (${input.material.type}) the student wrote:
+
+"""${input.note}"""
+
+Which of these objectives does the note say they don't understand, got stuck on or got wrong? Include an objective only when the note says the student struggles with that skill, not just because it's mentioned. sure = true when the note plainly names the skill, false when you're inferring it. Return an empty list when the note reports no difficulty.
+
+${input.objectives.map((o) => `- ${o.id} (${o.topic}): ${o.name}${o.description ? ` — ${o.description}` : ""}`).join("\n")}`,
+  };
+}
+
 export function buildPrompt<S extends StepName>(step: S, input: StepInput<S>): BuiltPrompt {
   switch (step) {
     case "extract":
@@ -165,6 +179,8 @@ export function buildPrompt<S extends StepName>(step: S, input: StepInput<S>): B
       return ambiguityPrompt(input as AmbiguityInput);
     case "agreement":
       return agreementPrompt(input as AgreementInput);
+    case "reflect":
+      return reflectPrompt(input as ReflectInput);
     default:
       throw new Error(`Unknown pipeline step "${String(step)}"`);
   }

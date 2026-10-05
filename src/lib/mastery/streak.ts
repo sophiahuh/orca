@@ -5,7 +5,7 @@ import type { EvidenceEvent } from "./types.ts";
 const DAY_MS = 86_400_000;
 
 export function streakDays(evidence: readonly EvidenceEvent[], now: Date, dayKey: (iso: string) => string = localDayKey): number {
-  const days = new Set(evidence.filter((e) => e.grader !== "self").map((e) => dayKey(e.at)));
+  const days = new Set(evidence.filter((e) => e.kind === "answer" && e.grader !== "self").map((e) => dayKey(e.at)));
   // Step back a day at a time from noon today, so daylight-saving shifts never skip a date.
   const noon = new Date(now);
   noon.setHours(12, 0, 0, 0);

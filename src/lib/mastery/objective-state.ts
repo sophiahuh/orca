@@ -5,7 +5,7 @@
  * applyAnswer is the step; stateAt reads the result against the clock.
  */
 import { type Card, type Grade, Rating, type State, createEmptyCard, fsrs, generatorParameters } from "ts-fsrs";
-import type { EvidenceEvent, ObjectiveState, ObjectiveStatus, Outcome } from "./types.ts";
+import type { AnswerEvent, ConfusionEvent, EvidenceEvent, ObjectiveState, ObjectiveStatus, Outcome } from "./types.ts";
 
 export const MASTERY_RULES = {
   /** Credited answers needed for mastery. */
@@ -149,14 +149,14 @@ function timeOf(e: EvidenceEvent) {
 }
 
 /** How an answer grades for FSRS: wrong → Again; partial or self-marked → Hard; unaided correct → Good. */
-function gradeOf(e: EvidenceEvent): Grade {
+function gradeOf(e: AnswerEvent): Grade {
   if (e.outcome === "incorrect") return Rating.Again;
   if (e.outcome === "partial" || e.grader === "self") return Rating.Hard;
   return Rating.Good;
 }
 
 /** One step of the fold. Returns a new accumulator; never mutates the one it was given. */
-export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
+export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
   const R = MASTERY_RULES;
   const t = timeOf(e);
   if (acc.lastAt !== null && t < Date.parse(acc.lastAt)) {
@@ -220,6 +220,41 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
   return next;
 }
 
+/**
+ * Self-reported confusion: back to learning. Credit, credit days, attempted questions and the
+ * mastery check are cleared, so it needs fresh credited answers over separate days again. FSRS's
+ * memory estimate is kept (it describes past answers, which still happened). On an objective with
+ * no answers yet there is nothing to reset; Phase 3's priority reads the event itself.
+ */
+export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): ObjectiveAccumulator {
+  const t = timeOf(e);
+  if (acc.lastAt !== null && t < Date.parse(acc.lastAt)) {
+    throw new Error(`Evidence ${e.id} is older than the last event applied to objective ${e.objectiveId}; rebuild its state from the log`);
+  }
+  if (acc.answered === 0) return acc;
+  return {
+    ...acc,
+    lastAt: e.at,
+    attempted: [],
+    credit: 0,
+    gradedCredit: 0,
+    creditDays: [],
+    lastTwo: [],
+    lastMissQuestion: null,
+    mastered: false,
+    checkDueAt: null,
+    spacedChecks: 0,
+    missPending: false,
+    missSessionId: null,
+    retired: false,
+  };
+}
+
+/** One step of the fold for any event. */
+export function applyEvidence(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
+  return e.kind === "confusion" ? applyConfusion(acc, e) : applyAnswer(acc, e, options);
+}
+
 /** Read an accumulator against the clock. Fading is computed here, never by a timer. */
 export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState {
   let status: ObjectiveStatus;
@@ -248,7 +283,7 @@ export function replayObjective(objectiveId: string, events: readonly EvidenceEv
     .filter((e) => e.objectiveId === objectiveId)
     .map((e) => ({ e, t: timeOf(e) }))
     .sort((a, b) => a.t - b.t)
-    .reduce((acc, { e }) => applyAnswer(acc, e, options), EMPTY_ACCUMULATOR);
+    .reduce((acc, { e }) => applyEvidence(acc, e, options), EMPTY_ACCUMULATOR);
 }
 
 export function computeObjectiveState(

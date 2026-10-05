@@ -40,7 +40,7 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
   const events = evidence
     .filter((e) => e.courseId === courseId)
     .map((e) => {
-      const current = objectiveOfQuestion.get(e.questionId) ?? resolveObjectiveId(e.objectiveId, catalogue);
+      const current = (e.kind === "answer" ? objectiveOfQuestion.get(e.questionId) : undefined) ?? resolveObjectiveId(e.objectiveId, catalogue);
       return current !== e.objectiveId ? { ...e, objectiveId: current } : e;
     });
 

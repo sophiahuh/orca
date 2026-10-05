@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
-import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
+import type { AnswerEvent as EvidenceEvent } from "../../src/lib/mastery/types.ts";
 
 const catalogue = {
   "t1/a": { id: "t1/a", topicId: "t1", name: "A", review: "confirmed" as const },
@@ -21,6 +21,7 @@ const ev = (questionId: string, at: string, courseId = "c"): EvidenceEvent => ({
   tier: null,
   outcome: "correct",
   grader: "choice",
+  kind: "answer",
   source: "quiz",
   sessionId: "s1",
 });

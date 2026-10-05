@@ -6,7 +6,7 @@ import { parseLooseJson } from "@/lib/pipeline/parse";
 import { STEPS, type StepName } from "@/lib/pipeline/schemas";
 
 /**
- * POST /api/pipeline/{extract|reconcile|generate|solve|ambiguity|agreement}
+ * POST /api/pipeline/{extract|reconcile|generate|solve|ambiguity|agreement|reflect}
  * Body: { llm?, input } → { output, model }. The prompt is built here from the step's structured
  * input, so the route never forwards arbitrary prompts on Orca's key. Uses the student's model when
  * they connected one, else the server's ANTHROPIC_API_KEY.
@@ -22,6 +22,7 @@ const BUDGET: Record<StepName, { effort: "low" | "medium" | "high"; maxTokens: n
   solve: { effort: "medium", maxTokens: 8000 },
   ambiguity: { effort: "low", maxTokens: 8000 },
   agreement: { effort: "low", maxTokens: 8000 },
+  reflect: { effort: "medium", maxTokens: 4000 },
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ step: string }> }) {

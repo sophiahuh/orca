@@ -30,7 +30,7 @@ import type { LlmConfig } from "./llm";
 import type { UploadPlan } from "./pipeline/run";
 import { applyUploadPlan } from "./pipeline/apply";
 import type { QuizQuestion } from "./data";
-import type { EvidenceEvent } from "./mastery/types";
+import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types";
 import type { CourseStructure } from "./course/ops";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { dueTopics } from "./mastery/due";
@@ -95,7 +95,9 @@ interface OrcaActions {
   addMaterial: (m: Material) => void;
   recordQuiz: (r: Omit<QuizResult, "finishedAt">) => void;
   /** Append one graded answer. The only way learner state changes. */
-  recordEvidence: (e: Omit<EvidenceEvent, "id" | "at">) => void;
+  recordEvidence: (e: Omit<AnswerEvent, "id" | "at" | "kind">) => void;
+  /** A homework reflection: one confusion event per objective the student confirmed, and the note kept on the material. */
+  recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note">>) => void;
   setOnboarded: (v: boolean) => void;
   setLlm: (c: LlmConfig | null) => void;
   /** Merge an upload's pipeline result into a course and keep the run's record. */
@@ -209,8 +211,18 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const recordEvidence = useCallback<OrcaActions["recordEvidence"]>((e) => {
-    const event: EvidenceEvent = { ...e, id: crypto.randomUUID(), at: new Date().toISOString() };
+    const event: EvidenceEvent = { ...e, kind: "answer", id: crypto.randomUUID(), at: new Date().toISOString() };
     setState((s) => ({ ...s, evidence: [...s.evidence, event] }));
+  }, []);
+
+  const recordReflection = useCallback<OrcaActions["recordReflection"]>((materialId, note, events) => {
+    const at = new Date().toISOString();
+    const confusion: EvidenceEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: crypto.randomUUID(), at, materialId, note }));
+    setState((s) => ({
+      ...s,
+      evidence: [...s.evidence, ...confusion],
+      materials: s.materials.map((m) => (m.id === materialId ? { ...m, reflection: { at, note, objectiveIds: events.map((e) => e.objectiveId) } } : m)),
+    }));
   }, []);
 
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
@@ -260,8 +272,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo<OrcaContextValue>(
-    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, applyUpload, editStructure, reset }),
-    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, applyUpload, editStructure, reset],
+    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setLlm, applyUpload, editStructure, reset }),
+    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setLlm, applyUpload, editStructure, reset],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

@@ -167,6 +167,29 @@ export const AgreementInput = z.object({
 });
 export type AgreementInput = z.infer<typeof AgreementInput>;
 
+/* ── Reflect: which objectives a homework reflection says the student doesn't understand ── */
+
+export const ReflectInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200), type: MaterialType }),
+  note: z.string().min(1).max(2000),
+  objectives: z.array(z.object({ id: z.string(), name: z.string(), description: z.string(), topic: z.string() })).min(1).max(400),
+});
+export type ReflectInput = z.infer<typeof ReflectInput>;
+
+export const ReflectOutput = z.object({
+  matches: z
+    .array(
+      z.object({
+        objectiveId: z.string(),
+        sure: z.boolean().describe("true when the note plainly names this skill; false when you are inferring it"),
+        reasoning: z.string().max(300).describe("One sentence, quoting the note"),
+      }),
+    )
+    .max(10),
+});
+export type ReflectOutput = z.infer<typeof ReflectOutput>;
+
 /** Every step: its input and output schemas. */
 export const STEPS = {
   extract: { input: ExtractInput, output: ExtractOutput },
@@ -175,6 +198,7 @@ export const STEPS = {
   solve: { input: SolveInput, output: SolveOutput },
   ambiguity: { input: AmbiguityInput, output: AmbiguityOutput },
   agreement: { input: AgreementInput, output: AgreementOutput },
+  reflect: { input: ReflectInput, output: ReflectOutput },
 } as const;
 export type StepName = keyof typeof STEPS;
 export type StepInput<S extends StepName> = z.infer<(typeof STEPS)[S]["input"]>;
