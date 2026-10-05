@@ -2,7 +2,7 @@
 
 import { motion } from "motion/react";
 import { DueCard } from "@/components/ui/DueCard";
-import { useOrca } from "@/lib/store";
+import { useDueItems, useOrca } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
 import type { DueItem } from "@/lib/data";
 import { NavBar } from "./NavBar";
@@ -25,7 +25,7 @@ function Section({ title, items, hrefFor, labelFor }: {
           Nothing due. Nice.
         </motion.p>
       ) : (
-        items.map((d) => <DueCard key={d.id} course={labelFor(d)} title={d.title} href={hrefFor(d)} />)
+        items.map((d) => <DueCard key={d.id} course={labelFor(d)} title={`${d.title} · ${d.count} to review`} href={hrefFor(d)} />)
       )}
     </motion.section>
   );
@@ -33,7 +33,8 @@ function Section({ title, items, hrefFor, labelFor }: {
 
 /** 340px right rail: Due today / Due tomorrow + bottom nav. */
 export function Sidebar() {
-  const { due, courses } = useOrca();
+  const { courses } = useOrca();
+  const due = useDueItems();
   const byId = new Map(courses.map((c) => [c.id, c]));
   const hrefFor = (d: DueItem) => {
     const c = byId.get(d.courseId);

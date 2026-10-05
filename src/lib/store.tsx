@@ -19,9 +19,6 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_WEIGHTS,
   SEED_COURSES,
-  SEED_DUE,
-  SEED_EVENTS,
-  SEED_MATERIALS,
   defaultTopicPositions,
   shortName,
   slugify,
@@ -32,6 +29,8 @@ import type { QuizQuestion } from "./data";
 import { ALD_QUESTION_BANK } from "./content/ald";
 import type { EvidenceEvent, ObjectiveInfo } from "./mastery/types";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
+import { dueTopics } from "./mastery/due";
+import { streakDays } from "./mastery/streak";
 import { ALD_OBJECTIVES } from "./content/ald-objectives";
 import { useNow } from "@/hooks/useNow";
 
@@ -46,12 +45,10 @@ interface QuizResult {
 
 interface OrcaState {
   courses: Course[];
-  due: DueItem[];
   events: CalendarEvent[];
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
-  streak: number;
   results: QuizResult[];
   onboarded: boolean;
   /** The student's own model connection (bring-your-own-LLM). Lives only in this browser. */
@@ -64,16 +61,14 @@ interface OrcaState {
   evidence: EvidenceEvent[];
 }
 
-const STORAGE_KEY = "orca:v4"; // v4: topics no longer store status; learner state comes from the evidence log
+const STORAGE_KEY = "orca:v5"; // v5: due list and streak are derived; no fabricated seed data
 
 const initialState: OrcaState = {
   courses: SEED_COURSES,
-  due: SEED_DUE,
-  events: SEED_EVENTS,
-  materials: SEED_MATERIALS,
+  events: [],
+  materials: [],
   configs: Object.fromEntries(SEED_COURSES.map((c) => [c.id, DEFAULT_CONFIG])),
   weights: Object.fromEntries(SEED_COURSES.map((c) => [c.id, DEFAULT_WEIGHTS])),
-  streak: 5,
   results: [],
   onboarded: false,
   llm: null,
@@ -199,7 +194,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const recordQuiz = useCallback<OrcaActions["recordQuiz"]>((r) => {
     setState((s) => ({
       ...s,
-      streak: s.streak + (s.results.length === 0 ? 1 : 0),
       results: [...s.results, { ...r, finishedAt: new Date().toISOString() }],
     }));
   }, []);
@@ -298,4 +292,31 @@ export function useMasteryByCourse(): Record<string, CourseMastery> {
       ),
     [courses, questionBank, objectives, evidence, nowMs],
   );
+}
+
+/** Topics with reviews due today or tomorrow, across every course. */
+export function useDueItems(): DueItem[] {
+  const { courses } = useOrca();
+  const mastery = useMasteryByCourse();
+  const nowMs = useNow();
+  return useMemo(
+    () =>
+      courses.flatMap((c) => {
+        const m = mastery[c.id];
+        if (!m) throw new Error(`No mastery computed for course ${c.id}`);
+        return dueTopics(c.id, m, new Date(nowMs)).map((d) => {
+          const topic = c.topics.find((t) => t.id === d.topicId);
+          if (!topic) throw new Error(`Due topic ${d.topicId} is not in course ${c.id}`);
+          return { id: `${c.id}:${d.topicId}:${d.when}`, courseId: c.id, topicId: d.topicId, title: topic.name, when: d.when, count: d.objectiveIds.length };
+        });
+      }),
+    [courses, mastery, nowMs],
+  );
+}
+
+/** Days in a row with at least one unaided graded answer. */
+export function useStreak(): number {
+  const { evidence } = useOrca();
+  const nowMs = useNow();
+  return useMemo(() => streakDays(evidence, new Date(nowMs)), [evidence, nowMs]);
 }

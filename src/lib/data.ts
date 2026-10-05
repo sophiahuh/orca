@@ -37,20 +37,25 @@ export interface Course {
   topics: Topic[];
   /** Optional hand-tuned trail path. Generated from topic positions if absent. */
   trail?: string;
+  /** Built-in sample content rather than material the student uploaded. */
+  sample?: boolean;
 }
 
 export type DueWhen = "today" | "tomorrow";
 
+/** A topic with reviews due, derived from objective due times (never stored). */
 export interface DueItem {
   id: string;
   courseId: string;
+  topicId: string;
   title: string;
   when: DueWhen;
-  topicId?: string;
+  /** How many of the topic's objectives are due. */
+  count: number;
 }
 
 export type Cadence = "Daily" | "Weekly" | "1 wk before exam";
-export type Duration = "5 min" | "15 min" | "30 min" | "1 hour" | "3 hours" | "10 hours";
+export type Duration = "5 min" | "10 min" | "15 min" | "30 min" | "1 hour" | "3 hours" | "10 hours";
 
 export interface ReviewRow {
   duration: Duration;
@@ -156,7 +161,7 @@ export interface QuizQuestion {
 /* ── Seed ─────────────────────────────────────────────────────────────── */
 
 export const DEFAULT_CONFIG: ReviewConfig = {
-  quick: { duration: "5 min", cadence: "Daily" },
+  quick: { duration: "10 min", cadence: "Daily" },
   deep: { duration: "3 hours", cadence: "Weekly" },
   exam: { duration: "10 hours", cadence: "1 wk before exam" },
 };
@@ -187,24 +192,8 @@ export const SEED_COURSES: Course[] = [
     variant: "ald",
     pos: { x: 70, y: 110 },
     topics: ALD_SEED_TOPICS,
+    sample: true,
   },
-];
-
-export const SEED_DUE: DueItem[] = [
-  { id: "d2", courseId: "ald", title: "Boolean Algebra", when: "today", topicId: "boolean-algebra" },
-  { id: "d3", courseId: "ald", title: "Review Logic Circuits", when: "tomorrow", topicId: "logic-circuits-switches" },
-  { id: "d4", courseId: "ald", title: "Exam 1 prep", when: "tomorrow", topicId: "karnaugh-maps" },
-];
-
-export const SEED_EVENTS: CalendarEvent[] = [
-  { id: "e2", date: "2026-09-08", kind: "lab", title: "ALD Lab 2", courseId: "ald" },
-  { id: "e3", date: "2026-09-10", kind: "hw", title: "ALD HW 3", courseId: "ald" },
-  { id: "e4", date: "2026-09-15", kind: "rev", title: "Review Intro", courseId: "ald" },
-  { id: "e5", date: "2026-09-17", kind: "exam", title: "ALD midterm", courseId: "ald" },
-  { id: "e7", date: "2026-09-24", kind: "rev", title: "K-Maps quiz", courseId: "ald" },
-  { id: "e9", date: "2026-10-01", kind: "rev", title: "Exam 1 prep", courseId: "ald" },
-  { id: "e11", date: "2026-10-08", kind: "lab", title: "ALD Lab 3", courseId: "ald" },
-  { id: "e12", date: "2026-10-13", kind: "rev", title: "Verilog review", courseId: "ald" },
 ];
 
 export const MATERIAL_TYPES: readonly MaterialType[] = ["Past exam", "Practice problems", "Practice exam", "Homework", "Lecture", "Other"];
@@ -221,18 +210,6 @@ export function formatUSDate(iso: string) {
   const [y, m, d] = iso.split("-");
   return `${m}/${d}/${y}`;
 }
-
-export const SEED_MATERIALS: Material[] = [
-  {
-    id: "m1",
-    courseId: "ald",
-    filename: "ALD_HW3.pdf",
-    type: "Homework",
-    assigned: "2026-09-24",
-    due: "2026-10-01",
-    reflect: true,
-  },
-];
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 

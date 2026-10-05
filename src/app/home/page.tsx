@@ -8,10 +8,12 @@ import { KnowledgeMap } from "@/components/map/KnowledgeMap";
 import { ClassConfigModal } from "@/components/config/ClassConfigModal";
 import { OrcaLogo } from "@/components/brand/OrcaLogo";
 import { IconPlus } from "@/components/icons";
-import { useOrca } from "@/lib/store";
+import { useDueItems, useOrca, useStreak } from "@/lib/store";
 
 export default function HomePage() {
-  const { courses, due, streak } = useOrca();
+  const { courses } = useOrca();
+  const due = useDueItems();
+  const streak = useStreak();
   const [configuring, setConfiguring] = useState<Course | null>(null);
   const close = useCallback(() => setConfiguring(null), []);
   const dueCount = (courseId: string) => due.filter((d) => d.courseId === courseId).length;

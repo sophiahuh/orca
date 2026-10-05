@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type { QuizQuestion } from "@/lib/data";
 import { objectiveIdOf } from "@/lib/mastery/catalogue";
 import type { Grader, Outcome } from "@/lib/mastery/types";
-import { useCourse, useOrca } from "@/lib/store";
+import { useCourse, useOrca, useStreak } from "@/lib/store";
 import { IconClose } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -27,7 +27,8 @@ const LETTERS = "ABCDEFGH";
 export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) {
   const { slug, topic: topicId } = use(params);
   const router = useRouter();
-  const { hydrated, streak, recordQuiz, recordEvidence, questionBank, llm } = useOrca();
+  const streak = useStreak();
+  const { hydrated, recordQuiz, recordEvidence, questionBank, llm } = useOrca();
   const serverModel = useServerModel();
   const course = useCourse(slug);
   const topic = course?.topics.find((t) => t.id === topicId);

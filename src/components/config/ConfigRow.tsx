@@ -6,7 +6,7 @@ import { IconBell } from "@/components/icons";
 import { Select } from "@/components/ui/Select";
 import { fadeUp } from "@/lib/motion";
 
-export const DURATIONS: readonly Duration[] = ["5 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"];
+export const DURATIONS: readonly Duration[] = ["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"];
 export const CADENCES: readonly Cadence[] = ["Daily", "Weekly", "1 wk before exam"];
 
 export const REVIEW_LABELS = { quick: "Quick review", deep: "Deep review", exam: "Exam review" } as const;
