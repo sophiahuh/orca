@@ -285,16 +285,72 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   });
   if (deps.structureOnly) return { newTopics, topicAliases, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
 
-  /* 5. Questions for every objective this upload touched that is short of its stock */
+  /* 5–7. Questions for every objective this upload touched that is short of its stock */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
   const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => q.objectiveId && survivor(q.objectiveId, objectiveById)?.id === id);
-  const touched = [...new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])]
+  const targets = [...new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])]
     .map((id) => objectiveById.get(id)!)
     .filter((o) => o.review !== "archived")
-    .map((o) => ({ o, existing: liveQuestions(o.id), need: QUESTIONS_PER_OBJECTIVE - liveQuestions(o.id).length }))
+    .map((o) => ({ objective: o, existing: liveQuestions(o.id), need: QUESTIONS_PER_OBJECTIVE - liveQuestions(o.id).length }))
     .filter((x) => x.need > 0);
+  const written = await writeQuestions(
+    {
+      course: input.course,
+      material: input.material,
+      pages: input.pages,
+      topics: new Map([...input.course.topics, ...newTopics].map((t) => [t.id, t])),
+      targets,
+      bank: input.bank,
+    },
+    deps,
+  );
+  dropped.push(...written.dropped);
+  const questions = written.questions;
+
+  return {
+    newTopics,
+    topicAliases,
+    newObjectives,
+    objectiveUpdates,
+    relations,
+    questions,
+    run: runRecord(questions),
+  };
+}
+
+export interface WriteTarget {
+  objective: Objective;
+  /** Its questions so far, so the model doesn't repeat them. */
+  existing: readonly QuizQuestion[];
+  need: number;
+}
+
+export interface WriteInput {
+  course: { name: string; short: string };
+  material: Material;
+  pages: Array<{ n: number; text: string }>;
+  topics: ReadonlyMap<string, Topic>;
+  targets: readonly WriteTarget[];
+  /** Every question the course has (topicId → questions), for spotting duplicates. */
+  bank: Readonly<Record<string, readonly QuizQuestion[]>>;
+}
+
+/**
+ * Write questions for objectives from one material, then check them: a blind solve, an ambiguity
+ * check for choice questions and rubric agreement for prose answers. Questions that fail, duplicate
+ * one the course has, or need a figure that can't be rendered are dropped with a reason.
+ */
+export async function writeQuestions(
+  input: WriteInput,
+  deps: Pick<RunDeps, "call" | "newId" | "renderFigure" | "onProgress">,
+): Promise<{ questions: Record<string, QuizQuestion[]>; dropped: PipelineRun["dropped"] }> {
+  const { call, newId } = deps;
+  const progress = deps.onProgress ?? (() => {});
+  const dropped: PipelineRun["dropped"] = [];
+  /* Write */
+  const touched = input.targets.map((t) => ({ o: t.objective, existing: t.existing, need: t.need }));
   progress({ stage: "writing", objectives: touched.length });
-  const topicsById = new Map([...input.course.topics, ...newTopics].map((t) => [t.id, t]));
+  const topicsById = input.topics;
   const byTopic = new Map<string, typeof touched>();
   for (const x of touched) byTopic.set(x.o.topicId, [...(byTopic.get(x.o.topicId) ?? []), x]);
   const jobs = [...byTopic.entries()].flatMap(([topicId, xs]) =>
@@ -358,7 +414,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     })
   ).flat();
 
-  /* 6. Check: blind solve, ambiguity for choice questions, rubric agreement */
+  /* Check: blind solve, ambiguity for choice questions, rubric agreement */
   progress({ stage: "checking", questions: generated.length });
   const slideText = new Map(input.pages.map((p) => [p.n, p.text]));
   const failures = new Map<string, string>();
@@ -416,7 +472,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     ]);
   });
 
-  /* 7. Duplicates and figures */
+  /* Duplicates and figures */
   const seen = new Set(Object.values(input.bank).flat().map((q) => promptKey(q.prompt)));
   const passed: typeof generated = [];
   for (const g of generated) {
@@ -437,7 +493,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   if (slides.length) progress({ stage: "figures", slides: slides.length });
   const figures = new Map<number, string | null>();
   for (const n of slides) figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null);
-  const questions: UploadPlan["questions"] = {};
+  const questions: Record<string, QuizQuestion[]> = {};
   for (const p of passed) {
     if (p.figureSlide !== null) {
       const src = figures.get(p.figureSlide);
@@ -450,13 +506,5 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     (questions[p.topicId] ??= []).push(p.q);
   }
 
-  return {
-    newTopics,
-    topicAliases,
-    newObjectives,
-    objectiveUpdates,
-    relations,
-    questions,
-    run: runRecord(questions),
-  };
+  return { questions, dropped };
 }
