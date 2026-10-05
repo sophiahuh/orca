@@ -225,6 +225,7 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   snapshot stale (rebuilt lazily on read); a merge or re-tag marks only the objectives involved.
   Reads never replay the log otherwise.
 - The student's **timezone** on their profile, used for every day boundary.
+- Model calls on the server use Orca's key only (decided 2026-10-05); student keys later, if kept.
 - The extraction pipeline moves server-side, as **Trigger.dev** tasks (decided 2026-10-05):
   uploads and top-ups outlive Vercel's function limits once textbooks arrive, and Trigger.dev
   gives durable, retried, observable jobs with live progress to the browser, without running our

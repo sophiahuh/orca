@@ -56,11 +56,6 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   material type's coverage counts the same; the student's sliders are what make one type count more.
 
 ### Before Phase 4 (Supabase + Trigger.dev)
-- **Bring-your-own model under a server pipeline** (see "Bring-your-own model" below): once
-  uploads and top-ups run as Trigger.dev tasks, a student's key would have to be stored on the
-  server (encrypted, e.g. Supabase Vault) to be used there, and Ollama (browser-only) can't run
-  server-side at all. Options: Orca's server key only (simplest; BYO off or later), or encrypted
-  student keys for cloud providers only.
 - **Credentials a Phase 4 session needs** to run the live checks the invariants require: a
   Supabase project (URL, anon and service-role keys), a Trigger.dev project (secret key), and
   `ANTHROPIC_API_KEY`. Without them the work can only be typechecked, which isn't the same claim.
@@ -149,6 +144,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   questions, minutes, how many objectives get a question and, when some don't fit, how long
   covers them all. Assembly covers every objective once, highest priority first, before going
   deeper on any. The end card offers "Start another deep review".
+- 2026-10-05: Phase 4's server pipeline uses Orca's server key only. Students' own keys (stored
+  encrypted, cloud providers only) can come later; whether to keep Settings → Your AI at all is
+  still open ("Bring-your-own model").
 - 2026-10-05: sign-in for Phase 4 is email + password through Supabase Auth (it hashes passwords,
   confirms emails and resets passwords; Orca stores no password itself). Google sign-in comes
   later as a second provider on the same accounts. Password emails need a custom SMTP provider
