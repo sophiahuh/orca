@@ -13,7 +13,7 @@ test("only the account screens and the email callback are public", () => {
 
 test("safeNext only allows same-site paths", () => {
   assert.equal(safeNext("/course/ald?x=1"), "/course/ald?x=1");
-  for (const bad of ["//evil.com", "https://evil.com", "/\\evil.com", "evil", "", null, undefined]) assert.equal(safeNext(bad), "/", String(bad));
+  for (const bad of ["//evil.com", "https://evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "/\r/evil.com", "/%09/evil.com".replace("%09", "\t"), "evil", "", null, undefined]) assert.equal(safeNext(bad), "/", String(bad));
 });
 
 test("passwords need 8 characters and emails an @", () => {

@@ -11,8 +11,18 @@ export function isGuestOnlyPath(pathname: string): boolean {
   return ["/sign-in", "/sign-up", "/forgot-password"].includes(pathname);
 }
 
-/** A same-site path, or "/" — never another origin (`//evil.com`, `https://…`, `/\evil.com`). */
+/**
+ * A same-site path, or "/" — never another origin. Control characters are refused (the URL parser
+ * strips tabs and newlines, so `/\t/evil.com` would become `//evil.com`), and the result is what the
+ * URL parser itself says stays on this origin.
+ */
 export function safeNext(next: string | null | undefined): string {
-  if (!next || !/^\/(?![/\\])/.test(next)) return "/";
-  return next;
+  if (!next || !/^\/(?![/\\])/.test(next) || /[\u0000-\u001f\u007f]/.test(next)) return "/";
+  try {
+    const u = new URL(next, "http://x");
+    if (u.origin !== "http://x") return "/";
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return "/";
+  }
 }
