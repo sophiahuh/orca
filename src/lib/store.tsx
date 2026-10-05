@@ -31,6 +31,7 @@ import {
 import type { LlmConfig } from "./llm";
 import type { UploadPlan } from "./pipeline/run";
 import { applyUploadPlan } from "./pipeline/apply";
+import type { TopUpPlan } from "./pipeline/topup";
 import type { QuizQuestion } from "./data";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types";
 import type { CourseStructure } from "./course/ops";
@@ -101,6 +102,8 @@ interface OrcaActions {
   setLlm: (c: LlmConfig | null) => void;
   /** Merge an upload's pipeline result into a course and keep the run's record. */
   applyUpload: (courseId: string, plan: UploadPlan) => void;
+  /** Add questions topped up after a session, and keep the runs' records. */
+  addQuestions: (courseId: string, plan: TopUpPlan) => void;
   /** Apply a review operation (`src/lib/course/ops.ts`) to one course's topics, objectives and questions. */
   editStructure: (courseId: string, op: (s: CourseStructure) => CourseStructure) => void;
   reset: () => void;
@@ -249,6 +252,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const addQuestions = useCallback<OrcaActions["addQuestions"]>((courseId, plan) => {
+    setState((s) => {
+      const bank = { ...(s.questionBank[courseId] ?? {}) };
+      for (const [topicId, qs] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...qs];
+      return { ...s, questionBank: { ...s.questionBank, [courseId]: bank }, runs: [...s.runs, ...plan.runs] };
+    });
+  }, []);
+
   const editStructure = useCallback<OrcaActions["editStructure"]>((courseId, op) => {
     setState((s) => {
       const course = s.courses.find((c) => c.id === courseId);
@@ -272,8 +283,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo<OrcaContextValue>(
-    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setLlm, applyUpload, editStructure, reset }),
-    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setLlm, applyUpload, editStructure, reset],
+    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setLlm, applyUpload, addQuestions, editStructure, reset }),
+    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setLlm, applyUpload, addQuestions, editStructure, reset],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

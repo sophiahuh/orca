@@ -223,6 +223,8 @@ export interface Relation {
 /** One upload's pass through the pipeline: what it made and what it threw away. */
 export interface PipelineRun {
   id: string;
+  /** An upload, or questions topped up after a session (absent on older records: an upload). */
+  kind?: "upload" | "top-up";
   courseId: string;
   materialId: string;
   /** ISO time. */
