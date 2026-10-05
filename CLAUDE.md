@@ -8,6 +8,13 @@ Design source of truth: Figma file `Xt9CiD6SpdN0BPma1q2pzZ` ("Orca – Study App
 Reference renders live in `docs/figma/` (`screens.png` = all 11 screens, `styleguide.png`, and the
 traced SVG assets in `docs/figma/assets/`). Frames are 1194×834; v1 ships as a laptop website.
 
+## Reporting to the owner
+
+Keep replies short. End each piece of work with a brief: **Done** (what changed, with file
+links), **Next** (the next step), **Notes** (only explanations or decisions the owner needs).
+A few bullets each; no restating the plan, no long background, no option surveys. Answer a
+question directly first, then stop.
+
 ## Start here (handoff, updated 2026-10-05)
 
 **Who it's for.** A college student who wants to actually master their classes, not cram. They

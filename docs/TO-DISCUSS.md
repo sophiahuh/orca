@@ -113,6 +113,27 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   it in normal use (a textbook upload would). Options: a higher limit, a per-course one, or
   limits by plan.
 
+### Injection pre-screen with a small model (deferred)
+- **Decided for Phase 4 (2026-10-05):** no model pre-screen. Untrusted text is sanitised,
+  pattern-screened, JSON-encoded, and outputs are validated in code (plan decision 13).
+- **Revisit when:** the red-team set or real uploads show injections getting past the pattern
+  screen and validators, or courses become shared. Then add a Claude Haiku 4.5 classifier
+  (structured `{ injectionSuspected, quotes }`) before extraction, as Anthropic's "Mitigate
+  jailbreaks and prompt injections" guide recommends; about a quarter of an upload's input cost.
+
+### The browser reports choice and exact outcomes
+- **Decided for Phase 4 (2026-10-05):** choice and exact answers are graded in the browser and
+  `/api/evidence` takes the outcome it sends; only prose grading loads its rubric on the server.
+  An edited request can inflate only the student's own record.
+- **Revisit when:** courses are shared, mastery feeds anything outside the student's own study
+  (grades, leaderboards), or the MCP connector writes answers. Then `/api/evidence` takes the
+  response and checks choice and exact answers on the server (a string compare, no model call).
+
+### Sign-up CAPTCHA (deferred)
+- **Decided for Phase 4 (2026-10-05):** no CAPTCHA; email confirmation and the global daily model
+  budget guard against mass sign-ups.
+- **Revisit:** before opening sign-up publicly. Supabase Auth supports Turnstile and hCaptcha.
+
 ### Mix-ups without a confidence rating
 - **Decided:** two unaided misses in a row on different questions marks an objective mixed-up.
   The quiz doesn't ask how sure the student was.
