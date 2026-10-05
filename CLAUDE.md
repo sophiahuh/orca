@@ -65,8 +65,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`: Tasks 1–3 are done (status notes at the top of the plan), **Task 4
-   (auth: browser client, proxy, auth screens) is next**. Tasks 1–9 need no hosted projects (local Supabase,
+   progress on branch `phase-4`: Tasks 1–4 are done (status notes at the top of the plan), **Task 5
+   (the store on Supabase) is next**. Tasks 1–9 need no hosted projects (local Supabase,
    inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
    `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
    "Watch" for the two to revisit).
@@ -160,7 +160,15 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   browser can't write evidence or snapshots: only `POST /api/evidence` does, with the service
   role. `src/lib/supabase/server.ts` has the server client (session cookie or `Authorization:
   Bearer`) and the secret-key client; `env.ts` throws "isn't connected" when variables are
-  missing (routes answer 503); `rows.ts` maps rows to the mastery types (pure).
+  missing (routes answer 503); `rows.ts` maps rows to the mastery types (pure); `browser.ts` is
+  the browser client; `cookieClient()` is for server actions. Auth (Task 4): `src/proxy.ts`
+  (session refresh, signed-out redirect, CSP with a nonce; `src/lib/csp.ts`, `src/lib/auth/` are
+  pure), actions in `src/app/auth/actions.ts`, screens `/sign-in`, `/sign-up`, `/forgot-password`,
+  `/reset-password`, callback `/auth/callback`, Account card in Settings, and the root layout shows
+  "isn't connected" without the env vars. `react/no-danger` is an error. e2e specs import `test`
+  from `e2e/fixture.ts`, which signs in a throwaway student; Playwright reads the Supabase URL and
+  keys from `supabase status` (stack must be up) unless `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`
+  and `SUPABASE_SECRET_KEY` are set.
   `src/lib/server/` holds route helpers (`student.ts`: 503/401 and the verified user) and the
   Supabase `SnapshotStore`. Screens only talk to `useOrca()`, so the persistence swap (Task 5)
   happens behind it.
@@ -239,7 +247,8 @@ This describes the code as it is.
 - Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`),
   `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
   `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`, `/api/evidence`, `/api/state` (the last two
-  need Supabase and a signed-in student; nothing calls them yet). Dynamic
+  need Supabase and a signed-in student; nothing calls them yet), `/sign-in`, `/sign-up`,
+  `/forgot-password`, `/reset-password`, `/auth/callback`. Dynamic
   pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
   (run `npx next typegen` before `tsc`).
 - Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, Settings → "Your AI"): the student picks

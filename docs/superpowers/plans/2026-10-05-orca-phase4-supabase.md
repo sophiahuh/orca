@@ -53,6 +53,23 @@
 >   a second account and a signed-out caller are refused). Differences from the plan: an answer to
 >   a question with no objective is refused (422), because evidence rows need a real objective
 >   (in `docs/TO-DISCUSS.md`); the store doesn't call the routes yet (Task 5).
+> - **Task 4 done (2026-10-05, local):** Supabase browser and cookie clients, `src/proxy.ts` (refreshes
+>   the session cookie, sends signed-out visitors to `/sign-in?next=…`, does only the CSP when the env
+>   vars are missing; `/api` is refreshed, never redirected), server actions for sign in, sign up,
+>   forgot and reset password and sign out, `/auth/callback` (exchanges the emailed `?code=`; a link
+>   opened in another browser can't be exchanged, so it lands on sign-in with a message), the four
+>   screens in Orca's style, an Account card in Settings (email, editable timezone, sign out), the
+>   "isn't connected to its database" screen in the root layout, and the CSP (per-request nonce,
+>   `strict-dynamic`, no framing) plus the `react/no-danger` lint rule. Sign-up sends the browser's
+>   timezone, which the profile trigger stores. Proved locally: `e2e/auth.spec.ts` (sign up, confirm
+>   from Mailpit, timezone stored, sign out, signed-out redirect, CSP header, generic wrong-password
+>   error, reset password from Mailpit), `tests/auth.test.ts`, and the whole e2e suite, which now
+>   signs in a throwaway confirmed student per test (`e2e/fixture.ts`; their data is still
+>   localStorage). Playwright takes the Supabase URL and keys from `supabase status` (not `.env`),
+>   so the stack must be up. Differences: the CSP's `connect-src` allows only this site and Supabase,
+>   so Settings → "Your AI" browser calls are blocked until Task 9 removes them; a reused dev server
+>   on port 3100 must have been started with the same Supabase keys. Hosted: the redirect URL list in
+>   `docs/SETUP-HOSTED.md` already covers `/auth/callback`; not run against a hosted project.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
