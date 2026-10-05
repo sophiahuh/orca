@@ -4,7 +4,7 @@
 > `docs/BACKEND-ROADMAP.md` (Phase 1 builds §2.2–2.5 on-device; Phase 3 builds §2.6 and §3).
 > Changes since it was written: the frontier term and distance discount are parked (§2.5–2.6,
 > `docs/TO-DISCUSS.md`); mix-ups are detected without a confidence rating (§2.3); a review that
-> comes due keeps counting for half its interval before it fades (§2.3); self-reported confusion
+> comes due stops counting as mastered (§2.3, `fading`); self-reported confusion
 > resets an objective to learning (§2.2); importance is a computed weight (§2.1); objectives are
 > created at upload (§2.1); there is no in-app chat (§2.2). §6 and §7 are superseded by the
 > roadmap and TO-DISCUSS.
@@ -50,7 +50,7 @@ used three ways, none of them a stored record:
 - a **review session**: a quiz the student sits (quick review daily, deep review on the course's
   cadence, exam review before an exam);
 - a **spaced check**: the next time a mastered objective should be re-asked, i.e. its `dueAt`. An
-  objective whose check has come due has status `due`;
+  objective whose check has come due is `fading` until it's answered correctly again;
 - **reviewing extracted content**: the student confirming or rejecting topics after an upload.
 
 A topic's progress and an island's look are summaries computed from its objectives' states.
@@ -94,24 +94,29 @@ separate *signal*, not an evidence event: it raises priority ("you studied this 
 never counts toward mastery.
 
 ### 2.3 Objective state (pure function of events + now)
-```
-unseen      no scored evidence
-learning    some evidence, mastery criteria not met
-mixed-up    two unaided misses in a row on different questions, not yet cleared
-            (no confidence rating is captured; see TO-DISCUSS)
-mastered    criteria met; carries stability S (days) and dueAt, not yet due
-due         dueAt has passed but by less than S/2 — in the review queue, still counts as mastered
-fading      a spaced check was missed, or dueAt + S/2 has passed — stops counting as mastered
-retired     mastered, S ≥ cap, ≥ 3 successful spaced checks; out of quick rotation
-```
-Topic status is derived: `done` when every objective is mastered, due or retired (none fading); `in progress` otherwise; `not started` when all unseen. Topics are **not gates**: the
+
+**Mastery states: quick reference.** Only objectives have a mastery state; topics and islands
+summarise them.
+
+| State | Meaning | Counts as mastered? | Leaves the state when |
+|---|---|---|---|
+| `unseen` | Never answered | No | Any graded answer |
+| `learning` | Answered, mastery bar not met yet | No | The bar is met (→ mastered), or a mix-up is detected (→ mixed-up) |
+| `mixed-up` | Two unaided wrong answers in a row on different questions: probably a wrong idea, not a slip (no confidence rating is captured; see TO-DISCUSS) | No | An unaided correct answer on a "why" (mechanism) question, or any unaided correct answer if the objective has none (→ learning) |
+| `mastered` | Bar met (§2.4); its next spaced check isn't due yet | **Yes** | The check comes due, or an unaided miss (→ fading) |
+| `fading` | Its spaced check is due or overdue, or it was just missed; it's in the review queue | No | An unaided correct answer at or after the due time (→ mastered, with a longer interval) |
+| `retired` | Stable: interval at the 60-day cap with 3+ successful checks; out of daily review | **Yes** | An unaided miss (→ fading), or an exam covering it brings it back |
+
+A self-reported "I don't understand this" sends any of these back to `learning` (§2.2).
+
+Topic status is derived: `done` when every objective is mastered or retired (none fading); `in progress` otherwise; `not started` when all unseen. Topics are **not gates**: the
 course moves on whether or not the student has mastered Lecture 2, so later topics unlock when
 their material exists. The trail shows which earlier topics need work rather than blocking them.
 
-Island level is derived too: the share of the course's objectives that are mastered, due or retired
-picks one of four fixed looks (`uncharted` with no answers yet, then `sprouting` < ⅓, `growing`
-≥ ⅓, `thriving` ≥ ⅔). Fading objectives don't count, so an island drops a level when checks go
-overdue. Names and cut-offs are provisional (TO-DISCUSS).
+Island level is derived too: the share of the course's objectives that are mastered or retired
+picks one of four fixed looks (no answers yet → look 1; under ⅓ → 2; ⅓ or more → 3; ⅔ or more → 4).
+Fading objectives don't count, so an island drops a level when checks come due. The level names
+(`uncharted`, `sprouting`, `growing`, `thriving`) are code identifiers only.
 
 ### 2.4 Mastery criteria (what "enough questions" means)
 Spaced-repetition practice (Leitner, SuperMemo, Anki) graduates an item after 2–3 successful

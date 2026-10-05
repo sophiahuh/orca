@@ -20,7 +20,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   and the student reviews topics. Inferred objectives (from general knowledge, not the material)
   are allowed and labelled. Unreviewed objectives are quizzable, with an "unreviewed" tag.
 - **Learner state is derived, never stored.** Every graded answer appends an evidence event;
-  objective status (unseen → learning → mastered → due → fading → retired, plus mixed-up), topic
+  objective status (unseen → learning → mastered → fading → retired, plus mixed-up; table in
+  `docs/MASTERY-PLAN.md` §2.3), topic
   progress, the island's mastery level, the due list and the streak are computed from the events
   and the clock. The mastery rule is a fold (`applyAnswer`), so the server can keep snapshots
   instead of replaying the log.

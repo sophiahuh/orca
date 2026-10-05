@@ -20,18 +20,18 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Meanwhile:** left out. Retirement already does most of the "don't re-quiz the intro" work.
 - **Decide:** together with the frontier term.
 
-### Island looks: cut-offs and art
+### Island looks: art
 - **What an island shows:** one summary of a whole course, computed from its objectives'
-  mastery states: the share of objectives currently held (mastered, due or retired). The level
+  mastery states: the share of objectives currently held (mastered or retired). The level
   names (`uncharted`, `sprouting`, `growing`, `thriving`) are only code identifiers for the four
   pictures; students never see them.
 - **Provisional (Phase 1):** no answers yet → look 1; under 1/3 held → look 2; 1/3 or more →
   look 3; 2/3 or more → look 4. Fading objectives don't count, so an island loses a look after
   real neglect.
-- **Decide:** (1) cut-offs: how many looks, and the share that triggers each; (2) art: the final
-  drawings for each look (Phase 1 uses placeholder trees built from the current island SVG;
-  Figma art replaces them later with changes only in `Island.tsx`); (3) whether a neglected
-  island (many fading objectives) gets a look of its own.
+- **Cut-offs decided** (see Decided).
+- **Decide:** (1) art: the final drawings for each look (Phase 1 uses placeholder trees built
+  from the current island SVG; Figma art replaces them later with changes only in
+  `Island.tsx`); (2) whether a neglected island (many fading objectives) gets a look of its own.
 
 ### Clearing a mix-up when an objective has no "mechanism" question
 - **Source:** `docs/MASTERY-PLAN.md` §2.4: only an unaided correct answer on a *mechanism* question
@@ -101,7 +101,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   status, weight, mastery, reject/merge) is where students reject ones the course doesn't cover.
 - 2026-10-04: day boundaries use the student's local timezone, on device and server.
 - 2026-10-04: a homework reflection saying "I don't understand X" resets X to learning.
-- 2026-10-04: due vs fading split (half-interval grace before a review stops counting).
+- 2026-10-04: a mastered objective whose spaced check comes due is `fading` and stops counting as
+  mastered (no grace period).
+- 2026-10-04: island cut-offs: no answers → look 1; under ⅓ held → 2; ⅓ or more → 3; ⅔ or more → 4.
 - 2026-10-04: streak = consecutive local days with an unaided graded answer.
 - 2026-10-04: ALD stays as a labelled sample course; all other seed data is removed; uploads
   (Phase 2) come before Supabase so extraction can be tested on real files.

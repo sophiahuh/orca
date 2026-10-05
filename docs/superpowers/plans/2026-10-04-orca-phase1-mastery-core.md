@@ -611,30 +611,22 @@ git commit -m "Objectives: evidence types, catalogue helpers, and every built-in
 
 **Files:**
 - Create: `src/lib/mastery/objective-state.ts`, `tests/mastery/objective-state.test.ts`
-- Modify: `src/lib/mastery/types.ts` (add `"due"` to `ObjectiveStatus`)
 
 **Interfaces:**
 - Consumes: `EvidenceEvent`, `ObjectiveState`, `ObjectiveStatus`, `Outcome` from Task 3.
 - Produces: `MASTERY_RULES`, `localDayKey(iso: string): string`, `interface ObjectiveStateOptions { hasMechanismQuestions: boolean; dayKey?: (iso: string) => string }`, `interface ObjectiveAccumulator` (plain JSON), `EMPTY_ACCUMULATOR`, `applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator`, `stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState`, `replayObjective(objectiveId: string, events: readonly EvidenceEvent[], options: ObjectiveStateOptions): ObjectiveAccumulator`, `computeObjectiveState(objectiveId: string, events: readonly EvidenceEvent[], now: Date, options: ObjectiveStateOptions): ObjectiveState`.
 
-**Why a step function.** The rule is written as `applyAnswer(state, answer) → state` (a fold over the log) plus `stateAt(state, now)`. Phase 1 still replays the whole log in the browser, which is cheap at this size. In the Supabase phase the accumulator becomes a stored snapshot updated in the same transaction as each new answer (event sourcing with snapshots), so reads stop replaying the log. Time-based states (due, fading) are computed at read from the stored due time, never by a timer.
+**Why a step function.** The rule is written as `applyAnswer(state, answer) → state` (a fold over the log) plus `stateAt(state, now)`. Phase 1 still replays the whole log in the browser, which is cheap at this size. In the Supabase phase the accumulator becomes a stored snapshot updated in the same transaction as each new answer (event sourcing with snapshots), so reads stop replaying the log. The time-based state (fading) is computed at read from the stored due time, never by a timer.
 
 Rules being implemented (from `docs/MASTERY-PLAN.md` §2.3–2.5):
 - Credit counts only a question's **first** attempt: unaided correct = 1, self-marked correct = 0.5, partial = 0.5, incorrect = 0. Repeats never add.
 - Mastered when credit ≥ 3, credit earned on ≥ 2 calendar days, the last two non-partial answers are correct, and there's no open mix-up.
 - Mix-up: two unaided misses in a row on different questions. Cleared by an unaided correct on a mechanism-tier question, or any unaided correct if the objective has no mechanism question (provisional, see TO-DISCUSS).
 - On mastery: stability 3 days, due 3 days later. An unaided correct at or after the due time is a spaced check: stability × 2.2 (cap 60), due again after the new stability. Early answers don't change it. An unaided miss: stability ÷ 3 (min 2), due tomorrow, fading until the next check. Stability at the cap with ≥ 3 checks = retired.
-- Status at `now`: `unseen` (no answers) → `learning` / `mixed-up` → `mastered` (due time not reached) → `due` (due, but still counts as mastered, for half its interval) → `fading` (a miss pending, or more than half an interval overdue; stops counting) → `retired`.
+- Status at `now`: `unseen` (no answers) → `learning` / `mixed-up` → `mastered` (check not due yet) → `fading` (check due or overdue, or a check missed; stops counting as mastered) → `retired`.
 - Answers must be applied in time order. `applyAnswer` throws on an answer older than the last one applied, telling the caller to rebuild from the log.
 
-- [ ] **Step 1: Add the "due" status**
-
-In `src/lib/mastery/types.ts`:
-```ts
-export type ObjectiveStatus = "unseen" | "learning" | "mixed-up" | "mastered" | "due" | "fading" | "retired";
-```
-
-- [ ] **Step 2: Write the failing tests**
+- [ ] **Step 1: Write the failing tests**
 
 `tests/mastery/objective-state.test.ts`:
 ```ts
@@ -791,12 +783,10 @@ test("an unaided correct answer at the due time grows stability", () => {
   assert.equal(s.spacedChecks, 1);
 });
 
-test("a review coming due still counts as mastered for half its interval, then fades", () => {
-  // Due day 5 at noon with a 3-day interval, so the grace runs to day 7 at midnight.
+test("a mastered objective fades as soon as its check is due", () => {
+  // Due day 5 at noon.
   assert.equal(state(masteredOnDay2(), at(5, 11)).status, "mastered");
-  assert.equal(state(masteredOnDay2(), at(5, 12)).status, "due");
-  assert.equal(state(masteredOnDay2(), at(6, 23)).status, "due");
-  assert.equal(state(masteredOnDay2(), at(7, 0)).status, "fading");
+  assert.equal(state(masteredOnDay2(), at(5, 12)).status, "fading");
 });
 
 test("a miss after mastery cuts stability, fades at once, and recovers on the next check", () => {
@@ -872,12 +862,12 @@ test("an unparseable timestamp throws", () => {
 });
 ```
 
-- [ ] **Step 3: Run to confirm they fail**
+- [ ] **Step 2: Run to confirm they fail**
 
 Run: `npm test`
 Expected: FAIL, `Cannot find module '.../objective-state.ts'`.
 
-- [ ] **Step 4: Implement**
+- [ ] **Step 3: Implement**
 
 `src/lib/mastery/objective-state.ts`:
 ```ts
@@ -899,8 +889,6 @@ export const MASTERY_RULES = {
   missDivisor: 3,
   minStabilityDays: 2,
   retireAfterChecks: 3,
-  /** A review that has come due still counts as mastered until it is this fraction of its interval overdue. */
-  fadingGraceFraction: 0.5,
 } as const;
 
 const DAY_MS = 86_400_000;
@@ -1020,15 +1008,14 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options
   return next;
 }
 
-/** Read an accumulator against the clock. Due and fading are computed here, never by a timer. */
+/** Read an accumulator against the clock. Fading is computed here, never by a timer. */
 export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState {
   const t = now.getTime();
   let status: ObjectiveStatus;
   if (acc.answered === 0) status = "unseen";
   else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
   else if (acc.retired) status = "retired";
-  else if (acc.missPending || t >= after(acc.dueAt, acc.stabilityDays * MASTERY_RULES.fadingGraceFraction)) status = "fading";
-  else if (t >= acc.dueAt) status = "due";
+  else if (acc.missPending || t >= acc.dueAt) status = "fading";
   else status = "mastered";
 
   return {
@@ -1062,17 +1049,17 @@ export function computeObjectiveState(
 }
 ```
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 4: Run tests**
 
 Run: `npm test`
 Expected: PASS (all objective-state tests).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 npx tsc --noEmit && npm run lint
-git add src/lib/mastery/objective-state.ts src/lib/mastery/types.ts tests/mastery/objective-state.test.ts
-git commit -m "Mastery: objective state as a fold over evidence (criteria, mix-ups, spaced checks, due vs fading, retirement)"
+git add src/lib/mastery/objective-state.ts tests/mastery/objective-state.test.ts
+git commit -m "Mastery: objective state as a fold over evidence (criteria, mix-ups, spaced checks, fading, retirement)"
 ```
 
 ---
@@ -1109,9 +1096,8 @@ const s = (objectiveId: string, status: ObjectiveStatus): ObjectiveState => ({
 });
 const map = (...states: ObjectiveState[]) => new Map(states.map((x) => [x.objectiveId, x]));
 
-test("a topic is done only when every objective is mastered, due (within grace) or retired", () => {
+test("a topic is done only when every objective is mastered or retired", () => {
   assert.deepEqual(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "retired"))), { status: "done", mastered: 2, total: 2 });
-  assert.equal(topicProgress(["a", "b"], map(s("a", "due"), s("b", "mastered"))).status, "done");
   assert.equal(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "fading"))).status, "in-progress");
 });
 
@@ -1136,9 +1122,8 @@ test("island level follows the share of objectives held", () => {
   assert.equal(islandLevel([s("a", "mastered"), s("b", "retired"), s("c", "unseen")]), "thriving");
 });
 
-test("fading objectives don't hold an island's level; due ones still do", () => {
+test("fading objectives don't hold an island's level", () => {
   assert.equal(islandLevel([s("a", "fading"), s("b", "fading"), s("c", "mastered")]), "growing");
-  assert.equal(islandLevel([s("a", "due"), s("b", "due"), s("c", "mastered")]), "thriving");
 });
 ```
 
@@ -1219,13 +1204,13 @@ export type TopicStatus = "not-started" | "in-progress" | "done";
 
 export interface TopicProgress {
   status: TopicStatus;
-  /** Objectives mastered, due (within grace) or retired. */
+  /** Objectives mastered or retired. */
   mastered: number;
   total: number;
 }
 
-/** Counts as mastered: a review coming due (within its grace) still counts; fading doesn't. */
-const held = (s: ObjectiveState) => s.status === "mastered" || s.status === "due" || s.status === "retired";
+/** Counts as mastered: mastered or retired. A fading objective (check due) doesn't. */
+const held = (s: ObjectiveState) => s.status === "mastered" || s.status === "retired";
 
 export function topicProgress(objectiveIds: readonly string[], states: ReadonlyMap<string, ObjectiveState>): TopicProgress {
   const list = objectiveIds.map((id) => {
@@ -1875,7 +1860,7 @@ git commit -m "Trail reads derived progress: no stored topic status, no locks, e
 Why: the sidebar's due cards, the calendar events, the sample homework file and the "5 day streak" are all hand-written stand-ins. After this task the due list and streak are computed from evidence, the calendar starts empty (real entries come from uploaded material with due dates), and ALD stays as a labelled sample course.
 
 Rules:
-- An objective is **due today** when it's mastered (not retired) and its due time has passed or falls on today's local date; **due tomorrow** when its due time falls on tomorrow's local date. Due items are grouped by topic. Objectives that aren't mastered yet aren't "due" in Phase 1; ranking new material into the daily queue is the scheduling phase.
+- An objective is **due today** when it has a spaced-check due time (it was mastered and isn't retired) and that time has passed or falls on today's local date; **due tomorrow** when its due time falls on tomorrow's local date. Due items are grouped by topic. Objectives that aren't mastered yet aren't "due" in Phase 1; ranking new material into the daily queue is the scheduling phase.
 - The **streak** counts consecutive local days, ending today, with at least one unaided graded answer. If today has none yet, the streak still counts from yesterday (it isn't broken until the day ends).
 
 - [ ] **Step 1: Write the failing tests**
@@ -1902,7 +1887,7 @@ const now = new Date("2026-10-05T09:00:00Z");
 
 test("groups objectives that are due by topic, into today and tomorrow", () => {
   const objectives = new Map([
-    ["t1/a", s("t1/a", "due", "2026-10-04T12:00:00Z")],
+    ["t1/a", s("t1/a", "fading", "2026-10-04T12:00:00Z")],
     ["t1/b", s("t1/b", "mastered", "2026-10-05T18:00:00Z")],
     ["t1/c", s("t1/c", "mastered", "2026-10-06T08:00:00Z")],
     ["t2/d", s("t2/d", "mastered", "2026-10-09T08:00:00Z")],

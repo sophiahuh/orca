@@ -32,8 +32,9 @@ Open questions live in `docs/TO-DISCUSS.md`.
   least 2 days, last two correct, no open mix-up. The bar is the same for every objective: weights
   change priority (what gets practised first), never what counts as mastered. Stability grows ×2.2 per successful spaced check
   (cap 60 days); a miss cuts it to a third; capped with 3 checks = retired.
-- **Due vs fading.** A review that comes due still counts as mastered for half its interval
-  ("due"); after that, or after a missed check, it's "fading" and stops counting.
+- **A check coming due means fading.** When a mastered objective's spaced check comes due (or is
+  missed), it's `fading` and stops counting as mastered until answered correctly again. States
+  table: `docs/MASTERY-PLAN.md` §2.3.
 - **Self-reported confusion un-masters.** A homework reflection like "I didn't understand K-map
   grouping" is matched to objectives (the student confirms uncertain matches) and recorded as a
   confusion event, which resets a mastered objective all the way to learning. Claims of
@@ -84,7 +85,7 @@ Open questions live in `docs/TO-DISCUSS.md`.
 Plan: `docs/superpowers/plans/2026-10-04-orca-phase1-mastery-core.md`.
 Remove the AI chat. Test runner. Built-in ALD questions tagged with objectives, ALD kept as a
 labelled sample course, fabricated seed data removed. Evidence log in the store; the mastery rule
-as a step function (with due vs fading); topic progress, island level, due list and streak derived.
+as a step function; topic progress, island level, due list and streak derived.
 The quiz writes evidence; the trail and islands read derived state. Still localStorage.
 
 ### Phase 2 — Uploads create the course structure, on-device
