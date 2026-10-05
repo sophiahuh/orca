@@ -55,7 +55,7 @@ export const FIXTURE_STATE = {
     },
   ],
   configs: { [COURSE_ID]: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "3 hours", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } } },
-  weights: { [COURSE_ID]: { homework: 30, practiceExams: 35, practiceProblems: 25, lectures: 10 } },
+  weights: { [COURSE_ID]: { homework: 25, practiceExams: 25, practiceProblems: 25, lectures: 25 } },
   objectives: {
     [COURSE_ID]: {
       "boolean-algebra/simplify": objective("boolean-algebra/simplify", "boolean-algebra", "Simplify an expression"),

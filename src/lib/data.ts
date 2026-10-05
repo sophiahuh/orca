@@ -260,11 +260,12 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   exam: { duration: "10 hours", cadence: "1 wk before exam" },
 };
 
+/** Every material type counts the same until the student moves a slider in Settings. */
 export const DEFAULT_WEIGHTS: Weights = {
-  homework: 30,
-  practiceExams: 35,
+  homework: 25,
+  practiceExams: 25,
   practiceProblems: 25,
-  lectures: 10,
+  lectures: 25,
 };
 
 export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];

@@ -32,12 +32,18 @@ test("material types map onto the Settings sliders; Other is neutral", () => {
   assert.equal(sliderFor("Other"), null);
 });
 
+test("by default every material type is worth the same", () => {
+  for (const type of ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
+    close(placeValue(type, DEFAULT_WEIGHTS), 1);
+  }
+});
+
 test("a place is worth its slider relative to the course's average slider", () => {
-  // Defaults 30/35/25/10 average 25.
-  close(placeValue("Lecture", DEFAULT_WEIGHTS), 0.4);
-  close(placeValue("Homework", DEFAULT_WEIGHTS), 1.2);
-  close(placeValue("Practice exam", DEFAULT_WEIGHTS), 1.4);
-  close(placeValue("Other", DEFAULT_WEIGHTS), 1);
+  const moved = { homework: 30, practiceExams: 35, practiceProblems: 25, lectures: 10 }; // average 25
+  close(placeValue("Lecture", moved), 0.4);
+  close(placeValue("Homework", moved), 1.2);
+  close(placeValue("Practice exam", moved), 1.4);
+  close(placeValue("Other", moved), 1);
 });
 
 test("coverage has diminishing returns between 0.75 and 1.5", () => {

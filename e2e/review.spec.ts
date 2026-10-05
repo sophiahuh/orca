@@ -23,7 +23,7 @@ const STATE = {
     },
   ],
   configs: { [ID]: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "3 hours", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } } },
-  weights: { [ID]: { homework: 30, practiceExams: 35, practiceProblems: 25, lectures: 10 } },
+  weights: { [ID]: { homework: 25, practiceExams: 25, practiceProblems: 25, lectures: 25 } },
   objectives: {
     [ID]: {
       a1: objective("a1", "A", "Simplify with absorption", { signals: [{ materialId: "m", materialType: "Lecture", places: [{ locator: "slide 2", excerpt: "" }] }] }),

@@ -60,7 +60,7 @@ worth a second look.
    - Material type → slider: Lecture and Syllabus → `lectures`; Homework → `homework`;
      Practice problems → `practiceProblems`; Past exam and Practice exam → `practiceExams`;
      Other → neutral 1.0. A place's value = its slider ÷ the mean of the course's sliders
-     (defaults give lectures 0.4, practice problems 1.0, homework 1.2, practice exams 1.4).
+     (the sliders default to equal, so every type is worth 1.0 until the student moves one).
    - Coverage factor = 0.75 + 0.75 × (1 − e^(−s / 1.5)), s = summed place values (0.75 with no
      coverage, about 1.1 at s = 1, approaching 1.5).
    - Builds-on factor = 1 + 0.1 × min(n, 5), n = confirmed or proposed objectives that build on it.

@@ -173,7 +173,7 @@ material-type weight, on a diminishing-returns curve) × builds-on factor (how m
 on it) × emphasis (×1.5 tested, ×0 skipped), clamped to 0.5–2 and recomputed when an upload adds
 signals. A topic's weight is the mean of its objectives'. Constants (provisional, in
 `src/lib/course/weights.ts` `WEIGHT_RULES`): a place is worth its type's slider ÷ the course's
-mean slider; coverage factor = 0.75 + 0.75 × (1 − e^(−s/1.5)); builds-on factor = 1 + 0.1 × min(n, 5);
+mean slider (sliders default to equal, so every type is worth 1.0 until the student moves one); coverage factor = 0.75 + 0.75 × (1 − e^(−s/1.5)); builds-on factor = 1 + 0.1 × min(n, 5);
 "skipped" is 0 and not clamped.
 
 Carry-overs from the Phase 1 review, both resolved before Phase 2 by the "ids are random and

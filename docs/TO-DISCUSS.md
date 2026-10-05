@@ -52,8 +52,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Set provisionally (Phase 2):** coverage factor 0.75 + 0.75 × (1 − e^(−s/1.5)), builds-on
   +0.1 per dependant up to 5, "skipped" = 0 (`WEIGHT_RULES` in `src/lib/course/weights.ts`).
 - **Open:** tune against the ALD decks once `npm run score:extraction` has a key and a baseline.
-  Lecture slides default to the lowest slider (10 of 100), so lecture-only objectives sit just under
-  1.0; check that this matches intent.
+  The Settings sliders default to equal (25 each, decided 2026-10-05), so by default every
+  material type's coverage counts the same; the student's sliders are what make one type count more.
 
 ### Existing local data at first sign-in
 - When accounts arrive (Phase 4), a browser may already hold courses and answers in localStorage
