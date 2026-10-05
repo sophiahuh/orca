@@ -23,7 +23,7 @@ import type { Material, Objective, Topic } from "../src/lib/data.ts";
 import type { LlmConfig } from "../src/lib/llm.ts";
 import { completeJson } from "../src/lib/llm-server.ts";
 import { type Named, exactMatch, shortlist } from "../src/lib/course/match.ts";
-import { pageText } from "../src/lib/pdf-text.ts";
+import { pageText } from "../src/lib/material/page-text.ts";
 import { STEP_BUDGET } from "../src/lib/pipeline/budget.ts";
 import { parseLooseJson } from "../src/lib/pipeline/parse.ts";
 import { buildPrompt } from "../src/lib/pipeline/prompts.ts";
