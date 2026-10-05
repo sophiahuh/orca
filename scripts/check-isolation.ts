@@ -83,8 +83,15 @@ async function main() {
     /* ── A builds a course through the paths the app uses ── */
     const course = await call("/rest/v1/courses", { method: "POST", token: A.token, headers: prefer, body: { id: ids.course, slug: "ald", name: "Advanced Logic Design", short: "ALD", variant: "ald", pos_x: 0, pos_y: 0, review_config: {}, weights: {} } });
     check("A adds a course", course.status === 201, course);
-    const material = await call("/rest/v1/materials", { method: "POST", token: A.token, body: { id: ids.material, course_id: ids.course, filename: "L01.pdf", type: "Lecture", storage_path: filePath } });
+    const material = await call("/rest/v1/materials", { method: "POST", token: A.token, body: { id: ids.material, course_id: ids.course, filename: "L01.pdf", type: "Lecture" } });
     check("A adds a material", material.status === 201, material);
+    // The server reads a material's path with the secret key, so a student must not be able to set one
+    // (here, one that climbs into another folder; the server makes the paths in POST /api/materials).
+    const planted = randomUUID();
+    const climb = await call("/rest/v1/materials", { method: "POST", token: A.token, body: { id: planted, course_id: ids.course, filename: "x.pdf", type: "Lecture", storage_path: `${A.id}/${planted}/../../someone-else/L01.pdf` } });
+    check("A cannot give a material a file path", refused(climb), climb);
+    const restatus = await call("/rest/v1/materials", { method: "POST", token: A.token, body: { id: randomUUID(), course_id: ids.course, filename: "x.pdf", type: "Lecture", status: "uploaded" } });
+    check("A cannot set a material's reading status", refused(restatus), restatus);
     const saved = await call("/rest/v1/rpc/save_structure", {
       method: "POST",
       token: A.token,

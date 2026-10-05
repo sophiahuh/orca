@@ -151,6 +151,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       relations: relations[course.id] ?? [],
       material,
       pages,
+      hiddenText: hidden,
       runId: crypto.randomUUID(),
       model: ownModel ? llm.model : (serverModel ?? "unknown"),
       now: new Date().toISOString(),

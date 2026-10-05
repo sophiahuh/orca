@@ -30,7 +30,7 @@ select pg_temp.act_as(:'B');
 select is((select count(*) from storage.objects where bucket_id = 'materials'), 0::bigint, 'B cannot see A''s file');
 update storage.objects set name = :'B' || '/m1/L01.pdf' where bucket_id = 'materials';
 reset role;
-select is((select name from storage.objects where bucket_id = 'materials'), :'A' || '/m1/L01.pdf', 'B cannot move A''s file');
+select is((select name from storage.objects where bucket_id = 'materials' and (name like :'A' || '/%' or name like :'B' || '/%')), :'A' || '/m1/L01.pdf', 'B cannot move A''s file');
 
 set local role anon;
 select is((select count(*) from storage.objects where bucket_id = 'materials'), 0::bigint, 'signed out sees no files');

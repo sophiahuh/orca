@@ -33,8 +33,8 @@ select is((select timezone from public.profiles where owner_id = :'B'), 'UTC', '
 select pg_temp.act_as(:'A');
 select lives_ok(format($$insert into public.courses (id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
   values (%L, 'ald', 'Advanced Logic Design', 'ALD', 'ald', 70, 110, '{}', '{}')$$, :'course'), 'A adds a course');
-select lives_ok(format($$insert into public.materials (id, course_id, filename, type, storage_path)
-  values (%L, %L, 'L01.pdf', 'Lecture', %L)$$, :'material', :'course', :'A' || '/' || :'material' || '/L01.pdf'), 'A adds a material');
+select lives_ok(format($$insert into public.materials (id, course_id, filename, type)
+  values (%L, %L, 'L01.pdf', 'Lecture')$$, :'material', :'course'), 'A adds a material');
 select lives_ok(format($$select public.save_structure(%L, %L)$$, :'course', jsonb_build_object(
   'runs', jsonb_build_array(jsonb_build_object('id', :'run', 'material_id', :'material', 'kind', 'upload', 'at', now(), 'model', 'stub')),
   'topics', jsonb_build_array(jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Boolean algebra', 'review', 'proposed', 'pos_x', 1, 'pos_y', 2, 'material_id', :'material', 'aliases', '[]'::jsonb)),

@@ -45,18 +45,31 @@ export function looksLikePdf(bytes: Uint8Array): boolean {
   return head.includes("%PDF-");
 }
 
-export async function readPdf(bytes: Uint8Array): Promise<ReadPdf> {
+/**
+ * `timeoutMs`: the overall budget; a file that takes longer (a pathological or hostile PDF) is
+ * refused as unreadable rather than holding the request until the platform kills it.
+ */
+export async function readPdf(bytes: Uint8Array, { timeoutMs = LIMITS.readMs }: { timeoutMs?: number } = {}): Promise<ReadPdf> {
   if (bytes.byteLength > LIMITS.uploadBytes) throw new UnreadablePdfError(`This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.`, 413);
   if (!looksLikePdf(bytes)) throw new UnreadablePdfError("This file isn't a PDF.", 415);
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   // pdf.js takes ownership of the buffer it's given, so it gets a copy.
   // Errors only: missing standard font data (metrics) is a warning that changes nothing for text.
   const task = pdfjs.getDocument({ data: bytes.slice(), disableFontFace: true, useSystemFonts: false, verbosity: pdfjs.VerbosityLevel.ERRORS });
+  const deadline = Date.now() + timeoutMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tooSlow = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new UnreadablePdfError(`Orca gave up reading this PDF after ${Math.round(timeoutMs / 1000)} seconds.`)), timeoutMs);
+  });
+  // Every step races the overall budget.
+  const inTime = <T>(p: Promise<T>): Promise<T> => (Date.now() > deadline ? tooSlow : Promise.race([p, tooSlow]));
+  tooSlow.catch(() => undefined);
   try {
     let doc: Awaited<typeof task.promise>;
     try {
-      doc = await task.promise;
+      doc = await inTime(task.promise);
     } catch (e) {
+      if (e instanceof UnreadablePdfError) throw e;
       const name = e instanceof Error ? e.name : "";
       if (name === "PasswordException") throw new UnreadablePdfError("This PDF is password-protected; upload a copy without a password.");
       throw new UnreadablePdfError(`Orca couldn't read this PDF (${e instanceof Error ? e.message : String(e)}).`);
@@ -69,8 +82,8 @@ export async function readPdf(bytes: Uint8Array): Promise<ReadPdf> {
     const truncated: number[] = [];
     let removed = 0;
     for (let n = 1; n <= doc.numPages; n++) {
-      const page = await doc.getPage(n);
-      const content = await page.getTextContent();
+      const page = await inTime(doc.getPage(n));
+      const content = await inTime(page.getTextContent());
       const visible = visibleItems(content.items, page.view as unknown as PageBox);
       if (visible.hidden) {
         hidden.items += visible.hidden;
@@ -84,6 +97,7 @@ export async function readPdf(bytes: Uint8Array): Promise<ReadPdf> {
     }
     return { pages, hidden, removed, truncated };
   } finally {
+    clearTimeout(timer);
     await task.destroy();
   }
 }

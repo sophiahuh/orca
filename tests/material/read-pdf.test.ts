@@ -51,3 +51,8 @@ test("too many pages, non-PDFs and oversize files are refused before reading", a
   await assert.rejects(readPdf(new Uint8Array(LIMITS.uploadBytes + 1)), (e: unknown) => e instanceof UnreadablePdfError && e.status === 413);
   await assert.rejects(readPdf(new TextEncoder().encode("%PDF-1.4 garbage")), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422);
 });
+
+test("a file that takes longer than the time budget is refused as unreadable", async () => {
+  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  await assert.rejects(readPdf(deck, { timeoutMs: 1 }), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422 && /gave up/.test(e.message));
+});

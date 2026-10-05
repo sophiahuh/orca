@@ -62,9 +62,9 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
                 {run.objectivesCreated.length === 1 ? "" : "s"}, {run.objectivesAttached.length} existing objective{run.objectivesAttached.length === 1 ? "" : "s"} covered again,{" "}
                 {run.questionsAdded} question{run.questionsAdded === 1 ? "" : "s"} added.
               </span>
-              {hiddenNote(material?.hiddenText) && (
+              {hiddenNote(run.hiddenText ?? material?.hiddenText) && (
                 <span className="text-[14px] font-semibold text-prussian" data-part="hidden-text">
-                  {hiddenNote(material?.hiddenText)} Check what this upload added.
+                  {hiddenNote(run.hiddenText ?? material?.hiddenText)} Check what this upload added.
                 </span>
               )}
               {run.dropped.length > 0 && (

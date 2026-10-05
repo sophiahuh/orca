@@ -275,3 +275,11 @@ test("applying a plan adds topics, objectives, questions and relations and updat
   assert.equal(s.relations.length, 1);
   assert.throws(() => applyUploadPlan({ topics: [], objectives: {}, bank: {}, relations: [] }, plan), /isn't in the course/);
 });
+
+test("the run record carries the hidden text the server dropped from the file", async () => {
+  const model = fakeModel({ extract: () => ({ ...lectureExtract, relations: [] }) });
+  const hiddenText = { items: 2, pages: [4] };
+  const plan = await runUpload(input({ hiddenText }), { call: model.call, newId, structureOnly: true });
+  assert.deepEqual(plan.run.hiddenText, hiddenText);
+  assert.equal((await runUpload(input(), { call: fakeModel({ extract: () => ({ ...lectureExtract, relations: [] }) }).call, newId, structureOnly: true })).run.hiddenText, undefined);
+});

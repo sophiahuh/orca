@@ -2,7 +2,7 @@
 -- the file (path, hash, status, hidden text), and never writes or sees another student's pages.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(16);
 
 \set A aaaaaaaa-0000-4000-8000-000000000001
 \set B bbbbbbbb-0000-4000-8000-000000000002
@@ -26,7 +26,25 @@ select throws_ok($$insert into public.materials (id, owner_id, course_id, filena
   values (gen_random_uuid(), 'aaaaaaaa-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-00000000000a', 'x.pdf', 'Lecture', '{"items": "lots"}')$$,
   '23514', null, 'the hidden-text record has a fixed shape');
 
+-- The path is the server's shape and nothing else, even for the service role.
+select throws_ok(format($$insert into public.materials (id, owner_id, course_id, filename, type, storage_path)
+  values (gen_random_uuid(), %L, %L, 'x.pdf', 'Lecture', %L)$$, :'A', :'course', :'A' || '/' || :'material' || '/../../' || :'B' || '/m/L01.pdf'),
+  '23514', null, 'a path that climbs out of the material''s folder is refused');
+select throws_ok(format($$insert into public.materials (id, owner_id, course_id, filename, type, storage_path)
+  values ('d0000000-0000-4000-8000-00000000000b', %L, %L, 'x.pdf', 'Lecture', %L)$$, :'A', :'course', :'A' || '/d0000000-0000-4000-8000-00000000000b/..'),
+  '23514', null, 'a ".." name is refused');
+select throws_ok(format($$insert into public.materials (id, owner_id, course_id, filename, type, storage_path)
+  values ('d0000000-0000-4000-8000-00000000000c', %L, %L, 'x.pdf', 'Lecture', %L)$$, :'A', :'course', :'A' || '/d0000000-0000-4000-8000-00000000000c/a/b.pdf'),
+  '23514', null, 'a nested path is refused');
+
 select pg_temp.act_as(:'A');
+select throws_ok(format($$insert into public.materials (id, course_id, filename, type, storage_path)
+  values (gen_random_uuid(), %L, 'x.pdf', 'Lecture', %L)$$, :'course', :'A' || '/x/y.pdf'), '42501', null, 'A cannot give a material a file path');
+select throws_ok(format($$insert into public.materials (id, course_id, filename, type, status)
+  values (gen_random_uuid(), %L, 'x.pdf', 'Lecture', 'uploaded')$$, :'course'), '42501', null, 'A cannot set a material''s status');
+select lives_ok(format($$insert into public.materials (id, course_id, filename, type)
+  values ('d0000000-0000-4000-8000-00000000000d', %L, 'notes.docx', 'Homework')$$, :'course'), 'A adds a material without a file');
+select is((select status from public.materials where id = 'd0000000-0000-4000-8000-00000000000d'), 'ready', '... and it is ready, with no file');
 select lives_ok(format($$update public.materials set reflection = '{"at": "2026-10-05", "note": "n", "objectiveIds": []}', due = '2026-10-20' where id = %L$$, :'material'),
   'A changes their reflection and due date');
 select throws_ok(format($$update public.materials set status = 'uploaded' where id = %L$$, :'material'), '42501', null, 'A cannot reset the reading status');

@@ -76,6 +76,10 @@ export const test = base.extend<{ student: Student }>({
       const own = await db.auth.signInWithPassword({ email, password });
       if (own.error) throw new Error(`Couldn't sign the test student in: ${own.error.message}`);
       await use({ id: data.user.id, email, password, db });
+      // Uploaded files aren't removed with the account; remove them first.
+      const files = await admin().from("materials").select("storage_path").eq("owner_id", data.user.id).not("storage_path", "is", null);
+      const paths = (files.data ?? []).map((f) => f.storage_path as string);
+      if (paths.length) await admin().storage.from("materials").remove(paths);
       await admin().auth.admin.deleteUser(data.user.id);
     },
     { auto: true },

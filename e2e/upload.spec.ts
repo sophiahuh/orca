@@ -226,6 +226,26 @@ test("hidden text is dropped from the stored pages and recorded on the material"
   expect(data).toEqual({ hidden_text: { items: 1, pages: [1] } });
 });
 
+test("a read that died is taken over after a while, and never blocks the file", async ({ page, student }) => {
+  const courseId = await newCourse(student);
+  const pdf = makePdf([lines("Two's complement")]);
+  const started = await page.request.post("/api/materials", { data: details(courseId, pdf) });
+  const { material, upload } = (await started.json()) as { material: { id: string }; upload: { path: string; token: string } };
+  await student.db.storage.from("materials").uploadToSignedUrl(upload.path, upload.token, new Blob([pdf as BlobPart], { type: "application/pdf" }));
+  // As a function stopped mid-read leaves it.
+  const stuck = (since: Date) => admin().from("materials").update({ status: "reading", reading_since: since.toISOString() }).eq("id", material.id);
+  await stuck(new Date());
+  expect((await page.request.post(`/api/materials/${material.id}/process`)).status()).toBe(409);
+  // The same file can still be uploaded meanwhile: a read that hasn't finished holds no hash.
+  expect((await page.request.post("/api/materials", { data: details(courseId, pdf) })).status()).toBe(201);
+  await stuck(new Date(Date.now() - 10 * 60_000));
+  const retried = await page.request.post(`/api/materials/${material.id}/process`);
+  expect(retried.status()).toBe(200);
+  expect(await retried.json()).toMatchObject({ pages: [{ n: 1 }] });
+  const { data } = await student.db.from("materials").select("status, content_hash").eq("id", material.id).single();
+  expect(data).toEqual({ status: "ready", content_hash: createHash("sha256").update(pdf).digest("hex") });
+});
+
 test("another student can't process, read or download your upload", async ({ page, student, baseURL }) => {
   const courseId = await newCourse(student);
   const { id, path: filePath, processed } = await sendFile(page.request, student, courseId, makePdf([lines("Mine")]));

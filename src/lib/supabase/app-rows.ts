@@ -205,6 +205,7 @@ export function runToRow(r: PipelineRun): StructureRow<"pipeline_runs"> {
     objectives_attached: r.objectivesAttached,
     questions_added: r.questionsAdded,
     dropped: jsonValue(r.dropped),
+    hidden_text: r.hiddenText ? jsonValue(r.hiddenText) : null,
   };
 }
 
@@ -221,6 +222,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     objectivesAttached: r.objectives_attached,
     questionsAdded: r.questions_added,
     dropped: r.dropped as unknown as PipelineRun["dropped"],
+    ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<PipelineRun["hiddenText"]> } : {}),
   };
 }
 
@@ -295,7 +297,17 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     status: "ready",
     error: null,
     hidden_text: null,
+    reading_since: null,
   };
+}
+
+/**
+ * The columns a student may insert (the rest are the server's): a material added from the browser
+ * is a record without a file, which the database marks ready.
+ */
+export function materialInsertRow(m: Material) {
+  const { id, course_id, filename, type, assigned, due, reflect, reflection } = materialToRow(m);
+  return { id, course_id, filename, type, assigned, due, reflect, reflection };
 }
 
 export function materialFromRow(r: Row<"materials">): Material {

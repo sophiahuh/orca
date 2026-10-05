@@ -63,7 +63,7 @@ import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
-import { type MyData, type StructureState, calendarToRow, courseToRow, isEmpty, loadedState, materialToRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
+import { type MyData, type StructureState, calendarToRow, courseToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import type { Json } from "./supabase/database.types";
 import { useNow } from "@/hooks/useNow";
@@ -494,7 +494,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       save(
         async () => {
           const db = browserSupabase();
-          if (!opts?.saved) must(await db.from("materials").insert(materialToRow(m)));
+          if (!opts?.saved) must(await db.from("materials").insert(materialInsertRow(m)));
           if (event) must(await db.from("calendar_events").insert(calendarToRow(event, m.id)));
         },
       );

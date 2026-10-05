@@ -19,6 +19,7 @@ import { z } from "zod";
 import { MATERIAL_TYPES, type Material, type MaterialType } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
 import { type HiddenText, type ReadPage, UnreadablePdfError, readPdf } from "@/lib/material/read-pdf";
+import { isOwnPath, safeName } from "@/lib/material/paths";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -26,11 +27,7 @@ import { ownsCourse, reply } from "./student";
 
 export const BUCKET = "materials";
 
-/** The file's name as stored: anything but letters, digits, dot, dash and underscore becomes "_". */
-export function safeName(filename: string): string {
-  const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
-  return /[a-zA-Z0-9]/.test(safe) ? safe : "file.pdf";
-}
+
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const UploadRequest = z.object({
@@ -125,24 +122,36 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     return reply(200, out);
   }
   if (m.status === "failed") return reply(422, { error: m.error });
-  if (m.status !== "uploaded" || !m.storage_path) return reply(409, { error: "This upload is already being read." });
+  if ((m.status !== "uploaded" && m.status !== "reading") || !m.storage_path) return reply(409, { error: "This upload isn't waiting to be read." });
   const path = m.storage_path;
 
-  // Claim it, so two requests can't read the same file at once.
-  const claim = await db.from("materials").update({ status: "reading" }).eq("owner_id", ownerId).eq("id", id).eq("status", "uploaded").select("id");
-  if (claim.error) throw fail("start reading the upload", claim.error);
-  if (!claim.data.length) return reply(409, { error: "This upload is already being read." });
-
   const setFailed = async (message: string) => {
-    const r = await db.from("materials").update({ status: "failed", error: message, content_hash: null }).eq("owner_id", ownerId).eq("id", id);
+    const r = await db.from("materials").update({ status: "failed", error: message, reading_since: null }).eq("owner_id", ownerId).eq("id", id);
     if (r.error) throw fail("record why the upload failed", r.error);
   };
+  if (!isOwnPath(path, ownerId, id)) {
+    await setFailed("This upload's file path isn't one Orca made.");
+    return reply(422, { error: "This upload's file path isn't one Orca made." });
+  }
+
+  // Claim it, so two requests can't read the same file at once. A read that started long ago died
+  // (its function was stopped), so it's taken over instead of blocking the upload for good.
+  const staleBefore = new Date(Date.now() - LIMITS.staleReadingMs).toISOString();
+  const claim = await db
+    .from("materials")
+    .update({ status: "reading", reading_since: new Date().toISOString() })
+    .eq("owner_id", ownerId)
+    .eq("id", id)
+    .or(`status.eq.uploaded,and(status.eq.reading,reading_since.lt.${staleBefore}),and(status.eq.reading,reading_since.is.null)`)
+    .select("id");
+  if (claim.error) throw fail("start reading the upload", claim.error);
+  if (!claim.data.length) return reply(409, { error: "This upload is already being read." });
 
   try {
     const file = await db.storage.from(BUCKET).download(path);
     if (file.error) {
       // Not there (yet): give it back, so the browser can upload and ask again.
-      const r = await db.from("materials").update({ status: "uploaded" }).eq("owner_id", ownerId).eq("id", id);
+      const r = await db.from("materials").update({ status: "uploaded", reading_since: null }).eq("owner_id", ownerId).eq("id", id);
       if (r.error) throw fail("release the upload", r.error);
       return reply(409, { error: "The file hasn't arrived in storage; upload it again." });
     }
@@ -153,16 +162,6 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
       await discard(db, ownerId, id, path);
       return reply(200, known);
     }
-    // Taking the hash now also settles a race between two uploads of the same file (unique per course).
-    const taken = await db.from("materials").update({ content_hash: hash, size_bytes: bytes.byteLength, mime: LIMITS.uploadMime }).eq("owner_id", ownerId).eq("id", id);
-    if (taken.error?.code === "23505") {
-      const winner = await sameFile(db, ownerId, m.course_id, hash, id);
-      await discard(db, ownerId, id, path);
-      if (winner) return reply(200, winner);
-      throw fail("record the file's hash", taken.error);
-    }
-    if (taken.error) throw fail("record the file's hash", taken.error);
-
     let read: Awaited<ReturnType<typeof readPdf>>;
     try {
       read = await readPdf(bytes);
@@ -176,13 +175,20 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
       const inserted = await db.from("material_pages").upsert(rows, { onConflict: "material_id,n" });
       if (inserted.error) throw fail("store the pages", inserted.error);
     }
+    // The hash is taken only now, with the row going ready: a read that dies leaves no hash behind
+    // to block the file, and the unique index settles a race between two uploads of the same file.
     const done = await db
       .from("materials")
-      .update({ status: "ready", hidden_text: read.hidden as unknown as Json })
+      .update({ status: "ready", reading_since: null, content_hash: hash, size_bytes: bytes.byteLength, mime: LIMITS.uploadMime, hidden_text: read.hidden as unknown as Json })
       .eq("owner_id", ownerId)
       .eq("id", id)
       .select()
       .single();
+    if (done.error?.code === "23505") {
+      const winner = await sameFile(db, ownerId, m.course_id, hash, id);
+      await discard(db, ownerId, id, path); // its pages go with it
+      if (winner) return reply(200, winner);
+    }
     if (done.error) throw fail("finish the upload", done.error);
     const out: Processed = { material: materialFromRow(done.data), pages: read.pages, hidden: read.hidden };
     return reply(200, out);

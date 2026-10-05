@@ -225,6 +225,8 @@ export interface PipelineRun {
   questionsAdded: number;
   /** Questions that failed validation or duplicated existing ones, with why. */
   dropped: Array<{ prompt: string; reason: string }>;
+  /** An upload's run: text hidden in the file (too small to see) that was dropped when it was read, and where. */
+  hiddenText?: { items: number; pages: number[] };
 }
 
 /* ── Quiz ─────────────────────────────────────────────────────────────── */

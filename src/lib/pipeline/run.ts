@@ -25,6 +25,8 @@ export interface RunInput {
   relations: readonly Relation[];
   material: Material;
   pages: Array<{ n: number; text: string }>;
+  /** What hidden text the server dropped when it read the file; recorded on the run (decision 13). */
+  hiddenText?: { items: number; pages: number[] };
   runId: string;
   model: string;
   /** ISO time of the run. */
@@ -282,6 +284,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     objectivesAttached: Object.keys(objectiveUpdates),
     questionsAdded: Object.values(questions).flat().length,
     dropped,
+    ...(input.hiddenText ? { hiddenText: input.hiddenText } : {}),
   });
   if (deps.structureOnly) return { newTopics, topicAliases, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
 
