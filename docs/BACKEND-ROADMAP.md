@@ -251,6 +251,11 @@ on branch `phase-4`).
   `/api/evidence` and `/api/state` must know who is signed in and write with the service role;
   nothing in the project already talks to Supabase. `supabase` (CLI) is a dev dependency since
   Task 1.
+  `@trigger.dev/sdk` (Task 7a): the jobs run as Trigger.dev tasks in production (decided above:
+  durable, observable, outlive Vercel's function limits) and nothing in the project already
+  queues work. The tasks (`src/trigger/jobs.ts`) only call the jobs; locally and in tests
+  `ORCA_JOBS=inline` runs the same jobs inside the route, so the SDK is used only to define and
+  enqueue tasks. No Trigger.dev project exists yet (Task 10).
 - **Done so far (local only, nothing hosted):** Task 1 (local stack), Task 2 (schema, RLS,
   Storage, `save_structure`), Task 3 (`objective_state` snapshots written with each event by
   `record_evidence`, stale marks on merges, re-tags, archives, mechanism-tier changes and timezone

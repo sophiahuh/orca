@@ -122,6 +122,42 @@
 >   are cut at 64 and of other characters at 8; pages are capped at 20,000 characters.
 >   `pdfjs-dist` is a `serverExternalPackages` entry (bundled, the server read fails); the build
 >   warns about the browser's worker URL, harmlessly. Not run on Vercel.
+> - **Task 7a mostly done (2026-10-05, local; stopped at a clean point on the owner's request):**
+>   the pipeline runs on the server. `src/lib/server/model.ts` is the step caller (Orca's key only,
+>   `claude-opus-5-5`; each step's input checked against its schema; replies streamed, since
+>   generate's 24k-token budget is refused unstreamed by the SDK, a bug the browser path never
+>   hit because it never ran with a key). `processMaterial` and `topUp` (`src/lib/jobs/jobs.ts`,
+>   pure, behind a `JobStore` scoped to one student; `src/lib/server/job-store.ts` on Supabase)
+>   claim a queued run, write `progress` as they go and finish the run in the same `save_structure`
+>   as what they built, or record why they failed. `ORCA_JOBS=inline` runs them after the route's
+>   response (`after()`); `ORCA_JOBS=trigger` enqueues `src/trigger/jobs.ts` tasks
+>   (`trigger.config.ts`; typechecks, never run; unset is inline in dev and an error in
+>   production). The upload routes start the job and answer with `generation` (started, running,
+>   built, no model, no text); a duplicate whose run failed is built again, so uploading again is
+>   the retry. `POST /api/top-up` (needs the finished session) and `POST /api/reflect` (note
+>   sanitised). Figures render on the server (pdf.js on `@napi-rs/canvas`, pdfjs-dist's own
+>   optional dependency) from the stored file only if its hash still matches. A migration makes
+>   runs server-written (students read them; Realtime publication), lets a top-up run name no
+>   material, and allows one upload job per material and one top-up per course in flight. The
+>   review screen and the session end card follow the run (`src/hooks/useRun.ts`: Realtime, a read
+>   on subscribe and a 5 s poll as backstop) and reload the store when it finishes. `client.ts`,
+>   `/api/pipeline/[step]`, `src/lib/pdf-text.ts` and the browser pipeline are gone; "Your AI" is
+>   hidden (code kept); the store no longer merges plans (`applyUpload`, `addQuestions` removed;
+>   `refresh`, `afterSaves` added). Structure saves now send only the changed columns of existing
+>   rows, so a job and a review edit landing together don't overwrite each other. e2e runs
+>   against `e2e/fake-anthropic.ts` (a streaming fake Messages API started by Playwright;
+>   `ANTHROPIC_BASE_URL`), and global setup refuses a server whose model isn't local. Proved
+>   locally: 203 unit tests (jobs with a fake caller and an in-memory store: success, failed job's
+>   message, no text, not queued, wrong material, top-up), 145 pgTAP, all 36 e2e (upload built by
+>   the job with progress shown, failed job says why and a re-upload retries it, top-up, reflection
+>   through the server), `check:isolation` (43). Differences: one run per top-up (not one per
+>   material; skipped objectives are in its left-out list); objectives for a top-up come from the
+>   browser and are filtered to the course; every finished session now starts a top-up job (a
+>   no-op run when nothing is short). **Left of 7a:** the no-key path ("saved, nothing generated")
+>   is covered by code and the add-material copy but not by a test (the e2e server always has the
+>   fake key); `check:evidence` and `npm run build` weren't rerun; progress through Realtime vs the
+>   poll wasn't told apart in a test. **Next:** 7b (injection defences), 7c (cost guard, daily
+>   page limit), then Tasks 8–10.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh

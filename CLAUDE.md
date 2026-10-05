@@ -29,25 +29,28 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   when done, as Phase 3 was). `backend-implementation` holds Phases 1–3 (CI runs on it); `main` is
   far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device. Phase 4 so far (plan Tasks 1–6 plus an isolation audit, local only): the local
+  on-device. Phase 4 so far (plan Tasks 1–6, most of 7a, plus an isolation audit, local only): the local
   Supabase stack, the schema with row-level security, the Storage bucket and `save_structure` in
   `supabase/migrations/`, the evidence path (`objective_state` snapshots, `record_evidence`, stale
   marks, `POST /api/evidence`, `GET /api/state`), auth, and the store on Supabase (Task 5: the app
   loads and saves the signed-in student's data there) and uploads to Storage (Task 6: the file goes
-  to the `materials` bucket, the server reads it into sanitised `material_pages`; the model
-  pipeline still runs in the browser on those pages until Task 7). Checks are green:
-  `npx tsc --noEmit`, `npm run lint`, `npm test` (190 unit tests), `npm run test:e2e` (34 browser
-  tests), `npm run build`, `npm run test:db` (126 pgTAP checks), `npm run check:isolation` (40
-  HTTP checks) and `npm run check:evidence` (44 HTTP checks through Orca's own routes). CI only runs on pushes to `main` and
+  to the `materials` bucket, the server reads it into sanitised `material_pages`) and jobs (Task 7a:
+  the pipeline runs on the server as `processMaterial` / `topUp`, inline locally, Trigger.dev
+  tasks written but never run; the review screen and session end card follow the run). Checks
+  last run green (2026-10-05, Task 7a): `npx tsc --noEmit`, `npm run lint`, `npm test` (203 unit
+  tests), `npm run test:e2e` (36 browser tests), `npm run test:db` (145 pgTAP checks),
+  `npm run check:isolation` (43 HTTP checks); `npm run build` and `npm run check:evidence` (44)
+  were last run at Task 6. CI only runs on pushes to `main` and
   `backend-implementation` and on pull requests, so `phase-4` isn't checked by CI: run the checks
   yourself. Nothing has run against a hosted Supabase or Trigger.dev project; the owner's setup
   steps are in `docs/SETUP-HOSTED.md`.
 - No app data is kept in the browser any more (the old `orca:materialPages` key is cleared on
   load); don't build on browser storage.
-- **Never run against a real model.** Every pipeline test stubs the model, and tests can't spend:
-  Playwright starts the dev server with model keys blanked (beating `.env.local` too), and
-  `e2e/global-setup.ts` stops the run if the server reports a model (e.g. a reused local dev
-  server started with a key). Only `npm run score:extraction` and uploading in `npm run dev`
+- **Never run against a real model.** Unit tests inject fake step callers; the browser tests run
+  against `e2e/fake-anthropic.ts`, a fake Messages API Playwright starts on port 3101 (the dev
+  server gets `ANTHROPIC_BASE_URL` pointing there and a fake key, beating `.env.local`), and
+  `e2e/global-setup.ts` stops the run if the server's model calls aren't local (e.g. a reused
+  dev server started with a real key). Only `npm run score:extraction` and uploading in `npm run dev`
   spend money. No session so far has
   had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` are untested against
   Claude, `npm run score:extraction` has no baseline (`scripts/extraction-baseline.json` doesn't
@@ -65,8 +68,10 @@ authored and reviewed the reference objectives, questions and quiz rubric.
 3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
    storage as decided in the roadmap). The plan is written
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`: Tasks 1–6 are done (status notes at the top of the plan), **Task 7
-   (jobs: the pipeline on the server) is next**. Tasks 1–9 need no hosted projects (local Supabase,
+   progress on branch `phase-4`: Tasks 1–6 are done and Task 7a mostly (status notes at the top of
+   the plan, with what's left of 7a: a test for the no-key path, rerunning `npm run build` and
+   `check:evidence`). **Next: Task 7b (injection defences), then 7c (cost guard and the daily page
+   limit)**, then Tasks 8–10. Tasks 1–9 need no hosted projects (local Supabase,
    inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
    `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
    "Watch" for the two to revisit).
@@ -98,7 +103,7 @@ them silently; list what you assumed.
 - e2e: seed with `seedState(student, …)` (secret key), read back with `stored(page, student)`;
   ids must be UUIDs (`ids(...)` makes fresh ones per spec). `page.goto` waits for the app's saves
   (`<html data-saving>`) first, since navigating away would cancel one.
-- Pure modules (`src/lib/mastery`, `src/lib/course`, `src/lib/pipeline` except `client.ts`) must
+- Pure modules (`src/lib/mastery`, `src/lib/course`, `src/lib/pipeline`, `src/lib/jobs`) must
   load under plain Node: relative imports with `.ts`, `import type`, no TS parameter properties.
 - The superpowers skills named below may not be installed in every session; if they aren't,
   follow the same flow by hand (plan doc first, then task-by-task commits with tests).
@@ -231,10 +236,11 @@ This describes the code as it is.
   `objectives` and `relations`, pipeline `runs`, `materials` (only read uploads; page text is
   never held, top-ups load it from `material_pages`), finished sessions (`results`), the `evidence` log (answers and confusion
   events) and the server's `snapshots`; `recordEvidence` and `recordReflection` are its only
-  evidence writers. Objective state comes from the snapshots; streak, agenda and the rest from
+  evidence writers. Runs are the server's: the store reads them, never writes them. Objective state comes from the snapshots; streak, agenda and the rest from
   the loaded events, with days in the profile's timezone. The bring-your-own model setting is kept
-  in memory only. `orca:v3`–`orca:v8` and `orca:materialPages` keys are removed on load. `addQuestions` adds topped-up questions. Course structure changes through `applyUpload` (a
-  pipeline plan) and `editStructure` (an op from `src/lib/course/ops.ts`). Derived reads:
+  in memory only. `orca:v3`–`orca:v8` and `orca:materialPages` keys are removed on load. Course structure changes in the browser only through `editStructure` (an op from
+  `src/lib/course/ops.ts`; saves send only changed columns); jobs change it on the server, and
+  `refresh()` reloads after one finishes; `afterSaves()` waits for the save queue. Derived reads:
   `useMasteryByCourse()`, `useAgenda()`, `useTodos()`, `useStreak()`.
 - `src/lib/course/` — pure course-structure modules (tested with `npm test`): `ops.ts` (confirm,
   reject, restore, rename, merge and un-merge topics and objectives; settle uncertain duplicates),
@@ -244,8 +250,9 @@ This describes the code as it is.
   as "file, slides 18–20").
 - `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
 - `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date),
-  `src/hooks/useNow.ts` (clock for derived state), `src/hooks/useTopUp.ts` (tops up a finished
-  session's objectives in the background).
+  `src/hooks/useNow.ts` (clock for derived state), `src/hooks/useTopUp.ts` (starts the top-up job
+  after a session, `POST /api/top-up`), `src/hooks/useRun.ts` (follows a pipeline run: Realtime,
+  a read on subscribe, a 5 s poll; reloads the store when it finishes).
 - `src/components/icons.tsx`, `brand/` (OrcaLogo, Island with four mastery looks, Wave, Bubble).
 - `src/components/ui/` — Button, Chip/ContextPill, RoundButton, ProgressBar, Card, Tag, Stat, Select,
   Toggle, Slider, AnswerOption, DueCard, PathNode (done / current / upcoming, no locks) (barrel in `ui/index.ts`).
@@ -255,12 +262,13 @@ This describes the code as it is.
   "how long do you want to study?" picker with the coverage plan), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
 - Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`),
   `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
-  `/api/pipeline/[step]`, `/api/grade`, `/api/llm/*`, `/api/evidence`, `/api/state` (the last two
-  need Supabase and a signed-in student; nothing calls them yet), `/sign-in`, `/sign-up`,
+  `/api/materials`, `/api/materials/[id]/process`, `/api/top-up`, `/api/reflect`, `/api/evidence`,
+  `/api/state` (these need Supabase and a signed-in student), `/api/grade`, `/api/llm/*`, `/sign-in`, `/sign-up`,
   `/forgot-password`, `/reset-password`, `/auth/callback`. Dynamic
   pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
   (run `npx next typegen` before `tsc`).
-- Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, Settings → "Your AI"): the student picks
+- Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, `src/components/settings/YourAI.tsx`, now
+  hidden from Settings; the pipeline ignores it, `/api/grade` still accepts it until Task 8): the student picks
   Anthropic / OpenAI / Gemini / OpenRouter / Ollama + a key; it lives in the store (browser only) and
   rides along with each request. Anthropic goes through `@anthropic-ai/sdk`; the rest use the
   OpenAI-compatible chat.completions shape; Ollama is called from the browser. Model routes fall
@@ -274,16 +282,24 @@ This describes the code as it is.
   in Node, at most 150 pages, text under 2 pt dropped and counted in `materials.hidden_text`,
   every page through `src/lib/untrusted/sanitize.ts`) into `material_pages`. Limits are in
   `src/lib/limits.ts`. Only `ready` materials load into the store.
-- Upload pipeline (in the browser on the stored pages until Task 7 moves it server-side),
-  `src/lib/pipeline/`: `runUpload` (`run.ts`) calls the steps through an injected caller:
+- Jobs (Task 7a): the upload routes start `processMaterial` and answer with `generation` (started,
+  running, built, no model, no text); `POST /api/top-up` starts `topUp` after a finished session.
+  `src/lib/jobs/jobs.ts` (pure, over a `JobStore`; `src/lib/server/job-store.ts` scopes every
+  service-role query to the student), `src/lib/server/jobs/start.ts` (creates the queued run and
+  dispatches: `ORCA_JOBS=inline` runs it after the response, `trigger` enqueues
+  `src/trigger/jobs.ts`; `trigger.config.ts` needs `TRIGGER_PROJECT_REF`), `run.ts` (what a
+  worker calls). Each job claims its run, writes `progress`, and saves the run (done) with what it
+  built in one `save_structure`, or records why it failed. `src/lib/server/model.ts` is the step
+  caller (Orca's `ANTHROPIC_API_KEY` only, streamed); `src/lib/server/figures.ts` renders figure
+  slides on the server from the stored file only if its hash still matches.
+- Upload pipeline (run by the jobs), `src/lib/pipeline/`: `runUpload` (`run.ts`) calls the steps through an injected caller:
   **extract** (structure and signals against the course's existing topics and objectives, with
   material-type rules), **reconcile** (only when something is close; same/new/uncertain),
   **generate** (questions per objective, topped up to 6), then **solve** (blind, compared in code
   for choice and exact answers), **ambiguity** and **agreement** checks; failures and duplicates are
   dropped with a reason in the run record. Prompts (`prompts.ts`) and zod schemas (`schemas.ts`)
-  are shared by `/api/pipeline/[step]` (builds the prompt server-side from structured input) and
-  `client.ts` (browser-only providers). `apply.ts` merges the plan; uploads land on
-  `/course/[slug]/review`. `writeQuestions` (generate + checks) is shared with `topup.ts`, which
+  are used by the server step caller. `apply.ts` merges the plan; uploads land on
+  `/course/[slug]/review?run=`, which follows the job. `writeQuestions` (generate + checks) is shared with `topup.ts`, which
   writes more questions after a session for objectives under 3 unseen, from only the stored
   pages of the material each objective is anchored to (plus one either side). `npm run score:extraction` scores extraction on the ALD decks against
   `docs/OBJECTIVES-ALD.md` (needs `ANTHROPIC_API_KEY`; `--dry` checks the decks without a model).
@@ -292,8 +308,8 @@ This describes the code as it is.
   questions Sophia authored from them were removed from the app; they're in git history
   (`src/lib/content/ald.ts` at 89e042b) for evaluating extraction.
 - `e2e/` — browser tests: `mastery-core.spec.ts` (fresh browser, empty states, the trail, quiz
-  answers writing evidence), `upload.spec.ts` (a real ALD deck through pdf.js and the pipeline with
-  `/api/pipeline/*` stubbed; re-uploading adds nothing), `review.spec.ts` (review screen and
+  answers writing evidence), `upload.spec.ts` (a real ALD deck through pdf.js and the server job
+  against the fake API; re-uploading adds nothing; a failed job says why and a re-upload retries), `review.spec.ts` (review screen and
   objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective),
   `scheduling.spec.ts` (quick review, poor-quiz to-dos and re-quiz, deep review cadence, top-up),
   `store.spec.ts` (a second browser sees the same data; a failed save is undone and not counted;
