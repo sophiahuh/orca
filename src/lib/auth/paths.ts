@@ -21,7 +21,9 @@ export function safeNext(next: string | null | undefined): string {
   try {
     const u = new URL(next, "http://x");
     if (u.origin !== "http://x") return "/";
-    return u.pathname + u.search + u.hash;
+    const out = u.pathname + u.search + u.hash;
+    // Normalising can leave a leading "//" (`/.//evil.com`), which a browser reads as another site.
+    return /^\/(?![/\\])/.test(out) ? out : "/";
   } catch {
     return "/";
   }
