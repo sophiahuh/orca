@@ -113,13 +113,6 @@ export function parseExtraction(text: string): Extraction {
 
 /* ── Turning an extraction into app data ─────────────────────────────── */
 
-export function slugifyTopic(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
-
 /**
  * The key for spotting a question the course already has: case, Unicode forms and spacing don't
  * matter, symbols do ("a + ac" and "a + a'c" stay different). A duplicate check, never an id.
@@ -139,11 +132,17 @@ export function promptKey(prompt: string) {
  * mastery fold uses it to find the question's current objective and to count distinct questions,
  * so it must never be derived from position or text. Where it came from is `materialId`.
  */
-export function questionsByTopic(x: Extraction, materialId: string, filename: string, figures: Record<number, string> = {}): Record<string, QuizQuestion[]> {
+export function questionsByTopic(
+  x: Extraction,
+  topicIdOf: (topicName: string) => string | undefined,
+  materialId: string,
+  filename: string,
+  figures: Record<number, string> = {},
+): Record<string, QuizQuestion[]> {
   const out: Record<string, QuizQuestion[]> = {};
-  const topicIds = new Map(x.topics.map((t) => [t.name.toLowerCase(), slugifyTopic(t.name)]));
   x.questions.forEach((q) => {
-    const id = topicIds.get(q.topic.toLowerCase()) ?? slugifyTopic(q.topic);
+    const id = topicIdOf(q.topic);
+    if (!id) return; // names a topic the extraction didn't produce; nowhere to put it
     const short = q.kind === "Short answer";
     if (!short && (q.answer < 0 || q.answer >= q.options.length)) return; // malformed; skip rather than teach the wrong thing
     if (short && !(q.exact && q.exact.length) && !q.rubric) return; // ungradable
@@ -166,10 +165,13 @@ export function questionsByTopic(x: Extraction, materialId: string, filename: st
   return out;
 }
 
-export function topicsFrom(x: Extraction, filename: string): Array<Omit<Topic, "pos">> {
+export function topicsFrom(x: Extraction, filename: string, materialId: string): Array<Omit<Topic, "pos">> {
   return x.topics.map((t) => ({
-    id: slugifyTopic(t.name),
+    id: crypto.randomUUID(),
     name: t.name,
+    aliases: [],
+    review: "proposed" as const,
+    materialId,
     summary: t.summary,
     source: { filename, slideStart: t.slideStart, slideEnd: t.slideEnd },
   }));

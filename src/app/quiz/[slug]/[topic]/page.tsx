@@ -3,8 +3,8 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import type { QuizQuestion } from "@/lib/data";
-import { objectiveIdOf } from "@/lib/mastery/catalogue";
+import { type QuizQuestion, trailTopics } from "@/lib/data";
+import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { Grader, Outcome } from "@/lib/mastery/types";
 import { useCourse, useOrca, useStreak } from "@/lib/store";
 import { IconClose } from "@/components/icons";
@@ -28,13 +28,18 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
   const { slug, topic: topicId } = use(params);
   const router = useRouter();
   const streak = useStreak();
-  const { hydrated, recordQuiz, recordEvidence, questionBank, llm } = useOrca();
+  const { hydrated, recordQuiz, recordEvidence, questionBank, objectives, llm } = useOrca();
   const serverModel = useServerModel();
   const course = useCourse(slug);
-  const topic = course?.topics.find((t) => t.id === topicId);
+  const topic = course ? trailTopics(course).find((t) => t.id === topicId) : undefined;
 
   const generated = course ? questionBank[course.id]?.[topicId] : undefined;
-  const fullSet = useMemo(() => (generated ?? []).slice(0, 8), [generated]);
+  const catalogue = course ? objectives[course.id] : undefined;
+  // Rejected (archived) objectives are never quizzed.
+  const fullSet = useMemo(
+    () => (generated ?? []).filter((q) => liveObjectiveOf(q, topicId, catalogue ?? {}) !== null).slice(0, 8),
+    [generated, topicId, catalogue],
+  );
   // null = the full set for this topic (derived, so it follows store hydration); a list = a review subset.
   const [subset, setSubset] = useState<QuizQuestion[] | null>(null);
   const questions = subset ?? fullSet;
@@ -76,11 +81,13 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
       if (!course || !topic) return;
       // One id per visit to this page; the "review missed" restart stays in the same session.
       sessionId.current ??= crypto.randomUUID();
+      const objective = liveObjectiveOf(question, topic.id, catalogue ?? {});
+      if (!objective) throw new Error(`Question ${question.id} belongs to an archived objective and should not have been asked`);
       recordEvidence({
         sessionId: sessionId.current,
         courseId: course.id,
         topicId: topic.id,
-        objectiveId: objectiveIdOf(question, topic.id),
+        objectiveId: objective.id,
         questionId: question.id,
         tier: question.tier ?? null,
         outcome,
@@ -88,7 +95,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
         source: "quiz",
       });
     },
-    [course, topic, recordEvidence],
+    [course, topic, catalogue, recordEvidence],
   );
 
   const check = useCallback(() => {

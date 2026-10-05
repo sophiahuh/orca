@@ -13,9 +13,24 @@ export const PATH_TOP = 240;
 
 export type IslandVariant = "ald" | "circuit" | "signals" | "linear" | "stats";
 
+/**
+ * Review status of anything extraction creates. `proposed` is usable everywhere with an
+ * "Unreviewed" tag; `archived` (rejected) is never quizzed but kept, so later uploads don't
+ * propose it again and the rejection can be undone.
+ */
+export type Review = "proposed" | "confirmed" | "archived";
+
 export interface Topic {
+  /** Random UUID, never derived from the name. */
   id: string;
   name: string;
+  /** Other names for the same topic (merged duplicates keep theirs here). */
+  aliases: string[];
+  review: Review;
+  /** Set when this topic was merged into another; it is then also archived. */
+  mergedInto?: string;
+  /** The upload that created it. */
+  materialId?: string;
   /** Node centre in the 854-wide path canvas. */
   pos: { x: number; y: number };
   /** One-paragraph summary (from extracted course material). */
@@ -98,6 +113,7 @@ export interface CalendarEvent {
 }
 
 export type MaterialType =
+  | "Syllabus"
   | "Past exam"
   | "Practice problems"
   | "Practice exam"
@@ -113,6 +129,81 @@ export interface Material {
   assigned: string | null;
   due: string | null;
   reflect: boolean;
+}
+
+/** The topics a student sees: everything except archived (rejected or merged-away) ones. */
+export function trailTopics(course: Pick<Course, "topics">): Topic[] {
+  return course.topics.filter((t) => t.review !== "archived");
+}
+
+/* ── Course structure from uploads ─────────────────────────────────────── */
+
+/** A quote from course material: "slide 14" plus a short excerpt. */
+export interface Anchor {
+  locator: string;
+  excerpt: string;
+}
+
+/** What one upload said about one objective. Claude records these facts; code computes the weight. */
+export interface ObjectiveSignal {
+  materialId: string;
+  materialType: MaterialType;
+  /** Places that genuinely teach or use the objective (not passing mentions). */
+  places: Anchor[];
+  /** Only when the material says so explicitly, quoted. */
+  emphasis?: { kind: "tested" | "skipped"; quote: string };
+}
+
+/** A "can do X" statement: the unit of mastery. Questions belong to exactly one. */
+export interface Objective {
+  /** Random UUID, never derived from the name. */
+  id: string;
+  topicId: string;
+  name: string;
+  description: string;
+  aliases: string[];
+  /** `material`: taught in an upload (has anchors). `inferred`: from general knowledge of the subject, no anchor. `authored`: written by hand. */
+  origin: "material" | "inferred" | "authored";
+  review: Review;
+  /** Set when merged into another objective; its questions and answers then count for that one. */
+  mergedInto?: string;
+  /** The upload and pipeline run that created it (null for authored ones). */
+  materialId: string | null;
+  runId: string | null;
+  /** Archived because its topic was rejected; restoring the topic brings it back. */
+  archivedWithTopic?: true;
+  /** Reconciliation couldn't tell whether this duplicates `candidateId`; the student decides. */
+  uncertain?: { candidateId: string; reasoning: string };
+  signals: ObjectiveSignal[];
+}
+
+export type RelationType = "builds-on" | "implies" | "contrasts-with" | "applies-to";
+
+/** `from` <type> `to`, e.g. "K-map grouping" builds-on "Gray code adjacency". */
+export interface Relation {
+  id: string;
+  from: string;
+  to: string;
+  type: RelationType;
+  anchor: Anchor | null;
+  review: Review;
+  materialId: string;
+}
+
+/** One upload's pass through the pipeline: what it made and what it threw away. */
+export interface PipelineRun {
+  id: string;
+  courseId: string;
+  materialId: string;
+  /** ISO time. */
+  at: string;
+  model: string;
+  topicsCreated: string[];
+  objectivesCreated: string[];
+  objectivesAttached: string[];
+  questionsAdded: number;
+  /** Questions that failed validation or duplicated existing ones, with why. */
+  dropped: Array<{ prompt: string; reason: string }>;
 }
 
 /* ── Quiz ─────────────────────────────────────────────────────────────── */
@@ -172,7 +263,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   lectures: 10,
 };
 
-export const MATERIAL_TYPES: readonly MaterialType[] = ["Past exam", "Practice problems", "Practice exam", "Homework", "Lecture", "Other"];
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
 
 /* ── Dates ────────────────────────────────────────────────────────────── */
 export function toISODate(d: Date) {

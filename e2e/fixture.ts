@@ -1,7 +1,8 @@
 import type { Page } from "@playwright/test";
+import type { Objective, QuizQuestion, Topic } from "../src/lib/data";
 
 /** Must match STORAGE_KEY in src/lib/store.tsx. */
-export const STORAGE_KEY = "orca:v6";
+export const STORAGE_KEY = "orca:v7";
 
 /**
  * A tiny course as if a student had created it and uploaded one deck: two topics, three
@@ -10,7 +11,7 @@ export const STORAGE_KEY = "orca:v6";
 const COURSE_ID = "logic-e2e";
 const DECK = "L01_Fixture.pdf";
 
-const short = (id: string, topic: string, objectiveId: string, prompt: string, exact: string[]) => ({
+const short = (id: string, topic: string, objectiveId: string, prompt: string, exact: string[]): QuizQuestion => ({
   id,
   kind: "Short answer",
   tier: "retrieval",
@@ -24,6 +25,19 @@ const short = (id: string, topic: string, objectiveId: string, prompt: string, e
   objectiveId,
 });
 
+const objective = (id: string, topicId: string, name: string): Objective => ({
+  id,
+  topicId,
+  name,
+  description: "",
+  aliases: [],
+  origin: "material",
+  review: "confirmed",
+  materialId: "fixture-material",
+  runId: "fixture-run",
+  signals: [],
+});
+
 export const FIXTURE_STATE = {
   courses: [
     {
@@ -34,18 +48,18 @@ export const FIXTURE_STATE = {
       variant: "circuit",
       pos: { x: 70, y: 110 },
       topics: [
-        { id: "boolean-algebra", name: "Boolean Algebra", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 1, slideEnd: 5 } },
-        { id: "twos-complement", name: "Two's Complement", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 6, slideEnd: 9 } },
-      ],
+        { id: "boolean-algebra", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 1, slideEnd: 5 } },
+        { id: "twos-complement", name: "Two's Complement", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 6, slideEnd: 9 } },
+      ] satisfies Topic[],
     },
   ],
   configs: { [COURSE_ID]: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "3 hours", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } } },
   weights: { [COURSE_ID]: { homework: 30, practiceExams: 35, practiceProblems: 25, lectures: 10 } },
   objectives: {
     [COURSE_ID]: {
-      "boolean-algebra/simplify": { id: "boolean-algebra/simplify", topicId: "boolean-algebra", name: "Simplify an expression" },
-      "twos-complement/convert": { id: "twos-complement/convert", topicId: "twos-complement", name: "Convert to 2's complement" },
-      "twos-complement/sign-extend": { id: "twos-complement/sign-extend", topicId: "twos-complement", name: "Sign-extend a number" },
+      "boolean-algebra/simplify": objective("boolean-algebra/simplify", "boolean-algebra", "Simplify an expression"),
+      "twos-complement/convert": objective("twos-complement/convert", "twos-complement", "Convert to 2's complement"),
+      "twos-complement/sign-extend": objective("twos-complement/sign-extend", "twos-complement", "Sign-extend a number"),
     },
   },
   questionBank: {

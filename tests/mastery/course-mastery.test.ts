@@ -4,8 +4,8 @@ import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
 
 const catalogue = {
-  "t1/a": { id: "t1/a", topicId: "t1", name: "A" },
-  "t2/b": { id: "t2/b", topicId: "t2", name: "B" },
+  "t1/a": { id: "t1/a", topicId: "t1", name: "A", review: "confirmed" as const },
+  "t2/b": { id: "t2/b", topicId: "t2", name: "B", review: "confirmed" as const },
 };
 const bank = {
   t1: [{ id: "q1", objectiveId: "t1/a" }, { id: "q2", objectiveId: "t1/a" }, { id: "q3", objectiveId: "t1/a" }],
@@ -58,4 +58,21 @@ test("evidence from another course is ignored", () => {
   const m = courseMastery({ ...base, evidence, now: new Date("2026-10-02T13:00:00Z") });
   assert.equal(m.objectives.get("t1/a")!.status, "unseen");
   assert.equal(m.island, "uncharted");
+});
+
+test("answers on a merged objective count for the survivor; answers on an archived one count for nothing", () => {
+  const day1 = [ev("q4", "2026-10-01T12:00:00Z")].map((e) => ({ ...e, topicId: "t2", objectiveId: "t2/b" }));
+  const merged = {
+    ...catalogue,
+    "t2/b": { ...catalogue["t2/b"], review: "archived" as const, mergedInto: "t2/c" },
+    "t2/c": { id: "t2/c", topicId: "t2", name: "C", review: "confirmed" as const },
+  };
+  const m = courseMastery({ ...base, catalogue: merged, evidence: day1, now: new Date("2026-10-01T13:00:00Z") });
+  assert.equal(m.objectives.get("t2/c")!.status, "learning");
+  assert.equal(m.objectives.has("t2/b"), false);
+
+  const archived = { ...catalogue, "t2/b": { ...catalogue["t2/b"], review: "archived" as const } };
+  const a = courseMastery({ ...base, catalogue: archived, evidence: day1, now: new Date("2026-10-01T13:00:00Z") });
+  assert.equal(a.objectives.has("t2/b"), false);
+  assert.deepEqual(a.topics.get("t2"), { status: "not-started", mastered: 0, total: 0 });
 });

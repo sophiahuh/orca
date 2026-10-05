@@ -14,18 +14,23 @@ import {
   type DueItem,
   type IslandVariant,
   type Material,
+  type Objective,
+  type PipelineRun,
+  type Relation,
   type ReviewConfig,
   type Weights,
   DEFAULT_CONFIG,
   DEFAULT_WEIGHTS,
   defaultTopicPositions,
   shortName,
+  trailTopics,
   slugify,
 } from "./data";
 import type { LlmConfig } from "./llm";
 import { type Extraction, promptKey, questionsByTopic, topicsFrom } from "./extraction";
 import type { QuizQuestion } from "./data";
-import type { EvidenceEvent, ObjectiveInfo } from "./mastery/types";
+import type { EvidenceEvent } from "./mastery/types";
+import type { CourseStructure } from "./course/ops";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { dueTopics } from "./mastery/due";
 import { streakDays } from "./mastery/streak";
@@ -52,13 +57,17 @@ interface OrcaState {
   llm: LlmConfig | null;
   /** Generated questions: courseId → topicId → questions. */
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
-  /** Course structure: courseId → objectiveId → objective. Created once (built-in content now, uploads from Phase 2), never regenerated. */
-  objectives: Record<string, Record<string, ObjectiveInfo>>;
+  /** Course structure: courseId → objectiveId → objective. Created once, at upload; archived or merged, never deleted. */
+  objectives: Record<string, Record<string, Objective>>;
+  /** courseId → relations between objectives, from uploads. */
+  relations: Record<string, Relation[]>;
+  /** Every upload's pipeline run, newest last. */
+  runs: PipelineRun[];
   /** Append-only answer log. Every learner-facing state is computed from it. */
   evidence: EvidenceEvent[];
 }
 
-const STORAGE_KEY = "orca:v6"; // v6: no built-in courses (the ALD sample is gone)
+const STORAGE_KEY = "orca:v7"; // v7: course structure from uploads (review status, aliases, merges, relations)
 
 const initialState: OrcaState = {
   // No built-in courses: every course is created by the student and filled from their uploads.
@@ -72,6 +81,8 @@ const initialState: OrcaState = {
   llm: null,
   questionBank: {},
   objectives: {},
+  relations: {},
+  runs: [],
   evidence: [],
 };
 
@@ -87,6 +98,8 @@ interface OrcaActions {
   setLlm: (c: LlmConfig | null) => void;
   /** Merge an extraction into a course: new topics on the trail, questions in the bank, material recorded. */
   importExtraction: (courseId: string, material: Omit<Material, "id">, extraction: Extraction, figures?: Record<number, string>) => { topicsAdded: number; questionsAdded: number };
+  /** Apply a review operation (`src/lib/course/ops.ts`) to one course's topics, objectives and questions. */
+  editStructure: (courseId: string, op: (s: CourseStructure) => CourseStructure) => void;
   reset: () => void;
 }
 
@@ -200,27 +213,32 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setOnboarded = useCallback((v: boolean) => setState((s) => ({ ...s, onboarded: v })), []);
   const importExtraction = useCallback<OrcaActions["importExtraction"]>((courseId, material, extraction, figures = {}) => {
-    const newTopics = topicsFrom(extraction, material.filename);
     const id = crypto.randomUUID();
-    const byTopic = questionsByTopic(extraction, id, material.filename, figures);
+    const extracted = topicsFrom(extraction, material.filename, id);
     let topicsAdded = 0;
     let questionsAdded = 0;
     setState((s) => {
+      // Extracted topic name → topic id: an existing topic with that name or alias, else a new one.
+      const idByName = new Map<string, string>();
       const courses = s.courses.map((c) => {
         if (c.id !== courseId) return c;
         const topics = [...c.topics];
-        for (const t of newTopics) {
-          const i = topics.findIndex((x) => x.id === t.id);
+        for (const t of extracted) {
+          const key = t.name.toLowerCase();
+          const i = topics.findIndex((x) => x.review !== "archived" && [x.name, ...x.aliases].some((n) => n.toLowerCase() === key));
           if (i >= 0) {
             topics[i] = { ...topics[i], summary: t.summary ?? topics[i].summary, source: t.source ?? topics[i].source };
+            idByName.set(key, topics[i].id);
           } else {
             topics.push({ ...t, pos: { x: 0, y: 0 } });
+            idByName.set(key, t.id);
             topicsAdded++;
           }
         }
         const positions = defaultTopicPositions(topics.length);
         return { ...c, trail: undefined, topics: topics.map((t, i) => ({ ...t, pos: positions[i] })) };
       });
+      const byTopic = questionsByTopic(extraction, (name) => idByName.get(name.toLowerCase()), id, material.filename, figures);
       const bank = { ...(s.questionBank[courseId] ?? {}) };
       // Skip questions the course already has anywhere (or that repeat within this upload): a
       // re-uploaded question would otherwise count as a "different" question toward mastery.
@@ -250,12 +268,31 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     return { topicsAdded, questionsAdded };
   }, []);
 
+  const editStructure = useCallback<OrcaActions["editStructure"]>((courseId, op) => {
+    setState((s) => {
+      const course = s.courses.find((c) => c.id === courseId);
+      if (!course) throw new Error(`No course ${courseId}`);
+      const next = op({ topics: course.topics, objectives: s.objectives[courseId] ?? {}, bank: s.questionBank[courseId] ?? {} });
+      // Lay the visible topics out again; archived ones keep their old spot.
+      const visible = trailTopics({ topics: next.topics });
+      const positions = defaultTopicPositions(visible.length);
+      const posOf = new Map(visible.map((t, i) => [t.id, positions[i]]));
+      const topics = next.topics.map((t) => ({ ...t, pos: posOf.get(t.id) ?? t.pos }));
+      return {
+        ...s,
+        courses: s.courses.map((c) => (c.id === courseId ? { ...c, trail: undefined, topics } : c)),
+        objectives: { ...s.objectives, [courseId]: next.objectives },
+        questionBank: { ...s.questionBank, [courseId]: next.bank },
+      };
+    });
+  }, []);
+
   const setLlm = useCallback((llm: LlmConfig | null) => setState((s) => ({ ...s, llm })), []);
   const reset = useCallback(() => setState(initialState), []);
 
   const value = useMemo<OrcaContextValue>(
-    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, importExtraction, reset }),
-    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, importExtraction, reset],
+    () => ({ ...state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, importExtraction, editStructure, reset }),
+    [state, hydrated, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, setOnboarded, setLlm, importExtraction, editStructure, reset],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
@@ -283,7 +320,7 @@ export function useMasteryByCourse(): Record<string, CourseMastery> {
           c.id,
           courseMastery({
             courseId: c.id,
-            topicIds: c.topics.map((t) => t.id),
+            topicIds: trailTopics(c).map((t) => t.id),
             bank: questionBank[c.id] ?? {},
             catalogue: objectives[c.id] ?? {},
             evidence,

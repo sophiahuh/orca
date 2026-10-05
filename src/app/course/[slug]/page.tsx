@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { fadeUp, stagger } from "@/lib/motion";
+import { trailTopics } from "@/lib/data";
 
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
@@ -31,13 +32,14 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
 
   const m = mastery[course.id];
   if (!m) throw new Error(`No mastery computed for course ${course.id}`);
-  const total = course.topics.length;
-  const done = course.topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
+  const topics = trailTopics(course);
+  const total = topics.length;
+  const done = topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
   const pct = total ? done / total : 0;
 
   return (
     <AppShell bg="alice">
-      {course.topics.length === 0 ? (
+      {topics.length === 0 ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] text-center">
           <p className="text-[22px] font-bold text-prussian">This island is uncharted.</p>
           <p className="text-[16px] text-wisteria-deep">Add lecture slides or homework and Orca will map its topics.</p>

@@ -1,5 +1,5 @@
 /** Everything learner-facing about one course, derived in one pass. */
-import { objectivesForTopic, type QuestionRef } from "./catalogue.ts";
+import { objectivesForTopic, resolveObjectiveId, type QuestionRef } from "./catalogue.ts";
 import { MASTERY_RULES, computeObjectiveState } from "./objective-state.ts";
 import { type IslandLevel, type TopicProgress, islandLevel, topicProgress } from "./progress.ts";
 import type { EvidenceEvent, ObjectiveInfo, ObjectiveState } from "./types.ts";
@@ -32,15 +32,16 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
   const perTopic = topicIds.map((topicId) => ({ topicId, list: objectivesForTopic(topicId, bank[topicId] ?? [], catalogue) }));
 
   // An answer counts toward its question's *current* objective, so re-sorting questions into
-  // objectives re-files past answers too. The objective recorded at answer time is used only
-  // when the question is no longer in the bank.
+  // objectives re-files past answers too. Otherwise the objective recorded at answer time is used,
+  // following merges. Answers on archived objectives (or archived topics' objectives) match no
+  // listed objective, so they count for nothing.
   const objectiveOfQuestion = new Map<string, string>();
   for (const { list } of perTopic) for (const o of list) for (const q of o.questionIds) objectiveOfQuestion.set(q, o.id);
   const events = evidence
     .filter((e) => e.courseId === courseId)
     .map((e) => {
-      const current = objectiveOfQuestion.get(e.questionId);
-      return current && current !== e.objectiveId ? { ...e, objectiveId: current } : e;
+      const current = objectiveOfQuestion.get(e.questionId) ?? resolveObjectiveId(e.objectiveId, catalogue);
+      return current !== e.objectiveId ? { ...e, objectiveId: current } : e;
     });
 
   const objectives = new Map<string, ObjectiveState>();

@@ -2,7 +2,7 @@
  * Learner-evidence types. Evidence is append-only; every learner-facing state
  * (objective status, topic progress, island level) is computed from it.
  */
-import type { QuestionTier } from "../data.ts";
+import type { Objective, QuestionTier } from "../data.ts";
 
 export type Outcome = "correct" | "partial" | "incorrect";
 
@@ -28,12 +28,8 @@ export interface EvidenceEvent {
   sessionId: string;
 }
 
-/** A "can do X" statement. Questions belong to exactly one. */
-export interface ObjectiveInfo {
-  id: string;
-  topicId: string;
-  name: string;
-}
+/** The part of an objective the mastery code reads. */
+export type ObjectiveInfo = Pick<Objective, "id" | "topicId" | "name" | "review" | "mergedInto">;
 
 export type ObjectiveStatus = "unseen" | "learning" | "mixed-up" | "mastered" | "fading" | "retired";
 

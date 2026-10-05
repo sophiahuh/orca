@@ -2,7 +2,7 @@
 
 import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
-import { pathCanvasHeight, trailFromPoints } from "@/lib/data";
+import { pathCanvasHeight, trailFromPoints, trailTopics } from "@/lib/data";
 import { Wave } from "@/components/brand/Decor";
 import type { TopicProgress } from "@/lib/mastery/progress";
 import { type NodeVisual, PathNode } from "@/components/ui/PathNode";
@@ -43,19 +43,20 @@ export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
     if (n === undefined) throw new Error(`No question-gap count computed for topic ${t.id}`);
     return n;
   };
+  const topics = trailTopics(course);
   // START goes to the first topic in progress, else the first not started; none when everything is done.
-  const firstInProgress = course.topics.findIndex((t) => progressOf(t).status === "in-progress");
-  const current = firstInProgress >= 0 ? firstInProgress : course.topics.findIndex((t) => progressOf(t).status === "not-started");
+  const firstInProgress = topics.findIndex((t) => progressOf(t).status === "in-progress");
+  const current = firstInProgress >= 0 ? firstInProgress : topics.findIndex((t) => progressOf(t).status === "not-started");
   const visualOf = (t: Topic, i: number): NodeVisual => {
     const status = progressOf(t).status;
     if (status === "done") return "done";
     if (i === current) return "current";
     return status === "in-progress" ? "in-progress" : "upcoming";
   };
-  const PATH_H = pathCanvasHeight(course.topics.length);
+  const PATH_H = pathCanvasHeight(topics.length);
   // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
   const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
-  const d = course.trail ?? trailFromPoints(course.topics.map((t) => t.pos));
+  const d = course.trail ?? trailFromPoints(topics.map((t) => t.pos));
 
   return (
     <div ref={ref} className="absolute inset-0 overflow-y-auto overflow-x-hidden">
@@ -83,7 +84,7 @@ export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
           />
         </svg>
 
-        {course.topics.map((t, i) => (
+        {topics.map((t, i) => (
           <PathNode
             key={t.id}
             index={i}

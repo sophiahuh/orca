@@ -30,15 +30,15 @@ const extraction: Extraction = {
 };
 
 test("question ids are random UUIDs, so re-uploading the same file never reuses one", () => {
-  const first = questionsByTopic(extraction, "material-1", "L02.pdf")["boolean-algebra"];
-  const again = questionsByTopic(extraction, "material-2", "L02.pdf")["boolean-algebra"];
+  const first = questionsByTopic(extraction, () => "boolean-algebra", "material-1", "L02.pdf")["boolean-algebra"];
+  const again = questionsByTopic(extraction, () => "boolean-algebra", "material-2", "L02.pdf")["boolean-algebra"];
   const ids = [...first, ...again].map((q) => q.id);
   for (const id of ids) assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(new Set(ids).size, 4);
 });
 
 test("each question records the upload it came from", () => {
-  const qs = questionsByTopic(extraction, "material-1", "L02.pdf")["boolean-algebra"];
+  const qs = questionsByTopic(extraction, () => "boolean-algebra", "material-1", "L02.pdf")["boolean-algebra"];
   assert.deepEqual(qs.map((q) => q.materialId), ["material-1", "material-1"]);
 });
 
