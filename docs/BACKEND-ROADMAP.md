@@ -212,6 +212,8 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
 
 ### Phase 4 — Supabase
 - Auth screens in Orca's style; `proxy.ts` session refresh (Next 16's name for middleware).
+  Email + password through Supabase Auth (email confirmation, password reset, custom SMTP before
+  real students); Google sign-in later as a second provider (decided 2026-10-05).
 - Tables for everything above, `owner_id = auth.uid()` RLS on every table. Start from the
   platform's migrations (0001/0003/0004/0012/0015/0016/0017) and policies; its `artifacts` bugs
   (no student UPDATE policy; `status` excluded from the column grant) are the checklist. The
@@ -235,7 +237,7 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   relational; pgvector inside Supabase if textbooks ever need search. Browser storage of page
   text (`materialPages`, Phase 3 stopgap) is removed.
 - Swap the store's persistence behind `useOrca()` so screens don't change.
-- Decide what happens to localStorage data at first sign-in (TO-DISCUSS).
+- localStorage data is not imported at first sign-in: accounts start fresh (decided 2026-10-05).
 - Carry-overs from Phase 1: `localDayKey` uses the host's timezone, so server-side folding must
   pass the student's; stored accumulators need a rules version so a rule change (e.g. a new field
   like `checkDueAt`) rebuilds them; old `orca:v3`/`orca:v4` localStorage keys can be removed.

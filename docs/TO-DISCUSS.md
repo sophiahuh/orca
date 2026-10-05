@@ -61,21 +61,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   server (encrypted, e.g. Supabase Vault) to be used there, and Ollama (browser-only) can't run
   server-side at all. Options: Orca's server key only (simplest; BYO off or later), or encrypted
   student keys for cloud providers only.
-- **Sign-in method:** email magic link only, or Google too (most students have school Google
-  accounts).
-- **Local data at first sign-in:** see the next entry (recommendation: start fresh).
 - **Credentials a Phase 4 session needs** to run the live checks the invariants require: a
   Supabase project (URL, anon and service-role keys), a Trigger.dev project (secret key), and
   `ANTHROPIC_API_KEY`. Without them the work can only be typechecked, which isn't the same claim.
-
-### Existing local data at first sign-in
-- When accounts arrive (Phase 4), a browser may already hold courses and answers in localStorage
-  from testing.
-- **Options:** import them into the new account once, or start fresh. Importing is cheap (evidence
-  events are self-contained) but imported timestamps can't be verified.
-- **Recommendation:** start fresh. The local data is test data, and an importer is code to
-  maintain for a one-off.
-- **Decide before:** Phase 4.
 
 ### Relation mastery details
 - **Decided shape:** a relations table (from objective, to objective, type: builds on | implies |
@@ -161,6 +149,11 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   questions, minutes, how many objectives get a question and, when some don't fit, how long
   covers them all. Assembly covers every objective once, highest priority first, before going
   deeper on any. The end card offers "Start another deep review".
+- 2026-10-05: sign-in for Phase 4 is email + password through Supabase Auth (it hashes passwords,
+  confirms emails and resets passwords; Orca stores no password itself). Google sign-in comes
+  later as a second provider on the same accounts. Password emails need a custom SMTP provider
+  before real students use it (Supabase's built-in sender is for testing only).
+- 2026-10-05: local test data is not imported at first sign-in; accounts start fresh.
 - 2026-10-05: deep review's suggested length is 30 minutes (was 3 hours).
 - 2026-10-05: a spaced check passed in a deep review sets the next check 1.5× further out than
   FSRS's Good interval, capped at 60 days; FSRS's memory estimate stays a Good, so later
