@@ -149,6 +149,14 @@ on it) × emphasis (×1.5 tested, ×0 skipped), clamped to 0.5–2 and recompute
 signals. A topic's weight is the mean of its objectives'. Exact curve constants are set in the
 Phase 2 plan, with tests.
 
+Carry-overs from the Phase 1 review (fix in this phase):
+- Merge the built-in ALD bank into saved state per question id, not per topic; today an upload into
+  an existing ALD topic is replaced on reload, and its answers are then dropped silently.
+- Make extracted question ids content-stable (today `${topic}-${filename}-${i}` can collide when the
+  same filename is re-uploaded) and enforce unique question ids across a course.
+- Surface answers whose question and objective no longer exist, instead of dropping them silently.
+- Built-in ALD objectives are replaced wholesale on load; keep student-added ALD objectives.
+
 ### Phase 3 — Scheduling, on-device
 - **Priority** (`docs/MASTERY-PLAN.md` §2.6 minus the parked terms), with objective weight as its
   importance term and confusion signals as a boost; a reason sentence per term.
@@ -181,6 +189,9 @@ Phase 2 plan, with tests.
   vs Trigger.dev vs Supabase functions) and record why here.
 - Swap the store's persistence behind `useOrca()` so screens don't change.
 - Decide what happens to localStorage data at first sign-in (TO-DISCUSS).
+- Carry-overs from Phase 1: `localDayKey` uses the host's timezone, so server-side folding must
+  pass the student's; stored accumulators need a rules version so a rule change (e.g. a new field
+  like `checkDueAt`) rebuilds them; old `orca:v3`/`orca:v4` localStorage keys can be removed.
 - Verify live: push migrations, prove RLS with two users, run a real upload.
 
 ### Phase 5 — Relation mastery, exams, calendar
