@@ -70,8 +70,9 @@ authored and reviewed the reference objectives, questions and quiz rubric.
    (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
    progress on branch `phase-4`: Tasks 1–6 are done and Task 7a mostly (status notes at the top of
    the plan, with what's left of 7a: a test for the no-key path, rerunning `npm run build` and
-   `check:evidence`). **Next: Task 7b (injection defences), then 7c (cost guard and the daily page
-   limit)**, then Tasks 8–10. Tasks 1–9 need no hosted projects (local Supabase,
+   `check:evidence`). **Next: review Task 7a (it hasn't had its review yet), then Task 7b
+   (injection defences), then 7c (cost guard and the daily page limit)**, then Tasks 8–10. The
+   plan's status block lists the review findings deferred so far; settle them before merging. Tasks 1–9 need no hosted projects (local Supabase,
    inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
    `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
    "Watch" for the two to revisit).

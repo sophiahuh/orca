@@ -156,8 +156,29 @@
 >   no-op run when nothing is short). **Left of 7a:** the no-key path ("saved, nothing generated")
 >   is covered by code and the add-material copy but not by a test (the e2e server always has the
 >   fake key); `check:evidence` and `npm run build` weren't rerun; progress through Realtime vs the
->   poll wasn't told apart in a test. **Next:** 7b (injection defences), 7c (cost guard, daily
->   page limit), then Tasks 8–10.
+>   poll wasn't told apart in a test. 7a has **not had its task review yet**: review it first
+>   (base 81abfff). **Next:** 7b (injection defences), 7c (cost guard, daily page limit), then
+>   Tasks 8–10. Tasks 3–6 were each reviewed and their Important findings fixed.
+> - **How the rest is run:** one fresh subagent per task (Task 7 is split into 7a, 7b and 7c;
+>   their briefs were written out from this plan's Task 7 and decisions 10 and 13), a review after
+>   each, and a whole-branch review before merging into `backend-implementation`.
+> - **Review findings deferred (fix before merge or record why not):**
+>   - Snapshots: a newer `rules_version` is treated as stale, so during a rolling deploy an old
+>     server overwrites newer snapshots; the 409 message blames a concurrent answer when a structure
+>     change caused it; two events in the same millisecond can fold in a different order on extend
+>     vs rebuild; `dayKeyIn` formats each timestamp three times; the 503 missing-env path is untested.
+>   - Auth: confirm and reset links are built from the request's Host header (use a `SITE_URL` and
+>     Supabase's redirect allowlist); a link opened in another browser fails (PKCE; token-hash
+>     email templates need hosted edits); the proxy's `getClaims()` lets a revoked session through
+>     until expiry (data paths use `getUser`).
+>   - Store: a quiz's score saves even when some of its answers failed to save; actions taken while
+>     the store reloads after a failed save vanish with no message of their own; check that a
+>     reload mid-session doesn't reassemble the quiz; a half-failed reflection can repeat its
+>     confusion events; weight sliders save on every change; the scheduling e2e runs on the real
+>     clock and can fail across midnight; `my_data` returns the whole evidence log (see "Watch").
+>   - Uploads: files of failed reads and abandoned uploads are never cleaned up; the sanitiser turns
+>     tabs into spaces and NFKC flattens superscripts (x² → x2), worth checking against ALD
+>     material; the 40 s PDF budget only checks between awaits.
 
 Roadmap: `docs/BACKEND-ROADMAP.md`, Phase 4. Decided before this plan (`docs/TO-DISCUSS.md`,
 Decided): sign-in is email + password through Supabase Auth, Google later; accounts start fresh
