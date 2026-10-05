@@ -138,7 +138,8 @@ weights (RTL labs 21%, HW 10%, exams 40%, FIR-filter project 25%).
 
 1. Each question carries an `objectiveId`. Phase 1 tags the 69 built-in questions with 40 of the
    objectives below (`src/lib/content/ald-objectives.ts`); the rest arrive with question generation
-   (Phase 4) and drills (Phase 6).
+   (Phase 2) and drills (Phase 6). ALD ships as a labelled sample course; uploading these decks
+   is also how extraction gets scored against this list (roadmap Phase 2, "Evaluation").
 2. A topic is *done* when every objective in it is mastered (3 different questions answered
    correctly over at least 2 days, last two correct; `docs/MASTERY-PLAN.md` §2.4), not after one
    quiz. Only 7 of the 40 tagged objectives have 3 or more questions today, so most ALD topics
@@ -147,8 +148,8 @@ weights (RTL labs 21%, HW 10%, exams 40%, FIR-filter project 25%).
    typed answers exactly (bit strings, integers, Boolean expressions by truth table). Phase 6.
 4. Uploads create objectives: extraction proposes them against the course's existing list,
    reconciliation matches duplicates, and the student reviews topics (`docs/BACKEND-ROADMAP.md`
-   Phase 4). Uploads from other courses get the same structure.
-5. Session composition (at least one question per objective, preferring unseen ones) is Phase 2.
+   Phase 2). Uploads from other courses get the same structure.
+5. Session composition (spread across objectives, preferring unseen questions) is Phase 3.
 
 ## Where your input matters most
 

@@ -20,11 +20,22 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   and the student reviews topics. Inferred objectives (from general knowledge, not the material)
   are allowed and labelled. Unreviewed objectives are quizzable, with an "unreviewed" tag.
 - **Learner state is derived, never stored.** Every graded answer appends an evidence event;
-  objective status (unseen → learning → mastered → fading → retired, plus mixed-up), topic
-  progress and the island's mastery level are computed from the events and the clock.
+  objective status (unseen → learning → mastered → due → fading → retired, plus mixed-up), topic
+  progress, the island's mastery level, the due list and the streak are computed from the events
+  and the clock. The mastery rule is a fold (`applyAnswer`), so the server can keep snapshots
+  instead of replaying the log.
+- **Weights.** Every topic and objective has a weight (neutral 1.0). Claude records signals from the
+  material (coverage, material type, explicit emphasis, what builds on what); code computes the
+  weight. The Settings material-type sliders feed it and set deep review's question mix.
+- **Practice.** Questions are generated ahead into a per-objective stock; a quiz session is
+  assembled instantly at start, sized to the course's time budget. Deep review follows each
+  course's own cadence.
+- **Self-reported confusion** in a homework reflection resets the matching objectives to learning.
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
 - **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
   growing, thriving) from the share of its course's objectives that are mastered.
+- **Nothing hardcoded or faked.** ALD is a labelled sample course; everything else starts empty and
+  comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** Claude is used for extracting material, generating questions and grading
   short answers. Students' own Claude/ChatGPT can connect through an MCP connector (planned) that
   logs study activity as a priority signal, never as mastery.
@@ -33,7 +44,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 
 - Next.js 16 (App Router, `src/` dir, TypeScript), Tailwind v4, `motion` (Framer Motion) for animation.
 - No backend yet. State is a React context persisted to localStorage (`src/lib/store.tsx`).
-  Supabase is the planned backend (Phase 3 of the roadmap); screens only talk to `useOrca()`, so
+  Supabase is the planned backend (Phase 4 of the roadmap); screens only talk to `useOrca()`, so
   the persistence swap happens behind it.
 - Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
   any API route. Without a key, routes fall back to demo mode.
@@ -79,7 +90,7 @@ changes the items marked †.
   OpenAI-compatible chat.completions shape; Ollama is called from the browser. Model routes fall
   back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`) and then to demo mode. Whether to keep
   this is open (`docs/TO-DISCUSS.md`).
-- Material pipeline (on-device stopgap until Phase 4): `src/lib/pdf-text.ts` reads PDFs with pdf.js
+- Material pipeline (on-device; Phase 2 makes it create objectives, Phase 4 moves it server-side): `src/lib/pdf-text.ts` reads PDFs with pdf.js
   → `/api/extract` asks the model for topics + source-anchored quiz questions (`src/lib/extraction.ts`,
   zod schema) → `importExtraction` in the store appends topics and fills
   `questionBank[courseId][topicId]`. It does not create objectives yet.
@@ -92,9 +103,10 @@ changes the items marked †.
 
 ## What to build next
 
-`docs/BACKEND-ROADMAP.md` is the plan. Phases: (1) mastery core on-device, (2) scheduling,
-(3) Supabase, (4) server-side material pipeline that creates objectives, (5) deep review,
-relationships and exams, (6) ALD drills, (7) MCP connector. Build each phase with
+`docs/BACKEND-ROADMAP.md` is the plan. Phases: (1) mastery core on-device, (2) uploads create
+topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase
+(auth, tables, Storage, snapshots, server-side pipeline), (5) relation mastery, exams and calendar,
+(6) ALD drills, (7) MCP connector. Build each phase with
 `superpowers:writing-plans` → `superpowers:subagent-driven-development`; plans go in
 `docs/superpowers/plans/`. Animation next steps are in `docs/ANIMATION.md`.
 

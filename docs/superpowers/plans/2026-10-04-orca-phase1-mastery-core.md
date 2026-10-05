@@ -153,7 +153,7 @@ description: Use when building or changing question generation, question validat
   needs a structured rubric (`requiredIdeas`, `acceptableAlternatives`, `knownMisconceptions`).
 - Course-specific questions carry a source anchor (`anchor.locator`, `anchor.excerpt`).
 - Generated questions must not copy the source verbatim, and pass an ambiguity check before a
-  student sees them (Phase 4 ports the platform's check).
+  student sees them (Phase 2 ports the platform's check).
 - The quiz records evidence only after grading finishes. A grading error records nothing.
 - Never show a placeholder question. A topic with no questions shows an empty state that points
   to adding material.
@@ -482,7 +482,7 @@ Question ids are `${topicId}-${n}`, n = 1-based position in that topic's `questi
 /**
  * ALD objectives ("can do X") and which built-in question tests each one.
  * Drafted from docs/OBJECTIVES-ALD.md, limited to objectives the current bank
- * has questions for; the rest arrive with drills and generation (Phases 4 and 6).
+ * has questions for; the rest arrive with generation and drills (Phases 2 and 6).
  */
 import type { ObjectiveInfo } from "../mastery/types.ts";
 
@@ -611,25 +611,42 @@ git commit -m "Objectives: evidence types, catalogue helpers, and every built-in
 
 **Files:**
 - Create: `src/lib/mastery/objective-state.ts`, `tests/mastery/objective-state.test.ts`
+- Modify: `src/lib/mastery/types.ts` (add `"due"` to `ObjectiveStatus`)
 
 **Interfaces:**
 - Consumes: `EvidenceEvent`, `ObjectiveState`, `ObjectiveStatus`, `Outcome` from Task 3.
-- Produces: `MASTERY_RULES`, `localDayKey(iso: string): string`, `interface ObjectiveStateOptions { hasMechanismQuestions: boolean; dayKey?: (iso: string) => string }`, `computeObjectiveState(objectiveId: string, events: readonly EvidenceEvent[], now: Date, options: ObjectiveStateOptions): ObjectiveState`.
+- Produces: `MASTERY_RULES`, `localDayKey(iso: string): string`, `interface ObjectiveStateOptions { hasMechanismQuestions: boolean; dayKey?: (iso: string) => string }`, `interface ObjectiveAccumulator` (plain JSON), `EMPTY_ACCUMULATOR`, `applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator`, `stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState`, `replayObjective(objectiveId: string, events: readonly EvidenceEvent[], options: ObjectiveStateOptions): ObjectiveAccumulator`, `computeObjectiveState(objectiveId: string, events: readonly EvidenceEvent[], now: Date, options: ObjectiveStateOptions): ObjectiveState`.
 
-Rules being implemented (from `docs/MASTERY-PLAN.md` §2.4–2.5):
+**Why a step function.** The rule is written as `applyAnswer(state, answer) → state` (a fold over the log) plus `stateAt(state, now)`. Phase 1 still replays the whole log in the browser, which is cheap at this size. In the Supabase phase the accumulator becomes a stored snapshot updated in the same transaction as each new answer (event sourcing with snapshots), so reads stop replaying the log. Time-based states (due, fading) are computed at read from the stored due time, never by a timer.
+
+Rules being implemented (from `docs/MASTERY-PLAN.md` §2.3–2.5):
 - Credit counts only a question's **first** attempt: unaided correct = 1, self-marked correct = 0.5, partial = 0.5, incorrect = 0. Repeats never add.
 - Mastered when credit ≥ 3, credit earned on ≥ 2 calendar days, the last two non-partial answers are correct, and there's no open mix-up.
 - Mix-up: two unaided misses in a row on different questions. Cleared by an unaided correct on a mechanism-tier question, or any unaided correct if the objective has no mechanism question (provisional, see TO-DISCUSS).
-- On mastery: stability 3 days, due 3 days later. An unaided correct at or after the due time is a spaced check: stability × 2.2 (cap 60), due again after the new stability. Early answers don't change it. An unaided miss: stability ÷ 3 (min 2), due tomorrow, status fading until the next check. Stability at the cap with ≥ 3 checks = retired.
-- Status at `now`: unseen (no answers) → learning / mixed-up → mastered, fading (due time passed or a miss pending), retired.
+- On mastery: stability 3 days, due 3 days later. An unaided correct at or after the due time is a spaced check: stability × 2.2 (cap 60), due again after the new stability. Early answers don't change it. An unaided miss: stability ÷ 3 (min 2), due tomorrow, fading until the next check. Stability at the cap with ≥ 3 checks = retired.
+- Status at `now`: `unseen` (no answers) → `learning` / `mixed-up` → `mastered` (due time not reached) → `due` (due, but still counts as mastered, for half its interval) → `fading` (a miss pending, or more than half an interval overdue; stops counting) → `retired`.
+- Answers must be applied in time order. `applyAnswer` throws on an answer older than the last one applied, telling the caller to rebuild from the log.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Add the "due" status**
+
+In `src/lib/mastery/types.ts`:
+```ts
+export type ObjectiveStatus = "unseen" | "learning" | "mixed-up" | "mastered" | "due" | "fading" | "retired";
+```
+
+- [ ] **Step 2: Write the failing tests**
 
 `tests/mastery/objective-state.test.ts`:
 ```ts
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MASTERY_RULES, computeObjectiveState } from "../../src/lib/mastery/objective-state.ts";
+import {
+  EMPTY_ACCUMULATOR,
+  MASTERY_RULES,
+  applyAnswer,
+  computeObjectiveState,
+  stateAt,
+} from "../../src/lib/mastery/objective-state.ts";
 import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
 
 /** Noon UTC on 2026-10-<n>. */
@@ -655,8 +672,9 @@ function ev(questionId: string, when: string, over: Partial<EvidenceEvent> = {})
   };
 }
 
+const opts = (hasMechanismQuestions = false) => ({ hasMechanismQuestions, dayKey: utcDay });
 const state = (events: EvidenceEvent[], now: Date, hasMechanismQuestions = false) =>
-  computeObjectiveState("t/o", events, now, { hasMechanismQuestions, dayKey: utcDay });
+  computeObjectiveState("t/o", events, now, opts(hasMechanismQuestions));
 
 /** Mastered on day 2: q1, q2 on day 1 and q3 on day 2. Due on day 5. */
 const masteredOnDay2 = () => [ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(2))];
@@ -773,12 +791,15 @@ test("an unaided correct answer at the due time grows stability", () => {
   assert.equal(s.spacedChecks, 1);
 });
 
-test("a mastered objective past its due time is fading", () => {
-  assert.equal(state(masteredOnDay2(), at(5, 12)).status, "fading");
+test("a review coming due still counts as mastered for half its interval, then fades", () => {
+  // Due day 5 at noon with a 3-day interval, so the grace runs to day 7 at midnight.
   assert.equal(state(masteredOnDay2(), at(5, 11)).status, "mastered");
+  assert.equal(state(masteredOnDay2(), at(5, 12)).status, "due");
+  assert.equal(state(masteredOnDay2(), at(6, 23)).status, "due");
+  assert.equal(state(masteredOnDay2(), at(7, 0)).status, "fading");
 });
 
-test("a miss after mastery cuts stability, fades, and recovers on the next check", () => {
+test("a miss after mastery cuts stability, fades at once, and recovers on the next check", () => {
   const missed = [...masteredOnDay2(), ev("q4", day(3), { outcome: "incorrect" })];
   const s = state(missed, at(3));
   assert.equal(s.status, "fading");
@@ -808,23 +829,62 @@ test("events are ordered by time, not by array position", () => {
   assert.equal(s.status, "mastered");
 });
 
+test("applying answers one at a time gives the same state as replaying the log", () => {
+  const events = [
+    ev("q1", day(1), { outcome: "incorrect" }),
+    ev("q2", day(1)),
+    ev("q3", day(2)),
+    ev("q4", day(2)),
+    ev("q5", day(5)),
+    ev("q6", day(9), { outcome: "incorrect" }),
+    ev("q7", day(10)),
+  ];
+  let acc = EMPTY_ACCUMULATOR;
+  for (let i = 0; i < events.length; i += 1) {
+    acc = applyAnswer(acc, events[i], opts());
+    const now = at(12);
+    assert.deepEqual(stateAt("t/o", acc, now), state(events.slice(0, i + 1), now), `after answer ${i + 1}`);
+  }
+});
+
+test("the accumulator survives a JSON round trip, so it can be stored as a snapshot", () => {
+  const acc = masteredOnDay2().reduce((a, e) => applyAnswer(a, e, opts()), EMPTY_ACCUMULATOR);
+  const restored = JSON.parse(JSON.stringify(acc));
+  assert.deepEqual(restored, acc);
+  const next = ev("q4", day(5));
+  assert.deepEqual(applyAnswer(restored, next, opts()), applyAnswer(acc, next, opts()));
+});
+
+test("an answer older than the last one applied throws instead of corrupting the state", () => {
+  const acc = applyAnswer(EMPTY_ACCUMULATOR, ev("q2", day(2)), opts());
+  assert.throws(() => applyAnswer(acc, ev("q1", day(1)), opts()), /rebuild/);
+});
+
+test("applyAnswer never mutates the state it was given", () => {
+  const before = applyAnswer(EMPTY_ACCUMULATOR, ev("q1", day(1)), opts());
+  const snapshot = JSON.stringify(before);
+  applyAnswer(before, ev("q2", day(2)), opts());
+  assert.equal(JSON.stringify(before), snapshot);
+});
+
 test("an unparseable timestamp throws", () => {
   assert.throws(() => state([ev("q1", "garbage")], at(1)), /unparseable timestamp/);
 });
 ```
 
-- [ ] **Step 2: Run to confirm they fail**
+- [ ] **Step 3: Run to confirm they fail**
 
 Run: `npm test`
 Expected: FAIL, `Cannot find module '.../objective-state.ts'`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 4: Implement**
 
 `src/lib/mastery/objective-state.ts`:
 ```ts
 /**
- * Objective state as a pure function of evidence and the clock
- * (docs/MASTERY-PLAN.md §2.3–2.5). Nothing here is stored.
+ * Objective state as a fold over evidence (docs/MASTERY-PLAN.md §2.3–2.5).
+ * applyAnswer is the step; stateAt reads the result against the clock.
+ * Nothing here is stored in Phase 1; the accumulator is shaped so it can be.
  */
 import type { EvidenceEvent, ObjectiveState, ObjectiveStatus, Outcome } from "./types.ts";
 
@@ -839,6 +899,8 @@ export const MASTERY_RULES = {
   missDivisor: 3,
   minStabilityDays: 2,
   retireAfterChecks: 3,
+  /** A review that has come due still counts as mastered until it is this fraction of its interval overdue. */
+  fadingGraceFraction: 0.5,
 } as const;
 
 const DAY_MS = 86_400_000;
@@ -858,10 +920,136 @@ export function localDayKey(iso: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Everything the rules remember about one objective's history. Plain JSON, so it can be stored as a snapshot. */
+export interface ObjectiveAccumulator {
+  answered: number;
+  /** ISO time of the last applied answer. */
+  lastAt: string | null;
+  /** Questions already attempted; only first attempts earn credit. */
+  attempted: string[];
+  credit: number;
+  creditDays: string[];
+  /** The last two non-partial outcomes. */
+  lastTwo: Outcome[];
+  mixedUp: boolean;
+  lastMissQuestion: string | null;
+  mastered: boolean;
+  stabilityDays: number;
+  /** Epoch ms; meaningful once mastered. */
+  dueAt: number;
+  spacedChecks: number;
+  missPending: boolean;
+  retired: boolean;
+}
+
+export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
+  answered: 0,
+  lastAt: null,
+  attempted: [],
+  credit: 0,
+  creditDays: [],
+  lastTwo: [],
+  mixedUp: false,
+  lastMissQuestion: null,
+  mastered: false,
+  stabilityDays: 0,
+  dueAt: 0,
+  spacedChecks: 0,
+  missPending: false,
+  retired: false,
+}) as ObjectiveAccumulator;
+
 function timeOf(e: EvidenceEvent) {
   const t = Date.parse(e.at);
   if (Number.isNaN(t)) throw new Error(`Evidence ${e.id} has an unparseable timestamp: "${e.at}"`);
   return t;
+}
+
+/** One step of the fold. Returns a new accumulator; never mutates the one it was given. */
+export function applyAnswer(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
+  const R = MASTERY_RULES;
+  const t = timeOf(e);
+  if (acc.lastAt !== null && t < Date.parse(acc.lastAt)) {
+    throw new Error(`Evidence ${e.id} is older than the last answer applied to objective ${e.objectiveId}; rebuild its state from the log`);
+  }
+  const dayKey = options.dayKey ?? localDayKey;
+  const assisted = e.grader === "self";
+  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at };
+
+  if (!next.mastered) {
+    if (e.outcome === "incorrect" && !assisted) {
+      if (next.lastMissQuestion !== null && next.lastMissQuestion !== e.questionId) next.mixedUp = true;
+      next.lastMissQuestion = e.questionId;
+    } else if (e.outcome === "correct" && !assisted) {
+      next.lastMissQuestion = null;
+      if (next.mixedUp && (e.tier === "mechanism" || !options.hasMechanismQuestions)) next.mixedUp = false;
+    }
+
+    if (!next.attempted.includes(e.questionId)) {
+      next.attempted = [...next.attempted, e.questionId];
+      const value = e.outcome === "correct" ? (assisted ? 0.5 : 1) : e.outcome === "partial" ? 0.5 : 0;
+      if (value > 0) {
+        next.credit += value;
+        const d = dayKey(e.at);
+        if (!next.creditDays.includes(d)) next.creditDays = [...next.creditDays, d];
+      }
+    }
+
+    if (e.outcome !== "partial") next.lastTwo = [...next.lastTwo, e.outcome].slice(-2);
+    const lastTwoCorrect = next.lastTwo.length === 2 && next.lastTwo.every((o) => o === "correct");
+    if (next.credit >= R.requiredCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
+      next.mastered = true;
+      next.stabilityDays = R.initialStabilityDays;
+      next.dueAt = after(t, next.stabilityDays);
+    }
+    return next;
+  }
+
+  if (e.outcome === "incorrect" && !assisted) {
+    next.stabilityDays = Math.max(R.minStabilityDays, next.stabilityDays / R.missDivisor);
+    next.dueAt = after(t, 1);
+    next.missPending = true;
+    next.retired = false;
+  } else if (e.outcome === "correct" && !assisted && t >= next.dueAt) {
+    next.stabilityDays = Math.min(R.stabilityCapDays, next.stabilityDays * R.stabilityGrowth);
+    next.spacedChecks += 1;
+    next.dueAt = after(t, next.stabilityDays);
+    next.missPending = false;
+    if (next.stabilityDays >= R.stabilityCapDays && next.spacedChecks >= R.retireAfterChecks) next.retired = true;
+  }
+  return next;
+}
+
+/** Read an accumulator against the clock. Due and fading are computed here, never by a timer. */
+export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState {
+  const t = now.getTime();
+  let status: ObjectiveStatus;
+  if (acc.answered === 0) status = "unseen";
+  else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
+  else if (acc.retired) status = "retired";
+  else if (acc.missPending || t >= after(acc.dueAt, acc.stabilityDays * MASTERY_RULES.fadingGraceFraction)) status = "fading";
+  else if (t >= acc.dueAt) status = "due";
+  else status = "mastered";
+
+  return {
+    objectiveId,
+    status,
+    credit: acc.credit,
+    creditDays: acc.creditDays.length,
+    stabilityDays: acc.mastered ? acc.stabilityDays : null,
+    dueAt: acc.mastered ? new Date(acc.dueAt).toISOString() : null,
+    spacedChecks: acc.spacedChecks,
+    lastEvidenceAt: acc.lastAt,
+  };
+}
+
+/** Rebuild one objective's accumulator from the full log (in time order). */
+export function replayObjective(objectiveId: string, events: readonly EvidenceEvent[], options: ObjectiveStateOptions): ObjectiveAccumulator {
+  return events
+    .filter((e) => e.objectiveId === objectiveId)
+    .map((e) => ({ e, t: timeOf(e) }))
+    .sort((a, b) => a.t - b.t)
+    .reduce((acc, { e }) => applyAnswer(acc, e, options), EMPTY_ACCUMULATOR);
 }
 
 export function computeObjectiveState(
@@ -870,103 +1058,21 @@ export function computeObjectiveState(
   now: Date,
   options: ObjectiveStateOptions,
 ): ObjectiveState {
-  const R = MASTERY_RULES;
-  const dayKey = options.dayKey ?? localDayKey;
-  const scored = events
-    .filter((e) => e.objectiveId === objectiveId)
-    .map((e) => ({ e, t: timeOf(e) }))
-    .sort((a, b) => a.t - b.t);
-
-  const attempted = new Set<string>();
-  const creditDays = new Set<string>();
-  const recent: Outcome[] = [];
-  let credit = 0;
-  let mixedUp = false;
-  let lastMissQuestion: string | null = null;
-
-  let mastered = false;
-  let stability = 0;
-  let dueAt = 0;
-  let checks = 0;
-  let missPending = false;
-  let retired = false;
-
-  for (const { e, t } of scored) {
-    const assisted = e.grader === "self";
-
-    if (!mastered) {
-      if (e.outcome === "incorrect" && !assisted) {
-        if (lastMissQuestion !== null && lastMissQuestion !== e.questionId) mixedUp = true;
-        lastMissQuestion = e.questionId;
-      } else if (e.outcome === "correct" && !assisted) {
-        lastMissQuestion = null;
-        if (mixedUp && (e.tier === "mechanism" || !options.hasMechanismQuestions)) mixedUp = false;
-      }
-
-      if (!attempted.has(e.questionId)) {
-        attempted.add(e.questionId);
-        const value = e.outcome === "correct" ? (assisted ? 0.5 : 1) : e.outcome === "partial" ? 0.5 : 0;
-        if (value > 0) {
-          credit += value;
-          creditDays.add(dayKey(e.at));
-        }
-      }
-
-      if (e.outcome !== "partial") recent.push(e.outcome);
-      const lastTwoCorrect = recent.length >= 2 && recent[recent.length - 1] === "correct" && recent[recent.length - 2] === "correct";
-      if (credit >= R.requiredCredit && creditDays.size >= R.requiredDays && lastTwoCorrect && !mixedUp) {
-        mastered = true;
-        stability = R.initialStabilityDays;
-        dueAt = after(t, stability);
-      }
-      continue;
-    }
-
-    if (e.outcome === "incorrect" && !assisted) {
-      stability = Math.max(R.minStabilityDays, stability / R.missDivisor);
-      dueAt = after(t, 1);
-      missPending = true;
-      retired = false;
-    } else if (e.outcome === "correct" && !assisted && t >= dueAt) {
-      stability = Math.min(R.stabilityCapDays, stability * R.stabilityGrowth);
-      checks += 1;
-      dueAt = after(t, stability);
-      missPending = false;
-      if (stability >= R.stabilityCapDays && checks >= R.retireAfterChecks) retired = true;
-    }
-  }
-
-  let status: ObjectiveStatus;
-  if (scored.length === 0) status = "unseen";
-  else if (!mastered) status = mixedUp ? "mixed-up" : "learning";
-  else if (retired) status = "retired";
-  else if (missPending || now.getTime() >= dueAt) status = "fading";
-  else status = "mastered";
-
-  return {
-    objectiveId,
-    status,
-    credit,
-    creditDays: creditDays.size,
-    stabilityDays: mastered ? stability : null,
-    dueAt: mastered ? new Date(dueAt).toISOString() : null,
-    spacedChecks: checks,
-    lastEvidenceAt: scored.length ? scored[scored.length - 1].e.at : null,
-  };
+  return stateAt(objectiveId, replayObjective(objectiveId, events, options), now);
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 5: Run tests**
 
 Run: `npm test`
 Expected: PASS (all objective-state tests).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 npx tsc --noEmit && npm run lint
-git add src/lib/mastery/objective-state.ts tests/mastery/objective-state.test.ts
-git commit -m "Mastery: objective state derived from evidence (criteria, mix-ups, spaced checks, fading, retirement)"
+git add src/lib/mastery/objective-state.ts src/lib/mastery/types.ts tests/mastery/objective-state.test.ts
+git commit -m "Mastery: objective state as a fold over evidence (criteria, mix-ups, spaced checks, due vs fading, retirement)"
 ```
 
 ---
@@ -980,7 +1086,7 @@ git commit -m "Mastery: objective state derived from evidence (criteria, mix-ups
 - Consumes: `computeObjectiveState` (Task 4), `objectivesForTopic` (Task 3).
 - Produces:
   - `progress.ts`: `type TopicStatus = "not-started" | "in-progress" | "done"`, `interface TopicProgress { status: TopicStatus; mastered: number; total: number }`, `topicProgress(objectiveIds: readonly string[], states: ReadonlyMap<string, ObjectiveState>): TopicProgress`, `type IslandLevel = "uncharted" | "sprouting" | "growing" | "thriving"`, `ISLAND_THRESHOLDS`, `islandLevel(states: readonly ObjectiveState[]): IslandLevel`
-  - `course-mastery.ts`: `interface CourseMastery { objectives: Map<string, ObjectiveState>; topics: Map<string, TopicProgress>; island: IslandLevel }`, `courseMastery(input: CourseMasteryInput): CourseMastery`, `interface CourseMasteryInput { courseId: string; topicIds: readonly string[]; bank: Readonly<Record<string, readonly QuestionRef[]>>; catalogue: Readonly<Record<string, ObjectiveInfo>>; evidence: readonly EvidenceEvent[]; now: Date; dayKey?: (iso: string) => string }`
+  - `course-mastery.ts`: `interface CourseMastery { objectives: Map<string, ObjectiveState>; topicObjectives: Map<string, string[]>; topics: Map<string, TopicProgress>; island: IslandLevel }`, `courseMastery(input: CourseMasteryInput): CourseMastery`, `interface CourseMasteryInput { courseId: string; topicIds: readonly string[]; bank: Readonly<Record<string, readonly QuestionRef[]>>; catalogue: Readonly<Record<string, ObjectiveInfo>>; evidence: readonly EvidenceEvent[]; now: Date; dayKey?: (iso: string) => string }`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1003,8 +1109,9 @@ const s = (objectiveId: string, status: ObjectiveStatus): ObjectiveState => ({
 });
 const map = (...states: ObjectiveState[]) => new Map(states.map((x) => [x.objectiveId, x]));
 
-test("a topic is done only when every objective is mastered or retired", () => {
+test("a topic is done only when every objective is mastered, due (within grace) or retired", () => {
   assert.deepEqual(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "retired"))), { status: "done", mastered: 2, total: 2 });
+  assert.equal(topicProgress(["a", "b"], map(s("a", "due"), s("b", "mastered"))).status, "done");
   assert.equal(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "fading"))).status, "in-progress");
 });
 
@@ -1029,8 +1136,9 @@ test("island level follows the share of objectives held", () => {
   assert.equal(islandLevel([s("a", "mastered"), s("b", "retired"), s("c", "unseen")]), "thriving");
 });
 
-test("fading objectives don't hold an island's level", () => {
+test("fading objectives don't hold an island's level; due ones still do", () => {
   assert.equal(islandLevel([s("a", "fading"), s("b", "fading"), s("c", "mastered")]), "growing");
+  assert.equal(islandLevel([s("a", "due"), s("b", "due"), s("c", "mastered")]), "thriving");
 });
 ```
 
@@ -1072,6 +1180,8 @@ test("rolls evidence up into objectives, topics and an island level", () => {
   assert.equal(m.topics.get("t1")!.status, "done");
   assert.equal(m.topics.get("t2")!.status, "not-started");
   assert.deepEqual(m.topics.get("t3"), { status: "not-started", mastered: 0, total: 0 });
+  assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a"]);
+  assert.deepEqual(m.topicObjectives.get("t3"), []);
   assert.equal(m.island, "growing");
 });
 
@@ -1109,12 +1219,13 @@ export type TopicStatus = "not-started" | "in-progress" | "done";
 
 export interface TopicProgress {
   status: TopicStatus;
-  /** Objectives mastered or retired. */
+  /** Objectives mastered, due (within grace) or retired. */
   mastered: number;
   total: number;
 }
 
-const held = (s: ObjectiveState) => s.status === "mastered" || s.status === "retired";
+/** Counts as mastered: a review coming due (within its grace) still counts; fading doesn't. */
+const held = (s: ObjectiveState) => s.status === "mastered" || s.status === "due" || s.status === "retired";
 
 export function topicProgress(objectiveIds: readonly string[], states: ReadonlyMap<string, ObjectiveState>): TopicProgress {
   const list = objectiveIds.map((id) => {
@@ -1153,6 +1264,8 @@ import type { EvidenceEvent, ObjectiveInfo, ObjectiveState } from "./types.ts";
 
 export interface CourseMastery {
   objectives: Map<string, ObjectiveState>;
+  /** topicId → its objective ids, in first-seen order. */
+  topicObjectives: Map<string, string[]>;
   topics: Map<string, TopicProgress>;
   island: IslandLevel;
 }
@@ -1184,14 +1297,17 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
     });
 
   const objectives = new Map<string, ObjectiveState>();
+  const topicObjectives = new Map<string, string[]>();
   const topics = new Map<string, TopicProgress>();
   for (const { topicId, list } of perTopic) {
     for (const o of list) {
       objectives.set(o.id, computeObjectiveState(o.id, events, now, { hasMechanismQuestions: o.hasMechanismQuestions, dayKey }));
     }
-    topics.set(topicId, topicProgress(list.map((o) => o.id), objectives));
+    const ids = list.map((o) => o.id);
+    topicObjectives.set(topicId, ids);
+    topics.set(topicId, topicProgress(ids, objectives));
   }
-  return { objectives, topics, island: islandLevel([...objectives.values()]) };
+  return { objectives, topicObjectives, topics, island: islandLevel([...objectives.values()]) };
 }
 ```
 
@@ -1257,7 +1373,7 @@ import { useNow } from "@/hooks/useNow";
 
 In `interface OrcaState`, after `questionBank`:
 ```ts
-  /** Course structure: courseId → objectiveId → objective. Created once (built-in content now, uploads in Phase 4), never regenerated. */
+  /** Course structure: courseId → objectiveId → objective. Created once (built-in content now, uploads from Phase 2), never regenerated. */
   objectives: Record<string, Record<string, ObjectiveInfo>>;
   /** Append-only answer log. Every learner-facing state is computed from it. */
   evidence: EvidenceEvent[];
@@ -1746,7 +1862,276 @@ git commit -m "Trail reads derived progress: no stored topic status, no locks, e
 
 ---
 
-### Task 9: Islands show mastery level
+### Task 9: Due list and streak from evidence; no fabricated seed data
+
+**Files:**
+- Create: `src/lib/mastery/due.ts`, `src/lib/mastery/streak.ts`, `tests/mastery/due.test.ts`, `tests/mastery/streak.test.ts`
+- Modify: `src/lib/data.ts`, `src/lib/store.tsx`, `src/app/home/page.tsx`, `src/components/layout/Sidebar.tsx`, `src/app/quiz/[slug]/[topic]/page.tsx`, `src/app/course/[slug]/page.tsx`
+
+**Interfaces:**
+- Consumes: `CourseMastery` with `topicObjectives` (Task 5), `localDayKey` (Task 4), `useMasteryByCourse`, `useNow` (Task 6).
+- Produces: `dueTopics(courseId: string, mastery: Pick<CourseMastery, "objectives" | "topicObjectives">, now: Date, dayKey?: (iso: string) => string): DueTopic[]`, `interface DueTopic { courseId: string; topicId: string; when: "today" | "tomorrow"; objectiveIds: string[] }`, `streakDays(evidence: readonly EvidenceEvent[], now: Date, dayKey?: (iso: string) => string): number`, store hooks `useDueItems(): DueItem[]` and `useStreak(): number`, `Course.sample?: boolean`.
+
+Why: the sidebar's due cards, the calendar events, the sample homework file and the "5 day streak" are all hand-written stand-ins. After this task the due list and streak are computed from evidence, the calendar starts empty (real entries come from uploaded material with due dates), and ALD stays as a labelled sample course.
+
+Rules:
+- An objective is **due today** when it's mastered (not retired) and its due time has passed or falls on today's local date; **due tomorrow** when its due time falls on tomorrow's local date. Due items are grouped by topic. Objectives that aren't mastered yet aren't "due" in Phase 1; ranking new material into the daily queue is the scheduling phase.
+- The **streak** counts consecutive local days, ending today, with at least one unaided graded answer. If today has none yet, the streak still counts from yesterday (it isn't broken until the day ends).
+
+- [ ] **Step 1: Write the failing tests**
+
+`tests/mastery/due.test.ts`:
+```ts
+import test from "node:test";
+import assert from "node:assert/strict";
+import { dueTopics } from "../../src/lib/mastery/due.ts";
+import type { ObjectiveState, ObjectiveStatus } from "../../src/lib/mastery/types.ts";
+
+const utcDay = (iso: string) => iso.slice(0, 10);
+const s = (objectiveId: string, status: ObjectiveStatus, dueAt: string | null): ObjectiveState => ({
+  objectiveId,
+  status,
+  credit: 3,
+  creditDays: 2,
+  stabilityDays: dueAt ? 3 : null,
+  dueAt,
+  spacedChecks: 0,
+  lastEvidenceAt: null,
+});
+const now = new Date("2026-10-05T09:00:00Z");
+
+test("groups objectives that are due by topic, into today and tomorrow", () => {
+  const objectives = new Map([
+    ["t1/a", s("t1/a", "due", "2026-10-04T12:00:00Z")],
+    ["t1/b", s("t1/b", "mastered", "2026-10-05T18:00:00Z")],
+    ["t1/c", s("t1/c", "mastered", "2026-10-06T08:00:00Z")],
+    ["t2/d", s("t2/d", "mastered", "2026-10-09T08:00:00Z")],
+    ["t2/e", s("t2/e", "learning", null)],
+  ]);
+  const topicObjectives = new Map([["t1", ["t1/a", "t1/b", "t1/c"]], ["t2", ["t2/d", "t2/e"]]]);
+  assert.deepEqual(dueTopics("c", { objectives, topicObjectives }, now, utcDay), [
+    { courseId: "c", topicId: "t1", when: "today", objectiveIds: ["t1/a", "t1/b"] },
+    { courseId: "c", topicId: "t1", when: "tomorrow", objectiveIds: ["t1/c"] },
+  ]);
+});
+
+test("retired objectives are never due", () => {
+  const objectives = new Map([["t1/a", s("t1/a", "retired", "2026-10-01T00:00:00Z")]]);
+  assert.deepEqual(dueTopics("c", { objectives, topicObjectives: new Map([["t1", ["t1/a"]]]) }, now, utcDay), []);
+});
+
+test("a missing objective state throws", () => {
+  assert.throws(() => dueTopics("c", { objectives: new Map(), topicObjectives: new Map([["t1", ["t1/a"]]]) }, now, utcDay), /No state computed/);
+});
+```
+
+`tests/mastery/streak.test.ts`:
+```ts
+import test from "node:test";
+import assert from "node:assert/strict";
+import { streakDays } from "../../src/lib/mastery/streak.ts";
+import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
+
+const utcDay = (iso: string) => iso.slice(0, 10);
+const ev = (at: string, grader: EvidenceEvent["grader"] = "choice"): EvidenceEvent => ({
+  id: at,
+  at,
+  courseId: "c",
+  topicId: "t",
+  objectiveId: "t/o",
+  questionId: "q",
+  tier: null,
+  outcome: "incorrect",
+  grader,
+  source: "quiz",
+});
+const now = new Date("2026-10-05T20:00:00Z");
+
+test("no answers is a zero streak", () => {
+  assert.equal(streakDays([], now, utcDay), 0);
+});
+
+test("counts consecutive days ending today, right or wrong answers alike", () => {
+  assert.equal(streakDays([ev("2026-10-03T10:00:00Z"), ev("2026-10-04T10:00:00Z"), ev("2026-10-05T10:00:00Z")], now, utcDay), 3);
+});
+
+test("a streak isn't broken until today ends", () => {
+  assert.equal(streakDays([ev("2026-10-03T10:00:00Z"), ev("2026-10-04T10:00:00Z")], now, utcDay), 2);
+});
+
+test("a gap ends the streak", () => {
+  assert.equal(streakDays([ev("2026-10-01T10:00:00Z"), ev("2026-10-04T10:00:00Z"), ev("2026-10-05T10:00:00Z")], now, utcDay), 2);
+  assert.equal(streakDays([ev("2026-10-02T10:00:00Z")], now, utcDay), 0);
+});
+
+test("self-marked answers don't keep a streak alive", () => {
+  assert.equal(streakDays([ev("2026-10-05T10:00:00Z", "self")], now, utcDay), 0);
+});
+```
+
+- [ ] **Step 2: Run to confirm they fail**
+
+Run: `npm test`
+Expected: FAIL, missing `due.ts` and `streak.ts`.
+
+- [ ] **Step 3: Implement**
+
+`src/lib/mastery/due.ts`:
+```ts
+/** Which topics have reviews due today or tomorrow, from objective due times. */
+import type { CourseMastery } from "./course-mastery.ts";
+import { localDayKey } from "./objective-state.ts";
+
+export interface DueTopic {
+  courseId: string;
+  topicId: string;
+  when: "today" | "tomorrow";
+  objectiveIds: string[];
+}
+
+const DAY_MS = 86_400_000;
+
+export function dueTopics(
+  courseId: string,
+  mastery: Pick<CourseMastery, "objectives" | "topicObjectives">,
+  now: Date,
+  dayKey: (iso: string) => string = localDayKey,
+): DueTopic[] {
+  const today = dayKey(now.toISOString());
+  const tomorrow = dayKey(new Date(now.getTime() + DAY_MS).toISOString());
+  const out: DueTopic[] = [];
+  for (const [topicId, ids] of mastery.topicObjectives) {
+    const buckets = { today: [] as string[], tomorrow: [] as string[] };
+    for (const id of ids) {
+      const s = mastery.objectives.get(id);
+      if (!s) throw new Error(`No state computed for objective ${id}`);
+      if (s.dueAt === null || s.status === "retired") continue;
+      const day = dayKey(s.dueAt);
+      if (Date.parse(s.dueAt) <= now.getTime() || day === today) buckets.today.push(id);
+      else if (day === tomorrow) buckets.tomorrow.push(id);
+    }
+    for (const when of ["today", "tomorrow"] as const) {
+      if (buckets[when].length > 0) out.push({ courseId, topicId, when, objectiveIds: buckets[when] });
+    }
+  }
+  return out;
+}
+```
+
+`src/lib/mastery/streak.ts`:
+```ts
+/** Consecutive local days, ending today, with at least one unaided graded answer. */
+import { localDayKey } from "./objective-state.ts";
+import type { EvidenceEvent } from "./types.ts";
+
+const DAY_MS = 86_400_000;
+
+export function streakDays(evidence: readonly EvidenceEvent[], now: Date, dayKey: (iso: string) => string = localDayKey): number {
+  const days = new Set(evidence.filter((e) => e.grader !== "self").map((e) => dayKey(e.at)));
+  // Step back a day at a time from noon today, so daylight-saving shifts never skip a date.
+  const noon = new Date(now);
+  noon.setHours(12, 0, 0, 0);
+  let cursor = noon.getTime();
+  if (!days.has(dayKey(new Date(cursor).toISOString()))) cursor -= DAY_MS;
+  let count = 0;
+  while (days.has(dayKey(new Date(cursor).toISOString()))) {
+    count += 1;
+    cursor -= DAY_MS;
+  }
+  return count;
+}
+```
+
+- [ ] **Step 4: Run tests**
+
+Run: `npm test`
+Expected: PASS.
+
+- [ ] **Step 5: Remove fabricated seed data; label the sample course**
+
+In `src/lib/data.ts`:
+- Delete `SEED_DUE`, `SEED_EVENTS` and `SEED_MATERIALS`.
+- `DueItem` becomes:
+```ts
+/** A topic with reviews due, derived from objective due times (never stored). */
+export interface DueItem {
+  id: string;
+  courseId: string;
+  topicId: string;
+  title: string;
+  when: DueWhen;
+  /** How many of the topic's objectives are due. */
+  count: number;
+}
+```
+- In `interface Course`, add:
+```ts
+  /** Built-in sample content rather than material the student uploaded. */
+  sample?: boolean;
+```
+- On the ALD entry in `SEED_COURSES`, add `sample: true,`.
+
+In `src/lib/store.tsx`:
+- `const STORAGE_KEY = "orca:v5"; // v5: due list and streak are derived; no fabricated seed data`
+- Remove `due` and `streak` from `OrcaState`, `initialState` and the imports (`SEED_DUE`, `SEED_EVENTS`, `SEED_MATERIALS`, `DueItem` if unused). Set `events: [],` and `materials: [],` in `initialState`.
+- In `recordQuiz`, delete the `streak:` line.
+- Import `dueTopics` from `./mastery/due`, `streakDays` from `./mastery/streak`, and `type DueItem` from `./data`. Below `useMasteryByCourse`, add:
+```ts
+/** Topics with reviews due today or tomorrow, across every course. */
+export function useDueItems(): DueItem[] {
+  const { courses } = useOrca();
+  const mastery = useMasteryByCourse();
+  const nowMs = useNow();
+  return useMemo(
+    () =>
+      courses.flatMap((c) => {
+        const m = mastery[c.id];
+        if (!m) throw new Error(`No mastery computed for course ${c.id}`);
+        return dueTopics(c.id, m, new Date(nowMs)).map((d) => {
+          const topic = c.topics.find((t) => t.id === d.topicId);
+          if (!topic) throw new Error(`Due topic ${d.topicId} is not in course ${c.id}`);
+          return { id: `${c.id}:${d.topicId}:${d.when}`, courseId: c.id, topicId: d.topicId, title: topic.name, when: d.when, count: d.objectiveIds.length };
+        });
+      }),
+    [courses, mastery, nowMs],
+  );
+}
+
+/** Days in a row with at least one unaided graded answer. */
+export function useStreak(): number {
+  const { evidence } = useOrca();
+  const nowMs = useNow();
+  return useMemo(() => streakDays(evidence, new Date(nowMs)), [evidence, nowMs]);
+}
+```
+
+- [ ] **Step 6: Point the screens at the derived values**
+
+- `src/app/home/page.tsx`: `const { courses } = useOrca(); const due = useDueItems(); const streak = useStreak();` (import both hooks from `@/lib/store`). `dueCount` stays as written.
+- `src/components/layout/Sidebar.tsx`: `const { courses } = useOrca(); const due = useDueItems();`. The card title shows the count: pass `title={`${d.title} · ${d.count} to review`}` to `DueCard`.
+- Quiz page: take `streak` from `useStreak()` instead of `useOrca()`.
+- Course page: when `course.sample` is true, render `<motion.span variants={fadeUp} className="eyebrow">Sample course</motion.span>` directly above the `<motion.h1>`.
+
+- [ ] **Step 7: Verify**
+
+Run: `grep -rn "SEED_DUE\|SEED_EVENTS\|SEED_MATERIALS\|streak: 5" src`
+Expected: no output.
+
+Run: `npx tsc --noEmit && npm run lint && npm test`
+Expected: all pass.
+
+Run `npm run dev` in a fresh browser profile (or clear `localStorage`). `/home` shows "0 day streak" and the sidebar says "Nothing due. Nice." under both headings; `/calendar` has no events; `/course/ald` shows "Sample course". Answer one question; the streak reads 1.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src tests
+git commit -m "Due list and streak derived from evidence; remove fabricated seed due items, events, materials and streak; label ALD as a sample course"
+```
+
+---
+
+### Task 10: Islands show mastery level
 
 **Files:**
 - Modify: `src/components/brand/Island.tsx`, `src/components/map/KnowledgeMap.tsx`, `src/app/page.tsx` (onboarding `ISLANDS`), `src/app/new-course/page.tsx:78`
@@ -1862,7 +2247,7 @@ git commit -m "Islands: four fixed looks by course mastery level"
 
 ---
 
-### Task 10: Docs and final verification
+### Task 11: Docs and final verification
 
 **Files:**
 - Modify: `CLAUDE.md`, `README.md`, `docs/MASTERY-PLAN.md` (top note)
@@ -1877,7 +2262,8 @@ code and remove the † marks and the sentence that explains them:
   `recordEvidence` and per-course `objectives` in the store, `src/hooks/useNow.ts`, and `npm test`.
 - `Island`: four mastery looks. `PathNode`: done / current / upcoming, no locks.
 - Remove `chat/ChatBubble` and `/chat` + `/api/chat`.
-- In "What to build next", note that Phase 1 is done and Phase 2 (scheduling) is next.
+- In "What to build next", note that Phase 1 is done and Phase 2 (uploads create the course structure) is next.
+- In "What exists", describe `src/lib/mastery/due.ts` and `streak.ts`, `useDueItems()` / `useStreak()`, the ALD sample label, and that seed data is ALD-only with no fabricated due items, events, materials or streak.
 
 - [ ] **Step 2: Update README.md**
 

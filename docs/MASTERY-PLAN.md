@@ -1,9 +1,11 @@
 # Mastery, progress and spaced repetition: implementation plan
 
 > **Status 2026-10-04.** This is the learner model. How and when it gets built is in
-> `docs/BACKEND-ROADMAP.md` (Phase 1 builds §2.2–2.5 on-device; Phase 2 builds §2.6 and §3).
+> `docs/BACKEND-ROADMAP.md` (Phase 1 builds §2.2–2.5 on-device; Phase 3 builds §2.6 and §3).
 > Changes since it was written: the frontier term and distance discount are parked (§2.5–2.6,
-> `docs/TO-DISCUSS.md`); mix-ups are detected without a confidence rating (§2.3); objectives are
+> `docs/TO-DISCUSS.md`); mix-ups are detected without a confidence rating (§2.3); a review that
+> comes due keeps counting for half its interval before it fades (§2.3); self-reported confusion
+> resets an objective to learning (§2.2); importance is a computed weight (§2.1); objectives are
 > created at upload (§2.1); there is no in-app chat (§2.2). §6 and §7 are superseded by the
 > roadmap and TO-DISCUSS.
 
@@ -49,13 +51,16 @@ concrete rules for ALD and a build order.
   (retrieval, mechanism, application, connection, transfer).
 - Objectives may declare `implies: [objectiveId]` edges (mastering "subtract in 2's complement"
   implies "negate in 2's complement"). Used for shielding, section 2.5.
-- Objectives carry `importance` (0..1) and two flags from professor notes: `tested` and `skipped`.
+- Objectives carry a **weight** (neutral 1.0, clamped 0.5–2) computed by code from signals the
+  extraction records: coverage in the material scaled by material-type weight, how many objectives
+  build on it, and explicit emphasis (`tested` ×1.5, `skipped` ×0). See the roadmap's "Weight
+  signals and formula". Priority (§2.6) uses it as `importance`.
 - **Objectives are course data, created once.** Built-in content ships authored objectives; from
-  Phase 4, each upload's extraction proposes new topics and objectives against the course's
+  Phase 2, each upload's extraction proposes new topics and objectives against the course's
   existing list, reconciliation matches duplicates, and the student reviews topics. Each
   objective records its `origin` (`authored | material | inferred`), its review `status`
   (`proposed | confirmed | archived`) and the upload that created it. Proposed objectives are
-  quizzable with an "unreviewed" tag; archived ones never are. Details: roadmap Phase 4.
+  quizzable with an "unreviewed" tag; archived ones never are. Details: roadmap Phase 2.
 - An answer counts toward its question's *current* objective, so merging, splitting or re-tagging
   questions re-files past answers automatically.
 
@@ -66,7 +71,15 @@ concrete rules for ALD and a build order.
   grader: choice | exact | rubric | self,   // "self" = student marked it without a grader → assisted
   source: quiz | deep | exam | drill }      // Phase 1 records only "quiz"
 ```
-Skipped questions and grading failures record nothing. Connector activity (§5) is stored as a
+Skipped questions and grading failures record nothing.
+
+**Self-reported confusion** (Phase 2): when a homework reflection says the student doesn't
+understand something, the note is matched to objectives (uncertain matches are confirmed by the
+student) and each match records a confusion event. A confusion event resets the objective to
+`learning`: credit, credit days and attempted questions are cleared, so it needs 3 fresh credited
+answers over 2 days again. On an objective that isn't mastered yet it raises priority. The
+asymmetry is deliberate: "I don't get it" is believed because it's cheap and safe to act on;
+"I get it" never raises mastery. Connector activity (§5) is stored as a
 separate *signal*, not an evidence event: it raises priority ("you studied this on Tuesday") and
 never counts toward mastery.
 
@@ -76,16 +89,16 @@ unseen      no scored evidence
 learning    some evidence, mastery criteria not met
 mixed-up    two unaided misses in a row on different questions, not yet cleared
             (no confidence rating is captured; see TO-DISCUSS)
-mastered    criteria met; carries stability S (days) and dueAt
-fading      mastered but dueAt has passed (needs a spaced check)
+mastered    criteria met; carries stability S (days) and dueAt, not yet due
+due         dueAt has passed but by less than S/2 — in the review queue, still counts as mastered
+fading      a spaced check was missed, or dueAt + S/2 has passed — stops counting as mastered
 retired     mastered, S ≥ cap, ≥ 3 successful spaced checks; out of quick rotation
 ```
-Topic status is derived: `done` when every objective is mastered or retired and none is
-fading; `in progress` otherwise; `not started` when all unseen. Topics are **not gates**: the
+Topic status is derived: `done` when every objective is mastered, due or retired (none fading); `in progress` otherwise; `not started` when all unseen. Topics are **not gates**: the
 course moves on whether or not the student has mastered Lecture 2, so later topics unlock when
 their material exists. The trail shows which earlier topics need work rather than blocking them.
 
-Island level is derived too: the share of the course's objectives that are mastered or retired
+Island level is derived too: the share of the course's objectives that are mastered, due or retired
 picks one of four fixed looks (`uncharted` with no answers yet, then `sprouting` < ⅓, `growing`
 ≥ ⅓, `thriving` ≥ ⅔). Fading objectives don't count, so an island drops a level when checks go
 overdue. Names and cut-offs are provisional (TO-DISCUSS).
