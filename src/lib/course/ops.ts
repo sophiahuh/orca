@@ -175,3 +175,11 @@ export function resolveUncertain(s: CourseStructure, id: string, verdict: "same"
   const confirmed = topicOf(s, o.topicId).review === "confirmed";
   return withObjectives(s, [id], (x) => ({ ...without(x, "uncertain"), review: confirmed ? "confirmed" : x.review }));
 }
+
+/** Answer reconciliation's "uncertain" for a topic: the same as its candidate (merge into it) or a separate topic. */
+export function resolveUncertainTopic(s: CourseStructure, id: string, verdict: "same" | "separate"): CourseStructure {
+  const t = topicOf(s, id);
+  if (!t.uncertain) throw new Error(`Topic ${id} has no open duplicate question`);
+  if (verdict === "same") return mergeTopics(withTopic(s, id, (x) => without(x, "uncertain")), id, t.uncertain.candidateId);
+  return withTopic(s, id, (x) => without(x, "uncertain"));
+}

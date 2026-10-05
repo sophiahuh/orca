@@ -4,7 +4,7 @@
  * Never log or persist `config.apiKey`.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { z } from "zod";
 import { type LlmConfig, PROVIDERS, compatChat } from "./llm";
 
@@ -16,6 +16,12 @@ export class LlmError extends Error {
 
 /** Models that accept `output_config.effort`. */
 const EFFORT_MODELS = /^claude-(opus|sonnet|fable|mythos)-5|^claude-opus-4-[678]/;
+
+/**
+ * Models with safety classifiers that take server-side refusal fallbacks (`fallbacks: "default"`
+ * routes a declined request to a model that can answer it, inside the same call).
+ */
+const FALLBACK_MODELS = /^claude-(fable-5-1|opus-5-5|opus-5|sonnet-5-5)$/;
 
 function mapAnthropicError(error: unknown, model: string): never {
   if (error instanceof Anthropic.AuthenticationError) throw new LlmError("Anthropic rejected that API key.", 401);
@@ -36,20 +42,35 @@ export async function completeJson<T>(
   prompt: string,
   schema: z.ZodType<T>,
   parseLoose: (text: string) => T,
-  opts: { effort?: "low" | "medium"; maxTokens?: number } = {},
+  opts: {
+    effort?: "low" | "medium" | "high";
+    maxTokens?: number;
+    /** Long text sent before `prompt` and cached (e.g. the material shared by every call of one upload). */
+    context?: string | null;
+  } = {},
 ): Promise<T> {
   if (PROVIDERS[config.provider].browserOnly) {
     throw new LlmError(`${PROVIDERS[config.provider].label} runs in your browser, not on the server.`, 400);
   }
   if (config.provider === "anthropic") {
     const client = new Anthropic({ apiKey: config.apiKey });
+    const fallback = FALLBACK_MODELS.test(config.model);
     try {
-      const response = await client.messages.parse({
+      const response = await client.beta.messages.parse({
         model: config.model,
         max_tokens: opts.maxTokens ?? 16000,
         system,
-        output_config: { format: zodOutputFormat(schema), ...(EFFORT_MODELS.test(config.model) ? { effort: opts.effort ?? "medium" } : {}) },
-        messages: [{ role: "user", content: prompt }],
+        output_config: { format: betaZodOutputFormat(schema), ...(EFFORT_MODELS.test(config.model) ? { effort: opts.effort ?? "medium" } : {}) },
+        messages: [
+          {
+            role: "user",
+            content: [
+              ...(opts.context ? [{ type: "text" as const, text: opts.context, cache_control: { type: "ephemeral" as const } }] : []),
+              { type: "text" as const, text: prompt },
+            ],
+          },
+        ],
+        ...(fallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
       });
       if (response.stop_reason === "refusal") throw new LlmError("The model declined to process this material.", 422);
       if (response.stop_reason === "max_tokens") throw new LlmError("The material is too long for one pass. Try a smaller file.", 413);
@@ -63,7 +84,7 @@ export async function completeJson<T>(
   }
   let text: string;
   try {
-    text = await compatChat(config, system, [{ role: "user", content: prompt }], { maxTokens: opts.maxTokens ?? 16000, json: true });
+    text = await compatChat(config, system, [{ role: "user", content: opts.context ? `${opts.context}\n\n${prompt}` : prompt }], { maxTokens: opts.maxTokens ?? 16000, json: true });
   } catch (error) {
     throw new LlmError(error instanceof Error ? error.message : "The model provider returned an error.", 502);
   }

@@ -1,6 +1,11 @@
 "use client";
 
-import type { DocumentText } from "./extraction";
+/** A document's text, slide by slide, read on the device. */
+export interface DocumentText {
+  filename: string;
+  type: string;
+  pages: Array<{ n: number; text: string }>;
+}
 
 /**
  * Read a PDF's text in the browser so the file itself never leaves the device.

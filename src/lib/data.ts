@@ -31,6 +31,8 @@ export interface Topic {
   mergedInto?: string;
   /** The upload that created it. */
   materialId?: string;
+  /** Reconciliation couldn't tell whether this duplicates topic `candidateId`; the student decides. */
+  uncertain?: { candidateId: string; reasoning: string };
   /** Node centre in the 854-wide path canvas. */
   pos: { x: number; y: number };
   /** One-paragraph summary (from extracted course material). */

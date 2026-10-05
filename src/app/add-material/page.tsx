@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
-import { PROVIDERS, compatChat, llmReady, modelLabel } from "@/lib/llm";
-import { EXTRACTION_SYSTEM, type DocumentText, type Extraction, extractionPrompt, parseExtraction } from "@/lib/extraction";
-import { extractPdfText, isPdf, renderPdfSlide } from "@/lib/pdf-text";
+import { llmReady, modelLabel } from "@/lib/llm";
+import { type Progress, runUpload } from "@/lib/pipeline/run";
+import { pipelineCaller } from "@/lib/pipeline/client";
+import { type DocumentText, extractPdfText, isPdf, renderPdfSlide } from "@/lib/pdf-text";
 import { useServerModel } from "@/hooks/useServerModel";
 import { IconCalendar, IconUpload } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
@@ -24,12 +25,27 @@ import { fadeUp, stagger } from "@/lib/motion";
 
 const SKELETON = [92, 100, 78, 96, 60, 0, 100, 88, 94, 70, 0, 90, 84];
 
+function progressMessage(p: Progress): string {
+  switch (p.stage) {
+    case "mapping":
+      return "Mapping the material onto the course…";
+    case "matching":
+      return `Checking ${p.candidates} topics and objectives against what the course already has…`;
+    case "writing":
+      return `Writing questions for ${p.objectives} objective${p.objectives === 1 ? "" : "s"}…`;
+    case "checking":
+      return `Checking ${p.questions} question${p.questions === 1 ? "" : "s"} with an independent solve…`;
+    case "figures":
+      return `Cutting ${p.slides} figure${p.slides === 1 ? "" : "s"} from the slides…`;
+  }
+}
+
 type Phase =
   | { kind: "idle" }
   | { kind: "reading"; done: number; total: number }
   | { kind: "ready" }
-  | { kind: "extracting" }
-  | { kind: "done"; topics: number; questions: number }
+  | { kind: "working"; message: string }
+  | { kind: "done"; topics: number; objectives: number; questions: number }
   | { kind: "error"; message: string };
 
 function DateField({ label, value, onChange, noneLabel }: { label: string; value: string | null; onChange: (v: string | null) => void; noneLabel: string }) {
@@ -67,7 +83,7 @@ function DateField({ label, value, onChange, noneLabel }: { label: string; value
 export default function AddMaterialPage({ searchParams }: PageProps<"/add-material">) {
   const sp = use(searchParams);
   const router = useRouter();
-  const { courses, addMaterial, importExtraction, llm, hydrated } = useOrca();
+  const { courses, objectives, questionBank, relations, addMaterial, applyUpload, llm, hydrated } = useOrca();
   const serverModel = useServerModel();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
@@ -103,7 +119,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const filename = chosenName ?? "Choose a PDF…";
   const ownModel = llmReady(llm);
   const connected = ownModel || Boolean(serverModel);
-  const busy = phase.kind === "reading" || phase.kind === "extracting";
+  const busy = phase.kind === "reading" || phase.kind === "working";
 
   const onFile = async (f: File) => {
     setChosenName(f.name);
@@ -124,46 +140,39 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   };
 
   const submit = async () => {
-    const material = { courseId: course.id, filename: chosenName ?? "material.pdf", type, assigned, due, reflect };
+    const material = { id: crypto.randomUUID(), courseId: course.id, filename: chosenName ?? "material.pdf", type, assigned, due, reflect };
     if (!doc || !connected) {
       addMaterial(material);
       router.push(due ? "/calendar" : `/course/${course.slug}`);
       return;
     }
-    setPhase({ kind: "extracting" });
+    setPhase({ kind: "working", message: "Starting…" });
     try {
-      const existingTopics = course.topics.map((t) => t.name);
-      let extraction: Extraction;
-      if (ownModel && PROVIDERS[llm.provider].browserOnly) {
-        const text = await compatChat(llm, EXTRACTION_SYSTEM, [{ role: "user", content: extractionPrompt(course, doc, existingTopics) }], { maxTokens: 16000, json: true });
-        extraction = parseExtraction(text);
-      } else {
-        const res = await fetch("/api/extract", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ llm: ownModel ? llm : null, course: { name: course.name, short: course.short }, existingTopics, document: doc }),
-        });
-        const data = (await res.json()) as { extraction?: Extraction; error?: string };
-        if (!res.ok || !data.extraction) throw new Error(data.error ?? "Extraction failed.");
-        extraction = data.extraction;
-      }
-      // Cut the figures the questions depend on straight from the PDF, in the browser.
-      const figures: Record<number, string> = {};
-      if (file) {
-        const slides = Array.from(new Set(extraction.questions.map((q) => q.figureSlide).filter((n): n is number => typeof n === "number" && n >= 1 && n <= doc.pages.length))).slice(0, 12);
-        for (const n of slides) {
-          try {
-            figures[n] = await renderPdfSlide(file, n);
-          } catch (error) {
-            console.warn(`Could not render slide ${n} for a figure`, error); // a missing figure is not fatal
-          }
-        }
-      }
-      const result = importExtraction(course.id, material, extraction, figures);
-      setPhase({ kind: "done", topics: result.topicsAdded, questions: result.questionsAdded });
+      const plan = await runUpload(
+        {
+          course: { id: course.id, name: course.name, short: course.short, topics: course.topics },
+          objectives: objectives[course.id] ?? {},
+          bank: questionBank[course.id] ?? {},
+          relations: relations[course.id] ?? [],
+          material,
+          pages: doc.pages,
+          runId: crypto.randomUUID(),
+          model: ownModel ? llm.model : (serverModel ?? "unknown"),
+          now: new Date().toISOString(),
+        },
+        {
+          call: pipelineCaller(llm),
+          newId: () => crypto.randomUUID(),
+          renderFigure: file ? (n) => (n <= doc.pages.length ? renderPdfSlide(file, n) : Promise.resolve(null)) : undefined,
+          onProgress: (p) => setPhase({ kind: "working", message: progressMessage(p) }),
+        },
+      );
+      addMaterial(material);
+      applyUpload(course.id, plan);
+      setPhase({ kind: "done", topics: plan.newTopics.length, objectives: plan.newObjectives.length, questions: plan.run.questionsAdded });
       window.setTimeout(() => router.push(`/course/${course.slug}`), 1400);
     } catch (error) {
-      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Extraction failed." });
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "The upload failed." });
     }
   };
 
@@ -310,7 +319,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             </Card>
 
             <Button full onClick={submit} disabled={busy || !chosenName}>
-              {phase.kind === "extracting"
+              {phase.kind === "working"
                 ? `Building ${course.short} from ${doc?.pages.length ?? ""} slides…`
                 : connected && doc
                   ? `Add to ${course.short} and generate quizzes`
@@ -318,14 +327,14 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             </Button>
 
             <AnimatePresence mode="wait">
-              {phase.kind === "extracting" && (
-                <motion.span key="x" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[13px] font-semibold text-wisteria-deep">
-                  This takes about a minute. Orca is reading every slide and writing questions grounded in them.
+              {phase.kind === "working" && (
+                <motion.span key="x" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[13px] font-semibold text-wisteria-deep" role="status">
+                  {phase.message} This takes a few minutes: every question is checked before you see it.
                 </motion.span>
               )}
               {phase.kind === "done" && (
                 <motion.span key="d" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-wisteria-deep">
-                  Added {phase.topics} topic{phase.topics === 1 ? "" : "s"} and {phase.questions} question{phase.questions === 1 ? "" : "s"}. Opening the path…
+                  Added {phase.topics} topic{phase.topics === 1 ? "" : "s"}, {phase.objectives} objective{phase.objectives === 1 ? "" : "s"} and {phase.questions} question{phase.questions === 1 ? "" : "s"}. Opening the path…
                 </motion.span>
               )}
               {phase.kind === "error" && (
