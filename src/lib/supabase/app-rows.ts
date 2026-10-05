@@ -286,13 +286,15 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     due: m.due,
     reflect: m.reflect,
     reflection: json(m.reflection ?? null),
-    // Read in the browser for now (Task 6 moves files to Storage and reading to the server).
+    // A material saved from the browser is a record without a file (a file Orca can't read yet).
+    // Uploaded PDFs are inserted by POST /api/materials and read on the server.
     storage_path: null,
     content_hash: null,
     size_bytes: null,
     mime: null,
     status: "ready",
     error: null,
+    hidden_text: null,
   };
 }
 
@@ -306,6 +308,7 @@ export function materialFromRow(r: Row<"materials">): Material {
     due: r.due,
     reflect: r.reflect,
     ...(r.reflection !== null ? { reflection: r.reflection as unknown as NonNullable<Material["reflection"]> } : {}),
+    ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<Material["hiddenText"]> } : {}),
   };
 }
 
@@ -404,7 +407,8 @@ export function loadedState(d: MyData): LoadedState {
     questionBank,
     relations,
     runs: d.runs.map(runFromRow),
-    materials: d.materials.map(materialFromRow),
+    // An upload still on its way (or one whose file couldn't be read) isn't part of the course yet.
+    materials: d.materials.filter((m) => m.status === "ready").map(materialFromRow),
     results: d.sessions.map(sessionFromRow),
     events: d.calendar.map(calendarFromRow),
     evidence: d.evidence.map(eventFromRow),

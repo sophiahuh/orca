@@ -63,4 +63,8 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.deepEqual(s.questionBank.c.t1.map((q) => q.id), ["q1", "q2"]);
   assert.deepEqual(s.relations.c, []);
   assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], review_config: { quick: "daily" } }] }), "a malformed config is refused, not shown");
+
+  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, created_at: owned.created_at };
+  const withFiles = loadedState({ ...data, materials: [material, { ...material, id: "m2", status: "uploaded", hidden_text: null }, { ...material, id: "m3", status: "failed", error: "unreadable" }] });
+  assert.deepEqual(withFiles.materials.map((m) => [m.id, m.hiddenText]), [["m", { items: 2, pages: [3] }]], "only read uploads are part of the course; the hidden-text record comes along");
 });

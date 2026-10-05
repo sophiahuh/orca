@@ -120,6 +120,8 @@ export interface Material {
   reflect: boolean;
   /** The student's reflection, once given: their note and the objectives they confirmed it was about. */
   reflection?: { at: string; note: string; objectiveIds: string[] };
+  /** Text hidden in the file (drawn too small to see) that the server dropped when reading it. */
+  hiddenText?: { items: number; pages: number[] };
 }
 
 /** The topics a student sees: everything except archived (rejected or merged-away) ones. */
