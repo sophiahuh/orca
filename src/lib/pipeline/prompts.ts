@@ -74,7 +74,7 @@ ${UNTRUSTED_POLICY}
 ${MATERIAL_RULES}
 
 Definitions:
-- A topic is something a student would review as a unit (2 to 6 per lecture). Skip logistics.
+- A topic is something a student would review as a unit (2 to 6 per lecture). Use clear, course-specific concepts at the granularity of "Derivatives", "Integrals", or "L'Hopital's rule" in Calculus—not a whole course area ("Calculus") and not a single assessable procedure. Skip logistics.
 - An objective is one "can do X" skill a question can test, e.g. "Convert between decimal and n-bit 2's complement". One skill per objective; 2 to 6 per topic.
 - A place is somewhere the material genuinely teaches or uses the objective (a slide or section on it, a worked example, a problem that requires it), cited by locator ("slide 14") and a short excerpt. A passing mention is not a place.
 - origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. Use it sparingly.
