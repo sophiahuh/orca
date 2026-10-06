@@ -32,22 +32,22 @@ export default function SettingsPage() {
 
   return (
     <Screen bg="ocean" className="overflow-auto">
-      <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
+      <header className="flex items-center gap-[12px] px-[24px] pt-[20px]">
         <BackButton />
         <h1 className="text-[46px] font-bold leading-none text-prussian">Settings</h1>
       </header>
 
-      <div className="grid min-w-[1524px] grid-cols-[640px_418px_418px] items-start gap-[24px] px-[40px] pb-[48px] pt-[36px]">
+      <div className="grid min-w-[1384px] grid-cols-[600px_380px_380px] items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]">
         {/* Only once loaded: an edit made before the load lands would be overwritten on screen by it. */}
         {hydrated && (
-        <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex w-[640px] max-w-full flex-col gap-[24px]">
+        <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex w-[600px] max-w-full flex-col gap-[12px]">
           <motion.div variants={fadeUp}>
-            <Card className="flex flex-col gap-[18px] px-[28px] pb-[28px] pt-[24px]" data-part="default-config">
+            <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]" data-part="default-config">
               <div className="flex flex-col gap-[4px]">
                 <h2 className="text-[22px] font-bold text-prussian">Default Review Settings</h2>
                 <p className="text-[14px] font-medium text-wisteria-deep">Used by every course unless overridden by that course&apos;s own configurations.</p>
               </div>
-              <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[14px]">
+              <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[10px]">
                 {(["quick", "deep", "exam"] as const).map((k) => (
                   <ConfigRow key={k} label={REVIEW_LABELS[k]} row={draftConfig[k]} onChange={(row) => { setDraft({ config: { ...draftConfig, [k]: row }, weights: draftWeights }); setSaved(false); }} />
                 ))}
@@ -55,7 +55,7 @@ export default function SettingsPage() {
             </Card>
           </motion.div>
           <motion.div variants={fadeUp}>
-            <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[24px]">
+            <Card className="flex flex-col gap-[12px] px-[24px] pb-[20px] pt-[20px]">
               <div className="flex flex-col gap-[4px]">
                 <h2 className="text-[22px] font-bold text-prussian">Account weights</h2>
                 <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes unless a course overrides its own weights.</p>
@@ -70,10 +70,10 @@ export default function SettingsPage() {
         </motion.div>
         )}
 
-        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full">
+        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[380px] max-w-full">
           <AccountCard />
         </motion.div>
-        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full">
+        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[380px] max-w-full">
           <YourMetricsCard />
         </motion.div>
         {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with

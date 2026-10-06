@@ -74,7 +74,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
       {course && (
         <motion.div
           key="overlay"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-prussian/70 p-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-prussian/70 p-4"
           variants={overlayFade}
           initial="hidden"
           animate="show"
@@ -90,27 +90,27 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
             animate="show"
             exit="exit"
             onClick={(e) => e.stopPropagation()}
-            className="relative flex max-h-full w-[980px] max-w-full flex-col overflow-y-auto rounded-[32px] bg-parchment px-[36px] pb-[32px] pt-[36px] lip-8 lip-alice"
+            className="relative flex max-h-full w-[920px] max-w-full flex-col overflow-auto rounded-[28px] bg-parchment px-[24px] pb-[20px] pt-[24px] lip-8 lip-alice"
           >
-            <RoundButton size={44} label="Close" onClick={dismiss} className="absolute right-[24px] top-[24px]">
+            <RoundButton size={44} label="Close" onClick={dismiss} className="absolute right-[16px] top-[16px]">
               <IconClose size={20} />
             </RoundButton>
 
             <h2 id="config-title" className="text-[28px] font-semibold text-prussian">
               {course.name} Configurations
             </h2>
-            <p className="mt-[10px] text-[15px] font-medium text-wisteria-deep">
+            <p className="mt-[6px] text-[15px] font-medium text-wisteria-deep">
               This course inherits your account settings until you make an override here. Course overrides take priority.
             </p>
 
-            <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="mt-[28px] flex flex-wrap items-start gap-[24px]">
-              <motion.div variants={popIn} className="flex w-[580px] max-w-full flex-1 flex-col gap-[24px]">
-                <Card className="flex flex-col gap-[18px] px-[28px] pb-[28px] pt-[24px]">
+            <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="mt-[16px] flex min-w-[848px] flex-nowrap items-start gap-[12px]">
+              <motion.div variants={popIn} className="flex w-[560px] flex-col gap-[12px]">
+                <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]">
                   <div className="flex flex-col gap-[4px]">
                     <h3 className="text-[22px] font-bold text-prussian">Review preferences</h3>
                     <p className="text-[14px] font-medium text-wisteria-deep">How often Orca should nudge you, and for how long. Editing creates a course override.</p>
                   </div>
-                  <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[14px]">
+                  <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[10px]">
                     {(["quick", "deep", "exam"] as const).map((k) => (
                       <ConfigRow key={k} label={REVIEW_LABELS[k]} row={config[k]} onChange={(row) => changeConfig({ ...config, [k]: row })} />
                     ))}
@@ -122,7 +122,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                   )}
                 </Card>
 
-                <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[24px]">
+                <Card className="flex flex-col gap-[12px] px-[24px] pb-[20px] pt-[20px]">
                   <div className="flex flex-col gap-[4px]">
                     <h3 className="text-[22px] font-bold text-prussian">Course weights</h3>
                     <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes when it builds reviews for this course.</p>
@@ -136,8 +136,8 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                 </Card>
               </motion.div>
 
-              <motion.div variants={popIn} className="w-[280px] max-w-full">
-                <Card className="flex flex-col gap-[8px] px-[24px] py-[24px]" tone="alice" lip={4}>
+              <motion.div variants={popIn} className="w-[276px]">
+                <Card className="flex flex-col gap-[8px] px-[20px] py-[20px]" tone="alice" lip={4}>
                   <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course overrides</p>
                   <h3 className="text-[22px] font-bold leading-tight text-prussian">{course.name}</h3>
                   <p className="pt-[4px] text-[14px] font-medium leading-relaxed text-wisteria-deep">
@@ -147,7 +147,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
               </motion.div>
             </motion.div>
 
-            <div className="mt-auto flex items-center justify-end gap-[12px] pt-[32px]">
+            <div className="mt-auto flex items-center justify-end gap-[12px] pt-[20px]">
               {saved && <span className="text-[14px] font-semibold text-good-deep">Saved</span>}
               <Button size="sm" onClick={save}>
                 Save
