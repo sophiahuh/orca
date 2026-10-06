@@ -13,6 +13,8 @@ test("the display percent climbs with credit before mastery and follows recall a
   assert.equal(masteryPercent({ ...base, status: "mixed-up", credit: 3 }), 40);
   assert.equal(masteryPercent({ ...base, status: "mastered", recall: 0.93 }), 93);
   assert.equal(masteryPercent({ ...base, status: "fading", recall: 0.52 }), 52);
+  // A missed check: FSRS's recall is ~100% right after the answer, but the display drops under the line.
+  assert.equal(masteryPercent({ ...base, status: "fading", recall: 0.999 }), 80, "a miss never reads as a rise");
   assert.equal(masteryPercent({ ...base, status: "retired", recall: null }), 100);
 });
 
