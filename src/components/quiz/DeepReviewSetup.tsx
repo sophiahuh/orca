@@ -44,7 +44,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
       </header>
 
       <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="mx-auto flex w-[760px] max-w-full flex-col items-center gap-[24px] px-[28px] py-[28px] text-center">
-        <motion.div variants={fadeUp} className="flex flex-wrap items-center justify-center gap-[12px]">
+        <motion.div variants={fadeUp} className="flex items-center justify-center gap-[12px]">
           {DEEP_MINUTE_PRESETS.map((m) => (
             <Chip
               key={m}
@@ -61,7 +61,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
               {m} min
             </Chip>
           ))}
-          <label className="flex items-center gap-[8px] text-[15px] font-bold text-prussian">
+          <label className="flex shrink-0 items-center gap-[8px] whitespace-nowrap text-[15px] font-bold text-prussian">
             Other
             <input
               type="number"

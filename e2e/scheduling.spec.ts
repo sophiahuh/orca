@@ -176,19 +176,19 @@ test.describe("scheduling", () => {
     await card.click();
     await expect(page).toHaveURL(/kind=deep/);
 
-    // The student picks the length and starts; nothing is listed ahead. 15 minutes is 4 questions (4 minutes each).
+    // The student picks the length and starts; nothing is listed ahead. 20 minutes is 5 questions (4 minutes each).
     await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toBeVisible();
     await expect(page.locator('[data-part="deep-plan"]')).toHaveCount(0);
-    await page.locator('[data-part="deep-minutes"][data-minutes="15"]').click();
+    await page.locator('[data-part="deep-minutes"][data-minutes="20"]').click();
     await page.locator('[data-part="deep-start"]').click();
-    await expect(page.getByText("1 / 4")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("1 / 5")).toBeVisible({ timeout: 30_000 });
     // One call per topic (the fixture has two), all through the deep step; nothing checks them after.
     expect(await fakeCalls()).toEqual(["deep", "deep"]);
     await expect(page.locator("h1").first()).toContainText("deep case");
 
     const state = await stored(page, student);
     const deep = Object.values(state.questionBank[F.course]).flat().filter((q) => q.deep);
-    expect(deep).toHaveLength(4);
+    expect(deep).toHaveLength(5);
     expect(new Set(deep.map((q) => q.objectiveId))).toEqual(new Set([F.simplify, F.convert, F.signExtend]));
     await answerAll(page, true);
 

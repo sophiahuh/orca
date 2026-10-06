@@ -12,7 +12,7 @@ export const DEEP_RULES = {
 /** The longest deep review that can be filled: every question it may write. */
 export const DEEP_MAX_MINUTES = (DEEP_RULES.maxQuestions * DEEP_RULES.questionSeconds) / 60;
 
-export const DEEP_MINUTE_PRESETS = [10, 15, 20, 30, 45, 60] as const;
+export const DEEP_MINUTE_PRESETS = [10, 20, 30, 45, 60] as const;
 
 /** How many questions a deep review of `minutes` gets: its length over a question's time, at least one. */
 export function deepQuestionCount(minutes: number): number {
