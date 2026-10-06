@@ -80,7 +80,7 @@ export function objectiveWeight(o: Objective, buildsOn: number, weights: Weights
 const live = (o: Objective | undefined): o is Objective => !!o && o.review !== "archived";
 
 /** A topic's survivor (following merges); null for an unknown id. */
-function survivingTopic(id: string, byId: ReadonlyMap<string, Topic>): Topic | null {
+export function survivingTopic(id: string, byId: ReadonlyMap<string, Topic>): Topic | null {
   let t = byId.get(id);
   for (let i = 0; i < 50 && t?.mergedInto; i++) t = byId.get(t.mergedInto);
   return t ?? null;

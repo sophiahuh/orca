@@ -1,39 +1,35 @@
 import { F, FIXTURE_STATE, expect, seedState, test } from "./fixture";
 
 /**
- * The Concept Atlas (Figma: 12 · Concept Atlas): a course's objectives on their unit rings and the
- * concept panel for a selected one, whose button starts the topic's quiz. Relations link topics
- * since 2026-10-06; the Atlas draws them once its nodes are topics.
+ * The Concept Atlas (Figma: E1/E2 · Concept graph v4): the course's topics as nodes, its topic
+ * relations as edges, foundations on top; hovering a topic lights its edges and shows a tooltip,
+ * clicking opens its quiz.
  */
 const SLUG = FIXTURE_STATE.courses[0].slug;
 
-test("the atlas maps the course's concepts, and a selected concept opens its panel", async ({ page, student }) => {
-  await seedState(student, FIXTURE_STATE);
+test("the atlas draws topics and their links, foundations on top; hovering explains a topic and clicking opens it", async ({ page, student }) => {
+  await seedState(student, {
+    ...FIXTURE_STATE,
+    relations: { [F.course]: [{ id: crypto.randomUUID(), from: F.booleanAlgebra, to: F.twosComplement, type: "used-in", anchor: null, review: "proposed", materialId: F.material }] },
+  });
   await page.goto(`/course/${SLUG}/atlas`);
-  await expect(page.locator("[data-part=atlas-summary]")).toHaveText("LOG · 3 concepts across 2 units");
-  await expect(page.locator("[data-part=concept]")).toHaveCount(3);
-  await expect(page.locator("[data-part=unit-label]")).toHaveCount(2);
-  // Nothing answered yet: every concept is not started, and the rail still shows what's due.
-  await expect(page.locator("[data-part=concept][data-mastery=not-started]")).toHaveCount(3);
+  await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 1 connection");
+  await expect(page.locator("[data-part=topic]")).toHaveCount(2);
+  await expect(page.locator("[data-part=edge][data-type=used-in]")).toHaveCount(1);
+  // Nothing answered yet: both unverified. The topic used in another sits above it.
+  await expect(page.locator("[data-part=topic][data-strength=unverified]")).toHaveCount(2);
+  const top = await page.locator(`[data-topic="${F.booleanAlgebra}"]`).boundingBox();
+  const below = await page.locator(`[data-topic="${F.twosComplement}"]`).boundingBox();
+  expect(top!.y).toBeLessThan(below!.y);
   await expect(page.getByRole("heading", { name: "Due today" })).toBeVisible();
 
-  await page.locator(`[data-concept="${F.convert}"]`).click();
-  const panel = page.locator("[data-part=concept-panel]");
-  await expect(panel.getByRole("heading", { name: "Convert to 2's complement" })).toBeVisible();
-  await expect(panel).toContainText("Unit 2 · Two's Complement");
-  await expect(panel.locator("[data-part=concept-numbers]")).toHaveText("0% mastered · 0 of 3 questions");
-  // The rest of the map dims (relations link topics now, so concepts have no links to light up).
-  await expect(page.locator(`[data-concept="${F.signExtend}"]`)).toHaveCSS("opacity", "0.3");
+  await page.locator(`[data-topic="${F.booleanAlgebra}"]`).hover();
+  await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Boolean Algebra · Unverified");
+  await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Used in 1 · click to open");
+  await expect(page.locator("[data-part=edge-label]")).toHaveText("used in");
 
-  // Esc clears the selection.
-  await page.keyboard.press("Escape");
-  await expect(panel).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Due today" })).toBeVisible();
-
-  // The one action starts the existing study flow: the unit's quiz.
-  await page.locator(`[data-concept="${F.convert}"]`).click();
-  await panel.locator("[data-part=review-concept]").click();
-  await expect(page).toHaveURL(new RegExp(`/quiz/${SLUG}/${F.twosComplement}`));
+  await page.locator(`[data-topic="${F.booleanAlgebra}"]`).click();
+  await expect(page).toHaveURL(new RegExp(`/quiz/${SLUG}/${F.booleanAlgebra}`));
 });
 
 test("the course page switches between Path and Atlas", async ({ page, student }) => {
@@ -41,7 +37,7 @@ test("the course page switches between Path and Atlas", async ({ page, student }
   await page.goto(`/course/${SLUG}`);
   await page.locator("[data-part=atlas-switch]").getByRole("link", { name: "Atlas" }).click();
   await expect(page).toHaveURL(new RegExp(`/course/${SLUG}/atlas$`));
-  await expect(page.getByRole("heading", { name: "Concept Atlas" })).toBeVisible();
+  await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 0 connections · upload more material to connect them");
   await page.locator("[data-part=atlas-switch]").getByRole("link", { name: "Path" }).click();
   await expect(page).toHaveURL(new RegExp(`/course/${SLUG}$`));
 });
