@@ -34,7 +34,7 @@ export default function SettingsPage() {
     <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton />
-        <h1 className="text-[46px] font-bold leading-none text-prussian">Configurations</h1>
+        <h1 className="text-[46px] font-bold leading-none text-prussian">Settings</h1>
       </header>
 
       <div className="flex flex-wrap items-start gap-[24px] px-[40px] pb-[48px] pt-[36px]">

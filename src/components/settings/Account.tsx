@@ -17,8 +17,16 @@ function zones(current: string): string[] {
 /** Who is signed in, their sea buddy, their timezone (every day boundary uses it), and sign out. */
 export function AccountCard() {
   // The timezone and avatar live in the store; a failed save shows there.
-  const { timezone, setTimezone, avatar, setAvatar, name, hydrated } = useOrca();
+  const { timezone, setTimezone, avatar, setAvatar, name, setName, hydrated } = useOrca();
   const [email, setEmail] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [username, setUsername] = useState("");
+  const [nextEmail, setNextEmail] = useState("");
+  const [nextPhone, setNextPhone] = useState("");
+  const [phoneCode, setPhoneCode] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [changingPhone, setChangingPhone] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,20 +36,105 @@ export function AccountCard() {
       if (!live) return;
       if (!auth.user) return setProblem("Couldn't read your account.");
       setEmail(auth.user.email ?? "");
+      setPhone(auth.user.phone ?? "");
+      setUsername(name ?? "");
     })();
     return () => {
       live = false;
     };
-  }, []);
+  }, [name]);
+
+  const saveUsername = () => {
+    try {
+      setName(username);
+      setNotice("Username saved.");
+      setProblem(null);
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : "Couldn't save your username.");
+    }
+  };
+
+  const requestEmailChange = async () => {
+    const value = nextEmail.trim();
+    if (!value || value === email) return setProblem("Enter a different email address.");
+    setChangingEmail(true);
+    setProblem(null);
+    setNotice(null);
+    const { error } = await browserSupabase().auth.updateUser({ email: value }, { emailRedirectTo: `${window.location.origin}/auth/callback?next=/settings` });
+    setChangingEmail(false);
+    if (error) return setProblem(error.message);
+    setNotice("Check your current and new inboxes to confirm the email change. Your email stays the same until it is confirmed.");
+  };
+
+  const requestPhoneChange = async () => {
+    const value = nextPhone.trim();
+    if (!value) return setProblem("Enter a phone number with its country code, for example +12125551212.");
+    setChangingPhone(true);
+    setProblem(null);
+    setNotice(null);
+    const { error } = await browserSupabase().auth.updateUser({ phone: value });
+    setChangingPhone(false);
+    if (error) return setProblem(error.message);
+    setPhoneCode("");
+    setNotice("We sent a confirmation code to that phone number. Enter it below to finish the change.");
+  };
+
+  const confirmPhoneChange = async () => {
+    const value = nextPhone.trim();
+    if (!value || !phoneCode.trim()) return setProblem("Enter the phone number and confirmation code.");
+    setChangingPhone(true);
+    setProblem(null);
+    const { error } = await browserSupabase().auth.verifyOtp({ phone: value, token: phoneCode.trim(), type: "phone_change" });
+    setChangingPhone(false);
+    if (error) return setProblem(error.message);
+    setPhone(value);
+    setNextPhone("");
+    setPhoneCode("");
+    setNotice("Phone number confirmed.");
+  };
 
   return (
     <Card className="flex flex-col gap-[14px] px-[28px] pb-[24px] pt-[24px]">
       <h2 className="text-[22px] font-bold text-prussian">Account</h2>
       {email !== null && hydrated && (
         <>
-          <p data-part="account-email" className="text-[15px] font-semibold text-prussian">
-            {name ? `${name} · ${email}` : email}
-          </p>
+          <div className="flex flex-col gap-[8px]">
+            <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
+              Username
+              <div className="flex gap-[8px]">
+                <input value={username} onChange={(e) => { setUsername(e.target.value); setNotice(null); }} maxLength={80} autoComplete="username" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
+                <Button size="sm" onClick={saveUsername} disabled={!username.trim() || username.trim() === (name ?? "")}>Save</Button>
+              </div>
+            </label>
+          </div>
+          <div className="flex flex-col gap-[8px]">
+            <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
+              Email
+              <input data-part="account-email" value={email} readOnly aria-label="Current email" className="rounded-[10px] border-2 border-alice-deep bg-alice px-[10px] py-[8px] text-[14px] font-medium text-prussian" />
+            </label>
+            <div className="flex gap-[8px]">
+              <input value={nextEmail} onChange={(e) => { setNextEmail(e.target.value); setNotice(null); }} type="email" autoComplete="email" placeholder="New email address" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
+              <Button size="sm" onClick={() => void requestEmailChange()} disabled={changingEmail || !nextEmail.trim()}>Verify</Button>
+            </div>
+            <span className="text-[12px] leading-snug text-wisteria-deep">Changing email requires confirmation from your inbox before it takes effect.</span>
+          </div>
+          <div className="flex flex-col gap-[8px]">
+            <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
+              Phone number
+              <input value={phone ?? ""} readOnly aria-label="Current phone number" placeholder="No phone number added" className="rounded-[10px] border-2 border-alice-deep bg-alice px-[10px] py-[8px] text-[14px] font-medium text-prussian placeholder:text-wisteria-deep" />
+            </label>
+            <div className="flex gap-[8px]">
+              <input value={nextPhone} onChange={(e) => { setNextPhone(e.target.value); setPhoneCode(""); setNotice(null); }} type="tel" autoComplete="tel" placeholder="+1 212 555 1212" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
+              <Button size="sm" onClick={() => void requestPhoneChange()} disabled={changingPhone || !nextPhone.trim()}>Send code</Button>
+            </div>
+            {notice?.startsWith("We sent") && (
+              <div className="flex gap-[8px]">
+                <input value={phoneCode} onChange={(e) => setPhoneCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="Confirmation code" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
+                <Button size="sm" onClick={() => void confirmPhoneChange()} disabled={changingPhone || !phoneCode.trim()}>Confirm</Button>
+              </div>
+            )}
+            <span className="text-[12px] leading-snug text-wisteria-deep">A confirmation code is required before a new phone number is saved.</span>
+          </div>
           <div className="flex flex-col gap-[8px]">
             <span className="text-[14px] font-bold text-prussian">Sea buddy</span>
             <AvatarPicker value={avatar} onChange={setAvatar} compact className="items-start" />
@@ -53,6 +146,7 @@ export function AccountCard() {
           <p className="-mt-[6px] text-[13px] text-wisteria-deep">Streaks and due dates change over at midnight here.</p>
         </>
       )}
+      {notice && <p role="status" className="text-[13px] font-semibold text-good-deep">{notice}</p>}
       {problem && <p role="alert" className="text-[13px] font-semibold text-prussian">{problem}</p>}
       <form action={signOut}>
         <Button variant="secondary" size="sm" type="submit">

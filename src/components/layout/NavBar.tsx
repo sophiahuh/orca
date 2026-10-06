@@ -11,7 +11,7 @@ import { cn } from "@/lib/cn";
 const ITEMS = [
   { href: "/calendar", label: "Calendar", Icon: IconCalendar },
   { href: "/add-material", label: "Add material", Icon: IconUpload },
-  { href: "/settings", label: "Configurations", Icon: IconGear },
+  { href: "/settings", label: "Settings", Icon: IconGear },
 ] as const;
 
 const BUTTON = "pressable inline-flex h-[48px] w-[48px] items-center justify-center rounded-[18px] border-2 lip-4";

@@ -164,6 +164,8 @@ interface OrcaActions {
   /** A homework reflection: one confusion event per objective the student confirmed, and the note kept on the material. */
   recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note">>) => void;
   setOnboarded: (v: boolean) => void;
+  /** The student's display name (profile), independent of the sign-in email. */
+  setName: (name: string) => void;
   setTimezone: (timezone: string) => void;
   setAvatar: (avatar: AvatarId) => void;
   setLlm: (c: LlmConfig | null) => void;
@@ -713,6 +715,20 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  const setName = useCallback<OrcaActions["setName"]>(
+    (name) => {
+      const clean = name.trim();
+      if (!clean) throw new Error("A username is required.");
+      setState((s) => ({ ...s, name: clean }));
+      save(async () => {
+        const { data } = await browserSupabase().auth.getSession();
+        if (!data.session) throw new Error("you're signed out");
+        mustChange(await browserSupabase().from("profiles").update({ name: clean }).eq("owner_id", data.session.user.id).select("owner_id"));
+      });
+    },
+    [save],
+  );
+
   const setTimezone = useCallback(
     (timezone: string) => {
       setState((s) => ({ ...s, timezone }));
@@ -815,6 +831,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       recordEvidence,
       recordReflection,
       setOnboarded,
+      setName,
       setTimezone,
       setAvatar,
       setLlm,
@@ -824,7 +841,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
