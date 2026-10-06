@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { WeightsEditor } from "@/components/config/WeightsEditor";
 import { AccountCard } from "@/components/settings/Account";
+import { YourMetricsCard } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
 
 /**
@@ -53,6 +54,9 @@ export default function SettingsPage() {
         <motion.div variants={stagger(0.1, 0.08)} initial="hidden" animate="show" className="flex w-[418px] max-w-full flex-col gap-[24px]">
           <motion.div variants={fadeUp}>
             <AccountCard />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <YourMetricsCard />
           </motion.div>
           {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
               Orca's key only (Phase 4, decision 9). Its code stays until "Bring-your-own model" is decided. */}
