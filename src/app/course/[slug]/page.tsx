@@ -70,7 +70,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
             {done} of {total} topics complete
           </motion.p>
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
-            <ProgressBar value={pct} height={12} label="Course progress" />
+            <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />
           </motion.div>
           <motion.nav variants={fadeUp} aria-label="Course structure" className="mt-[4px] flex items-center gap-[10px]">
             <AtlasSwitch slug={course.slug} current="path" />

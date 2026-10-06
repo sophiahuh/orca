@@ -19,7 +19,7 @@ export default function HomePage() {
   const dueCount = (courseId: string) => todos.filter((d) => d.courseId === courseId && d.when === "today").length;
 
   return (
-    <AppShell bg="parchment">
+    <AppShell bg="ocean">
       <KnowledgeMap courses={courses} dueCount={dueCount} onConfigure={setConfiguring} />
 
       {hydrated && courses.length === 0 && (

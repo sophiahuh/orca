@@ -48,16 +48,18 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, plan
 
   return (
     <Screen bg="ocean" className="overflow-y-auto">
-      <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
-        <BackButton href={backHref} />
-        <div className="flex flex-col gap-[4px]">
+      <header className="relative flex justify-center px-[100px] pt-[28px] text-center">
+        <div className="absolute left-[28px] top-[28px]">
+          <BackButton href={backHref} />
+        </div>
+        <div className="flex flex-col items-center gap-[4px]">
           <span className="eyebrow">Deep review · {courseName}</span>
           <h1 className="text-[40px] font-bold leading-none text-prussian">How long do you want to study?</h1>
         </div>
       </header>
 
-      <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="flex w-[760px] max-w-full flex-col gap-[20px] px-[28px] py-[28px]">
-        <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-[12px]">
+      <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="mx-auto flex w-[760px] max-w-full flex-col items-center gap-[20px] px-[28px] py-[28px] text-center">
+        <motion.div variants={fadeUp} className="flex flex-wrap items-center justify-center gap-[12px]">
           {DEEP_MINUTE_PRESETS.map((m) => (
             <Chip
               key={m}
@@ -91,7 +93,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, plan
         </motion.div>
 
         <motion.div variants={fadeUp}>
-          <Card radius={22} lip={5} className="flex flex-col gap-[10px] px-[24px] py-[20px] text-prussian" data-part="deep-plan">
+          <Card radius={22} lip={5} className="flex flex-col items-center gap-[10px] px-[24px] py-[20px] text-prussian" data-part="deep-plan">
             <p className="text-[22px] font-bold">
               {plan.questions} question{plan.questions === 1 ? "" : "s"} · about {minutesOf(plan.plannedSeconds)} min
             </p>
@@ -113,7 +115,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, plan
               </p>
             )}
             {plan.topics.length > 0 && (
-              <ul className="flex flex-wrap gap-[8px] pt-[4px]">
+              <ul className="flex flex-wrap justify-center gap-[8px] pt-[4px]">
                 {plan.topics.map((t) => (
                   <li key={t.name} className="rounded-pill bg-alice px-[12px] py-[6px] text-[14px] font-semibold text-prussian">
                     {t.name} · {t.questions}

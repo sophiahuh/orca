@@ -51,7 +51,7 @@ export function KnowledgeMap({ courses, dueCount, onConfigure }: {
         animate="show"
       >
         {WAVES.map((w, i) => (
-          <Wave key={i} tone="deep" x={w.x} y={w.y} width={w.w} seed={i} />
+          <Wave key={i} tone="light" x={w.x} y={w.y} width={w.w} seed={i} />
         ))}
 
         {courses.map((c, i) => (

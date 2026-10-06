@@ -81,7 +81,8 @@ export const swimOrca = {
 /** Halo pulse behind the current path node. */
 export const pulseHalo = {
   scale: [1, 1.12, 1],
-  opacity: [0.55, 0.3, 0.55],
+  // Near-solid alice so the halo reads on the ocean.
+  opacity: [0.95, 0.7, 0.95],
   transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" as const },
 };
 

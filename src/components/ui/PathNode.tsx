@@ -7,7 +7,7 @@ import { popIn, pulseHalo, springBouncy } from "@/lib/motion";
 
 /**
  * Figma: Knowledge Path node. done = periwinkle + check, current = large
- * wisteria + play with a pulsing halo and a START bubble (the first topic not
+ * wisteria + play with a pulsing alice halo and a START bubble (the first topic not
  * yet done), in-progress = parchment + small play with full-colour label, upcoming = parchment + small play with faded label. Topics are never locked.
  * Positioned absolutely by its centre inside the 854×834 path canvas.
  */
@@ -33,9 +33,9 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
 
   const face =
     visual === "done"
-      ? "bg-periwinkle border-periwinkle-deep text-prussian lip-periwinkle"
+      ? "bg-periwinkle border-periwinkle text-prussian lip-periwinkle"
       : visual === "current"
-        ? "bg-wisteria border-wisteria-deep text-parchment lip-wisteria"
+        ? "bg-wisteria border-wisteria text-parchment lip-wisteria"
         : "bg-parchment border-alice-deep text-periwinkle-deep lip-alice";
 
   return (
@@ -44,7 +44,7 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
         <motion.div
           data-part="halo"
           aria-hidden
-          className="absolute rounded-pill bg-periwinkle"
+          className="absolute rounded-pill bg-alice"
           style={{ width: HALO, height: HALO, left: -HALO / 2, top: -HALO / 2 }}
           animate={pulseHalo}
         />
