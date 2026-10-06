@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { BackButton } from "@/components/layout/BackButton";
 import { Screen } from "@/components/layout/Screen";
@@ -8,9 +9,18 @@ import { fadeUp, spin, stagger } from "@/lib/motion";
 
 /**
  * While a dive's questions are prepared (unanswered ones gathered, new ones written on the server),
- * then straight into the quiz. On failure it says why and offers to try again.
+ * then straight into the quiz. On failure it says why and offers to try again. A dive normally takes
+ * well under a minute; after two, it offers to cancel the stuck one and start again.
  */
-export function PreparingDive({ title, backHref, error, onRetry }: { title: string; backHref: string; error: string | null; onRetry: () => void }) {
+const SLOW_MS = 120_000;
+
+export function PreparingDive({ title, backHref, error, onRetry, onCancel }: { title: string; backHref: string; error: string | null; onRetry: () => void; onCancel?: () => void }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (error) return;
+    const id = window.setTimeout(() => setSlow(true), SLOW_MS);
+    return () => window.clearTimeout(id);
+  }, [error]);
   return (
     <Screen bg="ocean">
       <header className="px-[28px] pt-[28px]">
@@ -26,7 +36,14 @@ export function PreparingDive({ title, backHref, error, onRetry }: { title: stri
               {error}
             </motion.p>
             <motion.div variants={fadeUp}>
-              <Button onClick={onRetry}>Try again</Button>
+              <Button
+                onClick={() => {
+                  setSlow(false);
+                  onRetry();
+                }}
+              >
+                Try again
+              </Button>
             </motion.div>
           </>
         ) : (
@@ -38,6 +55,21 @@ export function PreparingDive({ title, backHref, error, onRetry }: { title: stri
             <motion.p variants={fadeUp} className="text-[15px] font-medium text-prussian">
               Harder questions on this, ready in a moment.
             </motion.p>
+            {slow && onCancel && (
+              <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex flex-col items-center gap-[8px] pt-[8px]" data-part="dive-slow">
+                <p className="text-[14px] font-medium text-prussian">This is taking longer than it should.</p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setSlow(false);
+                    onCancel();
+                  }}
+                >
+                  Cancel and try again
+                </Button>
+              </motion.div>
+            )}
           </>
         )}
       </motion.div>

@@ -83,3 +83,25 @@ test("Find connections links the course's topics with the link step and draws th
   await expect(page.locator("[data-part=find-connections-result]")).toHaveText("No new connections found.");
   await expect(page.locator("[data-part=edge]")).toHaveCount(1);
 });
+
+test("a stuck dive can be cancelled after two minutes and started again", async ({ page, student }) => {
+  await seedState(student, FIXTURE_STATE);
+  await seedPages(student, { [F.material]: [1, 2, 3, 4, 5].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
+  // The first dive's model call hangs, as if its job had died.
+  await fakeModel({ delayMs: 600_000 });
+  await page.clock.install();
+  await page.goto(`/session/${SLUG}?kind=deep&topic=${F.booleanAlgebra}&minutes=10`);
+  await expect(page.locator("[data-part=preparing-dive]")).toContainText("Preparing your quiz");
+  await expect(page.locator("[data-part=dive-slow]")).toHaveCount(0);
+  // The page follows the dive's run once the server has made it; two minutes after that, it offers to cancel.
+  await expect.poll(async () => (await student.db.from("pipeline_runs").select("status").eq("kind", "deep-review")).data!.map((r) => r.status)).toEqual(["running"]);
+  await page.waitForTimeout(500);
+  await page.clock.fastForward(121_000);
+  await expect(page.locator("[data-part=dive-slow]")).toBeVisible();
+
+  await fakeModel();
+  await page.getByRole("button", { name: "Cancel and try again" }).click();
+  await expect(page.getByText("1 / 3")).toBeVisible({ timeout: 30_000 });
+  const { data: runs } = await student.db.from("pipeline_runs").select("id, status").eq("kind", "deep-review").order("at");
+  expect(runs!.map((r) => r.status)).toEqual(["failed", "done"]);
+});

@@ -189,7 +189,12 @@ function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course
   // Once it's on its way (a topic dive from the start, a course dive after Start), only a loading
   // screen until the questions are ready, then the quiz. A topic dive's failure is shown there too.
   if (writing || (autostart && error)) {
-    return <PreparingDive title={topicName ?? course.name} backHref={backHref} error={writing ? null : error} onRetry={start} />;
+    // A stuck dive (its job died, e.g. on a server restart) can be cancelled and started again.
+    const cancelAndRetry = async () => {
+      await fetch("/api/deep-review/cancel", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId: course.id }) }).catch(() => undefined);
+      start();
+    };
+    return <PreparingDive title={topicName ?? course.name} backHref={backHref} error={writing ? null : error} onRetry={start} onCancel={() => void cancelAndRetry()} />;
   }
   return <DeepReviewSetup courseName={topicName ? `${course.name} · ${topicName}` : course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={writing} error={error} />;
 }
