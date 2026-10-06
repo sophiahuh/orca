@@ -70,11 +70,11 @@ export default function SettingsPage() {
         </motion.div>
         )}
 
-        <motion.div variants={stagger(0.1, 0.08)} initial="hidden" animate="show" className="flex w-[418px] max-w-full flex-col gap-[24px]">
-          <motion.div variants={fadeUp}>
+        <motion.div variants={stagger(0.1, 0.08)} initial="hidden" animate="show" className="flex w-[860px] max-w-full flex-col gap-[24px] min-[920px]:flex-row">
+          <motion.div variants={fadeUp} className="w-[418px] max-w-full">
             <AccountCard />
           </motion.div>
-          <motion.div variants={fadeUp}>
+          <motion.div variants={fadeUp} className="w-[418px] max-w-full">
             <YourMetricsCard />
           </motion.div>
           {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
