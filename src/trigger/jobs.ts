@@ -5,8 +5,8 @@
  * and the student can upload again. Deployed in Task 10 (`npx trigger.dev deploy`).
  */
 import { schedules, task } from "@trigger.dev/sdk";
-import { JOB_MAX_SECONDS, type MaterialJob, type TopUpJob } from "@/lib/jobs/start";
-import { runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
+import { JOB_MAX_SECONDS, type DeepReviewJob, type MaterialJob, type TopUpJob } from "@/lib/jobs/start";
+import { runDeepReviewJob, runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
 import { ownersWithPendingRuns, resumeNext } from "@/lib/server/jobs/start";
 import { adminClient } from "@/lib/supabase/server";
 
@@ -22,6 +22,13 @@ export const topUpTask = task({
   retry: { maxAttempts: 1 },
   maxDuration: JOB_MAX_SECONDS["top-up"],
   run: (payload: TopUpJob) => runTopUpJob(payload),
+});
+
+export const deepReviewTask = task({
+  id: "deep-review",
+  retry: { maxAttempts: 1 },
+  maxDuration: JOB_MAX_SECONDS["deep-review"],
+  run: (payload: DeepReviewJob) => runDeepReviewJob(payload),
 });
 
 /**

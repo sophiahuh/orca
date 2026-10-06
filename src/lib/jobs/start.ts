@@ -29,19 +29,31 @@ export interface TopUpJob {
   objectiveIds: string[];
 }
 
-export type Dispatch = { kind: "material"; job: MaterialJob } | { kind: "top-up"; job: TopUpJob };
+export interface DeepReviewJob {
+  ownerId: string;
+  runId: string;
+  objectiveIds: string[];
+  minutes: number;
+}
+
+export type Dispatch = { kind: "material"; job: MaterialJob } | { kind: "top-up"; job: TopUpJob } | { kind: "deep-review"; job: DeepReviewJob };
 
 /**
  * Longest a job may run, in seconds: the Trigger.dev tasks' `maxDuration` (an inline job is cut
  * off sooner, by its route's `maxDuration`).
  */
-export const JOB_MAX_SECONDS = { upload: 1800, "top-up": 900 } as const;
+export const JOB_MAX_SECONDS = { upload: 1800, "top-up": 900, "deep-review": 900 } as const;
 
 /** A running run claimed longer ago than this has died: its job's longest run plus a margin. */
-export const DEAD_RUN_MS = { upload: (JOB_MAX_SECONDS.upload + 600) * 1000, "top-up": (JOB_MAX_SECONDS["top-up"] + 600) * 1000 } as const;
+export const DEAD_RUN_MS = {
+  upload: (JOB_MAX_SECONDS.upload + 600) * 1000,
+  "top-up": (JOB_MAX_SECONDS["top-up"] + 600) * 1000,
+  "deep-review": (JOB_MAX_SECONDS["deep-review"] + 600) * 1000,
+} as const;
 
 export const DEAD_RUN_ERROR = "Orca's job stopped without finishing. Upload the file again to retry.";
 const DEAD_TOP_UP_ERROR = "Orca's job stopped without finishing.";
+const DEAD_DEEP_REVIEW_ERROR = "Orca couldn't finish preparing this Dive In. Try again.";
 
 export interface StartDeps {
   db: OrcaSupabase;
@@ -71,6 +83,7 @@ export type Generation =
   | { state: "no-text" };
 
 export type TopUpStart = { state: "started"; runId: string } | { state: "queued"; runId: string } | { state: "busy" } | { state: "no-model" } | { state: "no-session" };
+export type DeepReviewStart = { state: "started" | "running" | "queued" | "waiting"; runId: string } | { state: "no-model" } | { state: "no-course" };
 
 const LIVE = ["queued", "waiting", "running"] as const;
 
@@ -79,10 +92,10 @@ const UNIQUE_VIOLATION = "23505";
 /** Mark the student's dead runs failed: running (claimed) for longer than their job could run. */
 async function failDeadRuns(deps: StartDeps, ownerId: string): Promise<void> {
   const now = (deps.now?.() ?? new Date()).getTime();
-  for (const kind of ["upload", "top-up"] as const) {
+  for (const kind of ["upload", "top-up", "deep-review"] as const) {
     const { error } = await deps.db
       .from("pipeline_runs")
-      .update({ status: "failed", error: kind === "upload" ? DEAD_RUN_ERROR : DEAD_TOP_UP_ERROR, progress: null })
+      .update({ status: "failed", error: kind === "upload" ? DEAD_RUN_ERROR : kind === "top-up" ? DEAD_TOP_UP_ERROR : DEAD_DEEP_REVIEW_ERROR, progress: null })
       .eq("owner_id", ownerId)
       .eq("kind", kind)
       .eq("status", "running")
@@ -188,7 +201,7 @@ export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Disp
   await failDeadRuns(deps, ownerId);
   const { data: runs, error } = await db
     .from("pipeline_runs")
-    .select("id, kind, status, material_id, objective_ids")
+    .select("id, kind, status, material_id, objective_ids, deep_minutes")
     .eq("owner_id", ownerId)
     .in("status", [...LIVE])
     .order("at", { ascending: true });
@@ -208,7 +221,9 @@ export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Disp
     const d: Dispatch =
       r.kind === "upload"
         ? { kind: "material", job: { ownerId, runId: r.id, materialId: r.material_id! } }
-        : { kind: "top-up", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [] } };
+        : r.kind === "top-up"
+          ? { kind: "top-up", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [] } }
+          : { kind: "deep-review", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [], minutes: r.deep_minutes! } };
     // Back to queued (a waiting run) so the job can claim it; dispatch then runs it.
     const { error: requeue } = await db.from("pipeline_runs").update({ status: "queued", progress: null }).eq("owner_id", ownerId).eq("id", r.id).in("status", ["queued", "waiting"]);
     if (requeue) throw new Error(`Couldn't queue the run: ${requeue.message}`);
@@ -250,5 +265,50 @@ export async function startTopUpJob(deps: StartDeps, ownerId: string, req: { cou
   if (inserted.error) throw new Error(`Couldn't record the job: ${inserted.error.message}`);
   if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
   await handOff(deps, { kind: "top-up", job: { ownerId, runId, objectiveIds: req.objectiveIds } });
+  return { state: "started", runId };
+}
+
+/** Queue a Dive In. Its targets and duration live on the run so the browser may leave safely. */
+export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: { courseId: string; minutes: number; objectiveIds: string[] }): Promise<DeepReviewStart> {
+  const { db, model } = deps;
+  if (!model) return { state: "no-model" };
+  const { data: course, error: courseError } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", req.courseId).maybeSingle();
+  if (courseError) throw new Error(`Couldn't read the course: ${courseError.message}`);
+  if (!course) return { state: "no-course" };
+  await failDeadRuns(deps, ownerId);
+  const { data: prior, error: priorError } = await db
+    .from("pipeline_runs")
+    .select("id, status")
+    .eq("owner_id", ownerId)
+    .eq("course_id", req.courseId)
+    .eq("kind", "deep-review")
+    .in("status", [...LIVE])
+    .order("at", { ascending: false })
+    .limit(1);
+  if (priorError) throw new Error(`Couldn't read the course's Dive In: ${priorError.message}`);
+  const live = prior[0];
+  if (live) {
+    if (live.status === "running") return { state: "running", runId: live.id };
+    const next = await resumeNext(deps, ownerId);
+    return { state: next?.job.runId === live.id ? "started" : live.status === "waiting" ? "waiting" : "queued", runId: live.id };
+  }
+  const runId = deps.newId?.() ?? crypto.randomUUID();
+  const queueBehind = await hasJobInFlight(deps, ownerId);
+  const inserted = await db.from("pipeline_runs").insert({
+    id: runId,
+    owner_id: ownerId,
+    course_id: req.courseId,
+    material_id: null,
+    kind: "deep-review",
+    at: (deps.now?.() ?? new Date()).toISOString(),
+    model,
+    status: "queued",
+    objective_ids: req.objectiveIds,
+    deep_minutes: req.minutes,
+  });
+  if (inserted.error?.code === UNIQUE_VIOLATION) return startDeepReviewJob(deps, ownerId, req);
+  if (inserted.error) throw new Error(`Couldn't record the Dive In: ${inserted.error.message}`);
+  if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
+  await handOff(deps, { kind: "deep-review", job: { ownerId, runId, objectiveIds: req.objectiveIds, minutes: req.minutes } });
   return { state: "started", runId };
 }

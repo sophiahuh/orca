@@ -233,14 +233,18 @@ export type RunStatus = "queued" | "waiting" | "running" | "done" | "failed";
 
 export interface PipelineRun {
   id: string;
-  /** An upload, or questions topped up after a session (absent on older records: an upload). */
-  kind?: "upload" | "top-up";
+  /** An upload, a post-session top-up, or a durable Dive In (absent on older records: an upload). */
+  kind?: "upload" | "top-up" | "deep-review";
   courseId: string;
   /** The material it was built from. A top-up written from several materials (or none) names none. */
   materialId: string | null;
   /** ISO time. */
   at: string;
   model: string;
+  /** Requested duration for a durable deep-review run. */
+  deepMinutes?: number;
+  /** The exact questions a durable Dive In wrote, in the order it should ask them. */
+  questionIds?: string[];
   /** Where its job is (runs are written by the server's jobs): queued → running → done | failed. */
   status: RunStatus;
   /** While running: the stage it's at (`Progress` in pipeline/run.ts). */

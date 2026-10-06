@@ -15,7 +15,7 @@ export interface DeepReviewSetupProps {
   minutes: number;
   onMinutes: (minutes: number) => void;
   onStart: () => void;
-  /** Orca is writing the questions (after Start). */
+  /** A durable job is writing the questions (after Start). */
   writing: boolean;
   /** Why the last Start failed, or null. */
   error: string | null;
@@ -84,7 +84,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
           </Button>
           {writing && (
             <p className="text-[15px] font-medium text-prussian" role="status" data-part="deep-writing">
-              Orca is writing harder questions from your course material. This can take a minute or two.
+              Orca is writing harder questions from your course material. This can take a minute or two; you can safely leave or reload this page.
             </p>
           )}
           {error && (

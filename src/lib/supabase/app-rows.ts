@@ -199,7 +199,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
 }
 
 /** A finished (or failed) run as the job saves it; its Trigger.dev job id, a top-up's request (objective_ids) and when it was claimed (started_at) are left as they are. */
-export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at"> {
+export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at" | "deep_minutes"> {
   return {
     id: r.id,
     material_id: r.materialId,
@@ -213,6 +213,7 @@ export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "j
     objectives_created: r.objectivesCreated,
     objectives_attached: r.objectivesAttached,
     questions_added: r.questionsAdded,
+    question_ids: r.questionIds ?? [],
     dropped: jsonValue(r.dropped),
     hidden_text: r.hiddenText ? jsonValue(r.hiddenText) : null,
     security: r.security ? jsonValue(r.security) : null,
@@ -227,6 +228,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     materialId: r.material_id,
     at: new Date(r.at).toISOString(),
     model: r.model,
+    ...(r.deep_minutes !== null ? { deepMinutes: r.deep_minutes } : {}),
     status: r.status as PipelineRun["status"],
     ...(r.progress !== null ? { progress: r.progress as unknown as NonNullable<PipelineRun["progress"]> } : {}),
     ...(r.error !== null ? { error: r.error } : {}),
@@ -234,6 +236,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     objectivesCreated: r.objectives_created,
     objectivesAttached: r.objectives_attached,
     questionsAdded: r.questions_added,
+    ...(r.question_ids.length ? { questionIds: r.question_ids } : {}),
     dropped: r.dropped as unknown as PipelineRun["dropped"],
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<PipelineRun["hiddenText"]> } : {}),
     ...(r.security !== null ? { security: r.security as unknown as NonNullable<PipelineRun["security"]> } : {}),
@@ -254,7 +257,7 @@ type SavedRow<K extends keyof Tables> = StructureRow<K> | (Partial<StructureRow<
 
 export interface StructureRows {
   /** Only the server's jobs save runs (students can't write them). */
-  runs?: Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at">[];
+  runs?: Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at" | "deep_minutes">[];
   topics?: SavedRow<"topics">[];
   objectives?: SavedRow<"objectives">[];
   relations?: SavedRow<"relations">[];

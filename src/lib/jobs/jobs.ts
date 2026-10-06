@@ -14,7 +14,7 @@ import type { Course, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
-import { runTopUp } from "../pipeline/topup.ts";
+import { runDeepReview, runTopUp, SKIPPED_PREFIX } from "../pipeline/topup.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
 import type { BudgetVerdict } from "./budget.ts";
 
@@ -197,5 +197,76 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
   } catch (e) {
     await progress.flushed();
     return failed(store, run.id, "Orca couldn't write new questions", e);
+  }
+}
+
+/** Write a durable Dive In's harder questions, then atomically save its questions and completed run. */
+export async function deepReview(deps: JobDeps, job: { runId: string; objectiveIds: readonly string[]; minutes: number }): Promise<JobOutcome> {
+  const { store } = deps;
+  const begun = await begin(store, job.runId, "deep-review", { stage: "writing", objectives: job.objectiveIds.length });
+  if ("outcome" in begun) return begun.outcome;
+  const { run } = begun;
+  try {
+    if (run.deepMinutes !== job.minutes) throw new Error("the Dive In's saved duration doesn't match its job");
+    const held = await heldByBudget(store, run.id, 0);
+    if (held) return held;
+    const loaded = await store.course(run.courseId);
+    if (!loaded) throw new Error("the course is gone");
+    const before = loaded.structure;
+    const objectiveIds = job.objectiveIds.filter((id) => before.objectives[id]);
+    if (!objectiveIds.length) throw new Error("none of this Dive In's objectives are still in the course");
+    const materials = await store.materials(run.courseId);
+    const materialPages = await store.pages(materials.map((m) => m.id));
+    const plan = await runDeepReview(
+      {
+        course: { ...loaded.course, topics: before.topics },
+        objectives: before.objectives,
+        bank: before.bank,
+        materials,
+        materialPages,
+        objectiveIds,
+        count: Math.max(1, Math.min(20, Math.round((job.minutes * 60) / 240))),
+      },
+      { call: deps.call, newId: deps.newId },
+    );
+    const added = Object.entries(plan.questions).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+    if (!added.length) {
+      const why = plan.skipped[0]?.reason ?? plan.dropped[0]?.reason ?? "the model wrote no usable questions";
+      throw new Error(why);
+    }
+    const bank = { ...before.bank };
+    for (const [topicId, questions] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...questions];
+    // One question per urgent objective before another round, matching the original Dive In order.
+    const priority = new Map(job.objectiveIds.map((id, index) => [id, index]));
+    const seen = new Map<string, number>();
+    const orderedIds = added
+      .map(({ question }) => {
+        const objectiveId = question.objectiveId!;
+        const round = seen.get(objectiveId) ?? 0;
+        seen.set(objectiveId, round + 1);
+        return { id: question.id, round, priority: priority.get(objectiveId) ?? priority.size };
+      })
+      .sort((a, b) => a.round - b.round || a.priority - b.priority)
+      .map((question) => question.id);
+    const finished: PipelineRun = {
+      id: run.id,
+      kind: "deep-review",
+      courseId: run.courseId,
+      materialId: null,
+      at: run.at,
+      model: run.model,
+      deepMinutes: job.minutes,
+      status: "done",
+      topicsCreated: [],
+      objectivesCreated: [],
+      objectivesAttached: [...new Set(objectiveIds)],
+      questionsAdded: added.length,
+      questionIds: orderedIds,
+      dropped: [...plan.dropped, ...plan.skipped.map((s) => ({ prompt: `Objective \"${before.objectives[s.objectiveId]?.name ?? s.objectiveId}\"`, reason: `${SKIPPED_PREFIX}${s.reason}` }))],
+    };
+    await store.save(run.courseId, structureRows(before, { ...before, bank }, [finished]));
+    return { status: "done", run: finished };
+  } catch (e) {
+    return failed(store, run.id, "Orca couldn't prepare this Dive In", e);
   }
 }
