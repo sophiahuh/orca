@@ -1,15 +1,16 @@
 import { expect, test, F, seedFixtureCourse, stored } from "./fixture";
 
-/** The weight sliders save when the student lets go, not on every step (Phase 4 review). A course's weights are set from its page. */
-test("dragging a course's weight slider saves once, on release, with the final value", async ({ page, student }) => {
+/** Course overrides live on their own page and do not persist until its explicit Save action. */
+test("course settings save an override through their own API", async ({ page, student }) => {
   await seedFixtureCourse(student);
   await page.goto("/course/logic-e2e");
-  await page.getByRole("button", { name: "LOG configurations" }).click();
-  const slider = page.getByRole("dialog").getByRole("slider", { name: "Homework weight" });
+  await page.getByRole("link", { name: "LOG settings" }).click();
+  await expect(page).toHaveURL(/\/course\/logic-e2e\/settings$/);
+  const slider = page.getByRole("slider", { name: "Homework weight" });
   await expect(slider).toHaveValue("25");
   const saves: string[] = [];
   page.on("request", (r) => {
-    if (r.method() === "PATCH" && /\/rest\/v1\/courses/.test(r.url())) saves.push(r.postData() ?? "");
+    if (r.method() === "PUT" && /\/api\/course-settings$/.test(r.url())) saves.push(r.postData() ?? "");
   });
   // Let the screen's entrance animation finish before measuring where the thumb is.
   await slider.scrollIntoViewIfNeeded();
@@ -25,17 +26,15 @@ test("dragging a course's weight slider saves once, on release, with the final v
   expect(moved).toBeGreaterThan(25);
   expect(saves).toEqual([]);
   await page.mouse.up();
-  await page.waitForFunction(() => document.documentElement.dataset.saving === "0");
+  await page.waitForTimeout(100);
   const final = Number(await slider.inputValue());
+  expect(saves).toHaveLength(0);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status", { name: "Saved" })).toBeVisible();
   expect(saves).toHaveLength(1);
-  expect(saves[0]).toContain(`"homework":${final}`);
+  expect(saves[0]).toContain(`"weights":{"homework":${final}`);
   const s = await stored(page, student);
   expect(s.weights[F.course].homework).toBe(final);
-  // Letting go without moving saves nothing more.
-  await slider.focus();
-  await slider.blur();
-  await page.waitForFunction(() => document.documentElement.dataset.saving === "0");
-  expect(saves).toHaveLength(1);
 });
 
 test("Settings holds the defaults: a course without its own settings follows them", async ({ page, student }) => {
