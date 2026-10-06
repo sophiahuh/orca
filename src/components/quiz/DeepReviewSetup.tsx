@@ -62,7 +62,6 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
             </Chip>
           ))}
           <label className="flex shrink-0 items-center gap-[8px] whitespace-nowrap text-[15px] font-bold text-prussian">
-            Other
             <input
               type="number"
               inputMode="numeric"
@@ -72,7 +71,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
               disabled={writing}
               onChange={(e) => setCustomMinutes(e.target.value)}
               data-part="deep-custom"
-              aria-label="Minutes"
+              aria-label="Other length in minutes"
               className="h-[40px] w-[84px] rounded-[12px] border-2 border-periwinkle-deep bg-parchment px-[12px] text-[15px] font-bold text-prussian focus:outline-none"
             />
             min
