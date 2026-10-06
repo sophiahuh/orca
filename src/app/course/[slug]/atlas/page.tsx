@@ -41,7 +41,7 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
   if (!course) {
     return (
       <div className="flex h-screen-below-bar w-full overflow-hidden">
-        <main className="relative min-w-0 flex-1 bg-alice">
+        <main className="relative min-w-0 flex-1 bg-ocean">
           <div className="flex h-full flex-col items-start gap-4 p-[32px]">
             <BackButton />
             {hydrated && <p className="text-[22px] font-bold text-prussian">We couldn&apos;t find that island.</p>}
@@ -81,7 +81,7 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
 
   return (
     <div className="flex h-screen-below-bar w-full overflow-hidden">
-      <main className="relative min-w-0 flex-1 overflow-hidden bg-alice">
+      <main className="relative min-w-0 flex-1 overflow-hidden bg-ocean">
         {concepts === 0 ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] text-center">
             <p className="text-[22px] font-bold text-prussian">No concepts to map yet.</p>

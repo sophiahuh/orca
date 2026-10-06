@@ -25,7 +25,7 @@ export default function NewCoursePage() {
   };
 
   return (
-    <Screen bg="alice">
+    <Screen bg="ocean">
       <header className="px-[28px] pt-[28px]">
         <BackButton />
       </header>

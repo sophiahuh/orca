@@ -16,6 +16,9 @@
   --color-alice: #e1ecfa;
   --color-alice-deep: #b4c8e6;
 
+  /* The sea behind full screens (owner's pick, 2026-10-06); cards and chips stay alice. */
+  --color-ocean: #9cc3e7;
+
   --color-parchment: #fcf7f4;
   --color-parchment-deep: #e3d9d2;
   --color-orca-shadow: #d9d0cb;

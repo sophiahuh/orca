@@ -49,7 +49,7 @@ export default function OnboardingPage({ searchParams }: PageProps<"/">) {
   if (!preview) return null;
 
   return (
-    <Screen bg="alice">
+    <Screen bg="ocean">
       <motion.div
         variants={stagger(0.1, 0.09)}
         initial="hidden"

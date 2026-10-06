@@ -198,7 +198,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const previewLines = doc ? doc.slice(0, 6).flatMap((p) => p.text.split("\n").filter((l) => l.trim().length > 3).slice(0, 4)).slice(0, 18) : [];
 
   return (
-    <Screen bg="alice" className="overflow-y-auto">
+    <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton />
         <h1 className="text-[44px] font-bold leading-none text-prussian">Add material</h1>
@@ -318,7 +318,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           {type === "Homework" && (
             <motion.label variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[8px]">
               <span className="text-[17px] font-bold text-prussian">Reflection</span>
-              <span className="text-[13px] font-medium text-wisteria-deep">What tripped you up? Anything you say you don&apos;t get goes back to practice.</span>
+              <span className="text-[13px] font-medium text-wisteria-deep">What tripped you up? Give us your honest thoughts so we can best tailor your studying.</span>
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}

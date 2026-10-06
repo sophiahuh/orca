@@ -30,7 +30,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
   if (!course) {
     return (
-      <Screen bg="alice">
+      <Screen bg="ocean">
         <div className="flex flex-col items-start gap-4 p-[32px]">
           <BackButton />
           {hydrated && <p className="text-[22px] font-bold text-prussian">We couldn&apos;t find that island.</p>}
@@ -49,7 +49,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
   const edit = editStructure.bind(null, course.id);
 
   return (
-    <Screen bg="alice" className="overflow-y-auto">
+    <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton />
         <div className="flex flex-col gap-[4px]">

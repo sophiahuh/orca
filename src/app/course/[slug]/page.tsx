@@ -25,7 +25,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
 
   if (!course) {
     return (
-      <AppShell bg="alice">
+      <AppShell bg="ocean">
         <div className="flex h-full flex-col items-start gap-4 p-[32px]">
           <BackButton />
           {hydrated && <p className="text-[22px] font-bold text-prussian">We couldn&apos;t find that island.</p>}
@@ -45,7 +45,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
 
   return (
-    <AppShell bg="alice">
+    <AppShell bg="ocean">
       {topics.length === 0 ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] text-center">
           <p className="text-[22px] font-bold text-prussian">This island is uncharted.</p>

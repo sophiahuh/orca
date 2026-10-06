@@ -47,7 +47,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, plan
   };
 
   return (
-    <Screen bg="alice" className="overflow-y-auto">
+    <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton href={backHref} />
         <div className="flex flex-col gap-[4px]">

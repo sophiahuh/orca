@@ -14,6 +14,8 @@ const ITEMS = [
 /** Three-icon nav pinned to the bottom of the sidebar. */
 export function NavBar({ className }: { className?: string }) {
   const pathname = usePathname();
+  // From a course's pages (or its quizzes and sessions), Add material opens on that course.
+  const slug = /^\/(?:course|quiz|session)\/([^/?#]+)/.exec(pathname)?.[1];
   return (
     <nav aria-label="Primary" className={cn("flex items-center justify-end gap-[12px]", className)}>
       {ITEMS.map(({ href, label, Icon }) => {
@@ -21,7 +23,7 @@ export function NavBar({ className }: { className?: string }) {
         return (
           <Link
             key={href}
-            href={href}
+            href={href === "/add-material" && slug ? `${href}?course=${slug}` : href}
             aria-label={label}
             title={label}
             aria-current={active ? "page" : undefined}

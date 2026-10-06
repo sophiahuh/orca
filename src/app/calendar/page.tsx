@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { fadeSwap } from "@/lib/motion";
 import type { EventKind } from "@/lib/data";
-import { useOrca } from "@/lib/store";
+import { useAgenda, useDayKey, useMasteryByCourse, useOrca } from "@/lib/store";
+import { reviewDates } from "@/lib/mastery/calendar";
 import { useToday } from "@/hooks/useToday";
 import { IconBack, IconNext } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
@@ -22,12 +23,30 @@ function monthOf(iso: string) {
 }
 
 export default function CalendarPage() {
-  const { events } = useOrca();
+  const { events, courses } = useOrca();
+  const agendas = useAgenda();
+  const mastery = useMasteryByCourse();
+  const dayKey = useDayKey();
   const today = useToday();
+  // Stored entries (homework, exams) plus the scheduled reviews derived from each course's agenda.
+  const shown = useMemo(() => {
+    if (!today) return events;
+    const reviews = reviewDates(
+      courses.map((c) => {
+        const agenda = agendas[c.id];
+        const m = mastery[c.id];
+        if (!agenda || !m) throw new Error(`No agenda computed for course ${c.id}`);
+        return { id: c.id, short: c.short, agenda, objectives: m.objectives };
+      }),
+      today,
+      dayKey,
+    );
+    return [...events, ...reviews];
+  }, [events, courses, agendas, mastery, dayKey, today]);
   // null = "follow today"; set once the student pages away.
   const [picked, setPicked] = useState<Date | null>(null);
   // Until the client clock is known, render the empty sea rather than a wrong month.
-  if (!today) return <Screen bg="alice" />;
+  if (!today) return <Screen bg="ocean" />;
   const cursor = picked ?? monthOf(today);
 
   const shift = (n: number) => setPicked(new Date(cursor.getFullYear(), cursor.getMonth() + n, 1));
@@ -35,7 +54,7 @@ export default function CalendarPage() {
   const showYear = cursor.getFullYear() !== Number(today.slice(0, 4));
 
   return (
-    <Screen bg="alice" className="overflow-y-auto">
+    <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[20px] px-[28px] pt-[28px]">
         <BackButton />
         <AnimatePresence mode="wait">
@@ -67,7 +86,7 @@ export default function CalendarPage() {
       </header>
 
       <div className="px-[40px] pb-[40px] pt-[28px]">
-        <MonthGrid cursor={cursor} events={events} today={today} />
+        <MonthGrid cursor={cursor} events={shown} today={today} />
       </div>
     </Screen>
   );

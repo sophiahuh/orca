@@ -31,7 +31,7 @@ export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue
   const accuracy = total ? Math.round((correct / total) * 100) : 0;
 
   return (
-    <div className="relative flex min-h-screen-below-bar flex-1 items-center justify-center overflow-y-auto bg-alice p-6">
+    <div className="relative flex min-h-screen-below-bar flex-1 items-center justify-center overflow-y-auto bg-ocean p-6">
       <Wave tone="light" x={120} y={160} width={70} seed={1} />
       <Wave tone="light" x={960} y={220} width={60} seed={2} />
       <Wave tone="light" x={180} y={650} width={80} seed={3} />

@@ -556,11 +556,21 @@ export async function writeQuestions(
   await pool(batches, 2, async (batch) => {
     const forCheck = batch.map(({ q, figureSlide }) => ({ id: q.id, kind: q.kind, prompt: q.prompt, options: q.options, context: figureSlide ? (slideText.get(figureSlide) ?? null) : null }));
     const fail = (ids: string[], reason: string) => ids.forEach((id) => failures.has(id) || failures.set(id, reason));
+    // The ambiguity check doesn't need the solve's answers, so it runs alongside it; its verdicts are
+    // applied after the solve's, so a question both reject keeps the solve's reason.
+    const choice = batch.filter(({ q }) => q.kind !== "Short answer");
+    const ambiguity = choice.length
+      ? call("ambiguity", { questions: choice.map(({ q }) => ({ ...forCheck.find((f) => f.id === q.id)!, marked: q.answer })) }).then(
+          (r) => ({ ok: true as const, r }),
+          (e: unknown) => ({ ok: false as const, e }),
+        )
+      : null;
     let solved: StepOutput<"solve">;
     try {
       solved = await call("solve", { questions: forCheck });
     } catch (e) {
       fail(batch.map((b) => b.q.id), `couldn't be checked: ${errorText(e)}`);
+      await ambiguity;
       return;
     }
     const answers = new Map(solved.answers.map((a) => [a.id, a]));
@@ -577,20 +587,16 @@ export async function writeQuestions(
         rubricItems.push({ id: q.id, prompt: q.prompt, rubric: q.rubric, independentAnswer: a.text ?? "" });
       }
     }
-    const choice = batch.filter(({ q }) => q.kind !== "Short answer" && !failures.has(q.id));
     await Promise.all([
-      choice.length
-        ? call("ambiguity", { questions: choice.map(({ q, figureSlide }) => ({ ...forCheck.find((f) => f.id === q.id)!, context: figureSlide ? (slideText.get(figureSlide) ?? null) : null, marked: q.answer })) })
-            .then((r) => {
-              const results = new Map(r.results.map((x) => [x.id, x]));
-              for (const { q } of choice) {
-                const x = results.get(q.id);
-                if (!x) fail([q.id], "the ambiguity check skipped it");
-                else if (x.ambiguous) fail([q.id], `ambiguous: ${shown(x.reasoning)}`);
-              }
-            })
-            .catch((e) => fail(choice.map((c) => c.q.id), `couldn't be checked: ${errorText(e)}`))
-        : null,
+      ambiguity?.then((a) => {
+        if (!a.ok) return fail(choice.map((c) => c.q.id), `couldn't be checked: ${errorText(a.e)}`);
+        const results = new Map(a.r.results.map((x) => [x.id, x]));
+        for (const { q } of choice) {
+          const x = results.get(q.id);
+          if (!x) fail([q.id], "the ambiguity check skipped it");
+          else if (x.ambiguous) fail([q.id], `ambiguous: ${shown(x.reasoning)}`);
+        }
+      }),
       rubricItems.length
         ? call("agreement", { items: rubricItems })
             .then((r) => {
@@ -626,7 +632,7 @@ export async function writeQuestions(
   const slides = [...new Set(passed.map((p) => p.figureSlide).filter((n): n is number => n !== null && slideText.has(n)))];
   if (slides.length) progress({ stage: "figures", slides: slides.length });
   const figures = new Map<number, string | null>();
-  for (const n of slides) figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null);
+  await pool(slides, 4, async (n) => figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null));
   const questions: Record<string, QuizQuestion[]> = {};
   for (const p of passed) {
     if (p.figureSlide !== null) {
