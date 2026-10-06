@@ -64,7 +64,7 @@ export default function SettingsPage() {
             </Card>
           </motion.div>
           <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
-            {saved && <span className="text-[14px] font-semibold text-good-deep">Saved</span>}
+            {saved && <span role="status" aria-label="Saved" className="text-[14px] font-semibold text-good-deep">Saved</span>}
             <Button size="sm" onClick={save}>Save</Button>
           </motion.div>
         </motion.div>

@@ -44,7 +44,10 @@ test("Settings holds the defaults: a course without its own settings follows the
   await slider.focus();
   await page.keyboard.press("End");
   await slider.blur();
-  await page.waitForFunction(() => document.documentElement.dataset.saving === "0");
+  // Configuration pages save only on their explicit Save (33ca8b6); the defaults' button comes before the account card's.
+  await page.getByRole("button", { name: "Save" }).first().click();
+  await expect(page.getByRole("status", { name: "Saved" })).toBeVisible();
+  await page.waitForFunction(() => (document.documentElement.dataset.saving ?? "0") === "0");
   const top = Number(await slider.inputValue());
 
   await page.goto("/new-course");

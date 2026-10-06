@@ -107,7 +107,7 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
           </motion.div>
           <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
             {problem && <span role="alert" className="text-[14px] font-semibold text-bad-text">{problem}</span>}
-            {saved && <span role="status" className="text-[14px] font-semibold text-good-deep">Saved</span>}
+            {saved && <span role="status" aria-label="Saved" className="text-[14px] font-semibold text-good-deep">Saved</span>}
             <Button size="sm" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
           </motion.div>
         </div>
