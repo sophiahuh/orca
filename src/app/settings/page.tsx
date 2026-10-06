@@ -31,13 +31,13 @@ export default function SettingsPage() {
   };
 
   return (
-    <Screen bg="ocean" className="overflow-y-auto">
+    <Screen bg="ocean" className="overflow-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton />
         <h1 className="text-[46px] font-bold leading-none text-prussian">Settings</h1>
       </header>
 
-      <div className="grid grid-cols-1 items-start gap-[24px] px-[40px] pb-[48px] pt-[36px] min-[1186px]:grid-cols-[minmax(0,640px)_minmax(0,418px)] min-[1620px]:grid-cols-[minmax(0,640px)_minmax(0,418px)_minmax(0,418px)]">
+      <div className="grid min-w-[1524px] grid-cols-[640px_418px_418px] items-start gap-[24px] px-[40px] pb-[48px] pt-[36px]">
         {/* Only once loaded: an edit made before the load lands would be overwritten on screen by it. */}
         {hydrated && (
         <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex w-[640px] max-w-full flex-col gap-[24px]">
@@ -73,7 +73,7 @@ export default function SettingsPage() {
         <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full">
           <AccountCard />
         </motion.div>
-        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full min-[1186px]:col-start-2 min-[1620px]:col-start-auto">
+        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full">
           <YourMetricsCard />
         </motion.div>
         {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
