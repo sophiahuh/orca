@@ -12,7 +12,7 @@ import { survivingTopic, topicUses } from "./weights.ts";
 /** How well a topic is held: every objective mastered, some fading or mixed up, under way, or nothing answered yet. */
 export type TopicStrength = "strong" | "developing" | "fragile" | "unverified";
 
-export const STRENGTH_LABEL: Record<TopicStrength, string> = { strong: "Strong", developing: "Developing", fragile: "Fragile", unverified: "Unverified" };
+export const STRENGTH_LABEL: Record<TopicStrength, string> = { strong: "Strong", developing: "Developing", fragile: "Fragile", unverified: "New" };
 
 export const RELATION_LABEL: Record<RelationType, string> = { "used-in": "used in", "has-a-kind": "has a kind", "alternative-to": "alternative to", related: "related" };
 
