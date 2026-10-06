@@ -94,7 +94,8 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
         animate="show"
         transition={{ ...springBouncy, delay: 0.35 + index * 0.08 }}
         className="absolute flex flex-col gap-[2px] whitespace-nowrap"
-        style={{ left: size / 2 + 18, top: -22 }}
+        // The current node's label clears its halo at its widest pulse.
+        style={{ left: (visual === "current" ? (HALO * Math.max(...pulseHalo.scale)) / 2 : size / 2) + 18, top: -22 }}
       >
         <span className={cn("text-[22px] font-bold leading-tight", faded ? "text-periwinkle-deep" : "text-prussian")}>{name}</span>
         <span className={cn("text-[15px] font-medium", faded ? "text-periwinkle-deep" : "text-wisteria-deep")}>{sub}</span>

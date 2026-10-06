@@ -25,13 +25,9 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
 
 /**
  * The island map: a fixed 854×834 canvas scaled to fit its container.
- * Clicking an island opens its path; clicking the label pill opens the config modal.
+ * Clicking an island or its label pill opens its path (its configuration is on that page).
  */
-export function KnowledgeMap({ courses, dueCount, onConfigure }: {
-  courses: Course[];
-  dueCount: (courseId: string) => number;
-  onConfigure: (course: Course) => void;
-}) {
+export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCount: (courseId: string) => number }) {
   const router = useRouter();
   const mastery = useMasteryByCourse();
   const levelOf = (courseId: string) => {
@@ -67,7 +63,7 @@ export function KnowledgeMap({ courses, dueCount, onConfigure }: {
               <Island variant={c.variant} level={levelOf(c.id)} float seed={i} />
             </motion.button>
             <div className="absolute left-1/2 -translate-x-1/2" style={{ top: 196 }}>
-              <LabelPill count={dueCount(c.id)} onClick={() => onConfigure(c)} aria-label={`${c.name} settings`}>
+              <LabelPill count={dueCount(c.id)} onClick={() => router.push(`/course/${c.slug}`)} aria-label={`Open ${c.name}, ${dueCount(c.id)} due today`}>
                 {c.short}
               </LabelPill>
             </div>

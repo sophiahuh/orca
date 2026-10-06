@@ -3,10 +3,10 @@ import { cn } from "@/lib/cn";
 
 /** Full-height page surface (below the top bar) with one of the three background tokens. */
 export interface ScreenProps extends HTMLAttributes<HTMLDivElement> {
-  bg?: "ocean" | "parchment" | "prussian";
+  bg?: "ocean" | "alice" | "parchment" | "prussian";
 }
 
-const bgs = { ocean: "bg-ocean", parchment: "bg-parchment", prussian: "bg-prussian" } as const;
+const bgs = { ocean: "bg-ocean", alice: "bg-alice", parchment: "bg-parchment", prussian: "bg-prussian" } as const;
 
 export function Screen({ bg = "ocean", className, children, ...rest }: ScreenProps) {
   return (

@@ -1,22 +1,23 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { Course, ReviewConfig } from "@/lib/data";
-import { IconArrowRight, IconClose } from "@/components/icons";
+import { type Course, DEFAULT_WEIGHTS, type ReviewConfig } from "@/lib/data";
+import { IconClose } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { RoundButton } from "@/components/ui/RoundButton";
 import { useOrca } from "@/lib/store";
 import { overlayFade, popIn, stagger } from "@/lib/motion";
 import { ConfigRow, REVIEW_LABELS } from "./ConfigRow";
+import { WeightsEditor } from "./WeightsEditor";
 
 /**
- * Figma: Config Modal. 680×440 parchment card over a dimmed map.
+ * Figma: Config Modal. 680×440 parchment card over a dimmed screen: one course's review cadence
+ * and material weights (Settings only holds the defaults new courses start with).
  * Edits write straight to the store (no local draft), so Done just closes.
  */
 export function ClassConfigModal({ course, onClose }: { course: Course | null; onClose: () => void }) {
-  const { configs, setConfig } = useOrca();
+  const { configs, setConfig, weights, setWeights } = useOrca();
 
   useEffect(() => {
     if (!course) return;
@@ -48,7 +49,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
             animate="show"
             exit="exit"
             onClick={(e) => e.stopPropagation()}
-            className="relative flex w-[680px] max-w-full flex-col rounded-[32px] bg-parchment px-[36px] pb-[32px] pt-[36px] lip-8 lip-alice"
+            className="relative flex max-h-full w-[680px] max-w-full flex-col overflow-y-auto rounded-[32px] bg-parchment px-[36px] pb-[32px] pt-[36px] lip-8 lip-alice"
             style={{ minHeight: 440 }}
           >
             <RoundButton size={44} label="Close" onClick={onClose} className="absolute right-[24px] top-[24px]">
@@ -66,10 +67,11 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
               ))}
             </motion.div>
 
-            <div className="mt-auto flex items-center justify-between pt-[32px]">
-              <Link href="/settings" className="inline-flex items-center gap-2 text-[15px] font-bold text-wisteria-deep hover:underline">
-                Configure weights <IconArrowRight size={18} />
-              </Link>
+            <h3 className="mt-[32px] text-[20px] font-semibold text-prussian">Weights</h3>
+            <p className="mb-[16px] mt-[6px] text-[15px] font-medium text-wisteria-deep">What Orca prioritizes when it builds your reviews.</p>
+            <WeightsEditor weights={weights[course.id] ?? DEFAULT_WEIGHTS} onChange={(w) => setWeights(course.id, w)} />
+
+            <div className="mt-auto flex items-center justify-end pt-[32px]">
               <Button size="sm" onClick={onClose}>
                 Done
               </Button>

@@ -44,6 +44,11 @@ const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min"
 export const ReviewConfigSchema = z.object({ quick: ReviewRowSchema, deep: ReviewRowSchema, exam: ReviewRowSchema });
 export const WeightsSchema = z.record(z.string(), z.number().min(0));
 
+/** The profile's defaults for new courses, as written to `profiles`. */
+export function defaultsToRow(config: ReviewConfig, weights: Weights) {
+  return { default_review_config: jsonValue(ReviewConfigSchema.parse(config)), default_weights: jsonValue(WeightsSchema.parse(weights)) };
+}
+
 /* ── Courses ── */
 
 export function courseToRow(c: Course, config: ReviewConfig, weights: Weights): Omit<Row<"courses">, "owner_id" | "created_at"> {
@@ -391,6 +396,9 @@ export interface LoadedState {
   onboarded: boolean;
   avatar: AvatarId;
   name: string | null;
+  /** Settings' defaults for new courses; null = Orca's built-in ones. */
+  defaultConfig: ReviewConfig | null;
+  defaultWeights: Weights | null;
   courses: Course[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
@@ -436,6 +444,8 @@ export function loadedState(d: MyData): LoadedState {
     onboarded: d.profile.onboarded,
     avatar: d.profile.avatar,
     name: d.profile.name,
+    defaultConfig: d.profile.default_review_config === null ? null : ReviewConfigSchema.parse(d.profile.default_review_config),
+    defaultWeights: d.profile.default_weights === null ? null : WeightsSchema.parse(d.profile.default_weights),
     courses,
     configs: Object.fromEntries(d.courses.map((c) => [c.id, ReviewConfigSchema.parse(c.review_config)])),
     weights: Object.fromEntries(d.courses.map((c) => [c.id, WeightsSchema.parse(c.weights)])),

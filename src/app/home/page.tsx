@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
-import type { Course } from "@/lib/data";
 import { AppShell } from "@/components/layout/AppShell";
 import { KnowledgeMap } from "@/components/map/KnowledgeMap";
-import { ClassConfigModal } from "@/components/config/ClassConfigModal";
 import { OrcaLogo } from "@/components/brand/OrcaLogo";
 import { IconPlus } from "@/components/icons";
 import { useOrca, useStreak, useTodos } from "@/lib/store";
@@ -14,13 +11,11 @@ export default function HomePage() {
   const { courses, hydrated } = useOrca();
   const todos = useTodos();
   const streak = useStreak();
-  const [configuring, setConfiguring] = useState<Course | null>(null);
-  const close = useCallback(() => setConfiguring(null), []);
   const dueCount = (courseId: string) => todos.filter((d) => d.courseId === courseId && d.when === "today").length;
 
   return (
     <AppShell bg="ocean">
-      <KnowledgeMap courses={courses} dueCount={dueCount} onConfigure={setConfiguring} />
+      <KnowledgeMap courses={courses} dueCount={dueCount} />
 
       {hydrated && courses.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[8px] text-center">
@@ -41,8 +36,6 @@ export default function HomePage() {
         <OrcaLogo width={38} shadow={false} />
         {hydrated && <span className="text-[15px] font-bold text-prussian">{streak} day streak</span>}
       </div>
-
-      <ClassConfigModal course={configuring} onClose={close} />
     </AppShell>
   );
 }

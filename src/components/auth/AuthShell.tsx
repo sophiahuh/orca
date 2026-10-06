@@ -8,7 +8,7 @@ import { Screen } from "@/components/layout/Screen";
  */
 export function AuthShell({ eyebrow, title, lead, aside, children }: { eyebrow: string; title: string; lead?: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <Screen bg="ocean" className="overflow-y-auto">
+    <Screen bg="alice" className="overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[1194px] flex-1 flex-col gap-[40px] px-[24px] py-[48px] md:flex-row md:items-center md:gap-[40px] md:px-[120px] md:py-[64px]">
         <section className="flex w-full max-w-[520px] flex-col gap-[24px]">
           <div className="flex flex-col gap-[10px]">

@@ -63,7 +63,7 @@ import { courseObjectiveWeights } from "./course/weights";
 import { laidOut } from "./course/layout";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
-import { type MyData, type StructureState, calendarToRow, courseToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
+import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
 import type { Json } from "./supabase/database.types";
@@ -75,6 +75,9 @@ interface OrcaState {
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
+  /** Settings' defaults, copied into each new course (profile; null there = Orca's built-in ones). */
+  defaultConfig: ReviewConfig;
+  defaultWeights: Weights;
   results: QuizResult[];
   onboarded: boolean;
   /** The student's IANA timezone (profile); every day boundary uses it. */
@@ -110,6 +113,8 @@ const initialState: OrcaState = {
   materials: [],
   configs: {},
   weights: {},
+  defaultConfig: DEFAULT_CONFIG,
+  defaultWeights: DEFAULT_WEIGHTS,
   results: [],
   onboarded: false,
   timezone: "UTC",
@@ -128,6 +133,8 @@ interface OrcaActions {
   addCourse: (name: string) => Course;
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
+  /** Settings' defaults for courses created from now on. */
+  setDefaults: (config: ReviewConfig, weights: Weights) => void;
   /**
    * Add a material to its course (and its due date to the calendar). `saved`: the server already
    * recorded it (an uploaded file, `src/lib/uploads.ts`); otherwise it's saved here as a record
@@ -234,7 +241,7 @@ async function loadAll(): Promise<Omit<OrcaState, "llm">> {
   await Promise.all([...staleCourses].map(async (id) => (snapshots[id] = await fetchSnapshots(id))));
   const { snapshots: _rows, ...rest } = loaded;
   void _rows;
-  return { ...rest, snapshots };
+  return { ...rest, defaultConfig: loaded.defaultConfig ?? DEFAULT_CONFIG, defaultWeights: loaded.defaultWeights ?? DEFAULT_WEIGHTS, snapshots };
 }
 
 async function sessionUser(): Promise<string | null> {
@@ -457,14 +464,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       setState((s) => ({
         ...s,
         courses: [...s.courses, course],
-        configs: { ...s.configs, [id]: DEFAULT_CONFIG },
-        weights: { ...s.weights, [id]: DEFAULT_WEIGHTS },
+        configs: { ...s.configs, [id]: s.defaultConfig },
+        weights: { ...s.weights, [id]: s.defaultWeights },
         objectives: { ...s.objectives, [id]: {} },
         relations: { ...s.relations, [id]: [] },
         snapshots: { ...s.snapshots, [id]: {} },
       }));
       save(
-        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, DEFAULT_CONFIG, DEFAULT_WEIGHTS))),
+        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, s.defaultConfig, s.defaultWeights))),
       );
       return course;
     },
@@ -644,6 +651,18 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save, refreshAfterSave],
   );
 
+  const setDefaults = useCallback<OrcaActions["setDefaults"]>(
+    (config, weights) => {
+      setState((s) => ({ ...s, defaultConfig: config, defaultWeights: weights }));
+      save(async () => {
+        const { data } = await browserSupabase().auth.getSession();
+        if (!data.session) throw new Error("you're signed out");
+        mustChange(await browserSupabase().from("profiles").update(defaultsToRow(config, weights)).eq("owner_id", data.session.user.id).select("owner_id"));
+      });
+    },
+    [save],
+  );
+
   const setAvatar = useCallback(
     (avatar: AvatarId) => {
       setState((s) => ({ ...s, avatar }));
@@ -698,6 +717,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       addCourse,
       setConfig,
       setWeights,
+      setDefaults,
       addMaterial,
       recordQuiz,
       recordEvidence,
@@ -712,7 +732,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
