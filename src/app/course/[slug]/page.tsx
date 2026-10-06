@@ -18,7 +18,7 @@ import Link from "next/link";
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
   const router = useRouter();
-  const { hydrated, objectives } = useOrca();
+  const { hydrated, objectives, renameCourse } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -63,7 +63,30 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           <BackButton />
         </motion.div>
         <div className="flex flex-col gap-[6px] pt-[2px]">
-          <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-none text-prussian">
+          <motion.h1
+            variants={fadeUp}
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-label="Course name"
+            spellCheck={false}
+            onBlur={(e) => {
+              const name = e.currentTarget.textContent?.trim() ?? "";
+              if (name && name !== course.name) renameCourse(course.id, name);
+              else e.currentTarget.textContent = course.name;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+              if (e.key === "Escape") {
+                e.currentTarget.textContent = course.name;
+                e.currentTarget.blur();
+              }
+            }}
+            className="text-[34px] font-bold leading-none text-prussian outline-none"
+          >
             {course.name}
           </motion.h1>
           <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep">

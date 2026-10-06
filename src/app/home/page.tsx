@@ -26,7 +26,7 @@ export default function HomePage() {
 
       <Link
         href="/new-course"
-        className="pressable absolute left-[28px] top-[28px] inline-flex items-center gap-2 rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink"
+        className="pressable absolute right-[28px] top-[28px] inline-flex items-center gap-2 rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink"
       >
         <IconPlus size={18} />
         Add Course

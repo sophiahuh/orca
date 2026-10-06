@@ -64,7 +64,7 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
             </motion.button>
             <div className="absolute left-1/2 -translate-x-1/2" style={{ top: 196 }}>
               <LabelPill count={dueCount(c.id)} onClick={() => router.push(`/course/${c.slug}`)} aria-label={`Open ${c.name}, ${dueCount(c.id)} due today`}>
-                {c.short}
+                {c.name}
               </LabelPill>
             </div>
           </div>

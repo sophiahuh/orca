@@ -131,6 +131,8 @@ const initialState: OrcaState = {
 
 interface OrcaActions {
   addCourse: (name: string) => Course;
+  /** Rename a course without changing its stable URL slug or compact labels elsewhere. */
+  renameCourse: (courseId: string, name: string) => void;
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
   /** Settings' defaults for courses created from now on. */
@@ -478,6 +480,23 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  const renameCourse = useCallback<OrcaActions["renameCourse"]>(
+    (courseId, name) => {
+      const clean = name.trim();
+      if (!clean) throw new Error("A course needs a name");
+      const course = stateRef.current.courses.find((c) => c.id === courseId);
+      if (!course) throw new Error(`No course ${courseId}`);
+      if (course.name === clean) return;
+      setState((s) => ({ ...s, courses: s.courses.map((c) => (c.id === courseId ? { ...c, name: clean } : c)) }));
+      save(
+        async () => {
+          mustChange(await browserSupabase().from("courses").update({ name: clean }).eq("id", courseId).select("id"));
+        },
+      );
+    },
+    [save],
+  );
+
   const setConfig = useCallback<OrcaActions["setConfig"]>(
     (courseId, config) => {
       setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: config } }));
@@ -715,6 +734,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       saving,
       saveError,
       addCourse,
+      renameCourse,
       setConfig,
       setWeights,
       setDefaults,
@@ -732,7 +752,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

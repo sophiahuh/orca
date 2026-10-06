@@ -51,7 +51,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
   return (
     <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
-        <BackButton />
+        <BackButton href={`/course/${course.slug}`} />
         <div className="flex flex-col gap-[4px]">
           <h1 className="text-[40px] font-bold leading-none text-prussian">Review {course.short}</h1>
           <p className="text-[15px] font-medium text-wisteria-deep">New topics are quizzable now, marked Unreviewed until you confirm them.</p>
