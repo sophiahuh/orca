@@ -12,9 +12,11 @@ import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { RoundButton } from "@/components/ui/RoundButton";
 import { Tag } from "@/components/ui/Tag";
+import { Select } from "@/components/ui/Select";
 import { MonthGrid } from "@/components/calendar/MonthGrid";
 
-const KINDS: EventKind[] = ["hw", "lab", "rev", "exam"];
+const KINDS: EventKind[] = ["hw", "rev", "exam"];
+const ALL = "all";
 
 /** First day of the month containing an ISO date. */
 function monthOf(iso: string) {
@@ -36,13 +38,16 @@ export default function CalendarPage() {
         const agenda = agendas[c.id];
         const m = mastery[c.id];
         if (!agenda || !m) throw new Error(`No agenda computed for course ${c.id}`);
-        return { id: c.id, short: c.short, agenda, objectives: m.objectives };
+        return { id: c.id, short: c.name, agenda, objectives: m.objectives };
       }),
       today,
       dayKey,
     );
     return [...events, ...reviews];
   }, [events, courses, agendas, mastery, dayKey, today]);
+  // One course's entries, or every course's.
+  const [courseFilter, setCourseFilter] = useState<string>(ALL);
+  const visible = courseFilter === ALL ? shown : shown.filter((e) => e.courseId === courseFilter);
   // null = "follow today"; set once the student pages away.
   const [picked, setPicked] = useState<Date | null>(null);
   // Until the client clock is known, render the empty sea rather than a wrong month.
@@ -74,6 +79,18 @@ export default function CalendarPage() {
           {KINDS.map((k) => (
             <Tag key={k} kind={k} size="md" />
           ))}
+          {courses.length > 0 && (
+            <Select
+              label="Filter by course"
+              size="sm"
+              value={courseFilter}
+              options={[ALL, ...courses.map((c) => c.id)]}
+              labels={{ [ALL]: "All courses", ...Object.fromEntries(courses.map((c) => [c.id, c.name])) }}
+              onChange={setCourseFilter}
+              className="ml-[8px]"
+              data-part="course-filter"
+            />
+          )}
         </div>
         <div className="ml-auto flex items-center gap-[12px]">
           <RoundButton size={48} label="Previous month" onClick={() => shift(-1)}>
@@ -86,7 +103,7 @@ export default function CalendarPage() {
       </header>
 
       <div className="px-[40px] pb-[40px] pt-[28px]">
-        <MonthGrid cursor={cursor} events={shown} today={today} />
+        <MonthGrid cursor={cursor} events={visible} today={today} />
       </div>
     </Screen>
   );
