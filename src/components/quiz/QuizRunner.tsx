@@ -85,6 +85,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const [correct, setCorrect] = useState(0);
   /** Answers that couldn't be graded (a grading outage): no evidence, and not in the score either. */
   const [ungraded, setUngraded] = useState(0);
+  /** Questions skipped without an answer: they record nothing and stay out of the score. */
+  const [skipped, setSkipped] = useState(0);
   const [missed, setMissed] = useState<RunnerItem[]>([]);
   const [finished, setFinished] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -101,16 +103,16 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     return () => window.clearInterval(id);
   }, [finished]);
 
-  // Persist the result exactly once when the set completes. Ungraded answers are left out of the
-  // score (a grading outage would otherwise make every quiz look poor and queue re-quizzes); a set
-  // with nothing graded records no session at all.
+  // Persist the result exactly once when the set completes. Ungraded answers and skipped questions
+  // are left out of the score (a grading outage or a skip would otherwise make the quiz look poor and
+  // queue re-quizzes); a set with nothing graded, all skipped included, records no session at all.
   useEffect(() => {
     if (!finished || recorded.current) return;
     recorded.current = true;
     sessionId.current ??= crypto.randomUUID();
-    const total = questions.length - ungraded;
+    const total = questions.length - ungraded - skipped;
     if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
-  }, [finished, course, mode, allItems, correct, ungraded, questions.length, seconds, recordQuiz]);
+  }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz]);
 
   // Then top up the stock for the objectives this run asked about (waits for the server-model check).
   const { start: startTopUp } = topUp;
@@ -231,7 +233,11 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
 
   const advance = useCallback(() => {
     if (!item) return;
-    if (!checked) setMissed((m) => [...m, item]); // skipped counts as a miss
+    if (!checked) {
+      // Skipped: offered again in "review missed", but no answer is recorded and it isn't scored.
+      setMissed((m) => [...m, item]);
+      setSkipped((n) => n + 1);
+    }
     if (index + 1 >= total) {
       setFinished(true);
       window.scrollTo(0, 0);
@@ -277,6 +283,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     setGrade(null);
     setCorrect(0);
     setUngraded(0);
+    setSkipped(0);
     setMissed([]);
     setFinished(false);
     setSeconds(0);
@@ -290,7 +297,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         topicName={title}
         extra={<TopUpNote status={topUp.status} />}
         correct={correct}
-        total={total - ungraded}
+        total={total - ungraded - skipped}
+        skipped={skipped}
         seconds={seconds}
         streak={streak}
         onContinue={() => router.push(backHref)}

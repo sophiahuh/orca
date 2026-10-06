@@ -206,6 +206,41 @@ test.describe("scheduling", () => {
     await expect(page.locator('[data-todo="deep"]')).toHaveCount(0);
   });
 
+  test("skipping every question in a dive records nothing: no answers, no session, mastery unchanged, the dive still due", async ({ page, student }) => {
+    const answered = (objectiveId: string, questionId: string, topicId: string): AnswerEvent => ({
+      kind: "answer",
+      id: crypto.randomUUID(),
+      at: daysAgo(8),
+      courseId: F.course,
+      topicId,
+      objectiveId,
+      questionId,
+      tier: "retrieval",
+      outcome: "correct",
+      grader: "exact",
+      source: "quiz",
+      sessionId: "old",
+    });
+    await seedState(student, { ...FIXTURE_STATE, evidence: [answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement)] });
+    await seedPages(student, { [F.material]: [1, 2, 3, 4, 5].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
+    await page.goto("/home");
+    await expect(page.locator('[data-todo="deep"]')).toBeVisible();
+    const { data: before } = await student.db.from("objective_state").select("objective_id, accumulator").order("objective_id");
+
+    await page.goto(`/session/${COURSE}?kind=deep&topic=${F.booleanAlgebra}&minutes=10`);
+    await expect(page.getByText("1 / 3")).toBeVisible({ timeout: 30_000 });
+    for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Skip" }).click();
+    await expect(page.locator("[data-part=quiz-end-summary]")).toHaveText("You skipped every question, so nothing was recorded and your mastery is unchanged.");
+
+    const state = await stored(page, student);
+    expect(state.evidence).toHaveLength(2);
+    expect(state.results).toEqual([]);
+    const { data: after } = await student.db.from("objective_state").select("objective_id, accumulator").order("objective_id");
+    expect(after).toEqual(before);
+    await page.goto("/home");
+    await expect(page.locator('[data-todo="deep"]')).toBeVisible();
+  });
+
   test("after a session, objectives short of unseen questions are topped up from the material's stored pages", async ({ page, student }) => {
     await fakeModel({ perObjective: 2 });
     await seedState(student, FIXTURE_STATE);
