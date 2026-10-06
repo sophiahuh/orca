@@ -1,16 +1,19 @@
 /**
- * Orca's model, on the server only (Phase 4 plan, decision 9): every pipeline step (extract,
- * reconcile, generate, the checks, reflection matching) runs here with Orca's own key,
- * `ANTHROPIC_API_KEY`, on `claude-opus-5-5`. There is no student key and no browser path. Without
- * the key nothing is generated: callers get null and say so.
+ * Orca's model, on the server only (Phase 4 plan, decision 9, widened 2026-10-06 to OpenAI): every
+ * pipeline step (extract, reconcile, generate, the checks, reflection matching) and every grade
+ * runs here with Orca's own key. Which provider and model come from the environment
+ * (`ORCA_MODEL_PROVIDER`, `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`, `ORCA_MODEL`; resolved in
+ * `src/lib/model-config.ts`). There is no student key and no browser path. Without a key nothing is
+ * generated: callers get null and say so.
  *
- * The SDK reads `ANTHROPIC_BASE_URL` too; tests point it at the fake Messages API
- * (`e2e/fake-anthropic.ts`), and `/api/llm/status` says whether it points at this machine so the
- * browser tests can refuse to run against the real API.
+ * `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` point the provider elsewhere; tests point Anthropic at
+ * the fake Messages API (`e2e/fake-anthropic.ts`), and `/api/llm/status` says whether calls go to
+ * this machine so the browser tests can refuse to run against a real API.
  */
 import type { z } from "zod";
 import type { LlmConfig } from "@/lib/llm";
 import { LlmError, completeJson } from "@/lib/llm-server";
+import { SERVER_PROVIDERS, callsAreLocal, resolveServerModel } from "@/lib/model-config";
 import { STEP_BUDGET } from "@/lib/pipeline/budget";
 import { parseLooseJson } from "@/lib/pipeline/parse";
 import { buildPrompt } from "@/lib/pipeline/prompts";
@@ -20,28 +23,23 @@ import type { TokenUsage } from "@/lib/pricing";
 import { checkBudget, meterUsage } from "@/lib/server/usage";
 import { type OrcaSupabase, adminClient } from "@/lib/supabase/server";
 
-export const ORCA_MODEL = "claude-opus-5-5";
+/** The Anthropic default (what the server runs on when it uses Anthropic and `ORCA_MODEL` is unset). */
+export const ORCA_MODEL = SERVER_PROVIDERS.anthropic.defaultModel;
 
-/** The model the server uses, or null when it has no key (nothing is generated then). */
+/** The model the server uses, or null when it has no key (nothing is generated then). Throws on a bad setting. */
 export function serverModel(): string | null {
-  return process.env.ANTHROPIC_API_KEY ? ORCA_MODEL : null;
+  return resolveServerModel(process.env)?.model ?? null;
 }
 
-/** Orca's model and key as `completeJson` takes them, or null without a key. Server only; never sent anywhere. */
+/** Orca's provider, model and key as `completeJson` takes them, or null without a key. Server only; never sent anywhere. */
 export function orcaConfig(): LlmConfig | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  return apiKey ? { provider: "anthropic", model: ORCA_MODEL, apiKey } : null;
+  const m = resolveServerModel(process.env);
+  return m ? { provider: m.provider, model: m.model, apiKey: m.apiKey, ...(m.baseUrl ? { baseUrl: m.baseUrl } : {}) } : null;
 }
 
-/** Whether model calls go to this machine (the tests' fake API) rather than Anthropic. */
+/** Whether model calls go to this machine (the tests' fake API) rather than the provider. */
 export function modelIsLocal(): boolean {
-  const base = process.env.ANTHROPIC_BASE_URL;
-  if (!base) return false;
-  try {
-    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(base).hostname);
-  } catch {
-    return false;
-  }
+  return callsAreLocal(resolveServerModel(process.env));
 }
 
 /**

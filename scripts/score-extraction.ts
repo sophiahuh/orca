@@ -11,7 +11,7 @@
  * There is no target number to justify yet, so this guards against regressions: it fails only when
  * overall recall or precision drops more than 0.05 below scripts/extraction-baseline.json.
  *
- *   ANTHROPIC_API_KEY=… npm run score:extraction                 # score (calls the model)
+ *   ANTHROPIC_API_KEY=… npm run score:extraction                 # score (calls the model; or OPENAI_API_KEY, see src/lib/model-config.ts)
  *   ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline
  *   npm run score:extraction -- --dry                            # read decks + benchmark only, no model
  */
@@ -22,6 +22,7 @@ import type { z } from "zod";
 import type { Material, Objective, Topic } from "../src/lib/data.ts";
 import type { LlmConfig } from "../src/lib/llm.ts";
 import { completeJson } from "../src/lib/llm-server.ts";
+import { resolveServerModel } from "../src/lib/model-config.ts";
 import { type Named, exactMatch, shortlist } from "../src/lib/course/match.ts";
 import { pageText } from "../src/lib/material/page-text.ts";
 import { STEP_BUDGET } from "../src/lib/pipeline/budget.ts";
@@ -145,13 +146,14 @@ async function main() {
     return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.error("ANTHROPIC_API_KEY is not set: can't run the pipeline against the ALD decks. Use --dry to check the decks and benchmark without a model.");
+  const server = resolveServerModel(process.env);
+  if (!server) {
+    console.error("Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set: can't run the pipeline against the ALD decks. Use --dry to check the decks and benchmark without a model.");
     process.exitCode = 1;
     return;
   }
-  const config: LlmConfig = { provider: "anthropic", model: process.env.ORCA_MODEL ?? "claude-opus-5-5", apiKey };
+  const config: LlmConfig = { provider: server.provider, model: server.model, apiKey: server.apiKey, ...(server.baseUrl ? { baseUrl: server.baseUrl } : {}) };
+  console.log(`Model: ${server.model} (${server.provider})`);
   const call = modelCaller(config);
 
   let course: CourseStructureWithRelations = { topics: [], objectives: {}, bank: {}, relations: [] };

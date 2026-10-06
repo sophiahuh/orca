@@ -45,3 +45,6 @@ next-env.d.ts
 
 # subagent-driven-development scratch (ledgers, briefs, reports)
 .superpowers/
+
+# Trigger.dev CLI build output
+.trigger/

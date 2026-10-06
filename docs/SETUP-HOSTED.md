@@ -47,13 +47,16 @@ migrations in `supabase/migrations/` are the source of truth.
 3. **For the agent or CI to deploy tasks**: a personal access token (account → Personal Access
    Tokens, `tr_pat_…`).
 4. **Environment variables for the tasks** (project → Environment Variables, for Prod and Dev):
-   `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Tasks run on Trigger.dev's
+   the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER` if set),
+   `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Tasks run on Trigger.dev's
    machines, so they need their own copies.
 
-## 3. Anthropic
+## 3. Anthropic or OpenAI
 
-Create an API key at console.anthropic.com for Orca's server (the only model key the server uses)
-and set a monthly spend limit on the workspace. The same key unlocks the extraction baseline
+Create an API key for Orca's server: at console.anthropic.com, or at platform.openai.com
+(`OPENAI_API_KEY`; set `ORCA_MODEL_PROVIDER=openai` to make the choice explicit). Set a monthly
+spend limit on the workspace or project either way. Unset, the provider is OpenAI when its key is
+set, else Anthropic (`src/lib/model-config.ts`). The same key unlocks the extraction baseline
 (`npm run score:extraction`), so it's worth adding to the cloud environment first.
 
 ## 4. Email provider (before real students, not before testing)
@@ -73,7 +76,9 @@ work):
 | `NEXT_PUBLIC_SUPABASE_URL` | project URL | public |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key | public |
 | `SUPABASE_SECRET_KEY` | secret key | mark sensitive |
-| `ANTHROPIC_API_KEY` | Anthropic key | mark sensitive |
+| `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | the model key | mark sensitive |
+| `ORCA_MODEL_PROVIDER` | `openai` or `anthropic` (optional) | unset: OpenAI if its key is set, else Anthropic |
+| `ORCA_MODEL` | optional model override | must be priced in `src/lib/pricing.ts` |
 | `ORCA_JOBS` | `trigger` (or `inline` until Trigger.dev is set up: jobs then run inside the request, fine for short decks) | |
 | `TRIGGER_SECRET_KEY` | `tr_prod_…` | mark sensitive |
 | `SITE_URL` | the production address | emailed links come back to it; production refuses to send links without it |

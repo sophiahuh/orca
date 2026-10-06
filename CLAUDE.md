@@ -198,6 +198,11 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
   service-wide daily ceiling; unset = none), `TRIGGER_*`.
+- The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
+  (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
+  `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6-luna` / `claude-opus-5-5`) and
+  must be priced. OpenAI goes through its Responses API in the same `completeJson` (strict schema
+  from `src/lib/openai-schema.ts`, explicit caching of the material, same bounds and metering).
 - Model calls use the Claude API (`claude-opus-5-5`) through `completeJson` (`src/lib/llm-server.ts`:
   10-minute timeout, at most 2 retries of transient failures, spend-limit answers never retried,
   every reply's tokens reported to `onUsage`). Load the `claude-api` skill before writing any model
@@ -445,3 +450,9 @@ topics, objectives, weights and relations (on-device), (3) scheduling and sessio
   the check scripts) once at the end of a task that changed the store, a migration or shared
   code, and always before merging a branch.
   `npm run dev` for the preview.
+
+<!-- TRIGGER.DEV SKILLS START -->
+## Trigger.dev agent skills
+
+This project has Trigger.dev agent skills installed in `.claude/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-chat-agent`.
+<!-- TRIGGER.DEV SKILLS END -->

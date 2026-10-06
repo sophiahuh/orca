@@ -186,6 +186,21 @@ Judgement calls the agents made to keep building; each is in code behind one con
 - **Prices** in `src/lib/pricing.ts` were copied from Anthropic's pricing page on 2026-10-06 (no
   `claude-api` skill existed in the session); change them there when they change.
 
+### Server model on OpenAI (2026-10-06): decide or accept
+- **What changed:** the server can run on OpenAI instead of Anthropic (`src/lib/model-config.ts`).
+  `ORCA_MODEL_PROVIDER` picks the provider; unset, `OPENAI_API_KEY` wins over `ANTHROPIC_API_KEY`
+  (Amanda's ask). This widens the 2026-10-05 decision "Orca's server key only" to either provider's key.
+- **Decided for now (Amanda, 2026-10-06):** OpenAI's default model is `gpt-6-luna`, the cheap one
+  ($0.10 in / $0.50 out per million, 20× under `gpt-6.1-sol`), while the pipeline is tried out.
+  Watch whether it extracts and writes questions well enough: the blind solve and agreement checks
+  run on the same small model, so they may wave through wrong answers. Compare against
+  `ORCA_MODEL=gpt-6.1-sol` with `npm run score:extraction` before real students. Priced: `gpt-6-astra`, `gpt-6.1-sol`,
+  `gpt-6-luna` (Standard tier, read from developers.openai.com on 2026-10-06).
+- **Known gaps on OpenAI:** the prompts were written for Claude and are untested on either; a reply
+  cut off by the 10-minute timeout isn't metered (OpenAI calls aren't streamed, so no token counts
+  arrive); the browser tests only cover Anthropic (the fake API speaks the Messages API), the
+  OpenAI path is unit-tested against a fake `fetch`.
+
 ## Watch
 
 ### Loading all of a student's data at sign-in (revisit)
