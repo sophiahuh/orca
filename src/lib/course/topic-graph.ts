@@ -222,10 +222,10 @@ export function edgePath(a: GraphNode, b: GraphNode, labelT = 0.75): { d: string
   return { d: `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`, mid };
 }
 
-/** What a hovered topic's tooltip says: "Used in 1 · has 2 kinds · click to open". */
+/** What a hovered topic's tooltip says: "Used in 1 · has 2 kinds". */
 export function topicSummary(n: Pick<GraphNode, "usedIn" | "kinds" | "alternatives">): string {
   const parts = [`Used in ${n.usedIn}`];
   if (n.kinds) parts.push(`has ${n.kinds} kind${n.kinds === 1 ? "" : "s"}`);
   if (n.alternatives) parts.push(`${n.alternatives} alternative${n.alternatives === 1 ? "" : "s"}`);
-  return [...parts, "click to open"].join(" · ");
+  return parts.join(" · ");
 }

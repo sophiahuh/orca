@@ -30,7 +30,7 @@ test("foundations sit on top: a topic is a row above what it's used in and its k
   assert.equal(g.edges.length, 7);
   assert.equal(g.edges.filter((e) => e.type === "alternative-to").length, 1);
   assert.ok(node("recursion").y < node("dc").y && node("dc").y < node("merge").y);
-  assert.equal(topicSummary(node("tree")), "Used in 0 · has 2 kinds · click to open");
+  assert.equal(topicSummary(node("tree")), "Used in 0 · has 2 kinds");
 });
 
 test("merged and rejected topics: links follow merges, and links to archived topics or itself are dropped", () => {

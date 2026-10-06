@@ -26,7 +26,7 @@ test("the atlas draws topics and their links, foundations on top; hovering expla
 
   await page.locator(`[data-topic="${F.booleanAlgebra}"]`).hover();
   await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Boolean Algebra · New");
-  await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Used in 1 · click to open");
+  await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Used in 1");
   await expect(page.locator("[data-part=edge-label]")).toHaveText("used in");
 
   await page.locator(`[data-topic="${F.booleanAlgebra}"]`).click();
