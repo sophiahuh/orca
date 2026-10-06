@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { popIn, pulseHalo, springBouncy } from "@/lib/motion";
 
 /**
- * Figma: Knowledge Path node. done = periwinkle + check, current = large
+ * Figma: Knowledge Path node. done = mastered green + check, current = large
  * wisteria + play with a pulsing alice halo and a START bubble (the first topic not
  * yet done), in-progress = parchment + small play with full-colour label, upcoming = parchment + small play with faded label. Topics are never locked.
  * Positioned absolutely by its centre inside the 854×834 path canvas.
@@ -33,7 +33,7 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
 
   const face =
     visual === "done"
-      ? "bg-periwinkle border-periwinkle text-prussian lip-periwinkle"
+      ? "bg-good-tint border-good text-good-deep lip-good"
       : visual === "current"
         ? "bg-wisteria border-wisteria text-parchment lip-wisteria"
         : "bg-parchment border-alice-deep text-periwinkle-deep lip-alice";
