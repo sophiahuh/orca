@@ -256,7 +256,7 @@ function NewTopic({
                 <span className="text-[15px] text-prussian">{o.name}</span>
                 <OriginPill origin={o.origin} />
               </span>
-              <TextAction tone="quiet" onClick={() => onRejectObjective(o.id)}>
+              <TextAction tone="danger" onClick={() => onRejectObjective(o.id)}>
                 Reject
               </TextAction>
             </li>
@@ -269,7 +269,7 @@ function NewTopic({
         <Button size="sm" onClick={onConfirm}>
           Confirm topic
         </Button>
-        <Button size="sm" variant="secondary" onClick={onReject}>
+        <Button size="sm" variant="danger" onClick={onReject}>
           Reject topic
         </Button>
       </div>
