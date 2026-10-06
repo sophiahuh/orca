@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Course, DEFAULT_CONFIG, type QuizQuestion, trailTopics } from "@/lib/data";
 import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
@@ -40,13 +40,17 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
       </Screen>
     );
   }
-  return <SessionBody key={`${course.id}:${kind}`} course={course} kind={kind} />;
+  // A topic's dive ("Dive into [topic]" on the path or the Atlas): that topic only, at the length picked there.
+  const topicId = typeof sp.topic === "string" && trailTopics(course).some((t) => t.id === sp.topic) ? sp.topic : undefined;
+  const picked = Number(sp.minutes);
+  const minutes = Number.isInteger(picked) && picked >= 1 && picked <= DEEP_MAX_MINUTES ? picked : undefined;
+  return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}`} course={course} kind={kind} topicId={topicId} minutes={minutes} />;
 }
 
 /** Mounted once the store is loaded. A deep review asks for its length first and can be run again from its end card. */
-function SessionBody({ course, kind }: { course: Course; kind: Kind }) {
+function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind: Kind; topicId?: string; minutes?: number }) {
   const [round, setRound] = useState(0);
-  if (kind === "deep") return <DeepReview key={round} course={course} onAgain={() => setRound((r) => r + 1)} />;
+  if (kind === "deep") return <DeepReview key={round} course={course} topicId={topicId} startMinutes={minutes} onAgain={() => setRound((r) => r + 1)} />;
   return <ScheduledSession course={course} kind={kind} />;
 }
 
@@ -111,17 +115,26 @@ function ScheduledSession({ course, kind }: { course: Course; kind: "quick" | "r
   return <QuizRunner course={course} items={items} mode={kind} title={course.name} backHref={backHref} />;
 }
 
-function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }) {
+/**
+ * A dive: a deep review whose harder questions are written when it starts. Course-wide it asks for
+ * its length first and covers the objectives the student has answered; for one topic (topicId) it
+ * covers every live objective of that topic and starts at once with the length picked in the popup.
+ */
+function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course; onAgain: () => void; topicId?: string; startMinutes?: number }) {
   const router = useRouter();
   const { configs, questionBank, refresh } = useOrca();
   const agenda = useAgenda()[course.id];
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
   const backHref = `/course/${course.slug}`;
   // The course's deep-review length is the starting suggestion; the student picks the length here.
-  const [minutes, setMinutes] = useState(() => Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
-  const [phase, setPhase] = useState<{ kind: "setup" | "writing" } | { kind: "error"; message: string } | { kind: "ready"; picked: Array<{ id: string; topicId: string }> }>({ kind: "setup" });
-  // What it covers: objectives the student has answered (not retired), most urgent first.
-  const [objectiveIds] = useState(() => agenda.ranked.filter((r) => r.status !== "unseen" && r.status !== "retired").map((r) => r.objectiveId));
+  const [minutes, setMinutes] = useState(() => startMinutes ?? Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
+  const autostart = topicId !== undefined && startMinutes !== undefined;
+  const [phase, setPhase] = useState<{ kind: "setup" | "writing" } | { kind: "error"; message: string } | { kind: "ready"; picked: Array<{ id: string; topicId: string }> }>({ kind: autostart ? "writing" : "setup" });
+  // What it covers, most urgent first: one topic's live objectives, or every objective the student has answered (not retired).
+  const [objectiveIds] = useState(() =>
+    agenda.ranked.filter((r) => (topicId ? r.topicId === topicId && r.status !== "retired" : r.status !== "unseen" && r.status !== "retired")).map((r) => r.objectiveId),
+  );
+  const topicName = topicId ? trailTopics(course).find((t) => t.id === topicId)?.name : undefined;
 
   const items = useMemo((): RunnerItem[] | null => {
     if (phase.kind !== "ready") return null;
@@ -132,8 +145,7 @@ function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }
     });
   }, [phase, questionBank, course.id]);
 
-  const start = async () => {
-    setPhase({ kind: "writing" });
+  const write = async () => {
     try {
       // Written now, on the server, from the material each objective is taught in (POST /api/deep-review).
       const res = await fetch("/api/deep-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId: course.id, minutes, objectiveIds }) });
@@ -145,14 +157,25 @@ function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }
       setPhase({ kind: "error", message: error instanceof Error ? error.message : "Orca couldn't prepare your dive in." });
     }
   };
+  const start = () => {
+    setPhase({ kind: "writing" });
+    void write();
+  };
+  // From the topic popup: the length is already chosen, so the questions are written right away.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autostart || started.current || objectiveIds.length === 0) return;
+    started.current = true;
+    void write();
+  });
 
   if (objectiveIds.length === 0) {
-    return <NothingToDo course={course} message="Nothing to dive into yet: answer some questions first." onBack={() => router.push(backHref)} />;
+    return <NothingToDo course={course} message={topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet: answer some questions first."} onBack={() => router.push(backHref)} />;
   }
   if (items) {
-    return <QuizRunner course={course} items={items} mode="deep" title={course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} />;
+    return <QuizRunner course={course} items={items} mode="deep" title={topicName ?? course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} />;
   }
-  return <DeepReviewSetup courseName={course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={phase.kind === "writing"} error={phase.kind === "error" ? phase.message : null} />;
+  return <DeepReviewSetup courseName={topicName ? `${course.name} · ${topicName}` : course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={phase.kind === "writing"} error={phase.kind === "error" ? phase.message : null} />;
 }
 
 function NothingToDo({ course, message, onBack }: { course: Course; message: string; onBack: () => void }) {

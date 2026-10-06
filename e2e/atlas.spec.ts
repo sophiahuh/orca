@@ -1,4 +1,4 @@
-import { F, FIXTURE_STATE, expect, seedState, test } from "./fixture";
+import { F, FIXTURE_STATE, expect, seedPages, seedState, test } from "./fixture";
 import { fakeCalls, fakeModel } from "./fake-model";
 
 /**
@@ -29,8 +29,26 @@ test("the atlas draws topics and their links, foundations on top; hovering expla
   await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Used in 1");
   await expect(page.locator("[data-part=edge-label]")).toHaveText("used in");
 
+  // Clicking a topic offers a dive into it.
   await page.locator(`[data-topic="${F.booleanAlgebra}"]`).click();
-  await expect(page).toHaveURL(new RegExp(`/quiz/${SLUG}/${F.booleanAlgebra}`));
+  await expect(page.locator("[data-part=dive-modal]")).toContainText("Dive into Boolean Algebra");
+});
+
+test("a topic's dive: the popup picks the length and the session writes harder questions for that topic only", async ({ page, student }) => {
+  await seedState(student, FIXTURE_STATE);
+  // The deck's stored pages: dive questions are written from where each objective is taught.
+  await seedPages(student, { [F.material]: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
+  await page.goto(`/course/${SLUG}`);
+  await page.locator(`[data-visual] [data-part=node]`).first().click();
+  const modal = page.locator("[data-part=dive-modal]");
+  await expect(modal).toContainText("Dive into Boolean Algebra");
+  await modal.locator('[data-part=dive-minutes][data-minutes="10"]').click();
+  await modal.locator("[data-part=dive-start]").click();
+  await expect(page).toHaveURL(new RegExp(`/session/${SLUG}\\?kind=deep&topic=${F.booleanAlgebra}&minutes=10`));
+  // 10 minutes is 3 questions, all for Boolean Algebra's one objective; it starts without asking again.
+  await expect(page.getByText("1 / 3")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("h1").first()).toContainText("Simplify an expression: deep case");
+  expect(await fakeCalls()).toEqual(["deep"]);
 });
 
 test("the course page switches between Path and Atlas", async ({ page, student }) => {

@@ -1,13 +1,16 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import { DiveModal } from "@/components/quiz/DiveModal";
+import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
+import { durationSeconds } from "@/lib/mastery/session";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { TopicGraph } from "@/components/atlas/TopicGraph";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackButton } from "@/components/layout/BackButton";
-import { trailTopics } from "@/lib/data";
+import { DEFAULT_CONFIG, trailTopics } from "@/lib/data";
 import { topicGraph, topicStrength } from "@/lib/course/topic-graph";
 import { useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -18,8 +21,11 @@ import { fadeUp, stagger } from "@/lib/motion";
  */
 export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">) {
   const { slug } = use(params);
+  // A topic's dive: its popup ("Dive into [topic]") picks the length, then the session starts.
+  const [diving, setDiving] = useState<{ id: string; name: string } | null>(null);
+  const closeDive = useCallback(() => setDiving(null), []);
   const router = useRouter();
-  const { hydrated, relations, refresh } = useOrca();
+  const { hydrated, relations, refresh, configs } = useOrca();
   const [finding, setFinding] = useState<{ kind: "idle" | "busy" } | { kind: "done" | "error"; message: string }>({ kind: "idle" });
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
@@ -71,7 +77,7 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
           <p className="text-[16px] text-wisteria-deep">Add lecture slides or homework and Orca will chart this island&apos;s topics.</p>
         </div>
       ) : (
-        <TopicGraph key={`${graph.width}x${graph.height}`} graph={graph} onOpen={(id) => router.push(`/quiz/${course.slug}/${id}`)} />
+        <TopicGraph key={`${graph.width}x${graph.height}`} graph={graph} onOpen={(id) => setDiving(graph.nodes.find((n) => n.topic.id === id)?.topic ?? null)} />
       )}
       <motion.header variants={stagger()} initial="hidden" animate="show" className="pointer-events-none absolute left-[28px] top-[28px] flex items-start gap-[16px]">
         <motion.div variants={fadeUp} className="pointer-events-auto">
@@ -125,6 +131,12 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
           </motion.div>
         </div>
       )}
+      <DiveModal
+        topic={diving}
+        initialMinutes={Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60)}
+        onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
+        onClose={closeDive}
+      />
     </AppShell>
   );
 }

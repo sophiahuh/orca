@@ -3,6 +3,9 @@
 import { use, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
+import { DiveModal } from "@/components/quiz/DiveModal";
+import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
+import { durationSeconds } from "@/lib/mastery/session";
 import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackButton } from "@/components/layout/BackButton";
@@ -12,16 +15,19 @@ import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { ExamsModal } from "@/components/config/ExamsModal";
 import { fadeUp, stagger } from "@/lib/motion";
-import { trailTopics } from "@/lib/data";
+import { DEFAULT_CONFIG, trailTopics } from "@/lib/data";
 import { pendingReview } from "@/lib/course/review";
 import Link from "next/link";
 
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
+  // A topic's dive: its popup ("Dive into [topic]") picks the length, then the session starts.
+  const [diving, setDiving] = useState<{ id: string; name: string } | null>(null);
+  const closeDive = useCallback(() => setDiving(null), []);
   const [editingExams, setEditingExams] = useState(false);
   const closeExams = useCallback(() => setEditingExams(false), []);
   const router = useRouter();
-  const { hydrated, objectives, renameCourse } = useOrca();
+  const { hydrated, objectives, renameCourse, configs } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -58,7 +64,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </Button>
         </div>
       ) : (
-        <KnowledgePath course={course} progress={m.topics} needingQuestions={m.objectivesNeedingQuestions} onStart={(t) => router.push(`/quiz/${course.slug}/${t.id}`)} />
+        <KnowledgePath course={course} progress={m.topics} needingQuestions={m.objectivesNeedingQuestions} onStart={(t) => setDiving({ id: t.id, name: t.name })} />
       )}
 
       <motion.header variants={stagger()} initial="hidden" animate="show" className="absolute left-[28px] top-[28px] flex items-start gap-[16px]">
@@ -126,6 +132,12 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         )}
       </motion.div>
       <ExamsModal course={editingExams ? course : null} onClose={closeExams} />
+      <DiveModal
+        topic={diving}
+        initialMinutes={Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60)}
+        onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
+        onClose={closeDive}
+      />
     </AppShell>
   );
 }
