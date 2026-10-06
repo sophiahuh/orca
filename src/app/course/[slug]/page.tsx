@@ -114,7 +114,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         )}
         {agenda.deepReview.candidates > 0 && (
           <Link href={`/session/${course.slug}?kind=deep`} data-part="start-deep" className="pressable rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice">
-            Deep review{agenda.deepReview.due ? " · due" : ""}
+            Dive in{agenda.deepReview.due ? " · due" : ""}
           </Link>
         )}
       </motion.div>

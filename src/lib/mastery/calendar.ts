@@ -33,7 +33,7 @@ export function reviewDates(courses: readonly ReviewCourse[], today: string, day
     for (const [day, n] of later) add(day, "quick", `${c.short} quick review · ${plural(n)}`);
 
     const deep = agenda.deepReview.dueDay;
-    if (deep) add(deep < today ? today : deep, "deep", `${c.short} deep review`);
+    if (deep) add(deep < today ? today : deep, "deep", `${c.short} Dive in`);
 
     for (const when of ["today", "tomorrow"] as const) {
       if (agenda.study.some((s) => s.requiz === when)) add(when === "today" ? today : addDays(today, 1), "requiz", `${c.short} re-quiz`);

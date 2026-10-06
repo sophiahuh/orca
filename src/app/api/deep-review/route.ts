@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const parsed = Body.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return reply(400, { error: "Send the course, the length and the objectives to cover." });
     const call = stepCaller({ ownerId: student.id, kind: "deep-review" }, { guard: "none" });
-    if (!call) return reply(503, { error: "No AI is connected, so Orca can't write a deep review." });
+    if (!call) return reply(503, { error: "No AI is connected, so Orca can't prepare your dive in." });
     const rate = await rateLimit(db, student.id, "deepReview");
     if (!rate.ok) return tooManyRequests(rate);
     const verdict = await checkBudget(adminClient(), student.id, 0);
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const written = Object.entries(out.questions).flatMap(([topicId, qs]) => qs.map((q) => ({ id: q.id, topicId, objectiveId: q.objectiveId! })));
     if (!written.length) {
       const why = out.skipped[0]?.reason ?? out.dropped[0]?.reason ?? "the model wrote nothing usable";
-      return reply(422, { error: `Orca couldn't write a deep review: ${why}.` });
+      return reply(422, { error: `Orca couldn't prepare your dive in: ${why}.` });
     }
     const bank = { ...before.bank };
     for (const [topicId, qs] of Object.entries(out.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...qs];

@@ -38,7 +38,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
           <BackButton href={backHref} />
         </div>
         <div className="flex flex-col items-center gap-[4px]">
-          <span className="eyebrow">Deep review · {courseName}</span>
+          <span className="eyebrow">Dive in · {courseName}</span>
           <h1 className="text-[40px] font-bold leading-none text-prussian">How long do you want to study?</h1>
         </div>
       </header>
@@ -80,7 +80,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
 
         <motion.div variants={fadeUp} className="flex flex-col items-center gap-[12px]">
           <Button onClick={onStart} disabled={writing} data-part="deep-start">
-            {writing ? "Writing your deep review…" : "Start deep review"}
+            {writing ? "Preparing your dive in…" : "Dive in"}
           </Button>
           {writing && (
             <p className="text-[15px] font-medium text-prussian" role="status" data-part="deep-writing">

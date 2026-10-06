@@ -30,7 +30,7 @@ test("today's due list, later spaced checks by day, an overdue deep review today
   ]);
   const out = reviewDates([{ id: "c", short: "LOG", agenda, objectives }], TODAY, day);
   assert.deepEqual(out.map((e) => [e.date, e.kind, e.title]), [
-    [TODAY, "rev", "LOG deep review"],
+    [TODAY, "rev", "LOG Dive in"],
     [TODAY, "rev", "LOG quick review · 1 objective"],
     ["2026-10-07", "rev", "LOG re-quiz"],
     ["2026-10-09", "rev", "LOG quick review · 2 objectives"],

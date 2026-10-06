@@ -172,7 +172,7 @@ test.describe("scheduling", () => {
     await seedPages(student, { [F.material]: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
     await page.goto("/home");
     const card = page.locator('[data-todo="deep"]');
-    await expect(card).toContainText("Deep review");
+    await expect(card).toContainText("Dive in");
     await card.click();
     await expect(page).toHaveURL(/kind=deep/);
 

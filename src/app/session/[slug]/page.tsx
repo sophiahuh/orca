@@ -127,7 +127,7 @@ function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }
     if (phase.kind !== "ready") return null;
     return phase.picked.map((p) => {
       const question = questionBank[course.id]?.[p.topicId]?.find((q) => q.id === p.id);
-      if (!question) throw new Error(`Deep review question ${p.id} isn't in the course`);
+      if (!question) throw new Error(`Dive in question ${p.id} isn't in the course`);
       return { question, topicId: p.topicId, notes: [] };
     });
   }, [phase, questionBank, course.id]);
@@ -138,19 +138,19 @@ function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }
       // Written now, on the server, from the material each objective is taught in (POST /api/deep-review).
       const res = await fetch("/api/deep-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId: course.id, minutes, objectiveIds }) });
       const out = (await res.json().catch(() => null)) as { questions?: Array<{ id: string; topicId: string }>; error?: string } | null;
-      if (!res.ok || !out?.questions) throw new Error(out?.error ?? "Orca couldn't write the deep review. Try again in a moment.");
+      if (!res.ok || !out?.questions) throw new Error(out?.error ?? "Orca couldn't prepare your dive in. Try again in a moment.");
       await refresh();
       setPhase({ kind: "ready", picked: out.questions });
     } catch (error) {
-      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Orca couldn't write the deep review." });
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Orca couldn't prepare your dive in." });
     }
   };
 
   if (objectiveIds.length === 0) {
-    return <NothingToDo course={course} message="Nothing to deep review yet: answer some questions first." onBack={() => router.push(backHref)} />;
+    return <NothingToDo course={course} message="Nothing to dive into yet: answer some questions first." onBack={() => router.push(backHref)} />;
   }
   if (items) {
-    return <QuizRunner course={course} items={items} mode="deep" title={course.name} backHref={backHref} again={{ label: "Start another deep review", onStart: onAgain }} />;
+    return <QuizRunner course={course} items={items} mode="deep" title={course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} />;
   }
   return <DeepReviewSetup courseName={course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={phase.kind === "writing"} error={phase.kind === "error" ? phase.message : null} />;
 }
