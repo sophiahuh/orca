@@ -21,7 +21,7 @@ picks up environment changes.
 3. **Email sign-in** (Authentication → Sign In / Providers → Email): enabled, "Confirm email"
    on, minimum password length 8. If the plan offers leaked-password protection, turn it on.
 4. **URLs** (Authentication → URL Configuration): Site URL = the production address
-   (`https://orca-ocean.vercel.app` until there's a domain). Redirect URLs:
+   (`https://orca-lake-omega.vercel.app` until there's a domain). Redirect URLs:
    the production address with `/**`, `http://localhost:3000/**`, and Vercel's preview pattern
    for the project if previews should sign in.
 5. **Emails to real students** (Authentication → SMTP Settings): Supabase's built-in sender is
