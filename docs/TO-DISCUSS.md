@@ -213,8 +213,7 @@ Judgement calls the agents made to keep building; each is in code behind one con
   (the old confirm step is gone); a failed match still saves the note and says why.
 - **Dive in, one topic:** covers every live objective of the topic, including ones never answered
   (a course-wide dive covers only answered ones). A dive writes one question per 4 minutes, at most
-  20 (so at most 80 minutes) and 4 per objective (`src/lib/deep-review.ts`). Dives are rate-limited
-  to 6 an hour; "Find connections" to 10 an hour.
+  20 (so at most 80 minutes) and 4 per objective (`src/lib/deep-review.ts`). Dives have no per-hour limit (owner, 2026-10-06; the daily budgets still apply); "Find connections" is limited to 10 an hour.
 - **A topic's play button** now opens the topic dive. The old topic quiz (`/quiz/[slug]/[topic]`,
   the topic's quick-review questions) still exists but nothing on the course page links to it.
 - **Topic links from the link step** use the model's knowledge of the subject, not only the slides,

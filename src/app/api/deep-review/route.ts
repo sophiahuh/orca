@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { startDeepReviewJob } from "@/lib/server/jobs/start";
-import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { forStudent, reply } from "@/lib/server/student";
 
 /**
@@ -18,8 +17,7 @@ export async function POST(request: Request) {
   return forStudent(request, async (student, db) => {
     const parsed = Body.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return reply(400, { error: "Send the course, the length and the objectives to cover." });
-    const rate = await rateLimit(db, student.id, "deepReview");
-    if (!rate.ok) return tooManyRequests(rate);
+    // No per-hour limit on dives (owner, 2026-10-06); the daily budgets still hold each job.
     const out = await startDeepReviewJob(db, student.id, parsed.data);
     if (out.state === "no-model") return reply(503, { error: "No AI is connected, so Orca can't prepare your dive in." });
     if (out.state === "no-course") return reply(404, { error: "No such course." });
