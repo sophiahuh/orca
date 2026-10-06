@@ -88,6 +88,13 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
   }, [hover, graph.edges]);
   const lit = (e: { from: string; to: string }) => hover !== null && (e.from === hover || e.to === hover);
   const hovered = hover ? graph.nodes.find((n) => n.topic.id === hover) ?? null : null;
+  // Label positions stay exactly on their arrows. When one topic has several visible labels, spread
+  // them along their own paths so their pills do not stack at the same visual depth.
+  const edgeLabels = useMemo(() => {
+    const shown = edges.filter((edge) => hover !== null && (edge.from === hover || edge.to === hover) && edge.type !== "related");
+    const positions = shown.length === 1 ? [0.75] : shown.map((_, index) => 0.52 + (0.38 * index) / (shown.length - 1));
+    return shown.map((edge, index) => ({ ...edge, label: edgePath(nodesById.get(edge.from)!, nodesById.get(edge.to)!, positions[index]!).mid }));
+  }, [edges, hover, nodesById]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -182,11 +189,11 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
         </motion.g>
 
         {/* Hover: the lit edges' kinds as pills (related edges stay unlabelled). */}
-        {edges.filter((e) => lit(e) && e.type !== "related").map((e) => {
+        {edgeLabels.map((e) => {
           const label = RELATION_LABEL[e.type];
           const w = label.length * 6.4 + 18;
           return (
-            <g key={`label-${e.id}`} transform={`translate(${e.mid.x} ${e.mid.y})`} pointerEvents="none" data-part="edge-label">
+            <g key={`label-${e.id}`} transform={`translate(${e.label.x} ${e.label.y})`} pointerEvents="none" data-part="edge-label">
               <rect x={-w / 2} y={-10} width={w} height={20} rx={10} fill="var(--color-parchment)" stroke={EDGE[e.type].stroke} strokeWidth={1.5} />
               <text textAnchor="middle" y={4} fontSize={11} fontWeight={700} fill={EDGE[e.type].stroke}>
                 {label}

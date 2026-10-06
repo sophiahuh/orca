@@ -202,12 +202,12 @@ export function labelBottom(n: Pick<GraphNode, "y" | "r" | "lines">): number {
  * node's name and arriving at the top of the lower node's circle; a straight line within a row.
  */
 /** Connect two Atlas nodes; exported so an interactive view can redraw an edge after a node moves. */
-export function edgePath(a: GraphNode, b: GraphNode): { d: string; mid: { x: number; y: number } } {
+export function edgePath(a: GraphNode, b: GraphNode, labelT = 0.75): { d: string; mid: { x: number; y: number } } {
   if (a.row === b.row) {
     const dir = b.x >= a.x ? 1 : -1;
     const x1 = a.x + dir * a.r;
     const x2 = b.x - dir * (b.r + ARROW);
-    return { d: `M${x1} ${a.y} L${x2} ${b.y}`, mid: { x: Math.round((x1 + x2) / 2), y: a.y } };
+    return { d: `M${x1} ${a.y} L${x2} ${b.y}`, mid: { x: Math.round(x1 + (x2 - x1) * labelT), y: Math.round(a.y + (b.y - a.y) * labelT) } };
   }
   const dir = b.y > a.y ? 1 : -1;
   const p0 = { x: a.x, y: dir === 1 ? labelBottom(a) + 3 : a.y - a.r };
@@ -215,8 +215,8 @@ export function edgePath(a: GraphNode, b: GraphNode): { d: string; mid: { x: num
   const cy = (p0.y + p3.y) / 2;
   const p1 = { x: p0.x, y: cy };
   const p2 = { x: p3.x, y: cy };
-  // The cubic at t = 0.75: (1−t)³P0 + 3(1−t)²t P1 + 3(1−t)t² P2 + t³P3.
-  const t = 0.75;
+  // The cubic at the label position: (1−t)³P0 + 3(1−t)²t P1 + 3(1−t)t² P2 + t³P3.
+  const t = labelT;
   const [a0, a1, a2, a3] = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3];
   const mid = { x: Math.round(a0 * p0.x + a1 * p1.x + a2 * p2.x + a3 * p3.x), y: Math.round(a0 * p0.y + a1 * p1.y + a2 * p2.y + a3 * p3.y) };
   return { d: `M${p0.x} ${p0.y} C${p1.x} ${p1.y} ${p2.x} ${p2.y} ${p3.x} ${p3.y}`, mid };
