@@ -141,6 +141,10 @@ interface OrcaActions {
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
   clearConfigOverride: (courseId: string) => void;
+  /** A course's exams (calendar entries of kind "exam"): add one, rename or move it, or remove it. */
+  addExam: (courseId: string, title: string, date: string) => void;
+  updateExam: (id: string, change: { title?: string; date?: string }) => void;
+  removeExam: (id: string) => void;
   clearWeightOverride: (courseId: string) => void;
   /** Account defaults, inherited by courses without an override. */
   setDefaults: (config: ReviewConfig, weights: Weights) => void;
@@ -552,6 +556,31 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  const addExam = useCallback<OrcaActions["addExam"]>(
+    (courseId, title, date) => {
+      const event: CalendarEvent = { id: crypto.randomUUID(), date, kind: "exam", title, courseId };
+      setState((s) => ({ ...s, events: [...s.events, event] }));
+      save(async () => void must(await browserSupabase().from("calendar_events").insert(calendarToRow(event, null))));
+    },
+    [save],
+  );
+
+  const updateExam = useCallback<OrcaActions["updateExam"]>(
+    (id, change) => {
+      setState((s) => ({ ...s, events: s.events.map((e) => (e.id === id ? { ...e, ...change } : e)) }));
+      save(async () => mustChange(await browserSupabase().from("calendar_events").update(change).eq("id", id).eq("kind", "exam").select("id")));
+    },
+    [save],
+  );
+
+  const removeExam = useCallback<OrcaActions["removeExam"]>(
+    (id) => {
+      setState((s) => ({ ...s, events: s.events.filter((e) => e.id !== id) }));
+      save(async () => mustChange(await browserSupabase().from("calendar_events").delete().eq("id", id).eq("kind", "exam").select("id")));
+    },
+    [save],
+  );
+
   const addMaterial = useCallback<OrcaActions["addMaterial"]>(
     (m, opts) => {
       const event: CalendarEvent | null = m.due
@@ -772,6 +801,9 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       setWeights,
       clearConfigOverride,
       clearWeightOverride,
+      addExam,
+      updateExam,
+      removeExam,
       setDefaults,
       addMaterial,
       recordQuiz,
@@ -787,7 +819,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
+import { ExamsModal } from "@/components/config/ExamsModal";
 import { fadeUp, stagger } from "@/lib/motion";
 import { trailTopics } from "@/lib/data";
 import { pendingReview } from "@/lib/course/review";
@@ -17,6 +18,8 @@ import Link from "next/link";
 
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
+  const [editingExams, setEditingExams] = useState(false);
+  const closeExams = useCallback(() => setEditingExams(false), []);
   const router = useRouter();
   const { hydrated, objectives, renameCourse } = useOrca();
   const course = useCourse(slug);
@@ -107,11 +110,9 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
       </motion.header>
 
       <motion.div variants={fadeUp} initial="hidden" animate="show" role="group" aria-label="Practice" className="absolute right-[28px] top-[32px] flex items-center gap-[10px]">
-        {agenda.dueToday.length > 0 && (
-          <Link href={`/session/${course.slug}?kind=quick`} data-part="start-quick" className="pressable rounded-pill bg-prussian px-[14px] py-[7px] text-[13px] font-bold text-parchment lip-2 lip-ink">
-            Quick review · {agenda.dueToday.length} due
-          </Link>
-        )}
+        <button type="button" onClick={() => setEditingExams(true)} data-part="edit-exams" className="pressable rounded-pill bg-prussian px-[14px] py-[7px] text-[13px] font-bold text-parchment lip-2 lip-ink">
+          Edit Exams
+        </button>
         {agenda.deepReview.candidates > 0 && (
           <div className="group relative">
             <Link href={`/session/${course.slug}?kind=deep`} data-part="start-deep" aria-describedby="dive-in-info" className="pressable rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice">
@@ -124,6 +125,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </div>
         )}
       </motion.div>
+      <ExamsModal course={editingExams ? course : null} onClose={closeExams} />
     </AppShell>
   );
 }
