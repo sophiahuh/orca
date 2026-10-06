@@ -24,6 +24,12 @@ export function serverModel(): string | null {
   return process.env.ANTHROPIC_API_KEY ? ORCA_MODEL : null;
 }
 
+/** Orca's model and key as `completeJson` takes them, or null without a key. Server only; never sent anywhere. */
+export function orcaConfig(): LlmConfig | null {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  return apiKey ? { provider: "anthropic", model: ORCA_MODEL, apiKey } : null;
+}
+
 /** Whether model calls go to this machine (the tests' fake API) rather than Anthropic. */
 export function modelIsLocal(): boolean {
   const base = process.env.ANTHROPIC_BASE_URL;
@@ -64,9 +70,8 @@ export class StepError extends Error {
  * schema. Every call is made for `ctx`. Null without a key.
  */
 export function stepCaller(ctx: ModelCtx): CallStep | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-  const config: LlmConfig = { provider: "anthropic", model: ORCA_MODEL, apiKey };
+  const config = orcaConfig();
+  if (!config) return null;
   return (async (step: StepName, input: unknown) => {
     const spec = STEPS[step];
     if (!spec) throw new Error(`Unknown pipeline step "${String(step)}"`);

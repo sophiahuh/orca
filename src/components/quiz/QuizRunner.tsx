@@ -16,8 +16,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { RoundButton } from "@/components/ui/RoundButton";
 import { TruthTable } from "@/components/quiz/TruthTable";
 import { ShortAnswer } from "@/components/quiz/ShortAnswer";
-import { GRADE_SYSTEM, type GradeResult, gradeExact, gradePrompt, parseGradeLoose } from "@/lib/grading";
-import { PROVIDERS, compatChat, llmReady } from "@/lib/llm";
+import { type GradeResult, gradeExact } from "@/lib/grading";
 import { useServerModel } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
@@ -54,7 +53,7 @@ export interface QuizRunnerProps {
 export function QuizRunner({ course, items: allItems, mode, title, backHref, again }: QuizRunnerProps) {
   const router = useRouter();
   const streak = useStreak();
-  const { recordQuiz, recordEvidence, objectives, llm } = useOrca();
+  const { recordQuiz, recordEvidence, objectives } = useOrca();
   const serverModel = useServerModel();
   const topUp = useTopUp(serverModel);
   const catalogue = objectives[course.id];
@@ -139,7 +138,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     logAnswer(item, ok ? "correct" : "incorrect", "choice");
   }, [selected, checked, item, logAnswer]);
 
-  const noModel: string | null = llmReady(llm) || serverModel ? null : serverModel === undefined ? null : "no AI connected";
+  // Prose answers are graded by Orca's server (Task 8); with no model there, the student self-marks.
+  const noModel: string | null = serverModel === null ? "no AI connected" : null;
 
   const settle = useCallback(
     (result: GradeResult, grader: Grader | null) => {
@@ -163,20 +163,15 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
       if (!q.rubric) return;
       setGrading(true);
       try {
-        let result: GradeResult;
-        if (llmReady(llm) && PROVIDERS[llm.provider].browserOnly) {
-          result = parseGradeLoose(await compatChat(llm, GRADE_SYSTEM, [{ role: "user", content: gradePrompt(q.prompt, q.rubric, response) }], { maxTokens: 1024, json: true }));
-        } else {
-          const res = await fetch("/api/grade", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ llm: llmReady(llm) ? llm : null, question: q.prompt, rubric: q.rubric, response }),
-          });
-          const data = (await res.json()) as GradeResult & { error?: string };
-          if (!res.ok || data.error) throw new Error(data.error ?? "Grading failed.");
-          result = data;
-        }
-        settle(result, "rubric");
+        // The server loads the question and its rubric by id; the request never carries them.
+        const res = await fetch("/api/grade", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ questionId: q.id, response }),
+        });
+        const data = (await res.json()) as GradeResult & { error?: string };
+        if (!res.ok || data.error) throw new Error(data.error ?? "Grading failed.");
+        settle(data, "rubric");
       } catch (error) {
         settle(
           {
@@ -189,7 +184,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         setGrading(false);
       }
     },
-    [q, checked, grading, llm, settle],
+    [q, checked, grading, settle],
   );
 
   const advance = useCallback(() => {

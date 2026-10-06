@@ -24,6 +24,8 @@ export interface Scenario {
   /** Answer this step with an error (400 by default: the SDK doesn't retry it). */
   fail?: { step: string; status?: number; message?: string };
   reflect?: { matches: Array<{ name: string; sure: boolean; reasoning: string }> };
+  /** What the grade step answers (default: correct). */
+  grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string };
   /** Wait this long before answering each call (to watch progress). */
   delayMs?: number;
 }
@@ -99,7 +101,7 @@ function answer(step: string, prompt: string): unknown {
       };
     }
     case "grade":
-      return { outcome: "correct", satisfied: [], misconception: null, feedback: "The fake API marked it correct." };
+      return { satisfied: [], misconception: null, feedback: "The fake API graded it.", outcome: "correct", ...(scenario.grade ?? {}) };
     default:
       throw new Error(`no answer for ${step}`);
   }
