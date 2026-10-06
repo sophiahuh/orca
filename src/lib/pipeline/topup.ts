@@ -236,3 +236,32 @@ export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call"
   }
   return { questions, dropped, skipped };
 }
+
+/**
+ * Dive questions written earlier and never answered, for these objectives (merged ones followed),
+ * picked the way a dive is ordered: one per objective in priority order, then round again, at most
+ * `maxPerObjective` each and `count` in all. A dive asks these before any new ones are written.
+ */
+export function unansweredDeepQuestions(
+  input: Pick<DeepInput, "objectives" | "bank" | "objectiveIds" | "count">,
+  answered: ReadonlySet<string>,
+): Array<{ topicId: string; question: QuizQuestion }> {
+  const byObjective = new Map<string, Array<{ topicId: string; question: QuizQuestion }>>();
+  for (const [topicId, questions] of Object.entries(input.bank)) {
+    for (const question of questions) {
+      if (!question.deep || !question.objectiveId || answered.has(question.id)) continue;
+      const id = survivorId(question.objectiveId, input.objectives);
+      byObjective.set(id, [...(byObjective.get(id) ?? []), { topicId, question }]);
+    }
+  }
+  const order = [...new Set(input.objectiveIds.map((id) => survivorId(id, input.objectives)))].filter((id) => input.objectives[id] && input.objectives[id].review !== "archived");
+  const picked: Array<{ topicId: string; question: QuizQuestion }> = [];
+  for (let round = 0; round < DEEP_RULES.maxPerObjective && picked.length < input.count; round++) {
+    for (const id of order) {
+      if (picked.length >= input.count) break;
+      const next = byObjective.get(id)?.[round];
+      if (next) picked.push(next);
+    }
+  }
+  return picked;
+}

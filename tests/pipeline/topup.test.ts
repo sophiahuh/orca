@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Material, Objective, QuizQuestion, Topic } from "../../src/lib/data.ts";
 import type { CallStep } from "../../src/lib/pipeline/run.ts";
-import { type TopUpInput, pagesFor, runDeepReview, runTopUp, topUpTargets } from "../../src/lib/pipeline/topup.ts";
+import { type TopUpInput, pagesFor, runDeepReview, runTopUp, topUpTargets, unansweredDeepQuestions } from "../../src/lib/pipeline/topup.ts";
 import { deepQuestionCount } from "../../src/lib/deep-review.ts";
 import { locatorPages } from "../../src/lib/course/study.ts";
 import type { GeneratedQuestion, StepInput } from "../../src/lib/pipeline/schemas.ts";
@@ -183,4 +183,12 @@ test("a deep review writes harder questions through the deep step, spread over o
   assert.equal(qs.length, 3);
   assert.ok(qs.every((x) => x.deep === true && x.materialId === "L1"));
   assert.deepEqual(out.skipped, []);
+});
+
+test("unanswered dive questions are picked one per objective in priority order, then round again, up to the count", () => {
+  const deep = (id: string, objectiveId: string): QuizQuestion => ({ ...q(id, objectiveId), deep: true });
+  const bank = { t: [deep("a1", "a"), deep("a2", "a"), deep("b1", "b"), q("plain", "b"), deep("b2", "b")] };
+  const picked = unansweredDeepQuestions({ objectives: { a: objective("a"), b: objective("b") }, bank, objectiveIds: ["b", "a"], count: 3 }, new Set(["b1"]));
+  // b first (more urgent): b2 (b1 answered; "plain" isn't a dive question), then a1, then round two: a2.
+  assert.deepEqual(picked.map((p) => p.question.id), ["b2", "a1", "a2"]);
 });

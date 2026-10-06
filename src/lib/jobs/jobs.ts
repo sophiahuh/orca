@@ -14,7 +14,8 @@ import type { Course, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
-import { runDeepReview, runTopUp, SKIPPED_PREFIX } from "../pipeline/topup.ts";
+import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
+import { deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
 import type { BudgetVerdict } from "./budget.ts";
 
@@ -208,28 +209,28 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
   const { run } = begun;
   try {
     if (run.deepMinutes !== job.minutes) throw new Error("the Dive In's saved duration doesn't match its job");
-    const held = await heldByBudget(store, run.id, 0);
-    if (held) return held;
     const loaded = await store.course(run.courseId);
     if (!loaded) throw new Error("the course is gone");
     const before = loaded.structure;
     const objectiveIds = job.objectiveIds.filter((id) => before.objectives[id]);
     if (!objectiveIds.length) throw new Error("none of this Dive In's objectives are still in the course");
-    const materials = await store.materials(run.courseId);
-    const materialPages = await store.pages(materials.map((m) => m.id));
-    const plan = await runDeepReview(
-      {
-        course: { ...loaded.course, topics: before.topics },
-        objectives: before.objectives,
-        bank: before.bank,
-        materials,
-        materialPages,
-        objectiveIds,
-        count: Math.max(1, Math.min(20, Math.round((job.minutes * 60) / 240))),
-      },
-      { call: deps.call, newId: deps.newId },
-    );
-    const added = Object.entries(plan.questions).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+    const count = deepQuestionCount(job.minutes);
+    // Dive questions written before and never answered are asked first; only the rest are written.
+    const reused = unansweredDeepQuestions({ objectives: before.objectives, bank: before.bank, objectiveIds, count }, await store.answered(run.courseId));
+    const toWrite = count - reused.length;
+    let plan: Awaited<ReturnType<typeof runDeepReview>> = { questions: {}, dropped: [], skipped: [] };
+    if (toWrite > 0) {
+      const held = await heldByBudget(store, run.id, 0);
+      if (held) return held;
+      const materials = await store.materials(run.courseId);
+      const materialPages = await store.pages(materials.map((m) => m.id));
+      plan = await runDeepReview(
+        { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite },
+        { call: deps.call, newId: deps.newId },
+      );
+    }
+    const written = Object.entries(plan.questions).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+    const added = [...reused, ...written];
     if (!added.length) {
       const why = plan.skipped[0]?.reason ?? plan.dropped[0]?.reason ?? "the model wrote no usable questions";
       throw new Error(why);
@@ -260,7 +261,7 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
       topicsCreated: [],
       objectivesCreated: [],
       objectivesAttached: [...new Set(objectiveIds)],
-      questionsAdded: added.length,
+      questionsAdded: written.length,
       questionIds: orderedIds,
       dropped: [...plan.dropped, ...plan.skipped.map((s) => ({ prompt: `Objective \"${before.objectives[s.objectiveId]?.name ?? s.objectiveId}\"`, reason: `${SKIPPED_PREFIX}${s.reason}` }))],
     };
