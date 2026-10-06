@@ -42,13 +42,17 @@ export type Dispatch = { kind: "material"; job: MaterialJob } | { kind: "top-up"
  * Longest a job may run, in seconds: the Trigger.dev tasks' `maxDuration` (an inline job is cut
  * off sooner, by its route's `maxDuration`).
  */
-export const JOB_MAX_SECONDS = { upload: 1800, "top-up": 900, "deep-review": 900 } as const;
+export const JOB_MAX_SECONDS = { upload: 1800, "top-up": 900, "deep-review": 660 } as const;
 
-/** A running run claimed longer ago than this has died: its job's longest run plus a margin. */
+/**
+ * A running run claimed longer ago than this has died: its job's longest run plus a margin. A dive
+ * is one round of model calls (each capped at 10 minutes) and a student is waiting on it, so its
+ * margin is short: 12 minutes in all.
+ */
 export const DEAD_RUN_MS = {
   upload: (JOB_MAX_SECONDS.upload + 600) * 1000,
   "top-up": (JOB_MAX_SECONDS["top-up"] + 600) * 1000,
-  "deep-review": (JOB_MAX_SECONDS["deep-review"] + 600) * 1000,
+  "deep-review": (JOB_MAX_SECONDS["deep-review"] + 60) * 1000,
 } as const;
 
 export const DEAD_RUN_ERROR = "Orca's job stopped without finishing. Upload the file again to retry.";
