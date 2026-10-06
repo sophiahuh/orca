@@ -38,9 +38,9 @@ test("dragging a course's weight slider saves once, on release, with the final v
   expect(saves).toHaveLength(1);
 });
 
-test("Settings holds the defaults: a course created after changing them starts with them", async ({ page, student }) => {
+test("Settings holds the defaults: a course without its own settings follows them", async ({ page, student }) => {
   await page.goto("/settings");
-  await expect(page.getByText("Defaults for new courses")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Default Review Settings" })).toBeVisible();
   const slider = page.getByRole("slider", { name: "Homework weight" });
   await slider.focus();
   await page.keyboard.press("End");
@@ -55,4 +55,5 @@ test("Settings holds the defaults: a course created after changing them starts w
   const s = await stored(page, student);
   expect(s.defaultWeights?.homework).toBe(top);
   expect(s.weights[s.courses[0].id].homework).toBe(top);
+  expect(s.weightOverrides[s.courses[0].id], "it inherits; it has no override of its own").toBeNull();
 });
