@@ -16,7 +16,7 @@ export type ServerProvider = "anthropic" | "openai";
 
 export const SERVER_PROVIDERS: Readonly<Record<ServerProvider, { keyVar: string; baseUrlVar: string; defaultModel: string; label: string }>> = Object.freeze({
   anthropic: { keyVar: "ANTHROPIC_API_KEY", baseUrlVar: "ANTHROPIC_BASE_URL", defaultModel: "claude-opus-5-5", label: "Anthropic" },
-  openai: { keyVar: "OPENAI_API_KEY", baseUrlVar: "OPENAI_BASE_URL", defaultModel: "gpt-6-luna", label: "OpenAI" },
+  openai: { keyVar: "OPENAI_API_KEY", baseUrlVar: "OPENAI_BASE_URL", defaultModel: "gpt-6.1-sol", label: "OpenAI" },
 });
 
 /** The order an unset `ORCA_MODEL_PROVIDER` tries the keys in. */

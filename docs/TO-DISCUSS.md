@@ -194,6 +194,9 @@ Judgement calls the agents made to keep building; each is in code behind one con
 - **What changed:** the server can run on OpenAI instead of Anthropic (`src/lib/model-config.ts`).
   `ORCA_MODEL_PROVIDER` picks the provider; unset, `OPENAI_API_KEY` wins over `ANTHROPIC_API_KEY`
   (Amanda's ask). This widens the 2026-10-05 decision "Orca's server key only" to either provider's key.
+- **Changed (owner, 2026-10-06, later):** the default is now `gpt-6.1-sol`: luna left out obvious
+  topic links and quality matters more than cost while the pipeline is tried out. `ORCA_MODEL=gpt-6-luna`
+  still runs the cheap one. What follows was the first decision.
 - **Decided for now (Amanda, 2026-10-06):** OpenAI's default model is `gpt-6-luna`, the cheap one
   ($0.10 in / $0.50 out per million, 20× under `gpt-6.1-sol`), while the pipeline is tried out.
   Watch whether it extracts and writes questions well enough: the blind solve and agreement checks

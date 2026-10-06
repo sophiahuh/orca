@@ -101,6 +101,7 @@ function honestModel(per = 2, failOn?: string): { call: CallStep; steps: string[
         ),
       };
     }
+    if (step === "link") return { links: [] };
     throw new Error(`unexpected step ${step}`);
   }) as CallStep;
   return { call, steps };

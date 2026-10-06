@@ -16,6 +16,7 @@ const WHAT: Record<RateAction, string> = {
   grade: "answers graded",
   topUp: "top-ups",
   deepReview: "deep reviews started",
+  relink: "connection searches",
 };
 
 function spell(seconds: number): string {

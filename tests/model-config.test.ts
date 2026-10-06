@@ -9,7 +9,7 @@ import { z } from "zod";
 test("unset, the provider follows the keys: OpenAI first, then Anthropic, else no model", () => {
   assert.equal(resolveServerModel({}), null);
   assert.deepEqual(resolveServerModel({ ANTHROPIC_API_KEY: "a" }), { provider: "anthropic", model: "claude-opus-5-5", apiKey: "a" });
-  assert.deepEqual(resolveServerModel({ ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "o" }), { provider: "openai", model: "gpt-6-luna", apiKey: "o" });
+  assert.deepEqual(resolveServerModel({ ANTHROPIC_API_KEY: "a", OPENAI_API_KEY: "o" }), { provider: "openai", model: "gpt-6.1-sol", apiKey: "o" });
   assert.equal(resolveServerModel({ OPENAI_API_KEY: "", ANTHROPIC_API_KEY: "a" })?.provider, "anthropic", "an empty key is no key");
 });
 
@@ -22,7 +22,7 @@ test("ORCA_MODEL_PROVIDER picks the provider, and its key must be set", () => {
 });
 
 test("ORCA_MODEL must belong to the provider and have a price", () => {
-  assert.equal(resolveServerModel({ OPENAI_API_KEY: "o", ORCA_MODEL: "gpt-6.1-sol" })?.model, "gpt-6.1-sol");
+  assert.equal(resolveServerModel({ OPENAI_API_KEY: "o", ORCA_MODEL: "gpt-6-luna" })?.model, "gpt-6-luna");
   assert.throws(() => resolveServerModel({ OPENAI_API_KEY: "o", ORCA_MODEL: "claude-opus-5-5" }), ModelConfigError);
   assert.throws(() => resolveServerModel({ ANTHROPIC_API_KEY: "a", ORCA_MODEL: "gpt-6.1-sol" }), ModelConfigError);
   assert.throws(() => resolveServerModel({ OPENAI_API_KEY: "o", ORCA_MODEL: "gpt-made-up" }), /no price/);

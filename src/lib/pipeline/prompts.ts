@@ -11,7 +11,7 @@
  * system prompt is fixed: `e2e/fake-anthropic.ts` recognises the step by it.
  */
 import { UNTRUSTED_POLICY, untrustedBlock } from "../untrusted/encode.ts";
-import type { ExtractInput, GenerateInput, ReconcileInput, ReflectInput, StepInput, StepName } from "./schemas.ts";
+import type { ExtractInput, GenerateInput, LinkInput, ReconcileInput, ReflectInput, StepInput, StepName } from "./schemas.ts";
 
 export interface BuiltPrompt {
   system: string;
@@ -172,6 +172,34 @@ Every question is a "Short answer" (options empty, answer -1) that takes 3–6 m
   };
 }
 
+/**
+ * How a course's topics relate (the Concept Atlas's edges). Only names and summaries are sent, so
+ * it's cheap; the model may use its knowledge of the subject. First line kept distinct: the fake
+ * API recognises steps by it.
+ */
+export function linkPrompt(input: LinkInput): BuiltPrompt {
+  const fresh = input.topics.some((t) => t.isNew);
+  return {
+    system: `You connect the topics of one college course into a concept map for a study app. Use your knowledge of the subject and the topics' summaries. Return JSON only, matching the schema.
+
+${UNTRUSTED_POLICY}
+
+Link types, from → to:
+- used-in: A is used in B (B builds on A, e.g. "Boolean algebra" used-in "K-maps"; "Iterators" used-in "Reverse traversal of linked lists").
+- has-a-kind: A has a kind B (B is a kind or special case of A, e.g. "Trees" has-a-kind "Binary search trees").
+- alternative-to: A is an alternative to B (either does the same job, e.g. "Chaining" alternative-to "Open addressing"). Give it once, either way round.
+- related: closely connected in another way a student should know (they compare, share a technique, or are often confused). Not for topics that are merely in the same course.`,
+    context: null,
+    prompt: `Course: ${input.course.name} (${input.course.short}). Its topics, as a data block (source generated_question): ref, name, summary, and isNew for ${fresh ? "the topics just added" : "every topic (map the whole course)"}:
+${untrustedBlock("generated_question", input.topics)}
+
+Links the course already has (don't repeat them), by ref:
+${untrustedBlock("generated_question", input.existing)}
+
+Consider every pair of topics where at least one isNew, and return each link a student studying this course would expect, using the refs. Be thorough: a missing link hides how the course fits together; a wrong one misleads. No link from a topic to itself.`,
+  };
+}
+
 export function reflectPrompt(input: ReflectInput): BuiltPrompt {
   return {
     system: `You match a student's reflection on their coursework to the course's objectives. Return JSON only, matching the schema.
@@ -199,6 +227,8 @@ export function buildPrompt<S extends StepName>(step: S, input: StepInput<S>): B
       return generatePrompt(input as GenerateInput);
     case "deep":
       return deepPrompt(input as GenerateInput);
+    case "link":
+      return linkPrompt(input as LinkInput);
     case "reflect":
       return reflectPrompt(input as ReflectInput);
     default:

@@ -9,6 +9,7 @@ import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
+import { linkKey, linkTopics } from "./link.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "./schemas.ts";
 
@@ -340,15 +341,13 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     const id = topicIdOf(ref);
     return id === null || id === "dropped" ? null : id;
   };
-  // "alternative-to" reads both ways, so one row per pair; the others are directed.
-  const keyOf = (from: string, to: string, type: Relation["type"]) => (type === "alternative-to" ? `${[from, to].sort().join("|")}|${type}` : `${from}|${to}|${type}`);
-  const seenRelations = new Set(input.relations.map((r) => keyOf(r.from, r.to, r.type)));
+  const seenRelations = new Set(input.relations.map((r) => linkKey(r.from, r.to, r.type)));
   const relations: Relation[] = [];
   for (const r of extracted.relations) {
     const from = linkTopic(r.from);
     const to = linkTopic(r.to);
     if (!from || !to || from === to) continue;
-    const key = keyOf(from, to, r.type);
+    const key = linkKey(from, to, r.type);
     if (seenRelations.has(key)) continue;
     if (r.anchor) {
       const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));
@@ -359,6 +358,27 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     }
     seenRelations.add(key);
     relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id });
+  }
+
+  /* 5. A focused pass for links (the link step): this upload's new topics against every topic. Extraction
+     links only what the slides spell out; this one may use the subject. A failure costs only the links. */
+  if (newTopics.length) {
+    try {
+      relations.push(
+        ...(await linkTopics(
+          {
+            course: input.course,
+            topics: [...input.course.topics, ...newTopics],
+            newIds: new Set(newTopics.map((t) => t.id)),
+            existing: [...input.relations, ...relations],
+            materialId: input.material.id,
+          },
+          { call, newId },
+        )),
+      );
+    } catch (e) {
+      dropped.push({ prompt: "Links between topics", reason: `couldn't be found: ${errorText(e)}` });
+    }
   }
 
   const runRecord = (questions: UploadPlan["questions"]): PipelineRun => ({

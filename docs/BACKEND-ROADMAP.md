@@ -125,8 +125,11 @@ For each upload:
    material covers, relations between topics, and weight signals. It may use general knowledge
    of the subject. Relations link topics, not objectives (owner, 2026-10-06), and are the Concept
    Atlas's edges: used-in, has-a-kind, alternative-to, and related (an unlabelled edge). The same
-   extraction call proposes them between the new and existing topics. A topic's node grows with
-   the topics it's used in (`topicUses`), and so do its objectives' weights.
+   extraction call proposes them between the new and existing topics, and a focused link step
+   (`src/lib/pipeline/link.ts`: topic names and summaries only, general knowledge allowed) then
+   checks every pair involving a new topic, since extraction alone missed obvious links. "Find
+   connections" on the Atlas (`POST /api/relink`) runs the link step over the whole course. A
+   topic's node grows with the topics it's used in (`topicUses`), and so do its objectives' weights.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge

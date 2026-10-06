@@ -200,7 +200,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   service-wide daily ceiling; unset = none), `TRIGGER_*`.
 - The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
   (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
-  `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6-luna` / `claude-opus-5-5`) and
+  `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
   must be priced. OpenAI goes through its Responses API in the same `completeJson` (strict schema
   from `src/lib/openai-schema.ts`, explicit caching of the material, same bounds and metering).
 - Model calls use the Claude API (`claude-opus-5-5`) through `completeJson` (`src/lib/llm-server.ts`:
@@ -247,7 +247,9 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/pipeline/` — upload pipeline (extract, reconcile, generate; no model check of the
   questions since 2026-10-06), prompts and zod schemas; `topup.ts` writes more questions after a
   session and a deep review's harder ones (`runDeepReview`, the "deep" step, called by
-  `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there).
+  `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there);
+  `link.ts` is the link step (topic links from names and summaries, after each upload and from
+  "Find connections" on the Atlas, `POST /api/relink`).
 - `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`).
 - `src/lib/server/` — route helpers, model step caller (`model.ts`), grading, usage metering, rate limits.
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.

@@ -9,6 +9,7 @@
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
  * - deep: the same for a deep review, "<objective name>: deep case <i>?", tier application;
+ * - link: the scenario's `links`, by topic name (default: none);
  * - reflect: the scenario's `reflect` matches, by objective name.
  *
  * Control (tests run one at a time): POST /__scenario { extract?, perObjective?, fail?, reflect?,
@@ -28,6 +29,8 @@ export interface Scenario {
    */
   fail?: { step: string; status?: number; message?: string; type?: "spend-limit" | "rate-limit" };
   reflect?: { matches: Array<{ name: string; sure: boolean; reasoning: string }> };
+  /** What the link step finds, by topic name. */
+  links?: Array<{ from: string; to: string; type: string }>;
   /** What the grade step answers (default: correct). */
   grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string };
   /** Wait this long before answering each call (to watch progress). */
@@ -39,6 +42,7 @@ const STEPS: Array<[string, string]> = [
   ["You decide whether a newly extracted course item", "reconcile"],
   ["You write quick-review quiz questions", "generate"],
   ["You write deep-review questions", "deep"],
+  ["You connect the topics of one college course", "link"],
   ["You match a student's reflection", "reflect"],
   ["You grade one short student answer", "grade"],
 ];
@@ -95,6 +99,11 @@ function answer(step: string, prompt: string): unknown {
         }
       }
       return { questions: out };
+    }
+    case "link": {
+      const [topics] = blocks(prompt, "generated_question") as Array<Array<{ ref: string; name: string }>>;
+      const ref = new Map((topics ?? []).map((t) => [t.name, t.ref]));
+      return { links: (scenario.links ?? []).flatMap((l) => (ref.has(l.from) && ref.has(l.to) ? [{ from: ref.get(l.from), to: ref.get(l.to), type: l.type }] : [])) };
     }
     case "reflect": {
       const [objectives] = blocks(prompt, "generated_question") as Array<Array<{ id: string; name: string }>>;

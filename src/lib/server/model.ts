@@ -49,7 +49,7 @@ export function modelIsLocal(): boolean {
  */
 export interface ModelCtx {
   ownerId: string;
-  kind: "upload" | "top-up" | "reflect" | "grade" | "deep-review";
+  kind: "upload" | "top-up" | "reflect" | "grade" | "deep-review" | "relink";
   runId?: string;
 }
 

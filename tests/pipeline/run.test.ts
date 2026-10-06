@@ -13,6 +13,8 @@ function fakeModel(h: Handlers) {
   const call: CallStep = async (step, input) => {
     calls.push({ step, input });
     const handler = h[step] as ((i: typeof input) => StepOutput<typeof step>) | undefined;
+    // The link step runs after every upload with new topics; unless a test says otherwise it finds nothing.
+    if (!handler && step === "link") return { links: [] } as StepOutput<typeof step>;
     if (!handler) throw new Error(`unexpected ${step} call`);
     return handler(input);
   };
@@ -85,6 +87,7 @@ const lectureExtract: ExtractOutput = {
 test("a first lecture creates proposed topics and objectives with signals, relations and questions", async () => {
   const model = fakeModel({
     extract: () => lectureExtract,
+    link: () => ({ links: [{ from: "t1", to: "t2", type: "used-in" }, { from: "t2", to: "t1", type: "related" }, { from: "t1", to: "t1", type: "related" }, { from: "t9", to: "t1", type: "related" }] }),
     generate: (i) => ({
       questions: i.objectives.flatMap((o) =>
         o.name.startsWith("Simplify") ? [short(o.id, "Simplify x + xy.", ["x"])] : o.name.startsWith("Group") ? [mc(o.id, "Which group?", 2)] : [short(o.id, "What is 101 in decimal?", ["5"])],
@@ -104,7 +107,18 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.deepEqual(group.signals, [{ materialId: "mat", materialType: "Lecture", places: [{ locator: "slide 3", excerpt: "groups" }], emphasis: { kind: "tested", quote: "on the exam" } }]);
   assert.equal(inferred.origin, "inferred");
   assert.deepEqual(inferred.signals, []);
-  assert.deepEqual(plan.relations.map((r) => [r.from, r.to, r.type]), [[plan.newTopics[0].id, plan.newTopics[1].id, "used-in"]], "relations link topics; one to an unknown topic is dropped");
+  const [t1, t2] = plan.newTopics.map((t) => t.id);
+  assert.deepEqual(
+    plan.relations.map((r) => [r.from, r.to, r.type]),
+    [
+      [t1, t2, "used-in"],
+      [t2, t1, "related"],
+    ],
+    "extraction's link (one to an unknown topic dropped), then the link step's new one (its repeat of extraction's dropped)",
+  );
+  const linkInput = model.calls.find((c) => c.step === "link")!.input as StepInput<"link">;
+  assert.deepEqual(linkInput.topics.map((t) => [t.ref, t.name, t.isNew]), [["t1", "Boolean Algebra", true], ["t2", "Karnaugh Maps", true]]);
+  assert.deepEqual(linkInput.existing, [{ from: "t1", to: "t2", type: "used-in" }]);
 
   const all = Object.values(plan.questions).flat();
   assert.equal(all.length, 3);
@@ -112,7 +126,7 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.equal(all.find((q) => q.objectiveId === inferred.id)!.anchor, undefined, "inferred questions carry no anchor");
   assert.equal(plan.run.questionsAdded, 3);
   assert.deepEqual(progress, ["mapping", "matching", "writing"]);
-  assert.deepEqual([...new Set(model.calls.map((c) => c.step))], ["extract", "generate"], "no second model call checks the questions");
+  assert.deepEqual([...new Set(model.calls.map((c) => c.step))], ["extract", "link", "generate"], "no second model call checks the questions");
   assert.equal(model.calls.filter((c) => c.step === "reconcile").length, 0, "nothing existing to compare against");
   const generateInputs = model.calls.filter((c) => c.step === "generate").map((c) => c.input as StepInput<"generate">);
   assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 6)));

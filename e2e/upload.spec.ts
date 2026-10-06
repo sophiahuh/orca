@@ -64,7 +64,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
-  expect(await fakeCalls()).toEqual(["extract", "generate", "generate"]);
+  expect(await fakeCalls()).toEqual(["extract", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];

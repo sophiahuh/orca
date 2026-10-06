@@ -1,4 +1,5 @@
 import { F, FIXTURE_STATE, expect, seedState, test } from "./fixture";
+import { fakeCalls, fakeModel } from "./fake-model";
 
 /**
  * The Concept Atlas (Figma: E1/E2 · Concept graph v4): the course's topics as nodes, its topic
@@ -37,7 +38,23 @@ test("the course page switches between Path and Atlas", async ({ page, student }
   await page.goto(`/course/${SLUG}`);
   await page.locator("[data-part=atlas-switch]").getByRole("link", { name: "Atlas" }).click();
   await expect(page).toHaveURL(new RegExp(`/course/${SLUG}/atlas$`));
-  await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 0 connections · upload more material to connect them");
+  await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 0 connections");
   await page.locator("[data-part=atlas-switch]").getByRole("link", { name: "Path" }).click();
   await expect(page).toHaveURL(new RegExp(`/course/${SLUG}$`));
+});
+
+test("Find connections links the course's topics with the link step and draws them", async ({ page, student }) => {
+  await seedState(student, FIXTURE_STATE);
+  await fakeModel({ links: [{ from: "Boolean Algebra", to: "Two's Complement", type: "related" }] });
+  await page.goto(`/course/${SLUG}/atlas`);
+  await expect(page.locator("[data-part=edge]")).toHaveCount(0);
+  await page.locator("[data-part=find-connections]").click();
+  await expect(page.locator("[data-part=find-connections-result]")).toHaveText("Found 1 new connection.");
+  await expect(page.locator("[data-part=edge][data-type=related]")).toHaveCount(1);
+  await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 1 connection");
+  expect(await fakeCalls()).toEqual(["link"]);
+  // Asking again finds nothing new: the link it already has isn't added twice.
+  await page.locator("[data-part=find-connections]").click();
+  await expect(page.locator("[data-part=find-connections-result]")).toHaveText("No new connections found.");
+  await expect(page.locator("[data-part=edge]")).toHaveCount(1);
 });

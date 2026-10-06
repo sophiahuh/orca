@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo } from "react";
+import { use, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
@@ -19,7 +19,8 @@ import { fadeUp, stagger } from "@/lib/motion";
 export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">) {
   const { slug } = use(params);
   const router = useRouter();
-  const { hydrated, relations } = useOrca();
+  const { hydrated, relations, refresh } = useOrca();
+  const [finding, setFinding] = useState<{ kind: "idle" | "busy" } | { kind: "done" | "error"; message: string }>({ kind: "idle" });
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const m = course ? mastery[course.id] : undefined;
@@ -46,6 +47,20 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
   }
   if (!m || !graph) throw new Error(`No mastery computed for course ${course.id}`);
 
+  // "Find connections": the link step over the whole course (POST /api/relink), then a reload.
+  const findConnections = async () => {
+    setFinding({ kind: "busy" });
+    try {
+      const res = await fetch("/api/relink", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId: course.id }) });
+      const out = (await res.json().catch(() => null)) as { added?: number; error?: string } | null;
+      if (!res.ok || out?.added === undefined) throw new Error(out?.error ?? "Orca couldn't look for connections. Try again in a moment.");
+      await refresh();
+      setFinding({ kind: "done", message: out.added ? `Found ${out.added} new connection${out.added === 1 ? "" : "s"}.` : "No new connections found." });
+    } catch (error) {
+      setFinding({ kind: "error", message: error instanceof Error ? error.message : "Orca couldn't look for connections." });
+    }
+  };
+
   const topics = graph.nodes.length;
   const connections = graph.edges.length;
   return (
@@ -68,11 +83,27 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
           </motion.h1>
           <motion.p variants={fadeUp} className="text-[13px] font-semibold text-wisteria-deep" data-part="atlas-summary">
             {topics} topic{topics === 1 ? "" : "s"} · {connections} connection{connections === 1 ? "" : "s"}
-            {topics > 1 && connections === 0 ? " · upload more material to connect them" : ""}
+
           </motion.p>
-          <motion.div variants={fadeUp} className="pointer-events-auto mt-[6px]">
+          <motion.div variants={fadeUp} className="pointer-events-auto mt-[6px] flex items-center gap-[10px]">
             <AtlasSwitch slug={course.slug} current="atlas" />
+            {topics > 1 && (
+              <button
+                type="button"
+                onClick={findConnections}
+                disabled={finding.kind === "busy"}
+                data-part="find-connections"
+                className="pressable rounded-pill border-2 border-alice-deep bg-parchment px-[12px] py-[5px] text-[13px] font-bold text-prussian lip-2 lip-alice disabled:opacity-60"
+              >
+                {finding.kind === "busy" ? "Finding connections…" : "Find connections"}
+              </button>
+            )}
           </motion.div>
+          {(finding.kind === "done" || finding.kind === "error") && (
+            <motion.p variants={fadeUp} className="text-[13px] font-semibold text-prussian" role={finding.kind === "error" ? "alert" : "status"} data-part="find-connections-result">
+              {finding.message}
+            </motion.p>
+          )}
         </div>
       </motion.header>
     </AppShell>

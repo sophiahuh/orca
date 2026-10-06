@@ -6,5 +6,6 @@ export const STEP_BUDGET: Record<StepName, { effort: "low" | "medium" | "high"; 
   reconcile: { effort: "low", maxTokens: 2048 },
   generate: { effort: "medium", maxTokens: 24000 },
   deep: { effort: "medium", maxTokens: 24000 },
+  link: { effort: "medium", maxTokens: 6000 },
   reflect: { effort: "medium", maxTokens: 4000 },
 };

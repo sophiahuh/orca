@@ -156,6 +156,30 @@ export const GenerateInput = z.object({
 });
 export type GenerateInput = z.infer<typeof GenerateInput>;
 
+/* ── Link: how a course's topics relate (a focused pass after each upload, or on demand) ── */
+
+export const LinkInput = z.object({
+  course: Course,
+  /** Each topic by a short ref ("t1"…), with its summary; `isNew` marks this upload's topics. */
+  topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2).max(200),
+  /** Links the course already has, by ref (not to be repeated). */
+  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })).max(1000),
+});
+export type LinkInput = z.infer<typeof LinkInput>;
+
+export const LinkOutput = z.object({
+  links: z
+    .array(
+      z.object({
+        from: z.string().max(20).describe("A topic ref"),
+        to: z.string().max(20).describe("A topic ref"),
+        type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
+      }),
+    )
+    .max(120),
+});
+export type LinkOutput = z.infer<typeof LinkOutput>;
+
 /* ── Reflect: which objectives a homework reflection says the student doesn't understand ── */
 
 export const ReflectInput = z.object({
@@ -185,6 +209,7 @@ export const STEPS = {
   reconcile: { input: ReconcileInput, output: ReconcileOutput },
   generate: { input: GenerateInput, output: GenerateOutput },
   deep: { input: GenerateInput, output: DeepOutput },
+  link: { input: LinkInput, output: LinkOutput },
   reflect: { input: ReflectInput, output: ReflectOutput },
 } as const;
 export type StepName = keyof typeof STEPS;

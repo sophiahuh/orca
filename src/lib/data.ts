@@ -213,7 +213,8 @@ export interface Relation {
   type: RelationType;
   anchor: Anchor | null;
   review: Review;
-  materialId: string;
+  /** The upload it came from; null when "Find connections" linked the whole course. */
+  materialId: string | null;
 }
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */

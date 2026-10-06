@@ -39,6 +39,8 @@ export const LIMITS = {
     topUp: { max: 30, windowSeconds: 3600 },
     /** Starting a deep review (POST /api/deep-review), which writes its questions with the model. */
     deepReview: { max: 6, windowSeconds: 3600 },
+    /** "Find connections" on the Atlas (POST /api/relink): one model call over the course's topics. */
+    relink: { max: 10, windowSeconds: 3600 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */
