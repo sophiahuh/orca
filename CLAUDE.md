@@ -59,7 +59,7 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` (rewritten for data
   blocks in Task 7b) are untested against Claude, `npm run score:extraction` has no baseline
   (`scripts/extraction-baseline.json` doesn't exist), and the weight constants are untuned.
-- The Vercel deploy (https://orca-lake-omega.vercel.app) is from before Phase 1; it doesn't show
+- The Vercel deploy (https://orca-ocean.vercel.app) is from before Phase 1; it doesn't show
   any of this.
 
 **Next, in order.**
@@ -387,7 +387,7 @@ This describes the code as it is.
   secret key. The fake Anthropic API reads its inputs from the prompts' data blocks and can answer
   with a spend-limit error or a given grade.
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
-- Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app; last deployed before Phase 1). Deploy with
+- Deploy: Vercel project `orca` (https://orca-ocean.vercel.app; last deployed before Phase 1). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
   is not linked yet. `.vercelignore` keeps docs/ out of uploads.
 
