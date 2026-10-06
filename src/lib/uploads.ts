@@ -61,7 +61,8 @@ export function uploadProblem(file: File): string | null {
   return null;
 }
 
-export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: UploadStage) => void): Promise<UploadOutcome> {
+/** `onStarted` gets the material's id as soon as the server has made it (the page keeps it in its URL, so a reload can follow it). */
+export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: UploadStage) => void, onStarted?: (materialId: string) => void): Promise<UploadOutcome> {
   const problem = uploadProblem(file);
   if (problem) throw new Error(problem);
   onStage("hashing");
@@ -70,6 +71,7 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
   type Started = { material: Material; upload: { path: string; token: string } } | Duplicate;
   const started = await post<Started>("/api/materials", { ...meta, filename: file.name, size: file.size, mime: file.type || LIMITS.uploadMime, hash });
   if ("duplicate" in started) return { kind: "duplicate", ...started.duplicate, generation: started.generation };
+  onStarted?.(started.material.id);
 
   onStage("uploading");
   // Storage takes the type from the body itself, and some systems give a PDF no type (or a generic one).

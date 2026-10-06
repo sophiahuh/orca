@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { use, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
+import { browserSupabase } from "@/lib/supabase/browser";
 import { type UploadStage, uploadMaterial, uploadProblem } from "@/lib/uploads";
 import type { MaterialPages } from "@/lib/data";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
@@ -75,6 +76,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const router = useRouter();
   const { courses, addMaterial, hydrated, objectives, recordReflection } = useOrca();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
+  const resumeId = typeof sp.material === "string" ? sp.material : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
   const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
@@ -106,6 +108,9 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       </Screen>
     );
   }
+  if (resumeId && phase.kind === "idle" && !file) {
+    return <ResumeUpload materialId={resumeId} course={course} onAnother={() => router.replace(`/add-material?course=${course.slug}`)} />;
+  }
   const filename = chosenName ?? "Choose a PDF…";
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
@@ -131,7 +136,14 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       return;
     }
     try {
-      const outcome = await uploadMaterial(file, meta, (stage) => setPhase({ kind: "sending", stage }));
+      const outcome = await uploadMaterial(
+        file,
+        meta,
+        (stage) => setPhase({ kind: "sending", stage }),
+        // In the URL from here on (without re-rendering this page mid-upload): a reload follows this
+        // upload instead of showing an empty form.
+        (materialId) => window.history.replaceState(null, "", `/add-material?course=${course.slug}&material=${materialId}`),
+      );
       if (outcome.kind === "read") {
         addMaterial(outcome.material, { saved: true });
         setDoc(outcome.pages);
@@ -361,6 +373,74 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           </motion.div>
         </div>
       </motion.div>
+    </Screen>
+  );
+}
+
+type Resumed = { kind: "checking" } | { kind: "reading"; filename: string } | { kind: "done"; message: string } | { kind: "stopped"; message: string };
+
+/**
+ * After a reload during an upload (its material id is in the URL): follow it on the server. A job
+ * for it opens the review screen, as the upload would have; otherwise the page says where it got to.
+ */
+function ResumeUpload({ materialId, course, onAnother }: { materialId: string; course: { slug: string; short: string }; onAnother: () => void }) {
+  const router = useRouter();
+  const [state, setState] = useState<Resumed>({ kind: "checking" });
+
+  useEffect(() => {
+    let stop = false;
+    let checks = 0;
+    const check = async () => {
+      const db = browserSupabase();
+      const [material, run] = await Promise.all([
+        db.from("materials").select("filename, status, error").eq("id", materialId).maybeSingle(),
+        db.from("pipeline_runs").select("id").eq("material_id", materialId).order("at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      if (stop) return;
+      checks++;
+      if (run.data) return router.replace(`/course/${course.slug}/review?run=${run.data.id}`);
+      const m = material.data;
+      if (material.error || !m) return setState({ kind: "stopped", message: "Orca couldn't find this upload. Choose the file again." });
+      if (m.status === "failed") return setState({ kind: "stopped", message: m.error ?? "Orca couldn't read this file." });
+      // The browser was still sending the file when the page reloaded: it never arrived.
+      if (m.status === "uploaded" && checks >= 3) return setState({ kind: "stopped", message: `${m.filename} didn't finish uploading before the page reloaded. Choose the file again.` });
+      // Read, but no job for it after a while: nothing will be generated (no AI connected, or no text).
+      if (m.status === "ready" && checks >= 5) return setState({ kind: "done", message: `${m.filename} is saved to ${course.short}. No topics or questions are being generated for it.` });
+      setState({ kind: "reading", filename: m.filename });
+      window.setTimeout(check, 2000);
+    };
+    void check();
+    return () => {
+      stop = true;
+    };
+  }, [materialId, course.slug, course.short, router]);
+
+  return (
+    <Screen bg="ocean">
+      <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
+        <BackButton />
+        <h1 className="text-[44px] font-bold leading-none text-prussian">Add material</h1>
+        <ContextPill className="ml-[8px]">{course.short}</ContextPill>
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-[14px] px-[28px] text-center" data-part="resume-upload">
+        {state.kind === "checking" || state.kind === "reading" ? (
+          <>
+            <p className="text-[22px] font-bold text-prussian" role="status">
+              {state.kind === "reading" ? `Orca is reading ${state.filename}…` : "Finding your upload…"}
+            </p>
+            <p className="text-[15px] text-prussian">The review opens as soon as Orca starts building from it.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-[18px] font-bold text-prussian" role={state.kind === "stopped" ? "alert" : "status"}>
+              {state.message}
+            </p>
+            <Button size="sm" onClick={onAnother}>
+              Add a file
+            </Button>
+          </>
+        )}
+      </div>
     </Screen>
   );
 }

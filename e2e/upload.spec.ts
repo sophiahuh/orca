@@ -101,6 +101,25 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
 });
 
+test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await upload(page);
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  const state = await stored(page, student);
+  const material = state.materials[0];
+  // Reloading the upload page for it (its URL once the server made it) opens its run's review.
+  await page.goto(`/add-material?course=logic&material=${material.id}`);
+  await expect(page).toHaveURL(new RegExp(`/course/logic/review\\?run=${state.runs[0].id}`), { timeout: 15_000 });
+
+  // A reload while the browser was still sending the file: the file never arrived.
+  const stranded = crypto.randomUUID();
+  const inserted = await admin().from("materials").insert({ id: stranded, owner_id: student.id, course_id: state.courses[0].id, filename: "half.pdf", type: "Lecture", reflect: false, status: "uploaded", mime: "application/pdf", size_bytes: 10 });
+  expect(inserted.error).toBeNull();
+  await page.goto(`/add-material?course=logic&material=${stranded}`);
+  await expect(page.locator("[data-part=resume-upload]")).toContainText("half.pdf didn't finish uploading before the page reloaded.", { timeout: 15_000 });
+});
+
 test("re-uploading the same deck is recognised by its content and adds nothing", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
