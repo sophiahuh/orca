@@ -80,7 +80,7 @@ Definitions:
 - A broader topic and a meaningful subtype may both be topics when each is a distinct review unit. For example, both "Binary search trees" and "AVL trees" can be topics; both "MIPS instruction formats" and the distinct "R-type", "I-type", and "J-type" formats can be topics. Keep the broader topic when it has material of its own, and use has-a-kind to connect it to its subtypes. Do not split a topic into labels that the material does not teach separately.
 - An objective is one "can do X" skill a question can test, e.g. "Convert between decimal and n-bit 2's complement". One skill per objective; 2 to 6 per topic.
 - A place is somewhere the material genuinely teaches or uses the objective (a slide or section on it, a worked example, a problem that requires it), cited by locator ("slide 14") and a short excerpt. A passing mention is not a place.
-- origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. Use it sparingly.
+- origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. For a concise cheatsheet, formula sheet, or reference that names several substantive topics without explaining them, create a useful baseline of 1–2 inferred "can do" objectives for each such topic (up to 8 across the upload) rather than returning topics with no study skills. These are explicitly general knowledge, not claims about what the sheet taught.
 - emphasis only when the material explicitly says something will or won't be examined ("this will be on the exam", "you won't be tested on this"), quoting it.
 - Relations link topics (new ones to each other and to the course's existing topics), from → to, only when the material shows the link:
   - used-in: A is used in B when understanding, analyzing, or carrying out B needs A (e.g. "Boolean algebra" used-in "K-maps"; "MIPS registers" used-in "MIPS procedures and stack"). from = A, to = B. Do not use this merely because two topics are taught together.
@@ -130,7 +130,7 @@ export function generatePrompt(input: GenerateInput): BuiltPrompt {
     ...(o.existingPrompts.length ? { alreadyAsked: o.existingPrompts } : {}),
   }));
   return {
-    system: `You write quick-review quiz questions for a spaced-repetition study app, from one piece of college course material. Work only from the material: do not invent facts. Return JSON only, matching the schema.
+    system: `You write quick-review quiz questions for a spaced-repetition study app, from one piece of college course material. Work only from the material for material-backed objectives; for an inferred objective, use standard general knowledge of that named course concept, do not claim the material taught it, and leave its anchor null. Return JSON only, matching the schema.
 
 ${UNTRUSTED_POLICY}
 ${MATERIAL_RULES.replace(' Report every such span, quoted, in "instructionsFound".', "")}
