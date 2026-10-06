@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { type UploadStage, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import { type UploadStage, importAIChat, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
 import type { MaterialPages } from "@/lib/data";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
 import { IconCalendar, IconUpload } from "@/components/icons";
@@ -84,6 +84,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [doc, setDoc] = useState<MaterialPages | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [aiChatUrl, setAiChatUrl] = useState("");
+  const [aiChatText, setAiChatText] = useState("");
   const [chosenName, setChosenName] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [type, setType] = useState<MaterialType>("Lecture");
@@ -112,7 +114,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   if (resumeId && phase.kind === "idle" && !file) {
     return <ResumeUpload materialId={resumeId} course={course} onAnother={() => router.replace(`/add-material?course=${course.slug}`)} />;
   }
-  const filename = websiteUrl || chosenName || "Choose a PDF…";
+  const filename = aiChatUrl || (aiChatText.trim() ? "AI chat transcript" : websiteUrl || chosenName || "Choose a PDF…");
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
 
@@ -120,15 +122,28 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     setChosenName(f.name);
     setDoc(null);
     setFile(f);
+    setWebsiteUrl("");
+    setAiChatUrl("");
+    setAiChatText("");
     const problem = uploadProblem(f);
     setPhase(problem ? { kind: "error", message: `${problem} It will still be added to the course, without its file.` } : { kind: "idle" });
   };
 
   const submit = async () => {
-    if (!file && !websiteUrl.trim()) return;
+    if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
     const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0 };
     const leave = () => router.push(due ? "/calendar" : `/course/${course.slug}`);
+    if (aiChatUrl.trim() || aiChatText.trim()) {
+      try {
+        setPhase({ kind: "sending", stage: "reading" });
+        const outcome = await importAIChat({ ...(aiChatUrl.trim() ? { url: aiChatUrl.trim() } : {}), ...(aiChatText.trim() ? { text: aiChatText.trim() } : {}) }, meta);
+        addMaterial(outcome.material, { saved: true });
+        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.push(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
+        else leave();
+      } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The AI chat import failed." }); }
+      return;
+    }
     if (websiteUrl.trim()) {
       try {
         setPhase({ kind: "sending", stage: "reading" });
@@ -277,8 +292,14 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             </div>
             <label className="flex flex-col gap-[6px] text-[13px] font-semibold text-wisteria-deep" onClick={(e) => e.stopPropagation()}>
               Or import a public course website
-              <input value={websiteUrl} onChange={(e) => { setWebsiteUrl(e.target.value); setFile(null); setChosenName(null); setPhase({ kind: "idle" }); }} placeholder="https://example.edu/course" className="h-[40px] rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] text-[14px] font-medium text-prussian outline-none focus:border-wisteria" />
+              <input value={websiteUrl} onChange={(e) => { setWebsiteUrl(e.target.value); setFile(null); setChosenName(null); setAiChatUrl(""); setAiChatText(""); setPhase({ kind: "idle" }); }} placeholder="https://example.edu/course" className="h-[40px] rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] text-[14px] font-medium text-prussian outline-none focus:border-wisteria" />
             </label>
+            <div className="flex flex-col gap-[6px]" onClick={(e) => e.stopPropagation()}>
+              <span className="text-[13px] font-semibold text-wisteria-deep">Or add an AI chat</span>
+              <input value={aiChatUrl} onChange={(e) => { setAiChatUrl(e.target.value); setAiChatText(""); setWebsiteUrl(""); setFile(null); setChosenName(null); setPhase({ kind: "idle" }); }} placeholder="Public ChatGPT, Claude, or Gemini share link" className="h-[40px] rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] text-[14px] font-medium text-prussian outline-none focus:border-wisteria" />
+              <textarea value={aiChatText} onChange={(e) => { setAiChatText(e.target.value); setAiChatUrl(""); setWebsiteUrl(""); setFile(null); setChosenName(null); setPhase({ kind: "idle" }); }} maxLength={180000} rows={4} placeholder="Or paste an exported chat / Markdown log. Label turns User: and Assistant: when possible." className="resize-y rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] py-[9px] text-[13px] font-medium text-prussian outline-none focus:border-wisteria" />
+              <span className="text-[11px] leading-snug text-wisteria-deep">Your questions tell Orca what to prioritize. AI answers are treated as context, not course authority.</span>
+            </div>
 
             {phase.kind === "sending" && (
               <div className="flex flex-col gap-[8px]" role="status">
@@ -310,7 +331,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
                 ))}
                 <span className="my-[6px] flex h-[120px] items-center justify-center rounded-[12px] bg-alice text-[14px] font-semibold text-wisteria-deep">
-                  Drop a PDF, choose one, or paste a course URL
+                  Drop a PDF, choose one, paste a course URL, or add an AI chat
                 </span>
                 {SKELETON.slice(6).map((w, i) => (
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
@@ -360,7 +381,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button full onClick={submit} disabled={busy || (!chosenName && !websiteUrl.trim())}>
+            <Button full onClick={submit} disabled={busy || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
               {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
             </Button>
 

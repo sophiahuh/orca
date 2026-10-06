@@ -11,6 +11,7 @@
  * system prompt is fixed: `e2e/fake-anthropic.ts` recognises the step by it.
  */
 import { UNTRUSTED_POLICY, untrustedBlock } from "../untrusted/encode.ts";
+import { isAIChatMaterial } from "../material/ai-chat.ts";
 import type { ExtractInput, GenerateInput, LinkInput, ReconcileInput, ReflectInput, StepInput, StepName } from "./schemas.ts";
 
 export interface BuiltPrompt {
@@ -66,6 +67,9 @@ const TYPE_RULES: Record<ExtractInput["material"]["type"], string> = {
 };
 
 export function extractPrompt(input: ExtractInput): BuiltPrompt {
+  const aiChatRules = isAIChatMaterial(input.material.filename)
+    ? `\nAI-chat evidence: this is a student-AI conversation, not course-authoritative teaching material. Lines labelled STUDENT are high-priority signals of what the student asked about or found confusing. Map them to existing course topics/objectives whenever possible and create focused coverage for those skills. The AI ASSISTANT's claims may help interpret the student's question, but never introduce a topic, objective, or course fact solely because an AI response says it. Create a new inferred objective only when the student's own question clearly identifies a course-specific skill that the course does not yet cover. Do not use an AI response as a claim that a professor taught or will test something.\n`
+    : "";
   return {
     system: `You map one piece of college course material onto a course's structure for a spaced-repetition study app.
 Infer the subject from the material itself. Work only from what is present: return empty arrays rather than invent. Return JSON only, matching the schema.
@@ -92,7 +96,7 @@ Definitions:
 
 Reuse before you create: when the material covers an existing topic or objective, return it with its existingId (and its id as localId) and this material's places. Never propose anything marked rejectedByStudent.`,
     context: materialContext(input),
-    prompt: `${TYPE_RULES[input.material.type]}
+    prompt: `${TYPE_RULES[input.material.type]}${aiChatRules}
 
 The course's existing topics, as a data block (source generated_question; "rejectedByStudent" marks ones the student rejected):
 ${itemsBlock(input.existingTopics)}
@@ -140,7 +144,7 @@ ${QUIZ_RUBRIC}`,
     prompt: `The topic and its objectives, as a data block (source generated_question): each objective's id, name, how many questions to write ("write"), whether it is inferred (not taught in this material: then anchor must be null and the prompt must not claim to come from the course), and prompts already asked (don't repeat or rephrase them):
 ${untrustedBlock("generated_question", { topic: { name: input.topic.name, summary: input.topic.summary }, objectives })}
 
-Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.
+Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.${isAIChatMaterial(input.material.filename) ? " This is an AI chat: when its STUDENT messages identify confusion, make the questions concrete to that question or misconception. Do not treat an AI ASSISTANT response as independent authority for a new course concept." : ""}
 Mix per objective: at least one "Short answer" retrieval question on a concrete instance with an exact answer (set exact to every accepted spelling, rubric null) where the skill has one exact form; a "mechanism" short answer answerable in one sentence (set rubric with 1–3 requiredIdeas, exact null) when the objective has a why or how; the rest "Multiple choice" with four options where choosing between plausible alternatives is itself the skill; at most one "True or false". Keep every question under a minute.`,
   };
 }

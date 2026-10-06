@@ -44,6 +44,11 @@ export async function importWebsite(url: string, meta: UploadMeta): Promise<Extr
   return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/web", { ...meta, url });
 }
 
+/** Save a pasted AI-chat export or scrape a public shared-chat snapshot as one material page. */
+export async function importAIChat(input: { text?: string; url?: string }, meta: UploadMeta): Promise<Extract<UploadOutcome, { kind: "read" }>> {
+  return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/chat", { ...meta, ...input });
+}
+
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
