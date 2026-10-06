@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "motion/react";
 import { useOrca } from "@/lib/store";
 import { Screen } from "@/components/layout/Screen";
@@ -10,6 +11,8 @@ import { WeightsEditor } from "@/components/config/WeightsEditor";
 import { AccountCard } from "@/components/settings/Account";
 import { YourMetricsCard } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
+import { Button } from "@/components/ui/Button";
+import { type ReviewConfig, type Weights } from "@/lib/data";
 
 /**
  * Settings: account-wide fallbacks. A course can inherit these live defaults or set a higher-
@@ -17,6 +20,15 @@ import { fadeUp, stagger } from "@/lib/motion";
  */
 export default function SettingsPage() {
   const { defaultConfig, defaultWeights, setDefaults, hydrated } = useOrca();
+  const [draft, setDraft] = useState<{ config: ReviewConfig; weights: Weights } | null>(null);
+  const [saved, setSaved] = useState(false);
+  const draftConfig = draft?.config ?? defaultConfig;
+  const draftWeights = draft?.weights ?? defaultWeights;
+
+  const save = () => {
+    setDefaults(draftConfig, draftWeights);
+    setSaved(true);
+  };
 
   return (
     <Screen bg="ocean" className="overflow-y-auto">
@@ -37,7 +49,7 @@ export default function SettingsPage() {
               </div>
               <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[14px]">
                 {(["quick", "deep", "exam"] as const).map((k) => (
-                  <ConfigRow key={k} label={REVIEW_LABELS[k]} row={defaultConfig[k]} onChange={(row) => setDefaults({ ...defaultConfig, [k]: row }, defaultWeights)} />
+                  <ConfigRow key={k} label={REVIEW_LABELS[k]} row={draftConfig[k]} onChange={(row) => { setDraft({ config: { ...draftConfig, [k]: row }, weights: draftWeights }); setSaved(false); }} />
                 ))}
               </motion.div>
             </Card>
@@ -48,8 +60,12 @@ export default function SettingsPage() {
                 <h2 className="text-[22px] font-bold text-prussian">Account weights</h2>
                 <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes unless a course overrides its own weights.</p>
               </div>
-              <WeightsEditor weights={defaultWeights} onChange={(w) => setDefaults(defaultConfig, w)} />
+              <WeightsEditor weights={draftWeights} onChange={(w) => { setDraft({ config: draftConfig, weights: w }); setSaved(false); }} />
             </Card>
+          </motion.div>
+          <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
+            {saved && <span className="text-[14px] font-semibold text-good-deep">Saved</span>}
+            <Button size="sm" onClick={save}>Save</Button>
           </motion.div>
         </motion.div>
         )}

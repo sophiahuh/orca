@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { type Course, DEFAULT_WEIGHTS, type ReviewConfig } from "@/lib/data";
+import { type Course, DEFAULT_CONFIG, DEFAULT_WEIGHTS, type ReviewConfig, type Weights } from "@/lib/data";
 import { IconClose } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { RoundButton } from "@/components/ui/RoundButton";
@@ -17,20 +17,61 @@ import { WeightsEditor } from "./WeightsEditor";
  * account configuration; an edit creates a higher-priority course override.
  */
 export function ClassConfigModal({ course, onClose }: { course: Course | null; onClose: () => void }) {
-  const { configs, setConfig, weights, setWeights, configOverrides, weightOverrides, clearConfigOverride, clearWeightOverride } = useOrca();
+  const { configs, setConfig, weights, setWeights, configOverrides, weightOverrides, clearConfigOverride, clearWeightOverride, defaultConfig, defaultWeights } = useOrca();
+  const [draftConfig, setDraftConfig] = useState<ReviewConfig>(DEFAULT_CONFIG);
+  const [draftWeights, setDraftWeights] = useState<Weights>(DEFAULT_WEIGHTS);
+  const [inheritConfig, setInheritConfig] = useState(true);
+  const [inheritWeights, setInheritWeights] = useState(true);
+  const [draftCourseId, setDraftCourseId] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const dismiss = () => {
+    setDraftCourseId(null);
+    setSaved(false);
+    onClose();
+  };
 
   useEffect(() => {
     if (!course) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && dismiss();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [course, onClose]);
 
-  const config: ReviewConfig | undefined = course ? configs[course.id] : undefined;
+  const isDraftForCourse = course !== null && draftCourseId === course.id;
+  const config = course && isDraftForCourse ? draftConfig : (course ? configs[course.id] ?? defaultConfig : draftConfig);
+  const courseWeights = course && isDraftForCourse ? draftWeights : (course ? weights[course.id] ?? defaultWeights : draftWeights);
+  const courseInheritsConfig = course && isDraftForCourse ? inheritConfig : course ? configOverrides[course.id] === null : inheritConfig;
+  const courseInheritsWeights = course && isDraftForCourse ? inheritWeights : course ? weightOverrides[course.id] === null : inheritWeights;
+
+  const changeConfig = (next: ReviewConfig) => {
+    setDraftConfig(next);
+    setDraftCourseId(course?.id ?? null);
+    setInheritConfig(false);
+    if (course && !isDraftForCourse) setInheritWeights(weightOverrides[course.id] === null);
+    setSaved(false);
+  };
+  const changeWeights = (next: Weights) => {
+    setDraftWeights(next);
+    setDraftCourseId(course?.id ?? null);
+    setInheritWeights(false);
+    if (course && !isDraftForCourse) setInheritConfig(configOverrides[course.id] === null);
+    setSaved(false);
+  };
+
+  const save = () => {
+    if (!course) return;
+    if (courseInheritsConfig) clearConfigOverride(course.id);
+    else setConfig(course.id, config);
+    if (courseInheritsWeights) clearWeightOverride(course.id);
+    else setWeights(course.id, courseWeights);
+    setDraftCourseId(null);
+    setSaved(true);
+  };
 
   return (
     <AnimatePresence>
-      {course && config && (
+      {course && (
         <motion.div
           key="overlay"
           className="fixed inset-0 z-50 flex items-center justify-center bg-prussian/70 p-6"
@@ -38,7 +79,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
           initial="hidden"
           animate="show"
           exit="exit"
-          onClick={onClose}
+          onClick={dismiss}
         >
           <motion.div
             role="dialog"
@@ -51,7 +92,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
             onClick={(e) => e.stopPropagation()}
             className="relative flex max-h-full w-[980px] max-w-full flex-col overflow-y-auto rounded-[32px] bg-parchment px-[36px] pb-[32px] pt-[36px] lip-8 lip-alice"
           >
-            <RoundButton size={44} label="Close" onClick={onClose} className="absolute right-[24px] top-[24px]">
+            <RoundButton size={44} label="Close" onClick={dismiss} className="absolute right-[24px] top-[24px]">
               <IconClose size={20} />
             </RoundButton>
 
@@ -71,11 +112,11 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                   </div>
                   <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[14px]">
                     {(["quick", "deep", "exam"] as const).map((k) => (
-                      <ConfigRow key={k} label={REVIEW_LABELS[k]} row={config[k]} onChange={(row) => setConfig(course.id, { ...config, [k]: row })} />
+                      <ConfigRow key={k} label={REVIEW_LABELS[k]} row={config[k]} onChange={(row) => changeConfig({ ...config, [k]: row })} />
                     ))}
                   </motion.div>
-                  {configOverrides[course.id] !== null && (
-                    <Button size="sm" variant="ghost" className="self-start" onClick={() => clearConfigOverride(course.id)}>
+                  {!courseInheritsConfig && (
+                    <Button size="sm" variant="ghost" className="self-start" onClick={() => { setDraftConfig(defaultConfig); setDraftCourseId(course.id); setInheritConfig(true); if (!isDraftForCourse) setInheritWeights(weightOverrides[course.id] === null); setSaved(false); }}>
                       Use account review settings
                     </Button>
                   )}
@@ -86,9 +127,9 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                     <h3 className="text-[22px] font-bold text-prussian">Course weights</h3>
                     <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes when it builds reviews for this course.</p>
                   </div>
-                  <WeightsEditor weights={weights[course.id] ?? DEFAULT_WEIGHTS} onChange={(w) => setWeights(course.id, w)} />
-                  {weightOverrides[course.id] !== null && (
-                    <Button size="sm" variant="ghost" className="self-start" onClick={() => clearWeightOverride(course.id)}>
+                  <WeightsEditor weights={courseWeights} onChange={changeWeights} />
+                  {!courseInheritsWeights && (
+                    <Button size="sm" variant="ghost" className="self-start" onClick={() => { setDraftWeights(defaultWeights); setDraftCourseId(course.id); setInheritWeights(true); if (!isDraftForCourse) setInheritConfig(configOverrides[course.id] === null); setSaved(false); }}>
                       Use account weights
                     </Button>
                   )}
@@ -100,15 +141,16 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                   <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course overrides</p>
                   <h3 className="text-[22px] font-bold leading-tight text-prussian">{course.name}</h3>
                   <p className="pt-[4px] text-[14px] font-medium leading-relaxed text-wisteria-deep">
-                    Review settings: {configOverrides[course.id] === null ? "inheriting account default" : "course override active"}. Weights: {weightOverrides[course.id] === null ? "inheriting account default" : "course override active"}.
+                    Review settings: {courseInheritsConfig ? "inheriting account default" : "course override ready"}. Weights: {courseInheritsWeights ? "inheriting account default" : "course override ready"}.
                   </p>
                 </Card>
               </motion.div>
             </motion.div>
 
-            <div className="mt-auto flex items-center justify-end pt-[32px]">
-              <Button size="sm" onClick={onClose}>
-                Done
+            <div className="mt-auto flex items-center justify-end gap-[12px] pt-[32px]">
+              {saved && <span className="text-[14px] font-semibold text-good-deep">Saved</span>}
+              <Button size="sm" onClick={save}>
+                Save
               </Button>
             </div>
           </motion.div>
