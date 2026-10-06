@@ -224,3 +224,16 @@ test("a Dive In asks the dive questions written before and never answered first,
   assert.equal(runRow.questions_added, 0);
   assert.equal(mem.saves[0].questions, undefined, "no questions are written");
 });
+
+test("a Dive In asks no more than its objectives can hold: 20 minutes on one objective with 4 unanswered questions writes nothing", async () => {
+  const topic: Topic = { id: "t", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 } };
+  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", aliases: [], origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [] };
+  const deepQ = (id: string): QuizQuestion => ({ id, kind: "Short answer", tier: "application", topic: "Boolean Algebra", prompt: `${id}?`, options: [], answer: -1, exact: ["1"], explanation: "", anchor, objectiveId: "o", deep: true });
+  const structure: StructureState = { topics: [topic], objectives: { o: objective }, bank: { t: ["d1", "d2", "d3", "d4", "d5"].map(deepQ) }, relations: [] };
+  const mem = memoryStore({ run: queued({ kind: "deep-review", materialId: null, deepMinutes: 20 }), structure, pages });
+  const model = honestModel();
+  const out = await deepReview({ store: mem.store, call: model.call, newId }, { runId: "run1", objectiveIds: ["o"], minutes: 20 });
+  assert.equal(out.status, "done");
+  assert.deepEqual(model.steps, [], "20 minutes is 5 questions, but one objective holds 4: all from the stock");
+  assert.deepEqual(mem.saves[0].runs![0].question_ids, ["d1", "d2", "d3", "d4"]);
+});
