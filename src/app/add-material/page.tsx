@@ -180,8 +180,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         kind: "saved",
         message:
           g.state === "no-text"
-            ? `Saved to ${course.short}, but Orca found no text in this file, so there's nothing to build questions from.`
-            : `Saved to ${course.short}. No AI is connected, so no topics or questions were generated.`,
+            ? `Saved to ${course.name}, but Orca found no text in this file, so there's nothing to build questions from.`
+            : `Saved to ${course.name}. No AI is connected, so no topics or questions were generated.`,
       });
       window.setTimeout(leave, 2500);
     } catch (error) {
@@ -219,12 +219,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             label="Course"
             value={course.id}
             options={courses.map((c) => c.id)}
-            labels={Object.fromEntries(courses.map((c) => [c.id, c.short]))}
+            labels={Object.fromEntries(courses.map((c) => [c.id, c.name]))}
             onChange={setPickedId}
             className="ml-[8px]"
           />
         ) : (
-          <ContextPill className="ml-[8px]">{course.short}</ContextPill>
+          <ContextPill className="ml-[8px]">{course.name}</ContextPill>
         )}
       </header>
 
@@ -345,7 +345,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
             <Button full onClick={submit} disabled={busy || !chosenName}>
-              {phase.kind === "working" ? `Building ${course.short}…` : "Add to course"}
+              {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
             </Button>
 
             <AnimatePresence mode="wait">
@@ -361,7 +361,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
               )}
               {phase.kind === "duplicate" && (
                 <motion.span key="dup" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-prussian" role="status">
-                  {course.short} already has this file ({phase.filename}), so there&apos;s nothing new to add.
+                  {course.name} already has this file ({phase.filename}), so there&apos;s nothing new to add.
                 </motion.span>
               )}
               {phase.kind === "error" && (
@@ -383,7 +383,7 @@ type Resumed = { kind: "checking" } | { kind: "reading"; filename: string } | { 
  * After a reload during an upload (its material id is in the URL): follow it on the server. A job
  * for it opens the review screen, as the upload would have; otherwise the page says where it got to.
  */
-function ResumeUpload({ materialId, course, onAnother }: { materialId: string; course: { slug: string; short: string }; onAnother: () => void }) {
+function ResumeUpload({ materialId, course, onAnother }: { materialId: string; course: { slug: string; name: string }; onAnother: () => void }) {
   const router = useRouter();
   const [state, setState] = useState<Resumed>({ kind: "checking" });
 
@@ -405,7 +405,7 @@ function ResumeUpload({ materialId, course, onAnother }: { materialId: string; c
       // The browser was still sending the file when the page reloaded: it never arrived.
       if (m.status === "uploaded" && checks >= 3) return setState({ kind: "stopped", message: `${m.filename} didn't finish uploading before the page reloaded. Choose the file again.` });
       // Read, but no job for it after a while: nothing will be generated (no AI connected, or no text).
-      if (m.status === "ready" && checks >= 5) return setState({ kind: "done", message: `${m.filename} is saved to ${course.short}. No topics or questions are being generated for it.` });
+      if (m.status === "ready" && checks >= 5) return setState({ kind: "done", message: `${m.filename} is saved to ${course.name}. No topics or questions are being generated for it.` });
       setState({ kind: "reading", filename: m.filename });
       window.setTimeout(check, 2000);
     };
@@ -413,14 +413,14 @@ function ResumeUpload({ materialId, course, onAnother }: { materialId: string; c
     return () => {
       stop = true;
     };
-  }, [materialId, course.slug, course.short, router]);
+  }, [materialId, course.slug, course.name, router]);
 
   return (
     <Screen bg="ocean">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
         <BackButton />
         <h1 className="text-[44px] font-bold leading-none text-prussian">Add material</h1>
-        <ContextPill className="ml-[8px]">{course.short}</ContextPill>
+        <ContextPill className="ml-[8px]">{course.name}</ContextPill>
       </header>
       <div className="flex flex-1 flex-col items-center justify-center gap-[14px] px-[28px] text-center" data-part="resume-upload">
         {state.kind === "checking" || state.kind === "reading" ? (
