@@ -201,7 +201,8 @@ export function labelBottom(n: Pick<GraphNode, "y" | "r" | "lines">): number {
  * A path from one node to another: a vertical S-curve between rows, leaving from under the upper
  * node's name and arriving at the top of the lower node's circle; a straight line within a row.
  */
-function edgePath(a: GraphNode, b: GraphNode): { d: string; mid: { x: number; y: number } } {
+/** Connect two Atlas nodes; exported so an interactive view can redraw an edge after a node moves. */
+export function edgePath(a: GraphNode, b: GraphNode): { d: string; mid: { x: number; y: number } } {
   if (a.row === b.row) {
     const dir = b.x >= a.x ? 1 : -1;
     const x1 = a.x + dir * a.r;

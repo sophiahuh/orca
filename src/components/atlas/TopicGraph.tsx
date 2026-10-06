@@ -3,14 +3,15 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import type { RelationType } from "@/lib/data";
-import { GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary, wrapLabel } from "@/lib/course/topic-graph";
+import { edgePath, GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary, wrapLabel } from "@/lib/course/topic-graph";
 import { popIn, stagger } from "@/lib/motion";
 
 /**
  * Figma: E1 · Concept graph v4 (foundations on top) and E2 (hover on a topic). The topics as nodes,
  * sized by how many topics they're used in, with their strength glyph and name; the relations as
  * edges in four styles. Hovering (or focusing) a topic dims the rest to 30%, labels its edges and
- * shows a tooltip; clicking opens the topic's quiz. Zoom with − + and fit; drag to pan. Long names
+ * shows a tooltip; clicking opens the topic's quiz. Zoom with − + and fit; drag open space to pan
+ * or drag a node to arrange it. Long names
  * wrap (at most three lines) and edges leave from under a topic's name.
  */
 const EDGE: Record<RelationType, { stroke: string; dash?: string; width: number; marker?: string }> = {
@@ -55,9 +56,16 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
   const full = useMemo<View>(() => ({ x: 0, y: 0, w: graph.width, h: graph.height }), [graph.width, graph.height]);
   // Starts fitted; the page remounts this (key) when the graph's size changes.
   const [view, setView] = useState<View>(full);
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [hover, setHover] = useState<string | null>(null);
-  const drag = useRef<{ x: number; y: number; view: View } | null>(null);
+  const panDrag = useRef<{ x: number; y: number; view: View } | null>(null);
+  const nodeDrag = useRef<{ id: string; x: number; y: number; startX: number; startY: number; view: View; moved: boolean } | null>(null);
+  const ignoreClick = useRef(false);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  const nodes = useMemo(() => graph.nodes.map((node) => ({ ...node, ...positions[node.topic.id] })), [graph.nodes, positions]);
+  const nodesById = useMemo(() => new Map(nodes.map((node) => [node.topic.id, node])), [nodes]);
+  const edges = useMemo(() => graph.edges.map((edge) => ({ ...edge, ...edgePath(nodesById.get(edge.from)!, nodesById.get(edge.to)!) })), [graph.edges, nodesById]);
 
   const zoom = useCallback(
     (factor: number) =>
@@ -83,19 +91,45 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.target !== e.currentTarget) return;
-    drag.current = { x: e.clientX, y: e.clientY, view };
+    panDrag.current = { x: e.clientX, y: e.clientY, view };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    const d = drag.current;
+    const node = nodeDrag.current;
     const svg = svgRef.current;
-    if (!d || !svg) return;
+    if (!svg) return;
     const box = svg.getBoundingClientRect();
+    if (node) {
+      const k = Math.max(node.view.w / box.width, node.view.h / box.height);
+      const dx = (e.clientX - node.startX) * k;
+      const dy = (e.clientY - node.startY) * k;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) node.moved = true;
+      setPositions((p) => ({ ...p, [node.id]: { x: node.x + dx, y: node.y + dy } }));
+      return;
+    }
+    const d = panDrag.current;
+    if (!d) return;
     // preserveAspectRatio "meet": one screen pixel is the larger of the two ratios in view units.
     const k = Math.max(d.view.w / box.width, d.view.h / box.height);
     setView({ ...d.view, x: d.view.x - (e.clientX - d.x) * k, y: d.view.y - (e.clientY - d.y) * k });
   };
-  const endDrag = () => (drag.current = null);
+  const endDrag = () => {
+    if (nodeDrag.current?.moved) {
+      ignoreClick.current = true;
+      requestAnimationFrame(() => (ignoreClick.current = false));
+    }
+    nodeDrag.current = null;
+    panDrag.current = null;
+  };
+  const startNodeDrag = (node: GraphNode, e: React.PointerEvent<SVGGElement>) => {
+    e.stopPropagation();
+    nodeDrag.current = { id: node.topic.id, x: node.x, y: node.y, startX: e.clientX, startY: e.clientY, view, moved: false };
+    svgRef.current?.setPointerCapture(e.pointerId);
+  };
+  const openNode = (id: string) => {
+    if (ignoreClick.current) return;
+    onOpen(id);
+  };
 
   return (
     <div className="absolute inset-0" data-part="topic-graph">
@@ -120,7 +154,7 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
           </marker>
         </defs>
 
-        {graph.edges.map((e) => {
+        {edges.map((e) => {
           const style = EDGE[e.type];
           const on = lit(e);
           return (
@@ -142,13 +176,13 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
         })}
 
         <motion.g variants={stagger(0.05, 0.03)} initial="hidden" animate="show">
-          {graph.nodes.map((n) => (
-            <TopicNode key={n.topic.id} node={n} active={hover === n.topic.id} dim={neighbours !== null && !neighbours.has(n.topic.id)} onHover={setHover} onOpen={onOpen} />
+          {nodes.map((n) => (
+            <TopicNode key={n.topic.id} node={n} active={hover === n.topic.id} dim={neighbours !== null && !neighbours.has(n.topic.id)} onHover={setHover} onOpen={openNode} onDragStart={startNodeDrag} />
           ))}
         </motion.g>
 
         {/* Hover: the lit edges' kinds as pills (related edges stay unlabelled). */}
-        {graph.edges.filter((e) => lit(e) && e.type !== "related").map((e) => {
+        {edges.filter((e) => lit(e) && e.type !== "related").map((e) => {
           const label = RELATION_LABEL[e.type];
           const w = label.length * 6.4 + 18;
           return (
@@ -161,7 +195,7 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
           );
         })}
 
-        {hovered && <Tooltip node={hovered} />}
+        {hovered && <Tooltip node={nodesById.get(hovered.topic.id) ?? hovered} />}
       </svg>
 
       <div className="absolute bottom-[20px] right-[20px]">
@@ -183,7 +217,7 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
   );
 }
 
-function TopicNode({ node: n, active, dim, onHover, onOpen }: { node: GraphNode; active: boolean; dim: boolean; onHover: (id: string | null) => void; onOpen: (id: string) => void }) {
+function TopicNode({ node: n, active, dim, onHover, onOpen, onDragStart }: { node: GraphNode; active: boolean; dim: boolean; onHover: (id: string | null) => void; onOpen: (id: string) => void; onDragStart: (node: GraphNode, event: React.PointerEvent<SVGGElement>) => void }) {
   const style = NODE[n.strength];
   const id = n.topic.id;
   return (
@@ -195,10 +229,11 @@ function TopicNode({ node: n, active, dim, onHover, onOpen }: { node: GraphNode;
       role="button"
       tabIndex={0}
       aria-label={`${n.topic.name}, ${STRENGTH_LABEL[n.strength]}: ${topicSummary(n)}`}
-      className="cursor-pointer outline-none"
+      className="cursor-grab outline-none active:cursor-grabbing"
       style={{ opacity: dim ? 0.3 : 1, transition: "opacity 150ms" }}
       onPointerEnter={() => onHover(id)}
       onPointerLeave={() => onHover(null)}
+      onPointerDown={(e) => onDragStart(n, e)}
       onFocus={() => onHover(id)}
       onBlur={() => onHover(null)}
       onClick={() => onOpen(id)}
