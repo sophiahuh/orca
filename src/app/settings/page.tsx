@@ -37,7 +37,7 @@ export default function SettingsPage() {
         <h1 className="text-[46px] font-bold leading-none text-prussian">Settings</h1>
       </header>
 
-      <div className="flex flex-wrap items-start gap-[24px] px-[40px] pb-[48px] pt-[36px]">
+      <div className="grid grid-cols-1 items-start gap-[24px] px-[40px] pb-[48px] pt-[36px] min-[1186px]:grid-cols-[minmax(0,640px)_minmax(0,418px)] min-[1620px]:grid-cols-[minmax(0,640px)_minmax(0,418px)_minmax(0,418px)]">
         {/* Only once loaded: an edit made before the load lands would be overwritten on screen by it. */}
         {hydrated && (
         <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex w-[640px] max-w-full flex-col gap-[24px]">
@@ -70,16 +70,14 @@ export default function SettingsPage() {
         </motion.div>
         )}
 
-        <motion.div variants={stagger(0.1, 0.08)} initial="hidden" animate="show" className="flex w-[860px] max-w-full flex-col gap-[24px] min-[920px]:flex-row">
-          <motion.div variants={fadeUp} className="w-[418px] max-w-full">
-            <AccountCard />
-          </motion.div>
-          <motion.div variants={fadeUp} className="w-[418px] max-w-full">
-            <YourMetricsCard />
-          </motion.div>
-          {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
-              Orca's key only (Phase 4, decision 9). Its code stays until "Bring-your-own model" is decided. */}
+        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full">
+          <AccountCard />
         </motion.div>
+        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[418px] max-w-full min-[1186px]:col-start-2 min-[1620px]:col-start-auto">
+          <YourMetricsCard />
+        </motion.div>
+        {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
+            Orca's key only (Phase 4, decision 9). Its code stays until "Bring-your-own model" is decided. */}
       </div>
     </Screen>
   );
