@@ -75,6 +75,7 @@ ${MATERIAL_RULES}
 
 Definitions:
 - A topic is something a student would review as a unit (2 to 6 per lecture). Use clear, course-specific concepts at the granularity of "Derivatives", "Integrals", or "L'Hopital's rule" in Calculus—not a whole course area ("Calculus") and not a single assessable procedure. Skip logistics.
+- A broader topic and a meaningful subtype may both be topics when each is a distinct review unit. For example, both "Binary search trees" and "AVL trees" can be topics; both "MIPS instruction formats" and the distinct "R-type", "I-type", and "J-type" formats can be topics. Keep the broader topic when it has material of its own, and use has-a-kind to connect it to its subtypes. Do not split a topic into labels that the material does not teach separately.
 - An objective is one "can do X" skill a question can test, e.g. "Convert between decimal and n-bit 2's complement". One skill per objective; 2 to 6 per topic.
 - A place is somewhere the material genuinely teaches or uses the objective (a slide or section on it, a worked example, a problem that requires it), cited by locator ("slide 14") and a short excerpt. A passing mention is not a place.
 - origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. Use it sparingly.
