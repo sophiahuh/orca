@@ -180,9 +180,9 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
           </marker>
         </defs>
 
-        {edges.map((e) => {
+        {/* Unrelated arrows stay behind nodes; the hovered node's arrows are redrawn in front below. */}
+        {edges.filter((e) => !lit(e)).map((e) => {
           const style = EDGE[e.type];
-          const on = lit(e);
           return (
             <path
               key={e.id}
@@ -191,11 +191,11 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
               d={e.d}
               fill="none"
               stroke={style.stroke}
-              strokeWidth={on ? style.width + 0.8 : style.width}
+              strokeWidth={style.width}
               strokeDasharray={style.dash}
               strokeLinecap="round"
               markerEnd={style.marker}
-              opacity={hover && !on ? 0.25 : 1}
+              opacity={hover ? 0.25 : 1}
               pointerEvents="none"
             />
           );
@@ -206,6 +206,26 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
             <TopicNode key={n.topic.id} node={n} active={hover === n.topic.id} dim={neighbours !== null && !neighbours.has(n.topic.id)} onHover={setHover} onOpen={openNode} onDragStart={startNodeDrag} />
           ))}
         </motion.g>
+
+        {/* A selected topic's relationships stay readable even where they cross other nodes. */}
+        {hover && edges.filter(lit).map((e) => {
+          const style = EDGE[e.type];
+          return (
+            <path
+              key={`foreground-${e.id}`}
+              data-part="edge-foreground"
+              data-type={e.type}
+              d={e.d}
+              fill="none"
+              stroke={style.stroke}
+              strokeWidth={style.width + 0.8}
+              strokeDasharray={style.dash}
+              strokeLinecap="round"
+              markerEnd={style.marker}
+              pointerEvents="none"
+            />
+          );
+        })}
 
         {/* Hover: the lit edges' kinds as pills (related edges stay unlabelled). */}
         {edgeLabels.map((e) => {
