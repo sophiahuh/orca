@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VersionConflictError, recordEvent } from "@/lib/mastery/snapshots";
+import { NewerRulesError, VersionConflictError, recordEvent } from "@/lib/mastery/snapshots";
 import type { AnswerEvent, EvidenceEvent } from "@/lib/mastery/types";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
 import { forStudent, ownsCourse, reply } from "@/lib/server/student";
@@ -104,8 +104,17 @@ export async function POST(request: Request) {
         retried: r.retried,
       });
     } catch (e) {
-      if (e instanceof VersionConflictError) return reply(409, { error: "Another answer was being saved at the same moment; this one wasn't recorded. Try again." });
-      if (e instanceof RecordError && e.code === "23505") return reply(409, { error: "This event was already recorded." });
+      if (e instanceof VersionConflictError) {
+        return reply(409, {
+          error:
+            e.reason === "structure"
+              ? "This course's topics or objectives were being changed at the same moment; the answer wasn't recorded. Try again."
+              : "Another answer was being saved at the same moment; this one wasn't recorded. Try again.",
+          reason: e.reason,
+        });
+      }
+      if (e instanceof NewerRulesError) return reply(503, { error: "Orca is being updated; the answer wasn't recorded. Try again in a moment." });
+      if (e instanceof RecordError && e.code === "23505") return reply(409, { error: "This event was already recorded.", duplicate: true });
       throw e;
     }
   });

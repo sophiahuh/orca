@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { weightLabel, weightPercents } from "@/lib/data";
+import { type Weights, weightLabel, weightPercents } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { IconPlus } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
@@ -22,8 +22,18 @@ export default function SettingsPage() {
   const [newType, setNewType] = useState("");
 
   const target = courses.find((c) => c.id === weightsFor) ?? courses[0];
-  const w = target ? weights[target.id] ?? {} : {};
+  // While a slider is being dragged the screen follows this draft; the store (and the database) get
+  // the value once, when the student lets go.
+  const [draft, setDraft] = useState<{ courseId: string; weights: Weights } | null>(null);
+  const w: Weights = target ? (draft?.courseId === target.id ? draft.weights : weights[target.id] ?? {}) : {};
   const pct = weightPercents(w);
+  const dragWeight = (key: string, v: number) => target && setDraft({ courseId: target.id, weights: { ...w, [key]: v } });
+  const commitWeight = (key: string, v: number) => {
+    if (!target) return;
+    setDraft(null);
+    const saved = weights[target.id] ?? {};
+    if (saved[key] !== v) setWeights(target.id, { ...saved, [key]: v });
+  };
 
   const addType = () => {
     const name = newType.trim();
@@ -88,7 +98,7 @@ export default function SettingsPage() {
                 {Object.entries(w).map(([key, value]) => (
                   <div key={key} className="flex items-center gap-[14px]">
                     <span className="w-[128px] shrink-0 truncate text-[14px] font-bold text-prussian">{weightLabel(key)}</span>
-                    <Slider label={`${weightLabel(key)} weight`} value={value} onChange={(v) => setWeights(target.id, { ...w, [key]: v })} className="flex-1" />
+                    <Slider label={`${weightLabel(key)} weight`} value={value} onChange={(v) => dragWeight(key, v)} onCommit={(v) => commitWeight(key, v)} className="flex-1" />
                     <span className="w-[40px] text-right text-[14px] font-semibold text-wisteria-deep">{pct[key]}%</span>
                   </div>
                 ))}

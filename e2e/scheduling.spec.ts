@@ -37,6 +37,25 @@ async function answerAll(page: Page, right: boolean) {
 
 const noModel = (page: Page) => page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: null } }));
 
+/**
+ * Milliseconds until the next midnight in the student's timezone (the fixture signs students up
+ * with this process's zone). A test that starts just before it would see its answers land on the
+ * next day, so the run waits for the new day first instead of failing.
+ */
+function msToMidnight(now = new Date()): number {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(now).map((p) => [p.type, p.value]));
+  const sinceMidnight = (Number(parts.hour) * 3600 + Number(parts.minute) * 60 + Number(parts.second)) * 1000 + now.getMilliseconds();
+  return 86_400_000 - sinceMidnight;
+}
+test.beforeEach(async ({}, testInfo) => {
+  const left = msToMidnight();
+  if (left < 90_000) {
+    testInfo.setTimeout(testInfo.timeout + left + 5_000);
+    await new Promise((r) => setTimeout(r, left + 1_000));
+  }
+});
+
 test.describe("scheduling", () => {
   test("a quick review is due, starts instantly from the stock with reasons, and is done for the day once finished", async ({ page, student }) => {
     await noModel(page);

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { attribution, eventsCountingFor } from "../../src/lib/mastery/attribution.ts";
 import type { QuestionRef } from "../../src/lib/mastery/catalogue.ts";
 import { RULES_VERSION, type ObjectiveAccumulator, replayObjective } from "../../src/lib/mastery/objective-state.ts";
-import { type Snapshot, type SnapshotStore, VersionConflictError, readCourseState, recordEvent } from "../../src/lib/mastery/snapshots.ts";
+import { NewerRulesError, type Snapshot, type SnapshotStore, VersionConflictError, readCourseState, recordEvent } from "../../src/lib/mastery/snapshots.ts";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent, ObjectiveInfo } from "../../src/lib/mastery/types.ts";
 
 const utcDay = (iso: string) => iso.slice(0, 10);
@@ -285,4 +285,72 @@ test("a structure change between reading the structure and the snapshot starts o
   assert.equal(r.retried, true);
   assert.equal(store.rows.get("a")!.accumulator!.answered, 2, "b's earlier answer came with the merge");
   assert.deepEqual(store.rows.get("a")!.accumulator, await store.replay("a"));
+});
+
+/* ── Rolling deploys, conflict reasons, same-millisecond events (Phase 4 review) ── */
+
+test("a snapshot folded by a newer Orca is read without being overwritten, and a write to it is refused", async () => {
+  const store = new MemoryStore();
+  await recordEvent(store, answer("qa1", "a", day(1)));
+  await recordEvent(store, answer("qb1", "b", day(1)));
+  const newer = { ...store.rows.get("a")!, rulesVersion: RULES_VERSION + 1, accumulator: { ...store.rows.get("a")!.accumulator!, answered: 99 } };
+  store.rows.set("a", newer);
+
+  const read = await readCourseState(store);
+  assert.deepEqual(read.newer, ["a"]);
+  assert.deepEqual(read.rebuilt, []);
+  const a = read.objectives.find((o) => o.objectiveId === "a")!;
+  assert.equal(a.saved, false);
+  assert.deepEqual(a.accumulator, await store.replay("a"), "computed from the log under this server's rules");
+  assert.deepEqual(store.rows.get("a"), newer, "the stored newer fold is untouched");
+
+  const writes = store.writes;
+  await assert.rejects(recordEvent(store, answer("qa2", "a", day(2))), NewerRulesError);
+  assert.equal(store.writes, writes, "nothing recorded");
+  assert.equal(store.events.length, 2);
+  // Other objectives carry on.
+  assert.equal((await recordEvent(store, answer("qb2", "b", day(2)))).objectiveId, "b");
+});
+
+test("a conflict says whether another answer or a structure change caused it", async () => {
+  const store = new MemoryStore();
+  await recordEvent(store, answer("qa1", "a", day(1)));
+  // Another tab answers between every read and write.
+  const otherTab = () => {
+    const row = store.rows.get("a")!;
+    store.rows.set("a", { ...row, version: row.version + 1 });
+    store.beforeRecord = otherTab;
+  };
+  store.beforeRecord = otherTab;
+  await assert.rejects(recordEvent(store, answer("qa2", "a", day(2))), (e: unknown) => e instanceof VersionConflictError && e.reason === "concurrent" && /kept being answered/.test(e.message));
+  store.beforeRecord = null;
+
+  // A structure change (a merge, a re-tag) marks the snapshot stale between every read and write.
+  const restructure = () => {
+    store.markStale("a");
+    store.beforeRecord = restructure;
+  };
+  store.beforeRecord = restructure;
+  await assert.rejects(recordEvent(store, answer("qa3", "a", day(3))), (e: unknown) => e instanceof VersionConflictError && e.reason === "structure" && /course kept changing/.test(e.message));
+  store.beforeRecord = null;
+  assert.equal(store.events.length, 1, "neither answer was recorded");
+});
+
+test("two events in the same millisecond fold in id order whether extended or rebuilt", async () => {
+  const store = new MemoryStore();
+  const t = day(1);
+  const first = answer("qa1", "a", t, { id: "e-b", outcome: "incorrect" });
+  const second = answer("qa2", "a", t, { id: "e-a", outcome: "incorrect" });
+  assert.equal((await recordEvent(store, first)).rebuilt, true, "the first answer folds the log");
+  // The second lands in the same millisecond: not extended (that would fold it after e-b), but rebuilt in id order.
+  const r = await recordEvent(store, second);
+  assert.equal(r.rebuilt, true);
+  assert.deepEqual(store.rows.get("a")!.accumulator, await store.replay("a"));
+  // A mix-up needs two different questions missed in order; the replay sorts by id (e-a, e-b).
+  assert.equal(store.rows.get("a")!.accumulator!.lastMissQuestion, "qa1");
+  // Replays agree with each other whatever order the log is given in.
+  const view = await store.view();
+  const options = { hasMechanismQuestions: true, dayKey: utcDay };
+  assert.deepEqual(replayObjective("a", [first, second], options), replayObjective("a", [second, first], options));
+  void view;
 });

@@ -200,7 +200,18 @@ test("dayKeyIn follows daylight saving changes", () => {
 
 test("dayKeyIn refuses an unknown timezone and an unparseable time", () => {
   assert.throws(() => dayKeyIn("Mars/Olympus_Mons"), RangeError);
+  assert.throws(() => dayKeyIn("Mars/Olympus_Mons"), RangeError, "and keeps refusing it: nothing was cached for it");
   assert.throws(() => dayKeyIn("UTC")("yesterday"), /unparseable/);
+});
+
+test("dayKeyIn reuses one formatter per timezone, so folding a long log doesn't build one per event", () => {
+  const ny = dayKeyIn("America/New_York");
+  const again = dayKeyIn("America/New_York");
+  const times = Array.from({ length: 2000 }, (_, i) => new Date(Date.UTC(2026, 0, 1, i)).toISOString());
+  const started = performance.now();
+  for (const t of times) assert.equal(ny(t), again(t));
+  // 4,000 keys; building a formatter each time would take well over a second.
+  assert.ok(performance.now() - started < 1000, "day keys come from a cached formatter");
 });
 
 test("credit days follow the student's timezone: two UTC days can be one local day", () => {

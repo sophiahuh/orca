@@ -64,6 +64,7 @@ import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
 import { type MyData, type StructureState, calendarToRow, courseToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
+import { confusionEventId } from "./mastery/ids";
 import type { Json } from "./supabase/database.types";
 import { useNow } from "@/hooks/useNow";
 
@@ -189,9 +190,13 @@ function must<T>(result: { data: T; error: { message: string } | null }): T {
   return result.data;
 }
 
+/** The server already holds this event (409 with `duplicate`): the save it belongs to is done. */
+class DuplicateEventError extends Error {}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
+  const out = (await res.json().catch(() => null)) as (T & { error?: string; duplicate?: boolean }) | null;
+  if (res.status === 409 && out?.duplicate) throw new DuplicateEventError(out.error);
   if (!res.ok) throw new Error(out?.error ?? `the server answered ${res.status}`);
   if (out === null) throw new Error("the server sent nothing back");
   return out;
@@ -272,6 +277,10 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const queue = useRef<Promise<void>>(Promise.resolve());
   /** Moves on when a save fails (and again when the resync after it lands); saves from an older epoch are cancelled. */
   const epoch = useRef(0);
+  /** True while the state is being read again after a failed save; actions meanwhile are refused (below). */
+  const resyncing = useRef(false);
+  /** Quiz sessions with an answer that couldn't be saved: their score is never saved as a finished session. */
+  const failedSessions = useRef(new Set<string>());
   const pathname = usePathname();
 
   // Old local state is gone for good (accounts start fresh).
@@ -341,6 +350,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
    * replaced by what it read, so those actions' saves are cancelled too (the epoch moves on again).
    */
   const resync = useCallback(async () => {
+    resyncing.current = true;
     try {
       const loaded = await loadAll();
       setState((s) => ({ ...initialState, ...loaded, llm: s.llm }));
@@ -351,6 +361,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       setStatus("failed");
     } finally {
       epoch.current += 1;
+      resyncing.current = false;
     }
   }, []);
 
@@ -360,7 +371,15 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
    * and the state is read again from the database, so the screen matches what was saved.
    */
   const save = useCallback(
-    (run: () => Promise<void>) => {
+    (run: () => Promise<void>, opts: { onFail?: () => void } = {}) => {
+      if (resyncing.current) {
+        // The screen is about to be replaced by what the database holds; a change made now would be
+        // lost with no trace, so it's refused with its own message instead (its optimistic update goes
+        // with the reload).
+        opts.onFail?.();
+        setSaveError("Orca is reloading your data after a save that failed; that change wasn't saved. Try it again in a moment.");
+        return;
+      }
       const mine = epoch.current;
       count(1);
       queue.current = queue.current.then(async () => {
@@ -369,6 +388,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
           try {
             await run();
           } catch (e) {
+            opts.onFail?.();
             epoch.current += 1;
             setSaveError(`Couldn't save: ${message(e)}${inFlight.current > 1 ? " (changes made after it weren't saved either)" : ""}`);
             count(1);
@@ -499,15 +519,23 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const recordQuiz = useCallback<OrcaActions["recordQuiz"]>(
     (r) => {
       const local: QuizResult = { ...r, finishedAt: new Date().toISOString() };
+      const drop = () => setState((s) => ({ ...s, results: s.results.filter((x) => x !== local) }));
       setState((s) => ({ ...s, results: [...s.results, local] }));
       save(
         async () => {
+          // Runs after the session's answer saves (the queue is in order). If one of them failed,
+          // the score would count answers that aren't in the record: it isn't saved, and says so.
+          if (failedSessions.current.has(r.sessionId)) {
+            failedSessions.current.delete(r.sessionId);
+            throw new Error("some answers in this quiz couldn't be saved, so its score wasn't recorded");
+          }
           const { data: row, error } = await browserSupabase().from("session_results").insert(sessionToRow(r)).select().single();
           if (error) throw new Error(error.message);
           // The database stamps when it finished, on the same clock as the answers.
           const stored = sessionFromRow(row);
           setState((s) => ({ ...s, results: s.results.map((x) => (x === local ? stored : x)) }));
         },
+        { onFail: drop },
       );
     },
     [save],
@@ -515,7 +543,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   /** Post one evidence event; on success the server's copy (its time, topic and objective) replaces the local one and its snapshot is kept. */
   const postEvidence = useCallback(async (local: EvidenceEvent, body: object) => {
-    const out = await postJson<Recorded>("/api/evidence", body);
+    let out: Recorded;
+    try {
+      out = await postJson<Recorded>("/api/evidence", body);
+    } catch (e) {
+      // The same event again (a retried reflection sends the same ids): it's recorded; nothing to do.
+      if (e instanceof DuplicateEventError) return;
+      throw e;
+    }
     setState((s) => ({
       ...s,
       evidence: s.evidence.map((e) => (e.id === local.id ? out.event : e)),
@@ -541,6 +576,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
             source: e.source,
             sessionId: e.sessionId,
           }),
+        { onFail: () => failedSessions.current.add(e.sessionId) },
       );
     },
     [save, postEvidence],
@@ -549,7 +585,9 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const recordReflection = useCallback<OrcaActions["recordReflection"]>(
     (materialId, note, events) => {
       const at = new Date().toISOString();
-      const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: crypto.randomUUID(), at, materialId, note }));
+      // One id per (material, objective): a retry after a half-failed save sends the same ids, and the
+      // server refuses the ones already recorded instead of recording the confusion twice.
+      const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: confusionEventId(materialId, e.objectiveId), at, materialId, note }));
       const reflection = { at, note, objectiveIds: events.map((e) => e.objectiveId) };
       setState((s) => ({
         ...s,

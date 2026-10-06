@@ -45,17 +45,42 @@ export interface SnapshotStore {
   save(objectiveId: string, accumulator: ObjectiveAccumulator, expectedVersion: number): Promise<boolean>;
 }
 
-/** Two writers kept changing the snapshot under this one; the event was not recorded. */
+/** Why a write lost its race: another answer landed on the same objective, or the course's structure changed under it. */
+export type ConflictReason = "concurrent" | "structure";
+
+/** The snapshot moved twice under this writer; the event was not recorded. */
 export class VersionConflictError extends Error {
-  constructor(objectiveId: string) {
-    super(`Objective ${objectiveId} kept changing while this answer was saved; it was not recorded`);
+  readonly reason: ConflictReason;
+  constructor(objectiveId: string, reason: ConflictReason) {
+    super(
+      reason === "structure"
+        ? `Objective ${objectiveId}'s course kept changing while this answer was saved; it was not recorded`
+        : `Objective ${objectiveId} kept being answered while this answer was saved; it was not recorded`,
+    );
     this.name = "VersionConflictError";
+    this.reason = reason;
+  }
+}
+
+/**
+ * The snapshot was folded by a newer Orca than this server (a rolling deploy): this server neither
+ * extends it (its rules differ) nor overwrites it with an older fold. Writes wait for the new server.
+ */
+export class NewerRulesError extends Error {
+  constructor(objectiveId: string) {
+    super(`Objective ${objectiveId}'s state was saved by a newer version of Orca than this server; it was not recorded`);
+    this.name = "NewerRulesError";
   }
 }
 
 /** A snapshot that can be extended as it is: fresh, folded under the current rules. */
 export function isUsable(s: Snapshot): s is Snapshot & { accumulator: ObjectiveAccumulator } {
   return !s.stale && s.accumulator !== null && s.rulesVersion === RULES_VERSION;
+}
+
+/** Folded under newer rules than this server has: read-only here, never rebuilt over. */
+export function isNewer(s: Snapshot): boolean {
+  return s.rulesVersion !== null && s.rulesVersion > RULES_VERSION;
 }
 
 function optionsFor(objectiveId: string, view: CourseView): ObjectiveStateOptions {
@@ -89,6 +114,7 @@ export interface Recorded {
  */
 export async function recordEvent(store: SnapshotStore, event: EvidenceEvent): Promise<Recorded> {
   let target = "";
+  let reason: ConflictReason = "concurrent";
   for (const attempt of [1, 2]) {
     const countsFor = (await store.view()).attribution.countsFor(event);
     if (countsFor === null) {
@@ -97,12 +123,18 @@ export async function recordEvent(store: SnapshotStore, event: EvidenceEvent): P
     }
     target = countsFor;
     const snap = await store.snapshot(target);
+    if (snap !== null && isNewer(snap)) throw new NewerRulesError(target);
     // Read the structure again after the snapshot: a change before this read is in `view`, and a
     // change after it marks the snapshot stale, moving its version, so the write below loses.
     const view = await store.view();
-    if (view.attribution.countsFor(event) !== target) continue;
+    if (view.attribution.countsFor(event) !== target) {
+      reason = "structure";
+      continue;
+    }
+    // Extend only when the event is strictly later than the snapshot's last one: two events in the
+    // same millisecond are ordered by id on a rebuild, and extending could put them the other way.
     const extendable =
-      attempt === 1 && snap !== null && isUsable(snap) && (snap.accumulator.lastAt === null || Date.parse(event.at) >= Date.parse(snap.accumulator.lastAt));
+      attempt === 1 && snap !== null && isUsable(snap) && (snap.accumulator.lastAt === null || Date.parse(event.at) > Date.parse(snap.accumulator.lastAt));
     const accumulator = extendable
       ? applyEvidence(snap.accumulator, { ...event, objectiveId: target }, optionsFor(target, view))
       : rebuild(target, [...(await store.log()), event], view);
@@ -110,8 +142,11 @@ export async function recordEvent(store: SnapshotStore, event: EvidenceEvent): P
     if (await store.record(event, { objectiveId: target, accumulator, expectedVersion })) {
       return { objectiveId: target, accumulator, version: expectedVersion + 1, rebuilt: !extendable, retried: attempt > 1 };
     }
+    // The write lost: a stale mark means the structure moved; otherwise another answer landed.
+    const moved = await store.snapshot(target);
+    reason = moved?.stale ? "structure" : "concurrent";
   }
-  throw new VersionConflictError(target);
+  throw new VersionConflictError(target, reason);
 }
 
 export interface ObjectiveSnapshot {
@@ -125,9 +160,11 @@ export interface ObjectiveSnapshot {
 /**
  * Every snapshot of a course that holds state now. Fresh ones are returned as stored; stale,
  * old-rules and placeholder ones are rebuilt from the log (read once, only if needed) and saved.
+ * One folded by a newer Orca is computed from the log under this server's rules and returned
+ * unsaved (`newer`), so an older server in a rolling deploy never overwrites a newer fold.
  * Objectives with no snapshot have no events counting for them: they are unseen.
  */
-export async function readCourseState(store: SnapshotStore): Promise<{ objectives: ObjectiveSnapshot[]; rebuilt: string[] }> {
+export async function readCourseState(store: SnapshotStore): Promise<{ objectives: ObjectiveSnapshot[]; rebuilt: string[]; newer: string[] }> {
   // Rows first: a structure change before the view is read is in it, and one after marks the
   // snapshots it touches, moving their versions, so saving a rebuild from the old view fails.
   const rows = await store.snapshots();
@@ -135,6 +172,7 @@ export async function readCourseState(store: SnapshotStore): Promise<{ objective
   let log: EvidenceEvent[] | null = null;
   const objectives: ObjectiveSnapshot[] = [];
   const rebuilt: string[] = [];
+  const newer: string[] = [];
   for (const row of rows) {
     if (!view.attribution.objectives.has(row.objectiveId)) continue;
     if (isUsable(row)) {
@@ -143,9 +181,14 @@ export async function readCourseState(store: SnapshotStore): Promise<{ objective
     }
     log ??= await store.log();
     const accumulator = rebuild(row.objectiveId, log, view);
+    if (isNewer(row)) {
+      newer.push(row.objectiveId);
+      objectives.push({ objectiveId: row.objectiveId, accumulator, version: row.version, saved: false });
+      continue;
+    }
     const saved = await store.save(row.objectiveId, accumulator, row.version);
     rebuilt.push(row.objectiveId);
     objectives.push({ objectiveId: row.objectiveId, accumulator, version: saved ? row.version + 1 : row.version, saved });
   }
-  return { objectives, rebuilt };
+  return { objectives, rebuilt, newer };
 }

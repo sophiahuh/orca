@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "TZ=UTC node --experimental-strip-types --test \"tests/**/*.test.ts\"",
+    "test": "TZ=UTC node --experimental-strip-types --import ./tests/support/register.mjs --test \"tests/**/*.test.ts\"",
     "test:e2e": "playwright test",
     "score:extraction": "node --experimental-strip-types scripts/score-extraction.ts",
     "db:start": "supabase start",

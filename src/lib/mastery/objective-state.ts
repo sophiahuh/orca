@@ -89,14 +89,30 @@ export function localDayKey(iso: string) {
  * unknown timezone and an Error for an unparseable time, rather than guessing a day.
  */
 export function dayKeyIn(timeZone: string): (iso: string) => string {
-  const format = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  let format = dayFormatters.get(timeZone);
+  if (!format) {
+    // Throws RangeError for an unknown zone, before anything is cached.
+    format = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    dayFormatters.set(timeZone, format);
+  }
+  const f = format;
   return (iso: string) => {
     const t = Date.parse(iso);
     if (Number.isNaN(t)) throw new Error(`Can't take the day of an unparseable time: "${iso}"`);
-    const part = (type: string) => format.formatToParts(t).find((p) => p.type === type)!.value;
-    return `${part("year")}-${part("month")}-${part("day")}`;
+    let year = "";
+    let month = "";
+    let day = "";
+    for (const p of f.formatToParts(t)) {
+      if (p.type === "year") year = p.value;
+      else if (p.type === "month") month = p.value;
+      else if (p.type === "day") day = p.value;
+    }
+    return `${year}-${month}-${day}`;
   };
 }
+
+/** Building an Intl formatter is the slow part (tens of microseconds); one per timezone, kept for the process. */
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
 
 /** An FSRS card as plain JSON (dates as ISO strings). */
 export interface StoredCard {
@@ -323,7 +339,8 @@ export function replayObjective(objectiveId: string, events: readonly EvidenceEv
   return events
     .filter((e) => e.objectiveId === objectiveId)
     .map((e) => ({ e, t: timeOf(e) }))
-    .sort((a, b) => a.t - b.t)
+    // Time order; two events in the same millisecond by id, so every replay folds them the same way.
+    .sort((a, b) => a.t - b.t || (a.e.id < b.e.id ? -1 : a.e.id > b.e.id ? 1 : 0))
     .reduce((acc, { e }) => applyEvidence(acc, e, options), EMPTY_ACCUMULATOR);
 }
 
