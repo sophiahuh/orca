@@ -6,8 +6,8 @@
  *
  * - extract: the scenario's `extract` (default: nothing found);
  * - reconcile: "new"; ambiguity: never ambiguous; agreement: agrees; grade: correct;
- * - generate: for every objective in the prompt, short answers "<objective name>: case <i>?" with
- *   the exact answer "<i>" (as many as asked for, or `perObjective`);
+ * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
+ *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
  * - solve: answers those correctly (the number after "case"), and choice questions with option 0;
  * - reflect: the scenario's `reflect` matches, by objective name.
  *
@@ -51,52 +51,67 @@ let calls: Array<{ step: string }> = [];
 const text = (content: unknown): string =>
   typeof content === "string" ? content : Array.isArray(content) ? content.map((b: { text?: string }) => b.text ?? "").join("\n") : "";
 
+/**
+ * The data blocks in a prompt (decision 13): one JSON object per line, `{"source":…,"content":…}`.
+ * The fake reads its inputs from them the way the real model would, so a prompt whose text leaked
+ * out of its block (a payload breaking out) wouldn't be understood either.
+ */
+function blocks(prompt: string, source: string): unknown[] {
+  const out: unknown[] = [];
+  for (const line of prompt.split("\n")) {
+    if (!line.startsWith(`{"source":"${source}"`)) continue;
+    const parsed = JSON.parse(line) as { source: string; content: unknown };
+    out.push(parsed.content);
+  }
+  return out;
+}
+
 function answer(step: string, prompt: string): unknown {
   switch (step) {
     case "extract":
-      return scenario.extract ?? { topics: [], objectives: [], relations: [] };
+      // The schema requires instructionsFound; a scenario may say what the "model" saw.
+      return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
     case "reconcile":
       return { decision: "new", matchId: null, reasoning: "The fake API keeps them separate." };
     case "generate": {
       const out: unknown[] = [];
-      const lines = prompt.split("\n");
-      lines.forEach((line, i) => {
-        const m = /^- ([0-9a-f-]{36}): (.*)$/.exec(line);
-        const need = /write (\d+) question/.exec(lines[i + 1] ?? "");
-        if (!m || !need) return;
-        const name = m[2].split(" — ")[0];
-        const inferred = /INFERRED/.test(lines[i + 1]);
-        const n = Math.min(Number(need[1]), scenario.perObjective ?? Infinity);
+      const [task] = blocks(prompt, "generated_question") as Array<{ objectives: Array<{ id: string; name: string; write: number; inferred?: boolean }> }>;
+      for (const o of task?.objectives ?? []) {
+        const n = Math.min(o.write, scenario.perObjective ?? Infinity);
         for (let k = 1; k <= n; k++) {
           out.push({
-            objectiveId: m[1],
+            objectiveId: o.id,
             kind: "Short answer",
             tier: "retrieval",
-            prompt: `${name}: case ${k}?`,
+            prompt: `${o.name}: case ${k}?`,
             options: [],
             answer: -1,
             exact: [String(k)],
             rubric: null,
             explanation: "The fake API's answer.",
-            anchor: inferred ? null : { locator: "slide 2", excerpt: "x + xy = x" },
+            anchor: o.inferred ? null : { locator: "slide 2", excerpt: "x + xy = x" },
             figureSlide: null,
           });
         }
-      });
+      }
       return { questions: out };
     }
     case "solve": {
-      const answers = [...prompt.matchAll(/^\[([^\]]+)\] \(([^)]+)\) (.*)$/gm)].map(([, id, kind, q]) =>
-        kind === "Short answer" ? { id, choice: null, text: /case (\d+)\?$/.exec(q)?.[1] ?? "?" } : { id, choice: 0, text: null },
-      );
+      const [questions] = blocks(prompt, "generated_question") as Array<Array<{ id: string; kind: string; prompt: string }>>;
+      const answers = (questions ?? []).map((q) => (q.kind === "Short answer" ? { id: q.id, choice: null, text: /case (\d+)\?$/.exec(q.prompt)?.[1] ?? "?" } : { id: q.id, choice: 0, text: null }));
       return { answers };
     }
-    case "ambiguity":
-      return { results: [...prompt.matchAll(/^\[([^\]]+)\]/gm)].map(([, id]) => ({ id, ambiguous: false, reasoning: "Clear." })) };
-    case "agreement":
-      return { results: [...prompt.matchAll(/^\[([^\]]+)\]/gm)].map(([, id]) => ({ id, agrees: true, reasoning: "Agrees." })) };
+    case "ambiguity": {
+      const [questions] = blocks(prompt, "generated_question") as Array<Array<{ id: string }>>;
+      return { results: (questions ?? []).map((q) => ({ id: q.id, ambiguous: false, reasoning: "Clear." })) };
+    }
+    case "agreement": {
+      const [items] = blocks(prompt, "generated_question") as Array<Array<{ id: string }>>;
+      return { results: (items ?? []).map((q) => ({ id: q.id, agrees: true, reasoning: "Agrees." })) };
+    }
     case "reflect": {
-      const ids = new Map([...prompt.matchAll(/^- (\S+) \([^)]*\): (.*?)(?: — .*)?$/gm)].map(([, id, name]) => [name, id]));
+      const [objectives] = blocks(prompt, "generated_question") as Array<Array<{ id: string; name: string }>>;
+      const ids = new Map((objectives ?? []).map((o) => [o.name, o.id]));
       return {
         matches: (scenario.reflect?.matches ?? []).flatMap((m) => {
           const id = ids.get(m.name);

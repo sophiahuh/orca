@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { stepCaller, StepError } from "@/lib/server/model";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
+import { recordSecurityEvents } from "@/lib/server/security";
 import { forStudent, reply } from "@/lib/server/student";
 import { sanitize } from "@/lib/untrusted/sanitize";
+import { screen } from "@/lib/untrusted/screen";
 
 /**
  * POST { materialId, note } → which of the course's objectives a homework reflection says the
@@ -37,11 +39,16 @@ export async function POST(request: Request) {
     const live = objectives.data!.filter((o) => o.review !== "archived" && !o.merged_into);
     if (!live.length) return reply(200, { matches: [] });
     const topicName = new Map(topics.data!.map((t) => [t.id, t.name]));
+    // Decision 13: the note is screened and anything suspect logged; it still goes to the model as
+    // a data block (the prompt says instructions in it match nothing), and the student confirms matches.
+    const note = sanitize(parsed.data.note, 2000).text;
+    const suspected = screen(note);
+    if (suspected.suspected) await recordSecurityEvents(db, student.id, "reflection_note", suspected.hits, { materialId: material.id });
     try {
       const out = await call("reflect", {
         course: { name: course.data!.name, short: course.data!.short },
         material: { filename: material.filename, type: material.type as never },
-        note: sanitize(parsed.data.note, 2000).text,
+        note,
         objectives: live.map((o) => ({ id: o.id, name: o.name, description: o.description, topic: topicName.get(o.topic_id) ?? "" })),
       });
       const ids = new Set(live.map((o) => o.id));

@@ -84,6 +84,7 @@ const lectureExtract: ExtractOutput = {
     { from: "o2", to: "o1", type: "builds-on", anchor: null },
     { from: "o2", to: "nope", type: "builds-on", anchor: null },
   ],
+  instructionsFound: [],
 };
 
 test("a first lecture creates proposed topics and objectives with signals, relations and checked questions", async () => {
@@ -154,6 +155,7 @@ test("a later upload reuses existing items, records aliases and signals, skips r
         { localId: "e", existingId: null, topicRef: "t9", name: "Know the grading policy", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
       ],
       relations: [],
+      instructionsFound: [],
     }),
     reconcile: (i) =>
       i.candidate.name.startsWith("Order minterms")
@@ -187,6 +189,7 @@ test("questions that fail a check, duplicate the bank or lack a figure are dropp
     topics: [{ localId: "t1", existingId: null, name: "Logic", aliases: [], summary: "", slideStart: 1, slideEnd: 4 }],
     objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Do logic", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
     relations: [],
+    instructionsFound: [],
   };
   const rubric = { requiredIdeas: ["absorption"], acceptableAlternatives: [], knownMisconceptions: [] };
   const model = fakeModel({
@@ -227,7 +230,7 @@ test("questions that fail a check, duplicate the bank or lack a figure are dropp
 
 test("a failing check call drops its batch instead of letting unchecked questions through", async () => {
   const model = fakeModel({
-    extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [] }),
+    extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [], instructionsFound: [] }),
     generate: (i) => ({ questions: [short(i.objectives[0].id, "Simplify x + xy.", ["x"])] }),
     solve: () => {
       throw new Error("rate limited");
@@ -242,7 +245,7 @@ test("a figure question keeps its slide image, or is dropped when the slide can'
   const run = (render: (n: number) => Promise<string | null>) =>
     runUpload(input(), {
       call: fakeModel({
-        extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [] }),
+        extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [], instructionsFound: [] }),
         generate: (i) => ({ questions: [mc(i.objectives[0].id, "In the figure, which gate?", 1, { figureSlide: 2 })] }),
         solve: (i) => {
           assert.equal(i.questions[0].context, "slide 2 text about logic", "the solver sees the slide's text");
@@ -277,9 +280,9 @@ test("applying a plan adds topics, objectives, questions and relations and updat
 });
 
 test("the run record carries the hidden text the server dropped from the file", async () => {
-  const model = fakeModel({ extract: () => ({ ...lectureExtract, relations: [] }) });
+  const model = fakeModel({ extract: () => ({ ...lectureExtract, relations: [], instructionsFound: [] }) });
   const hiddenText = { items: 2, pages: [4] };
   const plan = await runUpload(input({ hiddenText }), { call: model.call, newId, structureOnly: true });
   assert.deepEqual(plan.run.hiddenText, hiddenText);
-  assert.equal((await runUpload(input(), { call: fakeModel({ extract: () => ({ ...lectureExtract, relations: [] }) }).call, newId, structureOnly: true })).run.hiddenText, undefined);
+  assert.equal((await runUpload(input(), { call: fakeModel({ extract: () => ({ ...lectureExtract, relations: [], instructionsFound: [] }) }).call, newId, structureOnly: true })).run.hiddenText, undefined);
 });

@@ -6,6 +6,10 @@
 import type { Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
 import { gradeExact } from "../grading.ts";
 import { type Named, exactMatch, normaliseName, shortlist } from "../course/match.ts";
+import { locatorPages } from "../course/study.ts";
+import { sanitize } from "../untrusted/sanitize.ts";
+import { screen } from "../untrusted/screen.ts";
+import { urlsIn, validateFields } from "../untrusted/validate.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "./schemas.ts";
 
@@ -60,14 +64,14 @@ const CHECK_BATCH = 30;
 const OBJECTIVES_PER_CALL = 8;
 
 /** Run `fn` over `items`, at most `limit` at a time, keeping order. */
-async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(limit, items.length) }, async () => {
       while (next < items.length) {
         const i = next++;
-        out[i] = await fn(items[i]);
+        out[i] = await fn(items[i], i);
       }
     }),
   );
@@ -134,6 +138,40 @@ function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | nu
   return null;
 }
 
+/** Dropped-list reasons that begin like this were refused by the output validators (decision 13). */
+export const REFUSED_PREFIX = "refused: ";
+
+/** What the validators need to know about the material: which slides exist and which URLs it contains. */
+export interface MaterialFacts {
+  pages: ReadonlySet<number>;
+  allowedUrls: ReadonlySet<string>;
+}
+
+export function materialFacts(pages: ReadonlyArray<{ n: number; text: string }>): MaterialFacts {
+  return { pages: new Set(pages.map((p) => p.n)), allowedUrls: urlsIn(pages.map((p) => p.text).join("\n")) };
+}
+
+/** An anchor that names slides must name ones the material has; one that names something else (a problem number) can't be checked and is kept. */
+function anchorExists(locator: string, facts: MaterialFacts): boolean {
+  const named = locatorPages(locator);
+  return named.length === 0 || named.every((n) => facts.pages.has(n));
+}
+
+const TEXT_RULE = (facts: MaterialFacts) => ({ maxChars: 1200, allowedUrls: facts.allowedUrls });
+const SHORT_RULE = (facts: MaterialFacts) => ({ maxChars: 240, allowedUrls: facts.allowedUrls });
+
+/** The pattern screen over every page of the material, each hit tagged with its slide. */
+export function screenMaterial(pages: ReadonlyArray<{ n: number; text: string }>): Array<{ check: string; quote: string }> {
+  const hits: Array<{ check: string; quote: string }> = [];
+  for (const p of pages) {
+    for (const h of screen(p.text).hits) {
+      if (hits.length >= 40) return hits;
+      hits.push({ check: h.check, quote: `slide ${p.n}: ${h.quote}`.slice(0, 240) });
+    }
+  }
+  return hits;
+}
+
 export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadPlan> {
   const { call, newId } = deps;
   const progress = deps.onProgress ?? (() => {});
@@ -147,6 +185,9 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
 
   /* 1. Extract */
   progress({ stage: "mapping" });
+  const facts = materialFacts(input.pages);
+  // Decision 13: the material is screened for instruction-like text before anything is built from it; a hit never blocks.
+  const materialScreen = screenMaterial(input.pages);
   const extracted: ExtractOutput = await call("extract", {
     course: { name: input.course.name, short: input.course.short },
     material: { filename: input.material.filename, type: input.material.type },
@@ -154,15 +195,27 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     existingTopics: listed(existingTopics),
     existingObjectives: listed(existingObjectives).map((o) => ({ ...o, topicId: input.objectives[o.id].topicId })),
   });
+  const instructionsFound = (extracted.instructionsFound ?? []).map((q) => sanitize(q, 240).text).filter((q) => q.length > 0);
+  const refuse = (what: string, reason: string) => dropped.push({ prompt: what, reason: `${REFUSED_PREFIX}${reason}` });
 
   /* 2. Topics */
   progress({ stage: "matching", candidates: extracted.topics.length + extracted.objectives.length });
   const topicByRef = new Map<string, { kind: "existing" | "new"; id: string } | { kind: "dropped" }>();
   const newTopics: Topic[] = [];
   const topicAliases: Record<string, string[]> = {};
-  const topicResolutions = await pool(extracted.topics, 4, (t) => resolve("topic", { existingId: t.existingId, name: t.name, aliases: t.aliases, description: t.summary }, existingTopics, call));
+  // Validators first (decision 13): a topic whose text holds a URL the material doesn't, HTML, a link or an instruction is refused, never repaired.
+  const topicTexts = extracted.topics.map((t) => validateFields({ name: t.name, summary: t.summary, ...Object.fromEntries(t.aliases.map((a, i) => [`alias ${i + 1}`, a])) }, SHORT_RULE(facts)));
+  const topicResolutions = await pool(extracted.topics, 4, (t, i) =>
+    topicTexts[i].ok ? resolve("topic", { existingId: t.existingId, name: t.name, aliases: t.aliases, description: t.summary }, existingTopics, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
+  );
   extracted.topics.forEach((t, i) => {
     const r = topicResolutions[i];
+    const text = topicTexts[i];
+    if (!text.ok) {
+      refuse(`Topic "${sanitize(t.name, 60).text}"`, text.reason);
+      topicByRef.set(t.localId, { kind: "dropped" });
+      return;
+    }
     if (r.kind === "dropped") {
       dropped.push({ prompt: `Topic "${t.name}"`, reason: `skipped: ${r.reason}` });
       topicByRef.set(t.localId, { kind: "dropped" });
@@ -209,12 +262,35 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   const objectiveByRef = new Map<string, string>();
   const newObjectives: Objective[] = [];
   const objectiveUpdates: UploadPlan["objectiveUpdates"] = {};
-  const objectiveResolutions = await pool(extracted.objectives, 4, (o) =>
-    resolve("objective", { existingId: o.existingId, name: o.name, aliases: o.aliases, description: o.description }, existingObjectives, call),
+  const objectiveTexts = extracted.objectives.map((o) =>
+    validateFields(
+      {
+        name: o.name,
+        description: o.description,
+        ...Object.fromEntries(o.aliases.map((a, i) => [`alias ${i + 1}`, a])),
+        ...Object.fromEntries(o.places.map((pl, i) => [`place ${i + 1}`, pl.excerpt])),
+        ...(o.emphasis ? { emphasis: o.emphasis.quote } : {}),
+      },
+      { maxChars: 400, allowedUrls: facts.allowedUrls },
+    ),
+  );
+  const objectiveResolutions = await pool(extracted.objectives, 4, (o, i) =>
+    objectiveTexts[i].ok ? resolve("objective", { existingId: o.existingId, name: o.name, aliases: o.aliases, description: o.description }, existingObjectives, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
   );
   extracted.objectives.forEach((o, i) => {
     const r = objectiveResolutions[i];
-    const signal = o.origin === "material" ? signalFor(o.places, o.emphasis) : signalFor([], o.emphasis);
+    const text = objectiveTexts[i];
+    if (!text.ok) {
+      refuse(`Objective "${sanitize(o.name, 120).text}"`, text.reason);
+      return;
+    }
+    // A place that names slides the material doesn't have is left out (the objective stays).
+    const places = o.places.filter((pl) => {
+      const ok = anchorExists(pl.locator, facts);
+      if (!ok) refuse(`A place of objective "${o.name}"`, `names ${pl.locator}, which this material doesn't have`);
+      return ok;
+    });
+    const signal = o.origin === "material" ? signalFor(places, o.emphasis) : signalFor([], o.emphasis);
     if (r.kind === "dropped") {
       dropped.push({ prompt: `Objective "${o.name}"`, reason: `skipped: ${r.reason}` });
       return;
@@ -269,6 +345,13 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     if (!from || !to || from === to) continue;
     const key = `${from}|${to}|${r.type}`;
     if (seenRelations.has(key)) continue;
+    if (r.anchor) {
+      const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));
+      if (!v.ok || !anchorExists(r.anchor.locator, facts)) {
+        refuse(`A ${r.type} relation`, v.ok ? `its anchor names ${r.anchor.locator}, which this material doesn't have` : v.reason);
+        continue;
+      }
+    }
     seenRelations.add(key);
     relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id });
   }
@@ -286,6 +369,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     questionsAdded: Object.values(questions).flat().length,
     dropped,
     ...(input.hiddenText ? { hiddenText: input.hiddenText } : {}),
+    security: { screen: materialScreen, instructionsFound, refused: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).length },
   });
   if (deps.structureOnly) return { newTopics, topicAliases, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
 
@@ -351,6 +435,7 @@ export async function writeQuestions(
   const { call, newId } = deps;
   const progress = deps.onProgress ?? (() => {});
   const dropped: PipelineRun["dropped"] = [];
+  const facts = materialFacts(input.pages);
   /* Write */
   const touched = input.targets.map((t) => ({ o: t.objective, existing: t.existing, need: t.need }));
   progress({ stage: "writing", objectives: touched.length });
@@ -387,8 +472,36 @@ export async function writeQuestions(
             dropped.push({ prompt: g.prompt, reason: problem });
             continue;
           }
+          // Decision 13: every string the model wrote is sanitised and refused for a URL the material
+          // doesn't have, HTML, a link or instruction-like text; an anchor must name slides that exist.
+          const texts = validateFields(
+            {
+              prompt: g.prompt,
+              explanation: g.explanation,
+              ...Object.fromEntries(g.options.map((o, i) => [`option ${i + 1}`, o])),
+              ...Object.fromEntries((g.exact ?? []).map((e, i) => [`exact answer ${i + 1}`, e])),
+              ...Object.fromEntries((g.rubric?.requiredIdeas ?? []).map((e, i) => [`required idea ${i + 1}`, e])),
+              ...Object.fromEntries((g.rubric?.acceptableAlternatives ?? []).map((e, i) => [`alternative ${i + 1}`, e])),
+              ...Object.fromEntries((g.rubric?.knownMisconceptions ?? []).flatMap((m, i) => [[`misconception ${i + 1}`, m.description], ...m.indicativePhrasing.map((ph, j) => [`misconception ${i + 1} phrasing ${j + 1}`, ph])])),
+              ...(g.anchor ? { "anchor excerpt": g.anchor.excerpt } : {}),
+            },
+            TEXT_RULE(facts),
+          );
+          if (!texts.ok) {
+            dropped.push({ prompt: sanitize(g.prompt, 1200).text, reason: `${REFUSED_PREFIX}${texts.reason}` });
+            continue;
+          }
+          if (g.anchor && !anchorExists(g.anchor.locator, facts)) {
+            dropped.push({ prompt: g.prompt, reason: `${REFUSED_PREFIX}its anchor names ${g.anchor.locator}, which this material doesn't have` });
+            continue;
+          }
+          if (g.figureSlide !== null && !facts.pages.has(g.figureSlide)) {
+            dropped.push({ prompt: g.prompt, reason: `${REFUSED_PREFIX}needs slide ${g.figureSlide}, which this material doesn't have` });
+            continue;
+          }
           count.set(g.objectiveId, (count.get(g.objectiveId) ?? 0) + 1);
           const short = g.kind === "Short answer";
+          const v = texts.values;
           kept.push({
             topicId,
             figureSlide: g.figureSlide,
@@ -399,14 +512,21 @@ export async function writeQuestions(
               kind: g.kind,
               tier: g.tier,
               topic: topic.name,
-              prompt: g.prompt,
-              options: short ? [] : g.options,
+              prompt: v.prompt,
+              options: short ? [] : g.options.map((_, i) => v[`option ${i + 1}`]),
               answer: short ? -1 : g.answer,
-              exact: short && g.exact && g.exact.length ? g.exact : undefined,
-              rubric: short && !(g.exact && g.exact.length) && g.rubric ? g.rubric : undefined,
-              explanation: g.explanation,
+              exact: short && g.exact && g.exact.length ? g.exact.map((_, i) => v[`exact answer ${i + 1}`]) : undefined,
+              rubric:
+                short && !(g.exact && g.exact.length) && g.rubric
+                  ? {
+                      requiredIdeas: g.rubric.requiredIdeas.map((_, i) => v[`required idea ${i + 1}`]),
+                      acceptableAlternatives: g.rubric.acceptableAlternatives.map((_, i) => v[`alternative ${i + 1}`]),
+                      knownMisconceptions: g.rubric.knownMisconceptions.map((m, i) => ({ description: v[`misconception ${i + 1}`], indicativePhrasing: m.indicativePhrasing.map((_, j) => v[`misconception ${i + 1} phrasing ${j + 1}`]) })),
+                    }
+                  : undefined,
+              explanation: v.explanation,
               // Questions for inferred objectives must not present themselves as course-specific.
-              anchor: inferred ? undefined : g.anchor ?? undefined,
+              anchor: inferred ? undefined : g.anchor ? { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } : undefined,
             },
           });
         }

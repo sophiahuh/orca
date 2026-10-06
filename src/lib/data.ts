@@ -237,6 +237,12 @@ export interface PipelineRun {
   dropped: Array<{ prompt: string; reason: string }>;
   /** An upload's run: text hidden in the file (too small to see) that was dropped when it was read, and where. */
   hiddenText?: { items: number; pages: number[] };
+  /**
+   * What the injection checks found (decision 13): the pattern screen's hits over the material, the
+   * spans the model reported as addressed to an AI, and how many generated items the validators
+   * refused. Any hit or span shows a warning on the review screen.
+   */
+  security?: { screen: Array<{ check: string; quote: string }>; instructionsFound: string[]; refused: number };
 }
 
 /* ── Quiz ─────────────────────────────────────────────────────────────── */

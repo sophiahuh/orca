@@ -10,6 +10,9 @@ test("dragging a weight slider saves once, on release, with the final value", as
   page.on("request", (r) => {
     if (r.method() === "PATCH" && /\/rest\/v1\/courses/.test(r.url())) saves.push(r.postData() ?? "");
   });
+  // Let the screen's entrance animation finish before measuring where the thumb is.
+  await slider.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(900);
   // A drag: press on the thumb, move right in several steps (each moves the value on screen), release once.
   const box = (await slider.boundingBox())!;
   const y = box.y + box.height / 2;

@@ -112,6 +112,12 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
                   {hiddenNote(run.hiddenText ?? material?.hiddenText)} Check what this upload added.
                 </span>
               )}
+              {run.security && (run.security.screen.length > 0 || run.security.instructionsFound.length > 0) && (
+                <span className="text-[14px] font-semibold text-prussian" role="alert" data-part="security-warning">
+                  This file contains text aimed at an AI; check what it added.
+                  {run.security.refused > 0 ? ` ${run.security.refused} item${run.security.refused === 1 ? " was" : "s were"} left out by Orca's checks (listed below).` : ""}
+                </span>
+              )}
               {run.dropped.length > 0 && (
                 <details className="text-[14px] text-prussian/80">
                   <summary className="cursor-pointer font-semibold text-wisteria-deep">

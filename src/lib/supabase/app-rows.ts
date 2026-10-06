@@ -205,6 +205,7 @@ export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "j
     questions_added: r.questionsAdded,
     dropped: jsonValue(r.dropped),
     hidden_text: r.hiddenText ? jsonValue(r.hiddenText) : null,
+    security: r.security ? jsonValue(r.security) : null,
   };
 }
 
@@ -225,6 +226,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     questionsAdded: r.questions_added,
     dropped: r.dropped as unknown as PipelineRun["dropped"],
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<PipelineRun["hiddenText"]> } : {}),
+    ...(r.security !== null ? { security: r.security as unknown as NonNullable<PipelineRun["security"]> } : {}),
   };
 }
 
