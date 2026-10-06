@@ -31,6 +31,39 @@ function geometry(transform: number[] | undefined): Geometry | null {
   return size > 0 && Number.isFinite(transform[5]) ? { y: transform[5], size } : null;
 }
 
+/**
+ * Short lines set noticeably larger than the page's usual text are useful structural hints for
+ * extraction. They are deliberately only hints: a large title or callout is not necessarily a
+ * study topic. The result is stored alongside the page text so queued jobs see the same context.
+ */
+export function likelyHeadings(items: ReadonlyArray<object>): string[] {
+  const runs = items
+    .flatMap((item) => {
+      if (!("str" in item)) return [];
+      const { str, transform } = item as TextRun;
+      const geo = geometry(transform);
+      return geo && str.trim() ? [{ str: str.trim(), x: transform![4]!, ...geo }] : [];
+    })
+    .sort((a, b) => b.y - a.y || a.x - b.x);
+  if (runs.length < 2) return [];
+  const sizes = runs.map((r) => r.size).sort((a, b) => a - b);
+  const median = sizes[Math.floor(sizes.length / 2)]!;
+  const lines: Array<{ y: number; size: number; runs: typeof runs }> = [];
+  for (const run of runs) {
+    const line = lines.find((candidate) => Math.abs(candidate.y - run.y) <= Math.max(candidate.size, run.size) * 0.35);
+    if (line) {
+      line.runs.push(run);
+      line.size = Math.max(line.size, run.size);
+    } else lines.push({ y: run.y, size: run.size, runs: [run] });
+  }
+  return lines
+    .filter((line) => line.size >= median * 1.35)
+    .map((line) => line.runs.sort((a, b) => a.x - b.x).map((run) => run.str).join(" ").replace(/\s+([,.;:!?])/g, "$1").trim())
+    .filter((text) => text.length >= 2 && text.length <= 140 && /[A-Za-z]/.test(text))
+    .filter((text, index, all) => all.indexOf(text) === index)
+    .slice(0, 8);
+}
+
 export function pageText(items: ReadonlyArray<object>): string {
   const lines: string[] = [];
   let line = "";
