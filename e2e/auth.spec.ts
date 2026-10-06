@@ -87,7 +87,9 @@ test.describe("sign up", () => {
 
     await page.goto(await emailedLink(email));
     await page.goto("/settings");
-    await expect(page.locator("[data-part=account-email]")).toHaveText(`Sophia · ${email}`);
+    // The Account card edits contacts in place (e427e9c): the email and name are inputs.
+    await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
+    await expect(page.getByRole("textbox", { name: "Username" })).toHaveValue("Sophia");
     await expect(page.getByRole("combobox", { name: "Timezone" })).toHaveValue("America/New_York");
     // The profile's avatar and name came from sign-up; the top bar shows the avatar.
     await expect(page.locator("[data-part=top-bar] [data-avatar=turtle]")).toBeVisible();
@@ -166,7 +168,7 @@ test("a token-hash link (hosted email templates) signs you in from any browser; 
   const page = await other.newPage();
   await page.goto(`${baseURL}/auth/callback?token_hash=${magic.data.properties!.hashed_token}&type=magiclink&next=/settings`);
   await expect(page).toHaveURL(/\/settings$/);
-  await expect(page.locator("[data-part=account-email]")).toHaveText(email);
+  await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
   await other.close();
 
   const recovery = await admin().auth.admin.generateLink({ type: "recovery", email });
