@@ -1,7 +1,7 @@
 # Orca Phase 4: Accounts, Supabase and the Server Pipeline
 
-> **Status: approved 2026-10-05; Tasks 1–9 built on branch `phase-4`** (from `backend-implementation`;
-> merge back into it, as Phase 3 was, once the owner confirms). CI runs on `phase-*` since Task 9a.
+> **Status: approved 2026-10-05; Tasks 1–9 built on branch `phase-4` and merged into
+> `backend-implementation` 2026-10-06** with the owner's OK. CI runs on `phase-*` since Task 9a.
 > Task 10 (hosted live checks) is owner-gated.
 > The owner accepted decisions 4 (load everything, revisit later), 5 (no guest mode) and 10 (300
 > pages a day, revisit later); 4 and 10 are under "Watch" in `docs/TO-DISCUSS.md`.

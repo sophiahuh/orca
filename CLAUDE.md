@@ -25,9 +25,9 @@ Advanced Logic Design (ALD, Columbia ELEN); `docs/samples/ald/` has its real dec
 authored and reviewed the reference objectives, questions and quiz rubric.
 
 **Where things stand.**
-- **Phase 4 is built on branch `phase-4`, pushed to GitHub, not merged** (from `backend-implementation`; merge it
-  back once the owner confirms, as Phase 3 was). `backend-implementation` holds Phases 1–3; `main`
-  is far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
+- **Phase 4 is merged into `backend-implementation`** (2026-10-06, with the owner's OK; `phase-4`
+  points at the same commit). `backend-implementation` holds Phases 1–4; `main` is far behind (the
+  pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
   on-device. Phase 4 (plan Tasks 1–9, status notes at the top of
   `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`): the local Supabase stack, the schema
@@ -65,9 +65,8 @@ authored and reviewed the reference objectives, questions and quiz rubric.
    hosted email templates to token-hash links, deploy, and do one real ALD upload end to end. Then
    `ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline` (it includes an injected deck
    now) and look at the review screen; fix prompts where extraction or question checks go wrong.
-2. Merge `phase-4` into `backend-implementation` once the owner confirms (CI runs the whole proof
-   on the push). Then the Phase 3 numbers and the assumptions listed in `docs/TO-DISCUSS.md`
-   ("Assumed while finishing Phase 4") want a decision or real use.
+2. The Phase 3 numbers and the assumptions listed in `docs/TO-DISCUSS.md` ("Assumed while
+   finishing Phase 4") want a decision or real use.
 3. Phase 5 per `docs/BACKEND-ROADMAP.md`.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
