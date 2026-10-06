@@ -133,9 +133,8 @@ export async function completeJson<T>(
       // Streamed: a long reply (generate may write 24k tokens) would outlast a plain request, which the
       // SDK refuses to send; finalMessage() gathers it and parses it against the schema the same way.
       const response = await withRetries(
-        () =>
-          client.beta.messages
-            .stream({
+        async () => {
+          const stream = client.beta.messages.stream({
               model: config.model,
               max_tokens: opts.maxTokens ?? 16000,
               system,
@@ -150,8 +149,42 @@ export async function completeJson<T>(
                 },
               ],
               ...(fallback ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const } : {}),
-            })
-            .finalMessage(),
+          });
+          // The tokens arrive before the content (message_start) and grow with it (message_delta). Kept
+          // so a reply cut off by the timeout or a dropped connection is still metered: it was paid for.
+          const seen: { partial: { usage: TokenUsage; model: string } | null } = { partial: null };
+          stream.on("streamEvent", (ev) => {
+            if (ev.type === "message_start") seen.partial = { usage: usageOf(ev.message), model: ev.message.model || config.model };
+            else if (ev.type === "message_delta" && seen.partial) {
+              const u = ev.usage;
+              const was = seen.partial.usage;
+              seen.partial = {
+                ...seen.partial,
+                usage: {
+                  inputTokens: u.input_tokens ?? was.inputTokens,
+                  outputTokens: u.output_tokens,
+                  cacheWriteTokens: u.cache_creation_input_tokens ?? was.cacheWriteTokens,
+                  cacheReadTokens: u.cache_read_input_tokens ?? was.cacheReadTokens,
+                },
+              };
+            }
+          });
+          try {
+            return await stream.finalMessage();
+          } catch (error) {
+            const { partial } = seen;
+            if (partial && opts.onUsage) {
+              try {
+                await opts.onUsage(partial.usage, partial.model);
+              } catch (meterError) {
+                console.error(`A cut-off model reply couldn't be metered: ${meterError instanceof Error ? meterError.message : String(meterError)}`);
+              }
+            }
+            // A connection that drops mid-reply surfaces as the stream's raw error, not an SDK one: it is a connection failure (retried, within the limit).
+            if (error instanceof Anthropic.APIError) throw error;
+            throw new Anthropic.APIConnectionError({ message: `The reply stream failed: ${error instanceof Error ? error.message : String(error)}`, cause: error instanceof Error ? error : undefined });
+          }
+        },
         { backoffMs: opts.retryBackoffMs },
       );
       if (opts.onUsage) await opts.onUsage(usageOf(response), response.model || config.model);

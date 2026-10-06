@@ -5,11 +5,12 @@
  * key the answer is 503 and the quiz lets the student mark it themselves; a grading failure records
  * nothing (the browser only records evidence after a reply).
  *
- * Decision 13, wired in integration: the answer is screened before the call; a hit is logged to
- * `security_events` (kind student_answer) and the answer still goes to the model as a data block.
- * A student whose answers were flagged `REPEAT_OFFENDER.flags` times in the last
- * `REPEAT_OFFENDER.days` days has model grading turned off (403 `graded: "self"`) until the owner
- * clears the events; `/api/llm/status` says so, and the quiz self-marks.
+ * Decision 13, wired in integration: the answer is screened before the call; a flagged answer is
+ * logged as one `security_events` row (kind student_answer, with the screen's severity) and still
+ * goes to the model as a data block. A student with `REPEAT_OFFENDER.flags` answers flagged by a
+ * strong check in the last `REPEAT_OFFENDER.days` days has model grading turned off (403
+ * `graded: "self"`) until the owner clears the events; `/api/llm/status` says so, and the quiz
+ * self-marks. Weak hits (phrasing honest answers also use) are logged and never counted.
  * Decision 10: at most `LIMITS.rate.grade` answers a minute per student (429), and the student's
  * and Orca's daily budgets apply (429).
  */
@@ -18,7 +19,7 @@ import { GRADE_SYSTEM, GradeSchema, type GradeResult, RubricSchema, cleanAnswer,
 import { LlmError, completeJson } from "@/lib/llm-server";
 import { meter, orcaConfig } from "@/lib/server/model";
 import { rateLimit } from "@/lib/server/rate-limit";
-import { flaggedCount, recordSecurityEvents } from "@/lib/server/security";
+import { flaggedCount, recordSecurityEvents, summaryHit } from "@/lib/server/security";
 import { checkBudget } from "@/lib/server/usage";
 import { screen } from "@/lib/untrusted/screen";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -29,9 +30,9 @@ export interface GradeReply {
 }
 
 export const NO_MODEL_FOR_GRADING = "No AI is connected, so Orca can't grade this answer. Compare it with the key and mark it yourself.";
-export const GRADING_OFF_MESSAGE = "Model grading is turned off for your account because several answers looked like instructions to the grader. Mark your answers yourself for now; Orca's owner has been notified.";
+export const GRADING_OFF_MESSAGE = "Model grading is turned off for your account because several answers looked like instructions to the grader. Mark your answers yourself for now; Orca's owner can review the answers and turn grading back on.";
 
-/** How many flagged prose answers in how many days turn model grading off for a student (integration, 2026-10-06; for TO-DISCUSS). */
+/** How many prose answers flagged by a strong check, in how many days, turn model grading off for a student (integration, 2026-10-06; for TO-DISCUSS). */
 export const REPEAT_OFFENDER = { flags: 3, days: 7 } as const;
 
 /** Whether this student's prose answers are graded by the model ("model") or self-marked ("self") right now. */
@@ -64,7 +65,8 @@ export async function gradeAnswer(db: OrcaSupabase, ownerId: string, questionId:
   // Decision 13: screen the answer and log a hit; a repeat offender's grading is off.
   if ((await gradingMode(db, ownerId)) === "self") return { status: 403, body: { error: GRADING_OFF_MESSAGE, graded: "self" } };
   const suspected = screen(answer);
-  if (suspected.suspected) await recordSecurityEvents(db, ownerId, "student_answer", suspected.hits, { questionId });
+  const flagged = summaryHit(suspected.hits);
+  if (flagged) await recordSecurityEvents(db, ownerId, "student_answer", [flagged], { questionId });
 
   try {
     const result = await completeJson(config, GRADE_SYSTEM, gradePrompt(q.prompt, rubric.data as AnswerRubric, answer), GradeSchema, parseGradeLoose, {

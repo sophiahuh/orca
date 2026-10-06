@@ -72,6 +72,32 @@ test("a rate-limit 429 with retry-after and a 5xx are retried, at most twice, an
   assert.equal(first.max_tokens, 16000);
 });
 
+test("a reply cut off mid-stream is metered with the tokens seen so far before the retry", async () => {
+  const api = fakeFetch([success()]);
+  const ev = (type: string, data: object) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+  // First attempt: the start of a reply, then the connection drops.
+  const dropped: typeof fetch = async () => {
+    const body = new ReadableStream({
+      start(c) {
+        const enc = new TextEncoder();
+        c.enqueue(enc.encode(ev("message_start", { message: { id: "msg_0", type: "message", role: "assistant", model: "claude-opus-5-5", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 5000, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } })));
+        c.enqueue(enc.encode(ev("content_block_start", { index: 0, content_block: { type: "text", text: "" } })));
+        c.enqueue(enc.encode(ev("message_delta", { delta: { stop_reason: null, stop_sequence: null }, usage: { output_tokens: 20000 } })));
+        // Erroring a stream discards what is still queued, so let the chunks be read first.
+        setTimeout(() => c.error(new Error("connection reset")), 30);
+      },
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  };
+  let first = true;
+  const fetchImpl: typeof fetch = (input, init) => (first ? ((first = false), dropped(input, init)) : api.fetch(input, init));
+  const usages: Array<{ u: ReturnType<typeof usageOf>; model: string }> = [];
+  const out = await completeJson(config, "sys", "hi", Out, (t) => Out.parse(JSON.parse(t)), { fetch: fetchImpl, retryBackoffMs: 1, onUsage: (u, model) => void usages.push({ u, model }) });
+  assert.deepEqual(out, { ok: true });
+  assert.equal(usages.length, 2, "the cut-off attempt and the successful one");
+  assert.deepEqual(usages[0], { u: { inputTokens: 5000, outputTokens: 20000, cacheWriteTokens: 0, cacheReadTokens: 0 }, model: "claude-opus-5-5" });
+});
+
 test("a third transient failure gives up; a 400 is never retried", async () => {
   const overloaded = { status: 529, body: { type: "error", error: { type: "overloaded_error", message: "busy" } } };
   const api = fakeFetch([overloaded, overloaded, overloaded, success()]);

@@ -35,6 +35,8 @@ export const LIMITS = {
     reflect: { max: 10, windowSeconds: 3600 },
     /** Grading a prose answer (POST /api/grade). */
     grade: { max: 60, windowSeconds: 60 },
+    /** Asking for a top-up after a session (POST /api/top-up); each one is a run row and a job. */
+    topUp: { max: 30, windowSeconds: 3600 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */

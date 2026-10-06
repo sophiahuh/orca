@@ -102,6 +102,48 @@ So a session can run the live checks:
   or from a GitHub Actions job with `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` as repo
   secrets. The REST, Storage and auth checks (`check:isolation`) only need HTTPS.
 
+## 7. Watching costs and security (after launch)
+
+Run these with the secret key (the Supabase SQL editor). Nothing in the app sends a notification;
+this is how the owner sees what the cost guard and the injection defences recorded.
+
+```sql
+-- Top students by tokens and cost today (UTC).
+select owner_id, count(*) as calls,
+       sum(input_tokens + output_tokens + cache_write_tokens + cache_read_tokens) as tokens,
+       round(sum(cost_usd), 4) as usd
+from public.model_usage
+where at >= date_trunc('day', now())
+group by owner_id order by usd desc limit 20;
+
+-- Everyone's spend today against ORCA_DAILY_BUDGET_USD.
+select round(sum(cost_usd), 2) as usd_today from public.model_usage where at >= date_trunc('day', now());
+
+-- Calls a fallback answered with a model that has no recorded price (priced as the requested one).
+select at, owner_id, model from public.model_usage where model like '%(priced as %' order by at desc;
+
+-- Runs held by a limit or still queued, with why and for how long.
+select owner_id, kind, status, progress ->> 'reason' as reason, at, started_at
+from public.pipeline_runs where status in ('queued', 'waiting', 'running') order by at;
+
+-- Students hitting rate limits repeatedly (worth a look).
+select owner_id, action, count(*) as windows_over_limit
+from public.rate_limits
+where count > case action when 'upload' then 20 when 'reflect' then 10 when 'grade' then 60 when 'topUp' then 30 end
+group by owner_id, action order by windows_over_limit desc;
+
+-- Security events this week: uploads with text aimed at an AI, flagged notes and answers, refused
+-- generated items. Strong student_answer rows are what turn a student's model grading off (3 in 7 days).
+select kind, "check", severity, count(*) from public.security_events
+where at >= now() - interval '7 days' group by 1, 2, 3 order by 4 desc;
+select owner_id, count(*) as flagged_answers from public.security_events
+where kind = 'student_answer' and severity = 'strong' and at >= now() - interval '7 days'
+group by owner_id having count(*) >= 3;
+
+-- Turn a student's model grading back on (after looking at their answers).
+-- delete from public.security_events where owner_id = '<uuid>' and kind = 'student_answer';
+```
+
 ## Order
 
 1. Anthropic key into the cloud environment (unblocks the extraction baseline now).

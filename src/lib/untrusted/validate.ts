@@ -3,7 +3,9 @@
  * without passing these in code. Generated text (question prompts, options, explanations, rubric
  * lines, topic and objective names, descriptions, excerpts) is sanitised like input and refused
  * when it holds a URL the material doesn't, HTML, a markdown link, or instruction-like phrasing
- * (the pattern screen). Refused items are dropped with a reason, never repaired. Pure.
+ * (the pattern screen's strong hits; its weak phrases are ordinary prose too, so a generated
+ * explanation may say "the output only changes on the clock edge"). Refused items are dropped with
+ * a reason, never repaired. Pure.
  */
 import { sanitize } from "./sanitize.ts";
 import { screen } from "./screen.ts";
@@ -40,7 +42,7 @@ export function validateText(text: string, rule: TextRule): Validated {
   if (MARKDOWN_LINK.test(t)) return { ok: false, reason: "contains a link" };
   for (const u of urlsIn(t)) if (!rule.allowedUrls?.has(u)) return { ok: false, reason: `contains a URL not in the material (${u.slice(0, 60)})` };
   const s = screen(t);
-  if (s.suspected) return { ok: false, reason: `reads like an instruction to an AI ("${s.hits[0].quote.slice(0, 80)}")` };
+  if (s.strong) return { ok: false, reason: `reads like an instruction to an AI ("${s.hits.find((h) => h.severity === "strong")!.quote.slice(0, 80)}")` };
   return { ok: true, text: t };
 }
 

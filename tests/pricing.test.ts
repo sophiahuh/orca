@@ -15,4 +15,6 @@ test("a call's cost follows the published per-million prices, cache writes and r
   assert.equal(costUsd("claude-haiku-4-5", { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 }), 1);
   assert.equal(costUsd("claude-opus-5-5", { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 }), 0.000024);
   assert.throws(() => costUsd("claude-made-up", u), UnpricedModelError);
+  // A dated snapshot of a priced model (what a server-side fallback may answer with) is priced as that model.
+  assert.equal(costUsd("claude-opus-5-5-20260301", u), costUsd("claude-opus-5-5", u));
 });

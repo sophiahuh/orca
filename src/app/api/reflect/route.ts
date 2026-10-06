@@ -52,7 +52,8 @@ export async function POST(request: Request) {
         objectives: live.map((o) => ({ id: o.id, name: o.name, description: o.description, topic: topicName.get(o.topic_id) ?? "" })),
       });
       const ids = new Set(live.map((o) => o.id));
-      return reply(200, { matches: out.matches.filter((m) => ids.has(m.objectiveId)) });
+      // The model's reasoning is shown to the student: sanitised like every generated string (decision 13).
+      return reply(200, { matches: out.matches.filter((m) => ids.has(m.objectiveId)).map((m) => ({ ...m, reasoning: sanitize(m.reasoning, 240).text })) });
     } catch (e) {
       if (e instanceof StepError) return reply(e.status >= 500 ? 502 : e.status, { error: e.message });
       throw e;

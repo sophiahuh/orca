@@ -68,6 +68,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const [grading, setGrading] = useState(false);
   const [grade, setGrade] = useState<GradeResult | null>(null);
   const [correct, setCorrect] = useState(0);
+  /** Answers that couldn't be graded (a grading outage): no evidence, and not in the score either. */
+  const [ungraded, setUngraded] = useState(0);
   const [missed, setMissed] = useState<RunnerItem[]>([]);
   const [finished, setFinished] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -84,13 +86,16 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     return () => window.clearInterval(id);
   }, [finished]);
 
-  // Persist the result exactly once when the set completes.
+  // Persist the result exactly once when the set completes. Ungraded answers are left out of the
+  // score (a grading outage would otherwise make every quiz look poor and queue re-quizzes); a set
+  // with nothing graded records no session at all.
   useEffect(() => {
     if (!finished || recorded.current) return;
     recorded.current = true;
     sessionId.current ??= crypto.randomUUID();
-    recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total: questions.length, seconds });
-  }, [finished, course, mode, allItems, correct, questions.length, seconds, recordQuiz]);
+    const total = questions.length - ungraded;
+    if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
+  }, [finished, course, mode, allItems, correct, ungraded, questions.length, seconds, recordQuiz]);
 
   // Then top up the stock for the objectives this run asked about (waits for the server-model check).
   const { start: startTopUp } = topUp;
@@ -183,6 +188,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         if (!res.ok || data.error) throw new Error(data.error ?? "Grading failed.");
         settle(data, "rubric");
       } catch (error) {
+        setUngraded((n) => n + 1);
         settle(
           {
             outcome: "incorrect",
@@ -243,6 +249,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     setChecked(false);
     setGrade(null);
     setCorrect(0);
+    setUngraded(0);
     setMissed([]);
     setFinished(false);
     setSeconds(0);
@@ -256,7 +263,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         topicName={title}
         extra={<TopUpNote status={topUp.status} />}
         correct={correct}
-        total={total}
+        total={total - ungraded}
         seconds={seconds}
         streak={streak}
         onContinue={() => router.push(backHref)}

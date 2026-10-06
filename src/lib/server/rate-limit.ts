@@ -14,6 +14,7 @@ const WHAT: Record<RateAction, string> = {
   upload: "uploads",
   reflect: "reflection matches",
   grade: "answers graded",
+  topUp: "top-ups",
 };
 
 function spell(seconds: number): string {

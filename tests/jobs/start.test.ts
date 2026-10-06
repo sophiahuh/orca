@@ -106,7 +106,7 @@ test("with a key an upload queues one run and hands it off", async () => {
 
 test("a run that died long ago is failed, and uploading again starts a new one", async () => {
   const at = new Date(now.getTime() - DEAD_RUN_MS.upload - 1000).toISOString();
-  const dead = { id: "run-dead", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at };
+  const dead = { id: "run-dead", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at, started_at: at };
   const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [dead] });
   const { deps: d } = deps(f.db, "claude-opus-5-5");
   assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-new" });
@@ -116,8 +116,8 @@ test("a run that died long ago is failed, and uploading again starts a new one",
 
 test("a recent run is still followed, and another student's dead run is left alone", async () => {
   const old = new Date(now.getTime() - DEAD_RUN_MS.upload - 1000).toISOString();
-  const mine = { id: "run-live", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at: new Date(now.getTime() - 60_000).toISOString() };
-  const theirs = { id: "run-theirs", owner_id: "owner-2", course_id: "c9", material_id: "m1", kind: "upload", status: "running", at: old };
+  const mine = { id: "run-live", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at: new Date(now.getTime() - 60_000).toISOString(), started_at: new Date(now.getTime() - 60_000).toISOString() };
+  const theirs = { id: "run-theirs", owner_id: "owner-2", course_id: "c9", material_id: "m1", kind: "upload", status: "running", at: old, started_at: old };
   const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [mine, theirs] });
   const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
   assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "running", runId: "run-live" });
@@ -125,13 +125,67 @@ test("a recent run is still followed, and another student's dead run is left alo
   assert.deepEqual(sent, []);
 });
 
-test("a run waiting for tomorrow's limit is never taken for dead", async () => {
+test("a run waiting for tomorrow's limit is never taken for dead; re-uploading its file says it is waiting, or starts it once the limit allows", async () => {
   const at = new Date(now.getTime() - 10 * DEAD_RUN_MS.upload).toISOString();
   const waiting = { id: "run-wait", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "waiting", at };
   const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [waiting] });
-  const { deps: d } = deps(f.db, "claude-opus-5-5");
-  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "running", runId: "run-wait" });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  d.budget = async () => ({ ok: false, reason: "daily-pages", message: "held" });
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "waiting", runId: "run-wait" });
   assert.equal(waiting.status, "waiting");
+  assert.deepEqual(sent, []);
+  // Tomorrow: the same re-upload starts it.
+  d.budget = async () => ({ ok: true });
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-wait" });
+  assert.equal(waiting.status, "queued", "back to queued for the job to claim");
+  assert.equal(sent.length, 1);
+});
+
+/* ── Review fixes (Wave 3): dead runs are judged from when they were claimed, for the whole student ── */
+
+test("a run that queued for an hour and started recently is alive: re-uploading its file follows it, nothing is paid twice", async () => {
+  const created = new Date(now.getTime() - 2 * DEAD_RUN_MS.upload).toISOString();
+  const claimed = new Date(now.getTime() - 5 * 60_000).toISOString();
+  const live = { id: "run-slow", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at: created, started_at: claimed };
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [live] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "running", runId: "run-slow" });
+  assert.equal(live.status, "running");
+  assert.deepEqual(sent, []);
+});
+
+test("a dead run of another material is failed when the student starts anything, so it can't block them for good", async () => {
+  const old = new Date(now.getTime() - DEAD_RUN_MS.upload - 1000).toISOString();
+  const dead = { id: "run-dead", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: old, started_at: old };
+  const f = fakeDb({ materials: [material, { id: "m0", owner_id: OWNER, course_id: "c1", status: "ready" }], material_pages: [page], pipeline_runs: [dead] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-new" });
+  assert.equal(dead.status, "failed");
+  assert.equal(sent.length, 1);
+  // A dead top-up is judged by its own, shorter, limit, also from resumeNext.
+  const deadTopUp = { id: "run-t", owner_id: OWNER, course_id: "c1", material_id: null, kind: "top-up", status: "running", at: old, started_at: new Date(now.getTime() - DEAD_RUN_MS["top-up"] - 1000).toISOString() };
+  f.tables.pipeline_runs.push(deadTopUp);
+  f.tables.pipeline_runs.find((r) => r.id === "run-new")!.status = "done";
+  assert.equal(await resumeNext(d, OWNER), null);
+  assert.equal(deadTopUp.status, "failed");
+});
+
+test("an orphaned queued run (nothing running) is started when the student next starts a job, and the new one queues behind it", async () => {
+  const orphan = { id: "run-orphan", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "queued", at: new Date(now.getTime() - 3_600_000).toISOString() };
+  const f = fakeDb({ materials: [material, { id: "m0", owner_id: OWNER, course_id: "c1", status: "ready" }], material_pages: [page], pipeline_runs: [orphan] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "queued", runId: "run-new" });
+  assert.deepEqual(sent, [{ kind: "material", job: { ownerId: OWNER, runId: "run-orphan", materialId: "m0" } }], "the oldest eligible run goes first");
+});
+
+test("a job queued behind a run that is only waiting for its budget starts at once when it fits itself", async () => {
+  const held = { id: "run-held", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "waiting", at: new Date(now.getTime() - 60_000).toISOString() };
+  const f = fakeDb({ session_results: [session], pipeline_runs: [held], material_pages: [{ owner_id: OWNER, material_id: "m0", n: 1 }] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  d.budget = async (_owner, pages) => (pages > 0 ? { ok: false, reason: "daily-pages", message: "held" } : { ok: true });
+  assert.deepEqual(await startTopUpJob(d, OWNER, { courseId: "c1", sessionId: "sess-1", objectiveIds: ["o1"] }), { state: "started", runId: "run-new" });
+  assert.deepEqual(sent, [{ kind: "top-up", job: { ownerId: OWNER, runId: "run-new", objectiveIds: ["o1"] } }]);
+  assert.equal(held.status, "waiting");
 });
 
 test("a hand-off that fails marks the run failed and says why", async () => {
@@ -197,11 +251,16 @@ test("a waiting run resumes only when its budget allows; one still held is skipp
   assert.deepEqual(await resumeNext(d, OWNER), { kind: "material", job: { ownerId: OWNER, runId: "run-wait", materialId: "m1" } });
 });
 
-test("a queued run is never taken for dead, however old: it waits its turn", async () => {
+test("a queued run is never taken for dead, however old: behind a running job it waits its turn, and alone (orphaned) it is started", async () => {
   const at = new Date(now.getTime() - 10 * DEAD_RUN_MS.upload).toISOString();
   const queued = { id: "run-q", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "queued", at };
-  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [queued] });
-  const { deps: d } = deps(f.db, "claude-opus-5-5");
-  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "running", runId: "run-q" });
+  const busy = { id: "run-busy", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: now.toISOString(), started_at: now.toISOString() };
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [queued, busy] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "queued", runId: "run-q" });
   assert.equal(queued.status, "queued");
+  assert.deepEqual(sent, []);
+  busy.status = "done";
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-q" });
+  assert.deepEqual(sent, [{ kind: "material", job: { ownerId: OWNER, runId: "run-q", materialId: "m1" } }]);
 });

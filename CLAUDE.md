@@ -25,7 +25,7 @@ Advanced Logic Design (ALD, Columbia ELEN); `docs/samples/ald/` has its real dec
 authored and reviewed the reference objectives, questions and quiz rubric.
 
 **Where things stand.**
-- **Phase 4 is built on branch `phase-4`, local only** (from `backend-implementation`; merge it
+- **Phase 4 is built on branch `phase-4`, pushed to GitHub, not merged** (from `backend-implementation`; merge it
   back once the owner confirms, as Phase 3 was). `backend-implementation` holds Phases 1–3; `main`
   is far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
@@ -37,10 +37,11 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   `topUp`, inline locally, Trigger.dev tasks written but never run), grading behind sign-in, the
   cost guard (metering, daily budgets with waiting runs, one job at a time per student, rate limits,
   bounded calls), the injection defences (data-block prompts, pattern screen, output validators,
-  `security_events`), CI with the Supabase stack, and the review findings from Tasks 3–7. Checks
-  last run green (2026-10-06, integration): `npx tsc --noEmit`, `npm run lint`, `npm test`,
-  `npm run test:e2e`, `npm run test:db`, `npm run check:isolation`, `npm run check:evidence`,
-  `npm run build` (counts in the integration commit). CI now runs on `phase-*` too, but GitHub
+  `security_events`), CI with the Supabase stack, the review findings from Tasks 3–7 and the
+  whole-branch review's fixes (Wave 3). Checks last run green (2026-10-06, after Wave 3):
+  `npx tsc --noEmit`, `npm run lint`, `npm test` (262), `npm run test:db` (172),
+  `npm run check:isolation` (43), `npm run check:evidence` (44), `npm run test:e2e` (55),
+  `npm run build`. CI now runs on `phase-*` too, but GitHub
   hasn't run it yet. **Nothing has run against a hosted Supabase, Trigger.dev or Anthropic**; the
   owner's setup steps are in `docs/SETUP-HOSTED.md` and the live checks are Task 10.
 - No app data is kept in the browser any more (the old `orca:materialPages` key is cleared on
@@ -121,7 +122,7 @@ with status notes), `docs/QUIZ-RUBRIC.md` (what makes a good question), `docs/OB
 (reference objectives / evaluation benchmark), `docs/BACKEND-NOTES.md` (what to port from the
 earlier `ai-native-learning-platform` repo), `docs/ANIMATION.md`, `docs/SETUP-HOSTED.md` (what the
 owner sets up in Supabase, Trigger.dev, Anthropic, Vercel and the cloud environment for live
-checks). Repo-local skills:
+checks, and the SQL for watching costs and security events). Repo-local skills:
 `.claude/skills/learner-evidence` and `.claude/skills/assessment` (load before touching mastery
 or question code).
 
@@ -299,18 +300,25 @@ This describes the code as it is.
   subscripts spelled as `^{…}`/`_{…}`, invisible and control characters removed, tabs kept, runs
   collapsed), `encode.ts` (`untrustedBlock`, `UNTRUSTED_POLICY`: every prompt sends material, course
   items, questions under check and notes as labelled JSON data blocks), `screen.ts` (the pattern
-  screen: OWASP phrasing with spacing and misspellings, role tags, Base64 and hex payloads decoded;
-  never blocks), `validate.ts` (generated text refused for a URL the material lacks, HTML, a markdown
-  link or instruction-like phrasing), `hidden-text.ts`. The pipeline records what it found on the run
-  (`security`), the review screen warns, and a trigger writes `security_events`; the reflect route
-  and the grader log their hits; three flagged answers in a week turn a student's model grading off.
+  screen: OWASP phrasing with spacing, misspellings and swapped letters, role tags, Base64 and hex
+  payloads decoded; never blocks; each hit is `strong` or `weak`, weak being phrasing honest course
+  text also uses), `validate.ts` (generated text refused for a URL the material lacks, HTML, a
+  markdown link or a strong screen hit), `hidden-text.ts`. The pipeline records what it found on the
+  run (`security`, with what the validators refused), the review screen warns on strong hits, and a
+  trigger writes `security_events` (with `severity`; refusals as `generated`); the reflect route
+  logs its hits and the grader one event per flagged answer; three answers with a strong hit in a
+  week turn a student's model grading off (the owner clears the events to turn it back on).
   Red-team fixtures: `tests/fixtures/injection/`.
 - Cost guard (decision 10): `src/lib/limits.ts` (every limit), `src/lib/pricing.ts`,
   `src/lib/jobs/budget.ts` (the daily-budget decision and the student's day start), the jobs check
   the budget when they claim a run and go `waiting` with why; `resumeNext` (`src/lib/jobs/start.ts`)
-  starts the student's next queued or resumable run when one finishes (and hourly on Trigger.dev);
-  rate limits through `hit_rate_limit`. The upload and reflect routes, and the grader, answer 429
-  with `retry-after` past a limit.
+  starts the student's next queued or resumable run when one finishes, when they start a job while
+  nothing of theirs is running (so a run waiting for yesterday's limit, or orphaned by a crash,
+  resumes in inline mode too) and hourly on Trigger.dev, failing dead runs first (judged from
+  `started_at`, set when the job claims the run); rate limits through `hit_rate_limit`. The upload,
+  reflect and top-up routes, and the grader, answer 429 with `retry-after` past a limit. A reply cut
+  off mid-stream is still metered; a fallback model with no recorded price is recorded at the
+  requested model's price and labelled.
 - Uploads (Task 6): `src/lib/uploads.ts` hashes the file, `POST /api/materials` answers with a
   signed upload URL into `<owner>/<material>/<safe name>` (PDF only, 25 MB) or "the course already
   has this file" (SHA-256), the browser uploads to Storage, and `POST /api/materials/:id/process`
@@ -319,7 +327,7 @@ This describes the code as it is.
   every page through `src/lib/untrusted/sanitize.ts`) into `material_pages`. Limits are in
   `src/lib/limits.ts`. Only `ready` materials load into the store.
 - Jobs (Task 7a): the upload routes start `processMaterial` and answer with `generation` (started,
-  running, queued, built, no model, no text); `POST /api/top-up` starts `topUp` after a finished session.
+  running, queued, waiting, built, no model, no text); `POST /api/top-up` starts `topUp` after a finished session.
   `src/lib/jobs/jobs.ts` (pure, over a `JobStore`; `src/lib/server/job-store.ts` scopes every
   service-role query to the student), `src/lib/server/jobs/start.ts` (creates the queued run and
   dispatches: `ORCA_JOBS=inline` runs it after the response, `trigger` enqueues

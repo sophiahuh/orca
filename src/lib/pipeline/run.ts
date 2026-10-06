@@ -122,7 +122,8 @@ async function resolve(
     });
     const match = r.matchId && byId.has(r.matchId) ? r.matchId : null;
     if (r.decision === "same" && match) return verdict(match);
-    if (r.decision === "uncertain") return { kind: "new", uncertain: { candidateId: match ?? close[0].id, reasoning: r.reasoning } };
+    // Model prose shown on the review screen: sanitised like every generated string (decision 13).
+    if (r.decision === "uncertain") return { kind: "new", uncertain: { candidateId: match ?? close[0].id, reasoning: shown(r.reasoning) } };
     return { kind: "new" };
   } catch (e) {
     return { kind: "new", uncertain: { candidateId: close[0].id, reasoning: `Couldn't check for a duplicate: ${errorText(e)}` } };
@@ -140,6 +141,9 @@ function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | nu
 
 /** Dropped-list reasons that begin like this were refused by the output validators (decision 13). */
 export const REFUSED_PREFIX = "refused: ";
+
+/** Model text that is only shown (a dropped prompt, a check's reasoning): sanitised, never trusted to be short. */
+const shown = (text: string, max = 240) => sanitize(text, max).text;
 
 /** What the validators need to know about the material: which slides exist and which URLs it contains. */
 export interface MaterialFacts {
@@ -160,13 +164,13 @@ function anchorExists(locator: string, facts: MaterialFacts): boolean {
 const TEXT_RULE = (facts: MaterialFacts) => ({ maxChars: 1200, allowedUrls: facts.allowedUrls });
 const SHORT_RULE = (facts: MaterialFacts) => ({ maxChars: 240, allowedUrls: facts.allowedUrls });
 
-/** The pattern screen over every page of the material, each hit tagged with its slide. */
-export function screenMaterial(pages: ReadonlyArray<{ n: number; text: string }>): Array<{ check: string; quote: string }> {
-  const hits: Array<{ check: string; quote: string }> = [];
+/** The pattern screen over every page of the material, each hit tagged with its slide and its severity. */
+export function screenMaterial(pages: ReadonlyArray<{ n: number; text: string }>): NonNullable<PipelineRun["security"]>["screen"] {
+  const hits: NonNullable<PipelineRun["security"]>["screen"] = [];
   for (const p of pages) {
     for (const h of screen(p.text).hits) {
       if (hits.length >= 40) return hits;
-      hits.push({ check: h.check, quote: `slide ${p.n}: ${h.quote}`.slice(0, 240) });
+      hits.push({ check: h.check, severity: h.severity, quote: `slide ${p.n}: ${h.quote}`.slice(0, 240) });
     }
   }
   return hits;
@@ -369,7 +373,13 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     questionsAdded: Object.values(questions).flat().length,
     dropped,
     ...(input.hiddenText ? { hiddenText: input.hiddenText } : {}),
-    security: { screen: materialScreen, instructionsFound, refused: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).length },
+    security: {
+      screen: materialScreen,
+      instructionsFound,
+      refused: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).length,
+      // Each refusal is logged as a `generated` security event by the database trigger (decision 13).
+      refusedItems: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).slice(0, 40).map((d) => ({ what: d.prompt.slice(0, 120), reason: d.reason.slice(REFUSED_PREFIX.length, REFUSED_PREFIX.length + 110) })),
+    },
   });
   if (deps.structureOnly) return { newTopics, topicAliases, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
 
@@ -462,14 +472,14 @@ export async function writeQuestions(
         for (const g of out.questions) {
           const target = wanted.get(g.objectiveId);
           if (!target) {
-            dropped.push({ prompt: g.prompt, reason: "written for an objective it wasn't asked about" });
+            dropped.push({ prompt: shown(g.prompt, 1200), reason: "written for an objective it wasn't asked about" });
             continue;
           }
           if ((count.get(g.objectiveId) ?? 0) >= target.need) continue;
           const inferred = target.o.origin === "inferred";
           const problem = structuralProblem(g, inferred);
           if (problem) {
-            dropped.push({ prompt: g.prompt, reason: problem });
+            dropped.push({ prompt: shown(g.prompt, 1200), reason: problem });
             continue;
           }
           // Decision 13: every string the model wrote is sanitised and refused for a URL the material
@@ -488,15 +498,15 @@ export async function writeQuestions(
             TEXT_RULE(facts),
           );
           if (!texts.ok) {
-            dropped.push({ prompt: sanitize(g.prompt, 1200).text, reason: `${REFUSED_PREFIX}${texts.reason}` });
+            dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });
             continue;
           }
           if (g.anchor && !anchorExists(g.anchor.locator, facts)) {
-            dropped.push({ prompt: g.prompt, reason: `${REFUSED_PREFIX}its anchor names ${g.anchor.locator}, which this material doesn't have` });
+            dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}its anchor names ${shown(g.anchor.locator, 60)}, which this material doesn't have` });
             continue;
           }
           if (g.figureSlide !== null && !facts.pages.has(g.figureSlide)) {
-            dropped.push({ prompt: g.prompt, reason: `${REFUSED_PREFIX}needs slide ${g.figureSlide}, which this material doesn't have` });
+            dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}needs slide ${g.figureSlide}, which this material doesn't have` });
             continue;
           }
           count.set(g.objectiveId, (count.get(g.objectiveId) ?? 0) + 1);
@@ -576,7 +586,7 @@ export async function writeQuestions(
               for (const { q } of choice) {
                 const x = results.get(q.id);
                 if (!x) fail([q.id], "the ambiguity check skipped it");
-                else if (x.ambiguous) fail([q.id], `ambiguous: ${x.reasoning}`);
+                else if (x.ambiguous) fail([q.id], `ambiguous: ${shown(x.reasoning)}`);
               }
             })
             .catch((e) => fail(choice.map((c) => c.q.id), `couldn't be checked: ${errorText(e)}`))
@@ -588,7 +598,7 @@ export async function writeQuestions(
               for (const item of rubricItems) {
                 const x = results.get(item.id);
                 if (!x) fail([item.id], "the answer check skipped it");
-                else if (!x.agrees) fail([item.id], `an independent answer disagreed with the rubric: ${x.reasoning}`);
+                else if (!x.agrees) fail([item.id], `an independent answer disagreed with the rubric: ${shown(x.reasoning)}`);
               }
             })
             .catch((e) => fail(rubricItems.map((i) => i.id), `couldn't be checked: ${errorText(e)}`))

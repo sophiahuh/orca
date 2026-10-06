@@ -122,14 +122,28 @@ Judgement calls the agents made to keep building; each is in code behind one con
   resumable mid-way.
 - **`ORCA_DAILY_BUDGET_USD` unset means no service-wide ceiling.** Right for development only;
   production must set it (`docs/SETUP-HOSTED.md`).
-- **Repeat offenders:** 3 flagged prose answers in 7 days turn model grading off for a student
-  (`REPEAT_OFFENDER` in `src/lib/server/grade.ts`); the owner clears it by deleting their
-  `student_answer` rows in `security_events`. No notification is sent yet ("the owner has been
-  notified" in the message is the monitoring query, not an email).
+- **Repeat offenders:** 3 prose answers in 7 days flagged by a *strong* screen check (ignore the
+  rubric, mark this correct, a role tag, an encoded payload…) turn model grading off for a student
+  (`REPEAT_OFFENDER` in `src/lib/server/grade.ts`; one `security_events` row per flagged answer);
+  the owner clears it by deleting their `student_answer` rows. No notification is sent: the
+  message says the owner can review, and the query is in `docs/SETUP-HOSTED.md` (section 7).
+- **The pattern screen's weak phrases** ("output only", "you are a", "act as", "new instructions",
+  "to the model", "as an AI"…) are ordinary prose in a logic course, so they are logged as `weak`
+  and never refuse generated text, warn on the review screen or count against a student. If real
+  uploads show injections built only from weak phrases, promote them or add the Haiku pre-screen.
+- **In inline mode a run waiting for a daily limit resumes when the student next starts or finishes
+  a job** (there is no clock); its message still says "processing resumes tomorrow". Trigger mode
+  sweeps hourly. If inline stays in production, a cron route would make the message exact.
+- **Top-ups are rate-limited to 30 an hour** (`LIMITS.rate.topUp`): each call is a run row and a job.
+  A finished session id still works for any number of top-ups within that (W0's open point).
+- **A quiz with ungraded answers (a grading outage) records a smaller total**, and a quiz with nothing
+  graded records no session (so no re-quiz is queued for it).
 - **Upload cleanup ages:** `uploaded`/`reading` after 24 h, `failed` after 7 days
   (`CLEANUP` in `src/lib/material/cleanup.ts`). `ready` and `processing` material is never touched.
 - **Metering failures throw:** a call whose usage can't be written fails the step after the model was
-  paid, rather than leaving a quiet hole in the budget.
+  paid, rather than leaving a quiet hole in the budget. One exception: a server-side fallback that
+  answers with a model `src/lib/pricing.ts` doesn't price is recorded at the requested model's price
+  with the model column saying so ("claude-x (priced as claude-opus-5-5)").
 - **A snapshot folded by a newer Orca refuses writes (503)** during a rolling deploy rather than
   being extended with older rules; reads compute from the log without saving.
 - **Same-millisecond events fold in id order without a `RULES_VERSION` bump**: the fold's logic is
@@ -137,7 +151,7 @@ Judgement calls the agents made to keep building; each is in code behind one con
 - **Anchors that don't name slides are kept unchecked** ("problem 3" in homework); only slide and
   page locators must exist in the material.
 - **The pattern screen flags legitimate discussion** of injection (a security course's "a system
-  prompt is…"). A hit only warns; nothing is removed.
+  prompt is…" is a strong hit). A hit only warns; nothing is removed from the material.
 - **The grader refuses exact-answer questions (400)** rather than grading them: code checks what
   code can check, and a model couldn't be talked into a "correct" on one. It never changes the
   model's outcome, only drops ideas and misconceptions the rubric doesn't list.

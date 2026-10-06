@@ -3,8 +3,10 @@
  * built, dead runs, a failed hand-off) are in `src/lib/jobs/start.ts`; this wires in the server's
  * model and where the job runs:
  *
- * - `ORCA_JOBS=inline` (local dev, tests, CI): the job runs in this server process after the
- *   response is sent (`after()`), so the browser follows it like any other.
+ * - `ORCA_JOBS=inline` (local dev, tests, CI; allowed in production only on a host that keeps the
+ *   function alive until `after()` settles, as Vercel does): the job runs in this server process
+ *   after the response is sent (`after()`), so the browser follows it like any other. A job the
+ *   finishing job starts (`resumeNext`) is awaited by it, so it is inside the same `after()`.
  * - `ORCA_JOBS=trigger` (production): the job is sent to Trigger.dev (`src/trigger/jobs.ts`); its
  *   Trigger.dev run id is kept on the row.
  *
@@ -42,9 +44,10 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
     async dispatch(d: Dispatch) {
       if (mode === "inline") {
         const work = () => (d.kind === "material" ? runMaterialJob(d.job) : runTopUpJob(d.job)).then(() => undefined);
-        // From a route: after its response. From a finishing job (already after a response): right away.
+        // From a route: after its response. From a finishing job (already after a response): right
+        // away, and awaited, so the enclosing after() covers the chained job too.
         if (run === "after-response") after(work);
-        else void work();
+        else await work();
         return;
       }
       const handle =
@@ -76,9 +79,9 @@ export function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch 
   return core.resumeNext(deps(db, "now"), ownerId);
 }
 
-/** Every student with a waiting run, for the scheduled sweep (trigger mode). */
-export async function ownersWithWaitingRuns(db: OrcaSupabase): Promise<string[]> {
-  const { data, error } = await db.from("pipeline_runs").select("owner_id").eq("status", "waiting");
-  if (error) throw new Error(`Couldn't read the waiting runs: ${error.message}`);
+/** Every student with a run that isn't running yet (queued or waiting), for the scheduled sweep (trigger mode). */
+export async function ownersWithPendingRuns(db: OrcaSupabase): Promise<string[]> {
+  const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting"]);
+  if (error) throw new Error(`Couldn't read the pending runs: ${error.message}`);
   return [...new Set(data.map((r) => r.owner_id))];
 }

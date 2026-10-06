@@ -7,7 +7,7 @@
 import { schedules, task } from "@trigger.dev/sdk";
 import { JOB_MAX_SECONDS, type MaterialJob, type TopUpJob } from "@/lib/jobs/start";
 import { runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
-import { ownersWithWaitingRuns, resumeNext } from "@/lib/server/jobs/start";
+import { ownersWithPendingRuns, resumeNext } from "@/lib/server/jobs/start";
 import { adminClient } from "@/lib/supabase/server";
 
 export const processMaterialTask = task({
@@ -26,9 +26,9 @@ export const topUpTask = task({
 
 /**
  * Runs held by a daily budget (`waiting`) resume when the student's day changes, which no job of
- * theirs may be around to notice: once an hour, try every student with a waiting run (decision 10).
- * Inline mode has no schedule; there a waiting run resumes when the student next starts or
- * finishes a job.
+ * theirs may be around to notice, and a queued run whose task was lost would otherwise wait for
+ * ever: once an hour, try every student with a queued or waiting run (decision 10). Inline mode
+ * has no schedule; there such a run resumes when the student next starts or finishes a job.
  */
 export const resumeWaitingTask = schedules.task({
   id: "resume-waiting",
@@ -37,7 +37,7 @@ export const resumeWaitingTask = schedules.task({
   run: async () => {
     const db = adminClient();
     const started: string[] = [];
-    for (const ownerId of await ownersWithWaitingRuns(db)) {
+    for (const ownerId of await ownersWithPendingRuns(db)) {
       const d = await resumeNext(db, ownerId);
       if (d) started.push(d.job.runId);
     }

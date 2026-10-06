@@ -231,6 +231,34 @@
 >   and has the rate limit, the budget check and metering. Final local run: see the integration
 >   commit. **Not run hosted; Task 10 is next** (`docs/SETUP-HOSTED.md`, plus the email-template
 >   change and `ORCA_DAILY_BUDGET_USD`).
+> - **Whole-branch review and its fixes (Wave 3, 2026-10-06, local):** a read-only review of the
+>   branch found four important problems, all fixed. (1) The page budget counted the running job's
+>   own pages twice, and the job and `resumeNext` disagreed, so a held upload could loop
+>   waiting → running for ever: `pagesSince` now counts finished runs only (the asking run's pages
+>   are the check's `pages`), with a unit test over a database double. (2) A queued run could stay
+>   queued for ever (an orphan after a crash, or every run in inline mode once one was `waiting`),
+>   with every later job queued behind it: starting a job behind others, or re-uploading a queued or
+>   waiting material, now runs `resumeNext`, which dispatches the oldest run that may run when
+>   nothing is running; the hourly sweep covers queued runs too. (3) Dead-run detection measured
+>   from the run's creation, so a legitimately long-queued run was killed while running (and paid
+>   twice) and a genuinely dead one blocked the student: `pipeline_runs.started_at` is set by
+>   `claim`, dead runs are judged from it for the whole student, and `resumeNext` fails them first.
+>   (4) The repeat-offender lockout counted screen hits (one answer with three phrases locked a
+>   student out) and the phrase list matched honest logic prose ("the output only changes on the
+>   clock edge", "you are a designer"): the screen now rates each hit `strong` or `weak`
+>   (`security_events.severity`), the grader writes one event per flagged answer, only strong events
+>   count, validators refuse generated text on strong hits only, the review screen warns on strong
+>   hits only, and the lockout message no longer claims a notification. Minor findings fixed too:
+>   model prose shown on the review and reflect screens is sanitised; a reply cut off mid-stream is
+>   metered from the stream's usage events and a dropped stream is retried as a connection failure;
+>   a fallback model with no price is recorded at the requested model's price and labelled, and a
+>   dated model id is priced as its model; a job a finishing job starts is awaited (inside the same
+>   `after()`); ungraded answers leave the quiz score (no session is recorded if nothing was graded);
+>   `/api/llm/models` refuses a caller's `baseUrl`; refused generated items are logged as
+>   `generated` events; `/api/top-up` is rate-limited (30 an hour); the upload screen says queued or
+>   waiting instead of "building". Left as noted: `scripts/stack-lock.sh` can mistake another user's
+>   live lock for a stale one (dev tooling); `src/trigger/*` importing `next/headers` through
+>   `adminClient` is unverified until Task 10 builds the tasks.
 > - **Review findings deferred (all handled 2026-10-06; kept for the record):**
 >   - Snapshots: a newer `rules_version` is treated as stale, so during a rolling deploy an old
 >     server overwrites newer snapshots; the 409 message blames a concurrent answer when a structure

@@ -31,7 +31,7 @@ export interface UploadMeta {
 /** What happens to an upload's questions (`Generation` in src/lib/server/jobs/start.ts). */
 export type Generation =
   | { state: "started" | "running" | "built"; runId: string }
-  | { state: "queued"; runId: string }
+  | { state: "queued" | "waiting"; runId: string }
   | { state: "no-model" }
   | { state: "no-text" };
 

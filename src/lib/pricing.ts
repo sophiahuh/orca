@@ -57,9 +57,14 @@ export class UnpricedModelError extends Error {
   }
 }
 
+/** The price for a model id, also when the API answers with a dated snapshot of a priced model (`…-20260301`). */
+export function priceOf(model: string): ModelPrice | null {
+  return MODEL_PRICES[model] ?? MODEL_PRICES[model.replace(/-\d{8}$/, "")] ?? null;
+}
+
 /** The call's cost in USD (5-minute cache writes). Throws for a model with no recorded price. */
 export function costUsd(model: string, u: TokenUsage): number {
-  const p = MODEL_PRICES[model];
+  const p = priceOf(model);
   if (!p) throw new UnpricedModelError(model);
   const perToken = (price: number) => price / 1_000_000;
   const cost = u.inputTokens * perToken(p.input) + u.outputTokens * perToken(p.output) + u.cacheWriteTokens * perToken(p.cacheWrite5m) + u.cacheReadTokens * perToken(p.cacheRead);

@@ -7,25 +7,38 @@
  */
 import { type BudgetVerdict, type UsageToday, dayStartIn, judgeBudget } from "@/lib/jobs/budget";
 import { LIMITS, globalDailyBudgetUsd } from "@/lib/limits";
-import { type TokenUsage, costUsd } from "@/lib/pricing";
+import { type TokenUsage, costUsd, priceOf } from "@/lib/pricing";
 import type { ModelCtx } from "@/lib/server/model";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 
-/** Record one call. Throws if the row can't be written: a call that can't be metered is a bug, not a quiet loss. */
-export async function recordUsage(db: OrcaSupabase, ctx: ModelCtx, model: string, usage: TokenUsage, at = new Date()): Promise<void> {
+/**
+ * Record one call. Throws if the row can't be written: a call that can't be metered is a bug, not a
+ * quiet loss. `pricedAs` names the model whose price to use when `model` (what the API answered
+ * with) has none; the row then says so in its model column, never a silent guess.
+ */
+export async function recordUsage(db: OrcaSupabase, ctx: ModelCtx, model: string, usage: TokenUsage, opts: { at?: Date; pricedAs?: string } = {}): Promise<void> {
   const { error } = await db.from("model_usage").insert({
     owner_id: ctx.ownerId,
     kind: ctx.kind,
     run_id: ctx.runId ?? null,
-    model,
+    model: opts.pricedAs ? `${model} (priced as ${opts.pricedAs})` : model,
     input_tokens: usage.inputTokens,
     output_tokens: usage.outputTokens,
     cache_write_tokens: usage.cacheWriteTokens,
     cache_read_tokens: usage.cacheReadTokens,
-    cost_usd: costUsd(model, usage),
-    at: at.toISOString(),
+    cost_usd: costUsd(opts.pricedAs ?? model, usage),
+    at: (opts.at ?? new Date()).toISOString(),
   });
   if (error) throw new Error(`Couldn't record the model call's usage: ${error.message}`);
+}
+
+/**
+ * Metering for one call made for `ctx` with `requested` as the model asked for. A server-side
+ * fallback may answer with another model; one `src/lib/pricing.ts` doesn't price is recorded at the
+ * requested model's price and labelled, rather than failing a step that was already paid for.
+ */
+export function meterUsage(db: OrcaSupabase, ctx: ModelCtx, requested: string): (usage: TokenUsage, model: string) => Promise<void> {
+  return (usage, model) => recordUsage(db, ctx, model, usage, priceOf(model) || !priceOf(requested) ? {} : { pricedAs: requested });
 }
 
 async function timezoneOf(db: OrcaSupabase, ownerId: string): Promise<string> {
@@ -34,14 +47,19 @@ async function timezoneOf(db: OrcaSupabase, ownerId: string): Promise<string> {
   return data?.timezone || "UTC";
 }
 
-/** Pages this student's uploads put through the model since `since`: the pages of every upload run that started (running, done or failed after starting) in that time. */
+/**
+ * Pages this student's uploads put through the model since `since`: the pages of every upload run
+ * finished (done or failed) in that time. A running run is left out: one job runs at a time per
+ * student, so the only running run is the one asking, and its pages are the `pages` the check
+ * adds (counting them here too held a third 100-page deck after two, with 300 allowed).
+ */
 async function pagesSince(db: OrcaSupabase, ownerId: string, since: Date): Promise<number> {
   const { data: runs, error } = await db
     .from("pipeline_runs")
     .select("material_id")
     .eq("owner_id", ownerId)
     .eq("kind", "upload")
-    .in("status", ["running", "done", "failed"])
+    .in("status", ["done", "failed"])
     .gte("at", since.toISOString());
   if (error) throw new Error(`Couldn't read today's runs: ${error.message}`);
   const ids = [...new Set(runs.flatMap((r) => (r.material_id ? [r.material_id] : [])))];

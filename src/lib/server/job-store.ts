@@ -39,7 +39,8 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
     async claim(runId, progress) {
       const { data, error } = await db
         .from("pipeline_runs")
-        .update({ status: "running", progress: progress as unknown as Json })
+        // started_at is when the job took the run: dead-run detection measures from it (src/lib/jobs/start.ts).
+        .update({ status: "running", started_at: new Date().toISOString(), progress: progress as unknown as Json })
         .eq("owner_id", ownerId)
         .eq("id", runId)
         .in("status", ["queued", "waiting"])

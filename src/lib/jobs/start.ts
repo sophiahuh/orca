@@ -4,11 +4,14 @@
  * it to Trigger.dev (`src/lib/server/jobs/start.ts` wires that up). Loads under plain Node (the
  * database is passed in), so the decisions here are unit-tested with a fake database.
  *
- * A run that is still running long after any job could have finished is dead (its process was
- * stopped): it is marked failed before anything else, so it can't hold the one-job-in-flight
- * indexes and uploading the file again retries it. Queued and waiting runs are never dead: one job
- * runs at a time per student (decision 10), so a run may legitimately queue behind a long upload,
- * and `resumeNext` starts it when its turn comes.
+ * A run that has been running longer than any job could (measured from when the job claimed it,
+ * `started_at`, not from when it was created: a run may legitimately queue for an hour first) is
+ * dead (its process was stopped): every start and every `resumeNext` marks the student's dead runs
+ * failed first, so a dead run can't hold the one-job-at-a-time place (decision 10) and uploading
+ * the file again retries it. Queued and waiting runs are never dead: `resumeNext` starts the oldest
+ * one that may run whenever a job finishes, whenever the student starts a job while nothing of
+ * theirs is running (so an orphaned queued run, or a run waiting for yesterday's limit, is picked
+ * up in inline mode too), and hourly in trigger mode.
  */
 import type { BudgetVerdict } from "./budget.ts";
 import type { OrcaSupabase } from "../supabase/server.ts";
@@ -34,7 +37,7 @@ export type Dispatch = { kind: "material"; job: MaterialJob } | { kind: "top-up"
  */
 export const JOB_MAX_SECONDS = { upload: 1800, "top-up": 900 } as const;
 
-/** A queued or running run older than this has died: its job's longest run plus a margin for queueing. */
+/** A running run claimed longer ago than this has died: its job's longest run plus a margin. */
 export const DEAD_RUN_MS = { upload: (JOB_MAX_SECONDS.upload + 600) * 1000, "top-up": (JOB_MAX_SECONDS["top-up"] + 600) * 1000 } as const;
 
 export const DEAD_RUN_ERROR = "Orca's job stopped without finishing. Upload the file again to retry.";
@@ -58,6 +61,8 @@ export type Generation =
   | { state: "started" | "running"; runId: string }
   /** Queued behind the student's other job (one runs at a time); it starts when that one finishes. */
   | { state: "queued"; runId: string }
+  /** Held by a daily budget; it resumes when the limit resets. */
+  | { state: "waiting"; runId: string }
   /** The material's questions were built before. */
   | { state: "built"; runId: string }
   /** The server has no model key: the file is stored and read, nothing is generated. */
@@ -67,30 +72,40 @@ export type Generation =
 
 export type TopUpStart = { state: "started"; runId: string } | { state: "queued"; runId: string } | { state: "busy" } | { state: "no-model" } | { state: "no-session" };
 
+const LIVE = ["queued", "waiting", "running"] as const;
+
 const UNIQUE_VIOLATION = "23505";
 
-/** Mark the student's dead runs (of one material's uploads, or one course's top-ups) failed: running too long. */
-async function failDeadRuns(deps: StartDeps, ownerId: string, kind: "upload" | "top-up", scope: { materialId: string } | { courseId: string }): Promise<void> {
-  const before = new Date((deps.now?.() ?? new Date()).getTime() - DEAD_RUN_MS[kind]).toISOString();
-  let q = deps.db
-    .from("pipeline_runs")
-    .update({ status: "failed", error: kind === "upload" ? DEAD_RUN_ERROR : DEAD_TOP_UP_ERROR, progress: null })
-    .eq("owner_id", ownerId)
-    .eq("kind", kind)
-    .in("status", ["running"])
-    .lt("at", before);
-  q = "materialId" in scope ? q.eq("material_id", scope.materialId) : q.eq("course_id", scope.courseId);
-  const { error } = await q;
-  if (error) throw new Error(`Couldn't check the job's earlier runs: ${error.message}`);
+/** Mark the student's dead runs failed: running (claimed) for longer than their job could run. */
+async function failDeadRuns(deps: StartDeps, ownerId: string): Promise<void> {
+  const now = (deps.now?.() ?? new Date()).getTime();
+  for (const kind of ["upload", "top-up"] as const) {
+    const { error } = await deps.db
+      .from("pipeline_runs")
+      .update({ status: "failed", error: kind === "upload" ? DEAD_RUN_ERROR : DEAD_TOP_UP_ERROR, progress: null })
+      .eq("owner_id", ownerId)
+      .eq("kind", kind)
+      .eq("status", "running")
+      .lt("started_at", new Date(now - DEAD_RUN_MS[kind]).toISOString());
+    if (error) throw new Error(`Couldn't check the student's earlier runs: ${error.message}`);
+  }
 }
 
 /** Whether the student already has a job in flight (queued, waiting or running): a new one queues behind it. */
-async function hasJobInFlight(deps: StartDeps, ownerId: string, except?: string): Promise<boolean> {
-  let q = deps.db.from("pipeline_runs").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).in("status", ["queued", "waiting", "running"]);
-  if (except) q = q.neq("id", except);
-  const { count, error } = await q;
+async function hasJobInFlight(deps: StartDeps, ownerId: string): Promise<boolean> {
+  const { count, error } = await deps.db.from("pipeline_runs").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).in("status", [...LIVE]);
   if (error) throw new Error(`Couldn't read the student's jobs: ${error.message}`);
   return (count ?? 0) > 0;
+}
+
+/**
+ * A new run was queued behind the student's other in-flight runs: if none of them is running (an
+ * orphaned queued run, or runs waiting for a limit), start the oldest that may run now, which may
+ * be this one. Says whether this run was the one started.
+ */
+async function startBehind(deps: StartDeps, ownerId: string, runId: string): Promise<boolean> {
+  const next = await resumeNext(deps, ownerId);
+  return next?.job.runId === runId;
 }
 
 /** Dispatch, or mark the run failed (while it's still queued) and say why. */
@@ -110,7 +125,7 @@ async function handOff(deps: StartDeps, d: Dispatch): Promise<void> {
  */
 export async function startUploadJob(deps: StartDeps, ownerId: string, materialId: string): Promise<Generation> {
   const { db } = deps;
-  await failDeadRuns(deps, ownerId, "upload", { materialId });
+  await failDeadRuns(deps, ownerId);
   const { data: runs, error } = await db
     .from("pipeline_runs")
     .select("id, status")
@@ -119,8 +134,14 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
     .eq("kind", "upload")
     .order("at", { ascending: false });
   if (error) throw new Error(`Couldn't read the material's runs: ${error.message}`);
-  const live = runs.find((r) => r.status === "queued" || r.status === "waiting" || r.status === "running");
-  if (live) return { state: "running", runId: live.id };
+  const live = runs.find((r) => (LIVE as readonly string[]).includes(r.status));
+  if (live) {
+    if (live.status === "running") return { state: "running", runId: live.id };
+    // Queued or waiting: start it now if nothing of the student's is running and it may run (an
+    // orphaned run, or one whose limit has reset); otherwise say what it is doing.
+    const next = await resumeNext(deps, ownerId);
+    return { state: next?.job.runId === live.id ? "started" : live.status === "waiting" ? "waiting" : "queued", runId: live.id };
+  }
   const built = runs.find((r) => r.status === "done");
   if (built) return { state: "built", runId: built.id };
   // A failed run is tried again: uploading the file again is how a student retries.
@@ -149,24 +170,27 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   });
   if (inserted.error?.code === UNIQUE_VIOLATION) return startUploadJob(deps, ownerId, materialId); // another request started it
   if (inserted.error) throw new Error(`Couldn't record the job: ${inserted.error.message}`);
-  // One job at a time per student: behind another, it stays queued and resumeNext starts it later.
-  if (queueBehind) return { state: "queued", runId };
+  // One job at a time per student: behind another, it stays queued until resumeNext starts it (now,
+  // if nothing of the student's is actually running).
+  if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
   await handOff(deps, { kind: "material", job: { ownerId, runId, materialId } });
   return { state: "started", runId };
 }
 
 /**
  * Start the student's next job, if nothing of theirs is running: the oldest queued run, or the
- * oldest waiting run whose budget now allows it. Called when a job finishes (and by a schedule in
- * trigger mode, for the day change). Returns what it started, or null.
+ * oldest waiting run whose budget now allows it. Called when a job finishes, when the student
+ * starts a job behind others, and by a schedule in trigger mode (for the day change). Dead runs
+ * are failed first, so one can't block the student for good. Returns what it started, or null.
  */
 export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Dispatch | null> {
   const { db } = deps;
+  await failDeadRuns(deps, ownerId);
   const { data: runs, error } = await db
     .from("pipeline_runs")
     .select("id, kind, status, material_id, objective_ids")
     .eq("owner_id", ownerId)
-    .in("status", ["queued", "waiting", "running"])
+    .in("status", [...LIVE])
     .order("at", { ascending: true });
   if (error) throw new Error(`Couldn't read the student's jobs: ${error.message}`);
   if (runs.some((r) => r.status === "running")) return null;
@@ -207,7 +231,7 @@ export async function startTopUpJob(deps: StartDeps, ownerId: string, req: { cou
     .limit(1);
   if (error) throw new Error(`Couldn't read the session: ${error.message}`);
   if (!session.length) return { state: "no-session" };
-  await failDeadRuns(deps, ownerId, "top-up", { courseId: req.courseId });
+  await failDeadRuns(deps, ownerId);
   const runId = deps.newId?.() ?? crypto.randomUUID();
   const queueBehind = await hasJobInFlight(deps, ownerId);
   const inserted = await db.from("pipeline_runs").insert({
@@ -224,7 +248,7 @@ export async function startTopUpJob(deps: StartDeps, ownerId: string, req: { cou
   });
   if (inserted.error?.code === UNIQUE_VIOLATION) return { state: "busy" };
   if (inserted.error) throw new Error(`Couldn't record the job: ${inserted.error.message}`);
-  if (queueBehind) return { state: "queued", runId };
+  if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
   await handOff(deps, { kind: "top-up", job: { ownerId, runId, objectiveIds: req.objectiveIds } });
   return { state: "started", runId };
 }

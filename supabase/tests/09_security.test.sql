@@ -2,7 +2,8 @@
 -- findings becomes events through the trigger, never by the job writing them itself.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(13);
+\set run2 e0000000-0000-4000-8000-000000000092
 
 \set A aaaaaaaa-0000-4000-8000-000000000091
 \set B bbbbbbbb-0000-4000-8000-000000000092
@@ -35,6 +36,15 @@ insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at
 select is((select count(*) from public.security_events where owner_id = :'A'), 2::bigint, 'a clean run adds no events');
 select throws_ok(format($$insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at, model, status, security) values (gen_random_uuid(), %L, %L, %L, 'upload', now(), 'x', 'done', '{"screen": "no"}')$$, :'A', :'course', :'material'),
   '23514', null, 'security must have its arrays');
+-- Review fixes (Wave 3): the screen's severity is carried, a hit without one is strong, and what the
+-- validators refused is logged as generated events.
+insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at, model, status, security)
+  values (:'run2', :'A', :'course', :'material', 'upload', now(), 'claude-opus-5-5', 'done',
+    '{"screen": [{"check": "phrase", "severity": "weak", "quote": "slide 7: the output only changes on the clock edge"}], "instructionsFound": [], "refused": 1, "refusedItems": [{"what": "Which gate?", "reason": "explanation contains HTML"}]}');
+select is((select severity from public.security_events where run_id = :'run2' and kind = 'upload'), 'weak', 'a weak screen hit is logged as weak');
+select is((select severity from public.security_events where run_id = :'run' and "check" = 'phrase'), 'strong', 'a hit without a severity is strong');
+select is((select count(*) from public.security_events where run_id = :'run2' and kind = 'generated' and "check" = 'validator' and quote = 'Which gate?: explanation contains HTML'), 1::bigint, 'a refused generated item is logged with what and why');
+select throws_ok(format($$insert into public.security_events (owner_id, kind, "check", severity, quote) values (%L, 'student_answer', 'phrase', 'maybe', 'x')$$, :'A'), '23514', null, 'severity is strong or weak');
 
 -- Closed to students.
 select pg_temp.act_as(:'A');

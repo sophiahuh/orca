@@ -257,6 +257,8 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   queues work. The tasks (`src/trigger/jobs.ts`) only call the jobs; locally and in tests
   `ORCA_JOBS=inline` runs the same jobs inside the route, so the SDK is used only to define and
   enqueue tasks. No Trigger.dev project exists yet (Task 10).
+  `pdfjs-dist` (Task 6; it was the browser's PDF reader since Phase 2) now also runs on the server,
+  on a worker thread, to read uploads into `material_pages`: the same library, no new one.
 - **Built (local only, nothing hosted):** the local stack; the schema with owner-only RLS, Storage
   and `save_structure`; `objective_state` snapshots with `record_evidence` and stale marks;
   `POST /api/evidence`, `GET /api/state`; auth; the store on Supabase; uploads into Storage read
@@ -266,13 +268,17 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   `src/lib/pricing.ts`), `rate_limits` with `hit_rate_limit` (fixed windows counted in Postgres: no
   other service), daily budgets per student (300 pages of uploads, 2,000,000 tokens, the student's
   day) and `ORCA_DAILY_BUDGET_USD` for everyone, checked when a job claims its run (`waiting` with
-  why, resumed by `resumeNext` when the student's jobs finish and hourly on Trigger.dev), one job at
-  a time per student (a unique index on running runs), bounded calls (timeout, 2 retries of transient
-  failures only, spend-limit answers never retried). Both tables are service-role only. No new
-  dependency: the SDK's own retries are off and `completeJson` retries itself.
+  why, resumed by `resumeNext` when the student's jobs finish, when they start one while nothing of
+  theirs runs, and hourly on Trigger.dev), one job at a time per student (a unique index on running
+  runs; dead runs judged from `started_at`), bounded calls (timeout, 2 retries of transient failures
+  only, spend-limit answers never retried, a cut-off reply still metered). Both tables are
+  service-role only. No new dependency: the SDK's own retries are off and `completeJson` retries
+  itself. The whole-branch review (2026-10-06) fixed the page budget counting the running job twice
+  and runs that could stay queued or waiting for ever (plan status block, Wave 3).
 - **Injection defences (decision 13, built 2026-10-06):** `security_events` (service-role only; one
-  row per finding from a trigger on `pipeline_runs.security`, from the reflect route and from the
-  grader), `pipeline_runs.security`, and no model pre-screen (Watch). Prompts send untrusted text as
+  row per finding, rated `strong` or `weak`, from a trigger on `pipeline_runs.security`, from the
+  reflect route and one per flagged answer from the grader), `pipeline_runs.security`, and no model
+  pre-screen (Watch). Only strong hits refuse generated text, warn or count against a student. Prompts send untrusted text as
   JSON data blocks; outputs are validated and refused, never repaired. The prompt format changed on
   every step, so `score:extraction` must be rerun with a key before anything is tuned.
 - **Also recorded:** `pipeline_runs.objective_ids` (a top-up's request, so a queued run can start

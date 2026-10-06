@@ -71,10 +71,16 @@ test("an injected deck: the screen and the model's report are recorded, planted 
   expect(run.questionsAdded).toBe(4);
   expect(await fakeCalls()).toEqual(["extract", "generate", "solve"]);
 
-  const { data: events } = await admin().from("security_events").select("kind, check, quote, run_id, material_id").eq("owner_id", student.id).order("check");
-  expect(events!.length).toBeGreaterThanOrEqual(2);
-  expect(events!.every((e) => e.kind === "upload" && e.run_id === generation.runId && e.material_id === material.id && e.quote.length <= 240)).toBe(true);
-  expect(events!.map((e) => e.check)).toEqual(expect.arrayContaining(["phrase", "model:instructionsFound"]));
+  const { data: events } = await admin().from("security_events").select("kind, check, severity, quote, run_id, material_id").eq("owner_id", student.id).order("check");
+  expect(events!.length).toBeGreaterThanOrEqual(3);
+  expect(events!.every((e) => e.run_id === generation.runId && e.material_id === material.id && e.quote.length <= 240)).toBe(true);
+  const uploads = events!.filter((e) => e.kind === "upload");
+  expect(uploads.map((e) => e.check)).toEqual(expect.arrayContaining(["phrase", "model:instructionsFound"]));
+  expect(uploads.find((e) => /ignore previous instructions/i.test(e.quote))!.severity).toBe("strong");
+  // What the validators refused is logged too (one event per refused item, with what and why).
+  const refused = events!.filter((e) => e.kind === "generated");
+  expect(refused.map((e) => e.check)).toEqual(["validator", "validator"]);
+  expect(refused.map((e) => e.quote).sort()).toEqual([expect.stringMatching(/^A place of objective .*names slide 9/), expect.stringMatching(/^Topic .*summary contains a URL not in the material/)]);
   // Nothing a student can read.
   expect((await student.db.from("security_events").select("id")).data).toEqual([]);
 });

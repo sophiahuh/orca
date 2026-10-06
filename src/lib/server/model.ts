@@ -17,7 +17,7 @@ import { buildPrompt } from "@/lib/pipeline/prompts";
 import type { CallStep } from "@/lib/pipeline/run";
 import { STEPS, type StepName } from "@/lib/pipeline/schemas";
 import type { TokenUsage } from "@/lib/pricing";
-import { checkBudget, recordUsage } from "@/lib/server/usage";
+import { checkBudget, meterUsage } from "@/lib/server/usage";
 import { type OrcaSupabase, adminClient } from "@/lib/supabase/server";
 
 export const ORCA_MODEL = "claude-opus-5-5";
@@ -70,9 +70,10 @@ export class StepError extends Error {
 /**
  * Metering for one call made for `ctx` (decision 10): every reply's token counts and cost go to
  * `model_usage`. Used by `stepCaller` and by the grader; pass it as `completeJson`'s `onUsage`.
+ * `requested` is the model the call asked for (a fallback may answer with another; see `meterUsage`).
  */
-export function meter(ctx: ModelCtx, db: OrcaSupabase = adminClient()): (usage: TokenUsage, model: string) => Promise<void> {
-  return (usage, model) => recordUsage(db, ctx, model, usage);
+export function meter(ctx: ModelCtx, db: OrcaSupabase = adminClient(), requested: string = orcaConfig()?.model ?? ""): (usage: TokenUsage, model: string) => Promise<void> {
+  return meterUsage(db, ctx, requested);
 }
 
 export interface StepCallerOptions {

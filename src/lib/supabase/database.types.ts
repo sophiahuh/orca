@@ -207,13 +207,13 @@ isOneToOne: false
                   ]
                 },"pipeline_runs": {
                   Row: {
-                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string | null,"model": string,"objective_ids": (string)[],"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"security": Json | null,"status": string,"topics_created": (string)[]
+                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string | null,"model": string,"objective_ids": (string)[],"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"security": Json | null,"started_at": string | null,"status": string,"topics_created": (string)[]
                   }
                   Insert: {
-                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id"?: string | null,"model": string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"security"?: Json | null,"status"?: string,"topics_created"?: (string)[]
+                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id"?: string | null,"model": string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"security"?: Json | null,"started_at"?: string | null,"status"?: string,"topics_created"?: (string)[]
                   }
                   Update: {
-                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string | null,"model"?: string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"security"?: Json | null,"status"?: string,"topics_created"?: (string)[]
+                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string | null,"model"?: string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"security"?: Json | null,"started_at"?: string | null,"status"?: string,"topics_created"?: (string)[]
                   }
                   Relationships: [
                     {
@@ -332,13 +332,13 @@ isOneToOne: false
                   ]
                 },"security_events": {
                   Row: {
-                    "at": string,"check": string,"id": string,"kind": string,"material_id": string | null,"owner_id": string,"question_id": string | null,"quote": string,"run_id": string | null
+                    "at": string,"check": string,"id": string,"kind": string,"material_id": string | null,"owner_id": string,"question_id": string | null,"quote": string,"run_id": string | null,"severity": string
                   }
                   Insert: {
-                    "at"?: string,"check": string,"id"?: string,"kind": string,"material_id"?: string | null,"owner_id": string,"question_id"?: string | null,"quote": string,"run_id"?: string | null
+                    "at"?: string,"check": string,"id"?: string,"kind": string,"material_id"?: string | null,"owner_id": string,"question_id"?: string | null,"quote": string,"run_id"?: string | null,"severity"?: string
                   }
                   Update: {
-                    "at"?: string,"check"?: string,"id"?: string,"kind"?: string,"material_id"?: string | null,"owner_id"?: string,"question_id"?: string | null,"quote"?: string,"run_id"?: string | null
+                    "at"?: string,"check"?: string,"id"?: string,"kind"?: string,"material_id"?: string | null,"owner_id"?: string,"question_id"?: string | null,"quote"?: string,"run_id"?: string | null,"severity"?: string
                   }
                   Relationships: [
                     
