@@ -18,7 +18,7 @@ import Link from "next/link";
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { slug } = use(params);
   const router = useRouter();
-  const { hydrated, objectives, materials } = useOrca();
+  const { hydrated, objectives } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -43,7 +43,6 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
   const agenda = agendas[course.id];
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
-  const toReflect = materials.filter((x) => x.courseId === course.id && x.reflect && !x.reflection);
 
   return (
     <AppShell bg="alice">
@@ -80,14 +79,6 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
                 {toReview} to review
               </Link>
             )}
-            <Link href={`/course/${course.slug}/objectives`} className="text-[13px] font-bold text-wisteria-deep hover:underline">
-              Objectives
-            </Link>
-            {toReflect.map((x) => (
-              <Link key={x.id} href={`/course/${course.slug}/reflect?material=${x.id}`} className="text-[13px] font-bold text-wisteria-deep hover:underline">
-                Reflect on {x.filename.replace(/\.[a-z0-9]+$/i, "")}
-              </Link>
-            ))}
           </motion.nav>
         </div>
       </motion.header>

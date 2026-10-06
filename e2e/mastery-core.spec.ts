@@ -29,13 +29,18 @@ test.describe("a fresh browser", () => {
     await expect(page).toHaveURL(/\/new-course$/);
   });
 
+  test("a signed-in student at / goes straight to their courses", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/home$/);
+  });
+
   test("has no in-app chat", async ({ page }) => {
     const response = await page.goto("/chat");
     expect(response?.status()).toBe(404);
   });
 
   test("onboarding shows all four island looks", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?preview");
     for (const level of ["thriving", "growing", "sprouting", "uncharted"]) {
       await expect(page.locator(`[data-level="${level}"]`).first()).toBeVisible();
     }

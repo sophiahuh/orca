@@ -115,7 +115,7 @@ test("a wrong password gets the same generic error as an unknown email", async (
   await expect(page).toHaveURL(/\/sign-in/);
 
   await signInVia(page, email, PASSWORD);
-  await expect(page).not.toHaveURL(/\/sign-in/);
+  await expect(page).toHaveURL(/\/home$/);
 });
 
 test("forgot password: the emailed link lets you choose a new one", async ({ page }) => {

@@ -15,7 +15,7 @@ const ITEMS = [
 export function NavBar({ className }: { className?: string }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Primary" className={cn("flex items-center justify-between", className)}>
+    <nav aria-label="Primary" className={cn("flex items-center justify-end gap-[12px]", className)}>
       {ITEMS.map(({ href, label, Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (

@@ -6,10 +6,9 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
-import { modelLabel } from "@/lib/llm";
 import { type UploadStage, uploadMaterial, uploadProblem } from "@/lib/uploads";
 import type { MaterialPages } from "@/lib/data";
-import { useServerModel } from "@/hooks/useServerModel";
+import type { ReflectOutput } from "@/lib/pipeline/schemas";
 import { IconCalendar, IconUpload } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -17,7 +16,6 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
 import { Select } from "@/components/ui/Select";
-import { Toggle } from "@/components/ui/Toggle";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -75,8 +73,7 @@ function DateField({ label, value, onChange, noneLabel }: { label: string; value
 export default function AddMaterialPage({ searchParams }: PageProps<"/add-material">) {
   const sp = use(searchParams);
   const router = useRouter();
-  const { courses, addMaterial, hydrated } = useOrca();
-  const serverModel = useServerModel();
+  const { courses, addMaterial, hydrated, objectives, recordReflection } = useOrca();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const [pickedId, setPickedId] = useState<string | null>(null);
   const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
@@ -89,7 +86,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [type, setType] = useState<MaterialType>("Lecture");
   const [assigned, setAssigned] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
-  const [reflect, setReflect] = useState(true);
+  const [note, setNote] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!course) {
@@ -110,7 +107,6 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     );
   }
   const filename = chosenName ?? "Choose a PDF…";
-  const connected = Boolean(serverModel);
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
 
@@ -124,10 +120,13 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
 
   const submit = async () => {
     if (!file) return;
-    const meta = { courseId: course.id, type, assigned, due, reflect };
+    const reflection = type === "Homework" ? note.trim() : "";
+    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0 };
     const leave = () => router.push(due ? "/calendar" : `/course/${course.slug}`);
     if (unreadable) {
-      addMaterial({ id: crypto.randomUUID(), filename: file.name, ...meta });
+      const id = crypto.randomUUID();
+      addMaterial({ id, filename: file.name, ...meta });
+      if (reflection) recordReflection(id, reflection, []);
       leave();
       return;
     }
@@ -137,23 +136,32 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         addMaterial(outcome.material, { saved: true });
         setDoc(outcome.pages);
       }
+      // The homework reflection: Orca matches it to the course's objectives and the ones it's sure
+      // of go back to learning. A failed match still saves the note, and says why.
+      const matchProblem = reflection ? await reflect(outcome.kind === "read" ? outcome.material.id : outcome.id, reflection) : null;
+      const go = (to: () => void) => {
+        if (!matchProblem) return to();
+        setPhase({ kind: "error", message: `Saved your reflection, but Orca couldn't match it to objectives: ${matchProblem}` });
+        window.setTimeout(to, 2500);
+      };
       const g = outcome.generation;
       if (g.state === "started" || g.state === "running" || g.state === "queued" || g.state === "waiting") {
         // The server builds it (a job); the review screen follows its progress. Queued: it starts
         // when the student's other job finishes (one at a time). Waiting: when the daily limit resets.
         const message =
           g.state === "queued" ? "Orca will build topics and questions from it after your other job finishes." : g.state === "waiting" ? "Orca will build topics and questions from it when today's limit resets." : "Orca is building topics and questions from it.";
-        setPhase({ kind: "working", message });
-        router.push(`/course/${course.slug}/review?run=${g.runId}`);
+        if (!matchProblem) setPhase({ kind: "working", message });
+        go(() => router.push(`/course/${course.slug}/review?run=${g.runId}`));
         return;
       }
       if (outcome.kind === "duplicate") {
-        setPhase({ kind: "duplicate", filename: outcome.filename });
+        if (matchProblem) go(() => undefined);
+        else setPhase({ kind: "duplicate", filename: outcome.filename });
         return;
       }
       if (g.state === "built") {
         // Read again after its questions were built (a repeated request): show what was built.
-        router.push(`/course/${course.slug}/review?run=${g.runId}`);
+        go(() => router.push(`/course/${course.slug}/review?run=${g.runId}`));
         return;
       }
       setPhase({
@@ -167,6 +175,24 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     } catch (error) {
       setPhase({ kind: "error", message: error instanceof Error ? error.message : "The upload failed." });
     }
+  };
+
+  /** Match a homework reflection (POST /api/reflect) and record it; the problem, or null. */
+  const reflect = async (materialId: string, text: string): Promise<string | null> => {
+    const catalogue = objectives[course.id] ?? {};
+    let problem: string | null = null;
+    let matches: ReflectOutput["matches"] = [];
+    try {
+      const res = await fetch("/api/reflect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ materialId, note: text }) });
+      const out = (await res.json().catch(() => null)) as (ReflectOutput & { error?: string }) | null;
+      if (!res.ok || !out?.matches) problem = out?.error ?? "the match didn't go through.";
+      else matches = out.matches;
+    } catch (error) {
+      problem = error instanceof Error ? error.message : "the match didn't go through.";
+    }
+    const sure = matches.filter((m) => m.sure && catalogue[m.objectiveId] && catalogue[m.objectiveId].review !== "archived");
+    recordReflection(materialId, text, sure.map((m) => ({ courseId: course.id, topicId: catalogue[m.objectiveId].topicId, objectiveId: m.objectiveId })));
+    return problem;
   };
 
   const previewLines = doc ? doc.slice(0, 6).flatMap((p) => p.text.split("\n").filter((l) => l.trim().length > 3).slice(0, 4)).slice(0, 18) : [];
@@ -289,33 +315,25 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <DateField label="Due date" value={due} onChange={setDue} noneLabel="No due date" />
           </motion.section>
 
-          <motion.div variants={fadeUp}>
-            <Card radius={18} lip={4} className="flex items-center gap-[16px] px-[18px] py-[14px]">
-              <Toggle checked={reflect} onChange={setReflect} label="Reflect and annotate when I finish" />
-              <div className="flex flex-col">
-                <span className="text-[15px] font-bold text-prussian">Reflect and annotate when I finish</span>
-                <span className="text-[13px] font-medium text-wisteria-deep">Homework only. Orca will ask what tripped you up.</span>
-              </div>
-            </Card>
-          </motion.div>
+          {type === "Homework" && (
+            <motion.label variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[8px]">
+              <span className="text-[17px] font-bold text-prussian">Reflection</span>
+              <span className="text-[13px] font-medium text-wisteria-deep">What tripped you up? Anything you say you don&apos;t get goes back to practice.</span>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                disabled={busy}
+                maxLength={2000}
+                rows={4}
+                placeholder="e.g. I kept getting the K-map groups wrong when they wrapped around the edges."
+                className="rounded-[16px] border-2 border-alice-deep bg-parchment px-[16px] py-[12px] text-[16px] text-prussian outline-none focus:border-wisteria"
+              />
+            </motion.label>
+          )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Card radius={18} lip={4} tone="alice" className="flex items-center justify-between gap-[12px] border-transparent px-[18px] py-[12px] lip-0">
-              <span className="text-[14px] font-semibold text-prussian" data-part="model-note">
-                {serverModel ? (
-                  <>Orca ({modelLabel(serverModel)}) will build topics and quizzes from this file.</>
-                ) : (
-                  <>No AI connected: the file is saved, but no topics or quizzes are generated.</>
-                )}
-              </span>
-            </Card>
-
             <Button full onClick={submit} disabled={busy || !chosenName}>
-              {phase.kind === "working"
-                ? `Building ${course.short}…`
-                : connected && !unreadable
-                  ? `Add to ${course.short} and generate quizzes`
-                  : `Add to ${course.short}`}
+              {phase.kind === "working" ? `Building ${course.short}…` : "Add to course"}
             </Button>
 
             <AnimatePresence mode="wait">

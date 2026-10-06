@@ -26,7 +26,8 @@ export function ResultBanner({ outcome, line, nonce }: { outcome: Outcome | null
   const visible = outcome !== null && expired !== nonce;
   const good = outcome === "correct";
   return (
-    <AnimatePresence>
+    // One banner at a time: a quick next answer waits for the last banner to slide away.
+    <AnimatePresence mode="wait">
       {visible && outcome && (
         <motion.div
           key={nonce}

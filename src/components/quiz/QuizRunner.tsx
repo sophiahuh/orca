@@ -333,22 +333,14 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
       <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[100px] pb-[24px] pt-[32px]">
         <AnimatePresence mode="wait">
           <motion.div key={q.id} variants={stagger(0.05, 0.07)} initial="hidden" animate="show" exit="exit" className="flex max-w-[800px] flex-col">
-            <motion.div variants={fadeUp} className="flex items-center gap-[10px]">
-              <span className="eyebrow">
-                {q.kind}{q.tier ? ` · ${q.tier}` : ""} · {q.topic}
-              </span>
-              {liveObjectiveOf(q, item.topicId, catalogue ?? {})?.review === "proposed" && (
+            {liveObjectiveOf(q, item.topicId, catalogue ?? {})?.review === "proposed" && (
+              <motion.div variants={fadeUp} className="mb-[10px] flex">
                 <Pill tone="strong" className="normal-case">
                   Unreviewed
                 </Pill>
-              )}
-            </motion.div>
-            {item.notes.length > 0 && (
-              <motion.p variants={fadeUp} data-part="question-notes" className="mt-[6px] text-[14px] font-medium text-wisteria-deep">
-                {item.notes.join(" · ")}
-              </motion.p>
+              </motion.div>
             )}
-            <motion.h1 variants={fadeUp} className="mt-[10px] text-[34px] font-bold leading-tight text-prussian">
+            <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-tight text-prussian">
               {q.prompt}
             </motion.h1>
 

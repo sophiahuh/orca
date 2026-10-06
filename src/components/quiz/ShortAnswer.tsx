@@ -98,7 +98,6 @@ export function ShortAnswer({ question, grading, result, noModel, selfMarkNow = 
           <Button size="sm" onClick={submit} disabled={!value.trim() || grading}>
             {grading ? "Checking…" : "Check"}
           </Button>
-          {!exact && noModel === null && <span className="text-[13px] font-medium text-wisteria-deep">Graded against the key, not by vibes.</span>}
         </div>
       )}
 

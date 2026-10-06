@@ -49,9 +49,8 @@ async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
   await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
-  await expect(page.locator("[data-part=model-note]")).toHaveText("Orca (Claude Opus 5.5) will build topics and quizzes from this file.");
   await page.getByRole("button", { name: type, exact: true }).click();
-  await page.getByRole("button", { name: /generate quizzes/ }).click();
+  await page.getByRole("button", { name: "Add to course" }).click();
 }
 
 test("a lecture upload is built by a job on the server; the review screen follows it and lands the questions on the trail", async ({ page, student }) => {

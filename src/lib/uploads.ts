@@ -42,7 +42,8 @@ export type UploadOutcome =
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!res.ok) throw new Error(out?.error ?? `the server answered ${res.status}`);
+  // The status code means nothing to a student; the route's own message, when it sent one, does.
+  if (!res.ok) throw new Error(out?.error ?? "The upload didn't go through. Try again in a moment.");
   if (out === null) throw new Error("the server sent nothing back");
   return out;
 }

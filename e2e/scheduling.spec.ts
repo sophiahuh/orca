@@ -57,7 +57,7 @@ test.beforeEach(async ({}, testInfo) => {
 });
 
 test.describe("scheduling", () => {
-  test("a quick review is due, starts instantly from the stock with reasons, and is done for the day once finished", async ({ page, student }) => {
+  test("a quick review is due, starts instantly from the stock and is done for the day once finished", async ({ page, student }) => {
     await noModel(page);
     await seedState(student, FIXTURE_STATE);
     await page.goto("/home");
@@ -68,7 +68,6 @@ test.describe("scheduling", () => {
     await card.click();
     await expect(page).toHaveURL(/\/session\/logic-e2e\?kind=quick/);
     await expect(page.getByText("1 / 6")).toBeVisible();
-    await expect(page.locator('[data-part="question-notes"]')).toHaveText("New: not practised yet");
     await answerAll(page, true);
 
     await expect(page.getByText("You answered 6 of 6 correctly.")).toBeVisible();
