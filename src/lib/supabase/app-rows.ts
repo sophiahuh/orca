@@ -25,6 +25,7 @@ import type {
   Topic,
   Weights,
 } from "../data.ts";
+import { DEFAULT_CONFIG, DEFAULT_WEIGHTS } from "../data.ts";
 import type { EvidenceEvent } from "../mastery/types.ts";
 import type { Database, Json } from "./database.types.ts";
 import { type EvidenceRow, type SnapshotRow, eventFromRow } from "./rows.ts";
@@ -51,7 +52,7 @@ export function defaultsToRow(config: ReviewConfig, weights: Weights) {
 
 /* ── Courses ── */
 
-export function courseToRow(c: Course, config: ReviewConfig, weights: Weights): Omit<Row<"courses">, "owner_id" | "created_at"> {
+export function courseToRow(c: Course, config: ReviewConfig | null, weights: Weights | null): Omit<Row<"courses">, "owner_id" | "created_at"> {
   return {
     id: c.id,
     slug: c.slug,
@@ -61,8 +62,8 @@ export function courseToRow(c: Course, config: ReviewConfig, weights: Weights): 
     pos_x: c.pos.x,
     pos_y: c.pos.y,
     trail: c.trail ?? null,
-    review_config: jsonValue(ReviewConfigSchema.parse(config)),
-    weights: jsonValue(WeightsSchema.parse(weights)),
+    review_config: config === null ? null : jsonValue(ReviewConfigSchema.parse(config)),
+    weights: weights === null ? null : jsonValue(WeightsSchema.parse(weights)),
   };
 }
 
@@ -404,6 +405,8 @@ export interface LoadedState {
   courses: Course[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
+  configOverrides: Record<string, ReviewConfig | null>;
+  weightOverrides: Record<string, Weights | null>;
   objectives: Record<string, Record<string, Objective>>;
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
   relations: Record<string, Relation[]>;
@@ -441,16 +444,22 @@ export function loadedState(d: MyData): LoadedState {
   const relations = byCourse<Relation[]>(() => []);
   for (const r of d.relations) relations[r.course_id].push(relationFromRow(r));
   if (!isAvatar(d.profile.avatar)) throw new Error(`Your profile's avatar "${d.profile.avatar}" isn't one Orca knows`);
+  const defaultConfig = d.profile.default_review_config === null ? null : ReviewConfigSchema.parse(d.profile.default_review_config);
+  const defaultWeights = d.profile.default_weights === null ? null : WeightsSchema.parse(d.profile.default_weights);
+  const configOverrides = Object.fromEntries(d.courses.map((c) => [c.id, c.review_config === null ? null : ReviewConfigSchema.parse(c.review_config)]));
+  const weightOverrides = Object.fromEntries(d.courses.map((c) => [c.id, c.weights === null ? null : WeightsSchema.parse(c.weights)]));
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
     avatar: d.profile.avatar,
     name: d.profile.name,
-    defaultConfig: d.profile.default_review_config === null ? null : ReviewConfigSchema.parse(d.profile.default_review_config),
-    defaultWeights: d.profile.default_weights === null ? null : WeightsSchema.parse(d.profile.default_weights),
+    defaultConfig,
+    defaultWeights,
     courses,
-    configs: Object.fromEntries(d.courses.map((c) => [c.id, ReviewConfigSchema.parse(c.review_config)])),
-    weights: Object.fromEntries(d.courses.map((c) => [c.id, WeightsSchema.parse(c.weights)])),
+    configs: Object.fromEntries(d.courses.map((c) => [c.id, configOverrides[c.id] ?? defaultConfig ?? DEFAULT_CONFIG])),
+    weights: Object.fromEntries(d.courses.map((c) => [c.id, weightOverrides[c.id] ?? defaultWeights ?? DEFAULT_WEIGHTS])),
+    configOverrides,
+    weightOverrides,
     objectives,
     questionBank,
     relations,

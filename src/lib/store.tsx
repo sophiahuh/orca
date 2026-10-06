@@ -75,7 +75,10 @@ interface OrcaState {
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
-  /** Settings' defaults, copied into each new course (profile; null there = Orca's built-in ones). */
+  /** Explicit course settings, if any. Null inherits the account default. */
+  configOverrides: Record<string, ReviewConfig | null>;
+  weightOverrides: Record<string, Weights | null>;
+  /** Account defaults, used by every course without an explicit override. */
   defaultConfig: ReviewConfig;
   defaultWeights: Weights;
   results: QuizResult[];
@@ -113,6 +116,8 @@ const initialState: OrcaState = {
   materials: [],
   configs: {},
   weights: {},
+  configOverrides: {},
+  weightOverrides: {},
   defaultConfig: DEFAULT_CONFIG,
   defaultWeights: DEFAULT_WEIGHTS,
   results: [],
@@ -135,7 +140,9 @@ interface OrcaActions {
   renameCourse: (courseId: string, name: string) => void;
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
-  /** Settings' defaults for courses created from now on. */
+  clearConfigOverride: (courseId: string) => void;
+  clearWeightOverride: (courseId: string) => void;
+  /** Account defaults, inherited by courses without an override. */
   setDefaults: (config: ReviewConfig, weights: Weights) => void;
   /**
    * Add a material to its course (and its due date to the calendar). `saved`: the server already
@@ -468,12 +475,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         courses: [...s.courses, course],
         configs: { ...s.configs, [id]: s.defaultConfig },
         weights: { ...s.weights, [id]: s.defaultWeights },
+        configOverrides: { ...s.configOverrides, [id]: null },
+        weightOverrides: { ...s.weightOverrides, [id]: null },
         objectives: { ...s.objectives, [id]: {} },
         relations: { ...s.relations, [id]: [] },
         snapshots: { ...s.snapshots, [id]: {} },
       }));
       save(
-        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, s.defaultConfig, s.defaultWeights))),
+        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, null, null))),
       );
       return course;
     },
@@ -499,13 +508,12 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setConfig = useCallback<OrcaActions["setConfig"]>(
     (courseId, config) => {
-      setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: config } }));
+      setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: config }, configOverrides: { ...s.configOverrides, [courseId]: config } }));
       const course = stateRef.current.courses.find((c) => c.id === courseId);
       if (!course) throw new Error(`No course ${courseId}`);
       save(
         async () => {
-          const row = courseToRow(course, config, stateRef.current.weights[courseId] ?? DEFAULT_WEIGHTS);
-          mustChange(await browserSupabase().from("courses").update({ review_config: row.review_config }).eq("id", courseId).select("id"));
+          mustChange(await browserSupabase().from("courses").update({ review_config: config as unknown as Json }).eq("id", courseId).select("id"));
         },
       );
     },
@@ -514,15 +522,32 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setWeights = useCallback<OrcaActions["setWeights"]>(
     (courseId, weights) => {
-      setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: weights } }));
+      setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: weights }, weightOverrides: { ...s.weightOverrides, [courseId]: weights } }));
       const course = stateRef.current.courses.find((c) => c.id === courseId);
       if (!course) throw new Error(`No course ${courseId}`);
       save(
         async () => {
-          const row = courseToRow(course, stateRef.current.configs[courseId] ?? DEFAULT_CONFIG, weights);
-          mustChange(await browserSupabase().from("courses").update({ weights: row.weights }).eq("id", courseId).select("id"));
+          mustChange(await browserSupabase().from("courses").update({ weights }).eq("id", courseId).select("id"));
         },
       );
+    },
+    [save],
+  );
+
+  const clearConfigOverride = useCallback<OrcaActions["clearConfigOverride"]>(
+    (courseId) => {
+      const fallback = stateRef.current.defaultConfig;
+      setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: fallback }, configOverrides: { ...s.configOverrides, [courseId]: null } }));
+      save(async () => mustChange(await browserSupabase().from("courses").update({ review_config: null }).eq("id", courseId).select("id")));
+    },
+    [save],
+  );
+
+  const clearWeightOverride = useCallback<OrcaActions["clearWeightOverride"]>(
+    (courseId) => {
+      const fallback = stateRef.current.defaultWeights;
+      setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: fallback }, weightOverrides: { ...s.weightOverrides, [courseId]: null } }));
+      save(async () => mustChange(await browserSupabase().from("courses").update({ weights: null }).eq("id", courseId).select("id")));
     },
     [save],
   );
@@ -672,7 +697,15 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setDefaults = useCallback<OrcaActions["setDefaults"]>(
     (config, weights) => {
-      setState((s) => ({ ...s, defaultConfig: config, defaultWeights: weights }));
+      setState((s) => {
+        const configs = { ...s.configs };
+        const courseWeights = { ...s.weights };
+        for (const c of s.courses) {
+          if (s.configOverrides[c.id] === null) configs[c.id] = config;
+          if (s.weightOverrides[c.id] === null) courseWeights[c.id] = weights;
+        }
+        return { ...s, defaultConfig: config, defaultWeights: weights, configs, weights: courseWeights };
+      });
       save(async () => {
         const { data } = await browserSupabase().auth.getSession();
         if (!data.session) throw new Error("you're signed out");
@@ -737,6 +770,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       renameCourse,
       setConfig,
       setWeights,
+      clearConfigOverride,
+      clearWeightOverride,
       setDefaults,
       addMaterial,
       recordQuiz,
@@ -752,7 +787,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

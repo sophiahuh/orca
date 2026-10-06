@@ -32,13 +32,13 @@ isOneToOne: false
                   ]
                 },"courses": {
                   Row: {
-                    "created_at": string,"id": string,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": NonNullable<Json>,"short": string,"slug": string,"trail": string | null,"variant": string,"weights": NonNullable<Json>
+                    "created_at": string,"id": string,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string,"weights": Json | null
                   }
                   Insert: {
-                    "created_at"?: string,"id": string,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config": NonNullable<Json>,"short": string,"slug": string,"trail"?: string | null,"variant": string,"weights": NonNullable<Json>
+                    "created_at"?: string,"id": string,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config"?: Json | null,"short": string,"slug": string,"trail"?: string | null,"variant": string,"weights"?: Json | null
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: NonNullable<Json>,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string,"weights"?: NonNullable<Json>
+                    "created_at"?: string,"id"?: string,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: Json | null,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string,"weights"?: Json | null
                   }
                   Relationships: [
                     

@@ -13,12 +13,11 @@ import { ConfigRow, REVIEW_LABELS } from "./ConfigRow";
 import { WeightsEditor } from "./WeightsEditor";
 
 /**
- * A course-specific counterpart to the main Configurations page. The course owns its review
- * cadence and material weights; Settings only holds the defaults new courses start with.
- * Edits write straight to the store (no local draft), so Done just closes.
+ * A course-specific counterpart to the main Configurations page. It starts by inheriting the
+ * account configuration; an edit creates a higher-priority course override.
  */
 export function ClassConfigModal({ course, onClose }: { course: Course | null; onClose: () => void }) {
-  const { configs, setConfig, weights, setWeights } = useOrca();
+  const { configs, setConfig, weights, setWeights, configOverrides, weightOverrides, clearConfigOverride, clearWeightOverride } = useOrca();
 
   useEffect(() => {
     if (!course) return;
@@ -60,7 +59,7 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
               {course.name} Configurations
             </h2>
             <p className="mt-[10px] text-[15px] font-medium text-wisteria-deep">
-              These settings apply only to this course and override your defaults for new courses.
+              This course inherits your account settings until you make an override here. Course overrides take priority.
             </p>
 
             <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="mt-[28px] flex flex-wrap items-start gap-[24px]">
@@ -68,13 +67,18 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                 <Card className="flex flex-col gap-[18px] px-[28px] pb-[28px] pt-[24px]">
                   <div className="flex flex-col gap-[4px]">
                     <h3 className="text-[22px] font-bold text-prussian">Review preferences</h3>
-                    <p className="text-[14px] font-medium text-wisteria-deep">How often Orca should nudge you, and for how long.</p>
+                    <p className="text-[14px] font-medium text-wisteria-deep">How often Orca should nudge you, and for how long. Editing creates a course override.</p>
                   </div>
                   <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[14px]">
                     {(["quick", "deep", "exam"] as const).map((k) => (
                       <ConfigRow key={k} label={REVIEW_LABELS[k]} row={config[k]} onChange={(row) => setConfig(course.id, { ...config, [k]: row })} />
                     ))}
                   </motion.div>
+                  {configOverrides[course.id] !== null && (
+                    <Button size="sm" variant="ghost" className="self-start" onClick={() => clearConfigOverride(course.id)}>
+                      Use account review settings
+                    </Button>
+                  )}
                 </Card>
 
                 <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[24px]">
@@ -83,15 +87,20 @@ export function ClassConfigModal({ course, onClose }: { course: Course | null; o
                     <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes when it builds reviews for this course.</p>
                   </div>
                   <WeightsEditor weights={weights[course.id] ?? DEFAULT_WEIGHTS} onChange={(w) => setWeights(course.id, w)} />
+                  {weightOverrides[course.id] !== null && (
+                    <Button size="sm" variant="ghost" className="self-start" onClick={() => clearWeightOverride(course.id)}>
+                      Use account weights
+                    </Button>
+                  )}
                 </Card>
               </motion.div>
 
               <motion.div variants={popIn} className="w-[280px] max-w-full">
                 <Card className="flex flex-col gap-[8px] px-[24px] py-[24px]" tone="alice" lip={4}>
-                  <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course settings</p>
+                  <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course overrides</p>
                   <h3 className="text-[22px] font-bold leading-tight text-prussian">{course.name}</h3>
                   <p className="pt-[4px] text-[14px] font-medium leading-relaxed text-wisteria-deep">
-                    Changes here affect only this course. Your main Configurations page controls starting defaults for future courses.
+                    Review settings: {configOverrides[course.id] === null ? "inheriting account default" : "course override active"}. Weights: {weightOverrides[course.id] === null ? "inheriting account default" : "course override active"}.
                   </p>
                 </Card>
               </motion.div>

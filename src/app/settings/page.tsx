@@ -12,8 +12,8 @@ import { YourMetricsCard } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
 
 /**
- * Settings: the account and the defaults new courses start with. A course's own cadence and
- * weights are set from that course (the settings button on its page, ClassConfigModal).
+ * Settings: account-wide fallbacks. A course can inherit these live defaults or set a higher-
+ * priority override from that course's own settings popup (ClassConfigModal).
  */
 export default function SettingsPage() {
   const { defaultConfig, defaultWeights, setDefaults } = useOrca();
@@ -30,8 +30,8 @@ export default function SettingsPage() {
           <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[18px] px-[28px] pb-[28px] pt-[24px]" data-part="default-config">
               <div className="flex flex-col gap-[4px]">
-                <h2 className="text-[22px] font-bold text-prussian">Defaults for new courses</h2>
-                <p className="text-[14px] font-medium text-wisteria-deep">Each new course starts with these. Change a course&apos;s own from its page.</p>
+                <h2 className="text-[22px] font-bold text-prussian">Account review settings</h2>
+                <p className="text-[14px] font-medium text-wisteria-deep">Used by every course that has not set its own override.</p>
               </div>
               <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[14px]">
                 {(["quick", "deep", "exam"] as const).map((k) => (
@@ -43,8 +43,8 @@ export default function SettingsPage() {
           <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[24px]">
               <div className="flex flex-col gap-[4px]">
-                <h2 className="text-[22px] font-bold text-prussian">Default weights</h2>
-                <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes when it builds your reviews.</p>
+                <h2 className="text-[22px] font-bold text-prussian">Account weights</h2>
+                <p className="text-[14px] font-medium text-wisteria-deep">What Orca prioritizes unless a course overrides its own weights.</p>
               </div>
               <WeightsEditor weights={defaultWeights} onChange={(w) => setDefaults(defaultConfig, w)} />
             </Card>
