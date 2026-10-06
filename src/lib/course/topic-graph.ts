@@ -30,7 +30,13 @@ export const GRAPH = {
   /** Room at the sides for the outermost names. */
   side: 60,
   /** Horizontal room per topic in a row. */
-  slot: 110,
+  slot: 130,
+  /** Names wrap at about this many characters a line, at most `labelLines` lines. */
+  labelChars: 20,
+  labelLines: 3,
+  /** Name: gap under the circle, line height. */
+  labelGap: 8,
+  lineHeight: 13,
   /** Space above the first row (the title sits there) and between rows. */
   top: 150,
   rowGap: 165,
@@ -54,6 +60,8 @@ export interface GraphNode {
   /** Topics it's an alternative to. */
   alternatives: number;
   strength: TopicStrength;
+  /** The name, wrapped (drawn under the circle; edges leave from under it). */
+  lines: string[];
 }
 
 export interface GraphEdge {
@@ -153,6 +161,7 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
       kinds: links.filter((l) => l.type === "has-a-kind" && l.from === topic.id).length,
       alternatives: links.filter((l) => l.type === "alternative-to" && (l.from === topic.id || l.to === topic.id)).length,
       strength: strengthOf(topic.id),
+      lines: wrapLabel(topic.name),
     };
   });
 
@@ -164,9 +173,33 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
 /** Room left at an arrow's end for its head. */
 const ARROW = 7;
 
+/** A name in lines of about `labelChars` characters, breaking at spaces; the last line ends "…" when it doesn't fit. */
+export function wrapLabel(name: string, chars: number = GRAPH.labelChars, max: number = GRAPH.labelLines): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of name.split(/\s+/).filter(Boolean)) {
+    if (!line) line = word;
+    else if (line.length + 1 + word.length <= chars) line += ` ${word}`;
+    else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  if (lines.length <= max) return lines;
+  const kept = lines.slice(0, max);
+  kept[max - 1] = `${kept[max - 1].replace(/[\s.,;:]+$/, "")}…`;
+  return kept;
+}
+
+/** Where a node's name ends below it: edges leave from here, not from the circle. */
+export function labelBottom(n: Pick<GraphNode, "y" | "r" | "lines">): number {
+  return n.y + n.r + GRAPH.labelGap + n.lines.length * GRAPH.lineHeight;
+}
+
 /**
- * A path from one node's edge to the other's: a vertical S-curve between rows (leaving the lower
- * edge of the upper node), a straight line within a row.
+ * A path from one node to another: a vertical S-curve between rows, leaving from under the upper
+ * node's name and arriving at the top of the lower node's circle; a straight line within a row.
  */
 function edgePath(a: GraphNode, b: GraphNode): { d: string; mid: { x: number; y: number } } {
   if (a.row === b.row) {
@@ -176,8 +209,8 @@ function edgePath(a: GraphNode, b: GraphNode): { d: string; mid: { x: number; y:
     return { d: `M${x1} ${a.y} L${x2} ${b.y}`, mid: { x: Math.round((x1 + x2) / 2), y: a.y } };
   }
   const dir = b.y > a.y ? 1 : -1;
-  const p0 = { x: a.x, y: a.y + dir * a.r };
-  const p3 = { x: b.x, y: b.y - dir * (b.r + ARROW) };
+  const p0 = { x: a.x, y: dir === 1 ? labelBottom(a) + 3 : a.y - a.r };
+  const p3 = { x: b.x, y: dir === 1 ? b.y - b.r - ARROW : labelBottom(b) + 3 + ARROW };
   const cy = (p0.y + p3.y) / 2;
   const p1 = { x: p0.x, y: cy };
   const p2 = { x: p3.x, y: cy };

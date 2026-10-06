@@ -3,14 +3,15 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import type { RelationType } from "@/lib/data";
-import { type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary } from "@/lib/course/topic-graph";
+import { GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary } from "@/lib/course/topic-graph";
 import { popIn, stagger } from "@/lib/motion";
 
 /**
  * Figma: E1 · Concept graph v4 (foundations on top) and E2 (hover on a topic). The topics as nodes,
  * sized by how many topics they're used in, with their strength glyph and name; the relations as
  * edges in four styles. Hovering (or focusing) a topic dims the rest to 30%, labels its edges and
- * shows a tooltip; clicking opens the topic's quiz. Zoom with − + and fit; drag to pan.
+ * shows a tooltip; clicking opens the topic's quiz. Zoom with − + and fit; drag to pan. Long names
+ * wrap (at most three lines) and edges leave from under a topic's name.
  */
 const EDGE: Record<RelationType, { stroke: string; dash?: string; width: number; marker?: string }> = {
   "used-in": { stroke: "var(--color-wisteria-deep)", width: 2.5, marker: "url(#arrow-used)" },
@@ -163,8 +164,7 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
         {hovered && <Tooltip node={hovered} />}
       </svg>
 
-      <div className="absolute bottom-[20px] left-[20px] right-[20px] flex items-end justify-between gap-[12px]">
-        <Legend />
+      <div className="absolute bottom-[20px] right-[20px]">
         <div className="flex gap-[8px]" role="group" aria-label="Zoom">
           <ZoomButton label="Zoom out" onClick={() => zoom(1.25)}>
             −
@@ -209,8 +209,12 @@ function TopicNode({ node: n, active, dim, onHover, onOpen }: { node: GraphNode;
         {active && <circle r={n.r + 4} fill="none" stroke="var(--color-wisteria-deep)" strokeWidth={2} data-part="topic-ring" />}
         <circle r={n.r} fill={style.fill} stroke={style.stroke} strokeWidth={2.5} strokeDasharray={style.dash} />
         <Glyph strength={n.strength} r={n.r} />
-        <text y={n.r + (n.usedIn > 0 ? 22 : 17)} textAnchor="middle" fontSize={n.usedIn > 0 ? 13 : 12} fontWeight={n.usedIn > 0 ? 700 : 600} fill="var(--color-prussian)">
-          {n.topic.name}
+        <text textAnchor="middle" fontSize={11} fontWeight={n.usedIn > 0 ? 700 : 600} fill="var(--color-prussian)">
+          {n.lines.map((line, i) => (
+            <tspan key={i} x={0} y={n.r + GRAPH.labelGap + GRAPH.lineHeight * (i + 1) - 3}>
+              {line}
+            </tspan>
+          ))}
         </text>
       </g>
     </motion.g>
@@ -241,51 +245,3 @@ function ZoomButton({ label, onClick, children }: { label: string; onClick: () =
     </button>
   );
 }
-
-const STRENGTH_ORDER: TopicStrength[] = ["strong", "developing", "fragile", "unverified"];
-
-function Legend() {
-  const line = (type: RelationType) => {
-    const s = EDGE[type];
-    return (
-      <svg width="30" height="10" aria-hidden>
-        <path d="M1 5 H22" stroke={s.stroke} strokeWidth={s.width} strokeDasharray={s.dash} strokeLinecap="round" />
-        {type === "used-in" && <path d="M22 1 L29 5 L22 9 z" fill={s.stroke} />}
-        {type === "has-a-kind" && <path d="M22 1.5 L28.5 5 L22 8.5 z" fill="var(--color-parchment)" stroke={s.stroke} strokeWidth={1.3} />}
-      </svg>
-    );
-  };
-  return (
-    <div className="flex flex-col gap-[6px] rounded-[16px] border-2 border-alice-deep bg-parchment px-[14px] py-[10px] text-[12px] font-semibold text-prussian lip-3 lip-alice" data-part="graph-legend">
-      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px]">
-        {(["used-in", "has-a-kind", "alternative-to", "related"] as const).map((t) => (
-          <span key={t} className="inline-flex items-center gap-[6px]">
-            {line(t)}
-            {RELATION_LABEL[t]}
-          </span>
-        ))}
-        <span className="inline-flex items-center gap-[4px]">
-          <svg width="26" height="14" aria-hidden>
-            <circle cx="6" cy="7" r="4" fill="none" stroke="var(--color-periwinkle-deep)" strokeWidth="1.5" />
-            <circle cx="18" cy="7" r="6" fill="none" stroke="var(--color-periwinkle-deep)" strokeWidth="1.5" />
-          </svg>
-          bigger = more build on it
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px]">
-        {STRENGTH_ORDER.map((s) => (
-          <span key={s} className="inline-flex items-center gap-[5px]">
-            <svg width="16" height="16" viewBox="-8 -8 16 16" aria-hidden>
-              <circle r={6.5} fill={NODE[s].fill} stroke={NODE[s].stroke} strokeWidth={1.5} strokeDasharray={s === "unverified" ? "2 2" : undefined} />
-              <g transform="scale(0.55)">
-                <Glyph strength={s} r={11} />
-              </g>
-            </svg>
-            {STRENGTH_LABEL[s]}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Relation, Topic } from "../../src/lib/data.ts";
 import type { ObjectiveState } from "../../src/lib/mastery/types.ts";
-import { GRAPH, topicGraph, topicStrength, topicSummary } from "../../src/lib/course/topic-graph.ts";
+import { GRAPH, labelBottom, topicGraph, topicStrength, topicSummary, wrapLabel } from "../../src/lib/course/topic-graph.ts";
 
 const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
 const rel = (from: string, to: string, type: Relation["type"], extra: Partial<Relation> = {}): Relation => ({ id: `${from}-${type}-${to}`, from, to, type, anchor: null, review: "proposed", materialId: "m", ...extra });
@@ -67,4 +67,19 @@ test("strength: nothing answered is unverified; fading or mixed up is fragile; e
   assert.equal(topicStrength(["m1", "u"], states), "developing");
   assert.equal(topicStrength(["m1", "l"], states), "developing");
   assert.equal(topicStrength(["m1", "f"], states), "fragile");
+});
+
+test("long names wrap at spaces into at most three lines, and edges leave from under the name", () => {
+  assert.deepEqual(wrapLabel("Big-O analysis of loops and recursive algorithms"), ["Big-O analysis of", "loops and recursive", "algorithms"]);
+  assert.deepEqual(wrapLabel("Iterator-based list traversal"), ["Iterator-based list", "traversal"]);
+  assert.deepEqual(wrapLabel("Heap"), ["Heap"]);
+  const long = wrapLabel("Reverse-order traversal of doubly linked lists with sentinel nodes and iterators");
+  assert.equal(long.length, 3);
+  assert.ok(long[2].endsWith("…"));
+
+  const live = [topic("a", { name: "Big-O analysis of loops and recursive algorithms" }), topic("b")];
+  const g = topicGraph({ topics: live, live, relations: [rel("a", "b", "used-in")], strengthOf: () => "unverified" });
+  const a = g.nodes[0];
+  const start = Number(/^M\S+ (\S+)/.exec(g.edges[0].d)![1]);
+  assert.ok(start >= labelBottom(a), "the edge starts below the wrapped name");
 });
