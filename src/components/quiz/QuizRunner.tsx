@@ -313,7 +313,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   };
   const outcomeShown: Outcome = q.kind === "Short answer" ? (grade?.outcome ?? "incorrect") : selected === q.answer ? "correct" : "incorrect";
   const suggestedCard = todos.find((t) => t.courseId === course.id && t.when === "today");
-  const suggested = suggestedCard ? { course: course.short, title: suggestedCard.title, detail: suggestedCard.detail, href: todoHref(suggestedCard, course), kind: suggestedCard.kind } : null;
+  const suggested = suggestedCard ? { course: course.name, title: suggestedCard.title, detail: suggestedCard.detail, href: todoHref(suggestedCard, course), kind: suggestedCard.kind } : null;
 
   return (
     <Screen bg="parchment" className="h-screen-below-bar max-h-screen-below-bar">

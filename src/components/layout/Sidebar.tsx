@@ -39,7 +39,7 @@ function Section({ title, items, hydrated, courses }: { title: string; hydrated:
         : items.map((d) => {
             const course = courses.get(d.courseId);
             if (!course) throw new Error(`To-do for unknown course ${d.courseId}`);
-            return <DueCard key={d.id} kind={d.kind} course={course.short} title={d.title} detail={d.detail} href={todoHref(d, course)} />;
+            return <DueCard key={d.id} kind={d.kind} course={course.name} title={d.title} detail={d.detail} href={todoHref(d, course)} />;
           })}
     </motion.section>
   );
