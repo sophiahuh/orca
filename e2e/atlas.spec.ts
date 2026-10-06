@@ -45,7 +45,16 @@ test("a topic's dive: the popup picks the length and the session writes harder q
   await expect(page).toHaveURL(new RegExp(`/session/${SLUG}\\?kind=deep&topic=${F.booleanAlgebra}&minutes=10`));
   // 10 minutes is 3 questions, all for Boolean Algebra's one objective; it starts without asking again.
   await expect(page.getByText("1 / 3")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toHaveCount(0);
   await expect(page.locator("h1").first()).toContainText("Simplify an expression: deep case");
+  expect(await fakeCalls()).toEqual(["deep"]);
+
+  // Leaving without answering keeps those questions: diving into the topic again asks them, with no new model call.
+  await page.goto(`/course/${SLUG}`);
+  await page.locator(`[data-visual] [data-part=node]`).first().click();
+  await page.locator('[data-part=dive-modal] [data-part=dive-minutes][data-minutes="10"]').click();
+  await page.locator("[data-part=dive-modal] [data-part=dive-start]").click();
+  await expect(page.getByText("1 / 3")).toBeVisible({ timeout: 30_000 });
   expect(await fakeCalls()).toEqual(["deep"]);
 });
 

@@ -20,6 +20,7 @@ import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
 import { QuizRunner, type RunnerItem } from "@/components/quiz/QuizRunner";
 import { DeepReviewSetup } from "@/components/quiz/DeepReviewSetup";
+import { PreparingDive } from "@/components/quiz/PreparingDive";
 import { isFinished, useRun } from "@/hooks/useRun";
 
 const KINDS = ["quick", "deep", "requiz"] as const;
@@ -185,6 +186,11 @@ function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course
   }
   const writing = phase.kind === "starting" || (!!followedRunId && (!run || !isFinished(run) || (run.status === "done" && !items)));
   const error = phase.kind === "error" ? phase.message : run?.status === "failed" ? run.error ?? "Orca couldn't prepare your dive in." : null;
+  // Once it's on its way (a topic dive from the start, a course dive after Start), only a loading
+  // screen until the questions are ready, then the quiz. A topic dive's failure is shown there too.
+  if (writing || (autostart && error)) {
+    return <PreparingDive title={topicName ?? course.name} backHref={backHref} error={writing ? null : error} onRetry={start} />;
+  }
   return <DeepReviewSetup courseName={topicName ? `${course.name} · ${topicName}` : course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={writing} error={error} />;
 }
 

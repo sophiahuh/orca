@@ -112,3 +112,9 @@ export const revealDown = (full: number): Variants => ({
   hidden: { height: 0 },
   show: { height: full, transition: { duration: 1.4, ease: easeOrca } },
 });
+
+/** A loading spinner's turn (pass as `animate`). */
+export const spin = {
+  rotate: 360,
+  transition: { duration: 0.9, ease: "linear" as const, repeat: Infinity },
+};
