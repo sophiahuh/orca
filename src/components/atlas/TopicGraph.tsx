@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import type { RelationType } from "@/lib/data";
-import { edgePath, GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary, wrapLabel } from "@/lib/course/topic-graph";
+import { edgePath, GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary } from "@/lib/course/topic-graph";
 import { popIn, stagger } from "@/lib/motion";
 
 /**
@@ -96,7 +96,6 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
     return ids;
   }, [hover, graph.edges]);
   const lit = (e: { from: string; to: string }) => hover !== null && (e.from === hover || e.to === hover);
-  const hovered = hover ? graph.nodes.find((n) => n.topic.id === hover) ?? null : null;
   // Label positions stay exactly on their arrows. Each starts in the normal position; only labels
   // whose padded bounds collide slide to another point on their own path.
   const edgeLabels = useMemo(() => {
@@ -248,7 +247,6 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
           );
         })}
 
-        {hovered && <Tooltip node={nodesById.get(hovered.topic.id) ?? hovered} />}
       </svg>
 
       <div className="absolute bottom-[20px] right-[20px]">
@@ -306,36 +304,6 @@ function TopicNode({ node: n, active, dim, onHover, onOpen, onDragStart }: { nod
         </text>
       </g>
     </motion.g>
-  );
-}
-
-/** At most this wide; its lines wrap to fit (characters per line at each size). */
-const TOOLTIP = { width: 210, titleChars: 30, detailChars: 38, pad: 12, titleLine: 15, detailLine: 13 } as const;
-
-function Tooltip({ node: n }: { node: GraphNode }) {
-  const title = wrapLabel(`${n.topic.name} · ${STRENGTH_LABEL[n.strength]}`, TOOLTIP.titleChars, 4);
-  const detail = wrapLabel(topicSummary(n), TOOLTIP.detailChars, 3);
-  const longest = Math.max(...title.map((l) => l.length * 6.8), ...detail.map((l) => l.length * 5.5));
-  const w = Math.min(TOOLTIP.width, longest + 2 * TOOLTIP.pad);
-  const h = TOOLTIP.pad * 2 + title.length * TOOLTIP.titleLine + detail.length * TOOLTIP.detailLine;
-  return (
-    <g transform={`translate(${n.x + n.r + 10} ${n.y - 8})`} pointerEvents="none" data-part="topic-tooltip">
-      <rect width={w} height={h} rx={8} fill="var(--color-prussian)" />
-      <text fontSize={12} fontWeight={700} fill="var(--color-parchment)">
-        {title.map((line, i) => (
-          <tspan key={i} x={TOOLTIP.pad} y={TOOLTIP.pad + TOOLTIP.titleLine * (i + 1) - 3}>
-            {line}
-          </tspan>
-        ))}
-      </text>
-      <text fontSize={10.5} fill="var(--color-alice)">
-        {detail.map((line, i) => (
-          <tspan key={i} x={TOOLTIP.pad} y={TOOLTIP.pad + title.length * TOOLTIP.titleLine + TOOLTIP.detailLine * (i + 1)}>
-            {line}
-          </tspan>
-        ))}
-      </text>
-    </g>
   );
 }
 
