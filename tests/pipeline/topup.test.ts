@@ -192,3 +192,10 @@ test("unanswered dive questions are picked one per objective in priority order, 
   // b first (more urgent): b2 (b1 answered; "plain" isn't a dive question), then a1, then round two: a2.
   assert.deepEqual(picked.map((p) => p.question.id), ["b2", "a1", "a2"]);
 });
+
+test("a dive question may be a long multi-step problem: a 1,500-character prompt and a 2,500-character solution parse", async () => {
+  const { DeepOutput } = await import("../../src/lib/pipeline/schemas.ts");
+  const question = { objectiveId: "a", kind: "Short answer", tier: "application", prompt: "x".repeat(1500), options: [], answer: -1, exact: ["1"], rubric: null, explanation: "y".repeat(2500), anchor: null, figureSlide: null };
+  assert.equal(DeepOutput.safeParse({ questions: [question] }).success, true);
+  assert.equal(DeepOutput.safeParse({ questions: [{ ...question, prompt: "x".repeat(4001) }] }).success, false);
+});

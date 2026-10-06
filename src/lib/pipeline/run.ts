@@ -11,7 +11,7 @@ import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
 import { linkKey, linkTopics } from "./link.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
-import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "./schemas.ts";
+import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
 
 export type CallStep = <S extends StepName>(step: S, input: StepInput<S>) => Promise<StepOutput<S>>;
 
@@ -159,7 +159,7 @@ function anchorExists(locator: string, facts: MaterialFacts): boolean {
   return named.length === 0 || named.every((n) => facts.pages.has(n));
 }
 
-const TEXT_RULE = (facts: MaterialFacts) => ({ maxChars: 1200, allowedUrls: facts.allowedUrls });
+const TEXT_RULE = (facts: MaterialFacts, maxChars = 1200) => ({ maxChars, allowedUrls: facts.allowedUrls });
 const SHORT_RULE = (facts: MaterialFacts) => ({ maxChars: 240, allowedUrls: facts.allowedUrls });
 
 /** The pattern screen over every page of the material, each hit tagged with its slide and its severity. */
@@ -519,7 +519,7 @@ export async function writeQuestions(
               ...Object.fromEntries((g.rubric?.knownMisconceptions ?? []).flatMap((m, i) => [[`misconception ${i + 1}`, m.description], ...m.indicativePhrasing.map((ph, j) => [`misconception ${i + 1} phrasing ${j + 1}`, ph])])),
               ...(g.anchor ? { "anchor excerpt": g.anchor.excerpt } : {}),
             },
-            TEXT_RULE(facts),
+            TEXT_RULE(facts, input.deep ? DEEP_TEXT : undefined),
           );
           if (!texts.ok) {
             dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });

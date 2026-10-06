@@ -102,13 +102,17 @@ export type GenerateOutput = z.infer<typeof GenerateOutput>;
 
 /* ── Deep: harder questions written when a deep review starts ───────── */
 
+/** Dive questions are multi-step problems with worked solutions: longer than quiz questions. */
+export const DEEP_TEXT = 4000;
+
 /** A deep-review question: a short answer that takes a few minutes (no recall tier, no choices). */
 export const DeepQuestion = GeneratedQuestion.extend({
+  explanation: z.string().min(1).max(DEEP_TEXT),
   kind: z.literal("Short answer"),
   tier: z.enum(["mechanism", "application", "connection", "transfer"]),
   options: z.array(z.string()).max(0).describe("Always empty"),
   answer: z.literal(-1),
-  prompt: z.string().min(1).max(TEXT).describe("Readable plain text: short paragraphs, line-separated givens, and numbered line-separated steps when appropriate; use \\n for line breaks, never Markdown or HTML"),
+  prompt: z.string().min(1).max(DEEP_TEXT).describe("Readable plain text: short paragraphs, line-separated givens, and numbered line-separated steps when appropriate; use \\n for line breaks, never Markdown or HTML"),
 });
 export const DeepOutput = z.object({ questions: z.array(DeepQuestion).max(40) });
 export type DeepOutput = z.infer<typeof DeepOutput>;
