@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { type UploadStage, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import { type UploadStage, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
 import type { MaterialPages } from "@/lib/data";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
 import { IconCalendar, IconUpload } from "@/components/icons";
@@ -83,6 +83,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   /** The file's pages as the server read them. */
   const [doc, setDoc] = useState<MaterialPages | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const [chosenName, setChosenName] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [type, setType] = useState<MaterialType>("Lecture");
@@ -111,7 +112,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   if (resumeId && phase.kind === "idle" && !file) {
     return <ResumeUpload materialId={resumeId} course={course} onAnother={() => router.replace(`/add-material?course=${course.slug}`)} />;
   }
-  const filename = chosenName ?? "Choose a PDF…";
+  const filename = websiteUrl || chosenName || "Choose a PDF…";
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
 
@@ -124,10 +125,21 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   };
 
   const submit = async () => {
-    if (!file) return;
+    if (!file && !websiteUrl.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
     const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0 };
     const leave = () => router.push(due ? "/calendar" : `/course/${course.slug}`);
+    if (websiteUrl.trim()) {
+      try {
+        setPhase({ kind: "sending", stage: "reading" });
+        const outcome = await importWebsite(websiteUrl.trim(), meta);
+        addMaterial(outcome.material, { saved: true });
+        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.push(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
+        else leave();
+      } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The website import failed." }); }
+      return;
+    }
+    if (!file) return;
     if (unreadable) {
       const id = crypto.randomUUID();
       addMaterial({ id, filename: file.name, ...meta });
@@ -263,6 +275,10 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                 <IconUpload size={16} /> {chosenName ? "Replace" : "Upload"}
               </span>
             </div>
+            <label className="flex flex-col gap-[6px] text-[13px] font-semibold text-wisteria-deep" onClick={(e) => e.stopPropagation()}>
+              Or import a public course website
+              <input value={websiteUrl} onChange={(e) => { setWebsiteUrl(e.target.value); setFile(null); setChosenName(null); setPhase({ kind: "idle" }); }} placeholder="https://example.edu/course" className="h-[40px] rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] text-[14px] font-medium text-prussian outline-none focus:border-wisteria" />
+            </label>
 
             {phase.kind === "sending" && (
               <div className="flex flex-col gap-[8px]" role="status">
@@ -294,7 +310,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
                 ))}
                 <span className="my-[6px] flex h-[120px] items-center justify-center rounded-[12px] bg-alice text-[14px] font-semibold text-wisteria-deep">
-                  Drop a PDF here or click to choose
+                  Drop a PDF, choose one, or paste a course URL
                 </span>
                 {SKELETON.slice(6).map((w, i) => (
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
@@ -344,7 +360,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button full onClick={submit} disabled={busy || !chosenName}>
+            <Button full onClick={submit} disabled={busy || (!chosenName && !websiteUrl.trim())}>
               {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
             </Button>
 

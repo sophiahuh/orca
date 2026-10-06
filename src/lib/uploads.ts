@@ -39,6 +39,11 @@ export type UploadOutcome =
   | { kind: "read"; material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation }
   | { kind: "duplicate"; id: string; filename: string; generation: Generation };
 
+/** Read one public, server-rendered course website as material. */
+export async function importWebsite(url: string, meta: UploadMeta): Promise<Extract<UploadOutcome, { kind: "read" }>> {
+  return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/web", { ...meta, url });
+}
+
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
