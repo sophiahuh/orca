@@ -29,11 +29,19 @@ export function Tag({ kind, size = "sm", className, children, ...rest }: TagProp
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center truncate rounded-pill font-bold leading-none",
+        "inline-flex max-w-full items-center overflow-x-auto whitespace-nowrap rounded-pill font-bold leading-none [scrollbar-width:thin]",
         size === "sm" ? "px-[9px] py-[5px] text-[11px]" : "px-[14px] py-[8px] text-[13px]",
         looks[kind],
         className,
       )}
+      onDoubleClick={(event) => {
+        const selection = window.getSelection();
+        if (!selection) return;
+        const range = document.createRange();
+        range.selectNodeContents(event.currentTarget);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }}
       {...rest}
     >
       {children ?? TAG_LABELS[kind]}
