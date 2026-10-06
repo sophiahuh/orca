@@ -171,6 +171,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     anchor: json(q.anchor ?? null),
     figure: json(q.figure ?? null),
     material_id: q.materialId ?? null,
+    deep: q.deep ?? false,
   };
 }
 
@@ -191,6 +192,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     ...(r.figure !== null ? { figure: r.figure as unknown as NonNullable<QuizQuestion["figure"]> } : {}),
     ...(r.material_id !== null ? { materialId: r.material_id } : {}),
     ...(r.objective_id !== null ? { objectiveId: r.objective_id } : {}),
+    ...(r.deep ? { deep: true } : {}),
   };
 }
 

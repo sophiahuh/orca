@@ -22,7 +22,8 @@ async function answerAll(page: Page, right: boolean) {
     await expect(page.getByPlaceholder("Type your answer")).toBeEnabled();
     const prompt = (await page.locator("h1").first().textContent())!.trim();
     previous = prompt;
-    const answer = answers.get(prompt);
+    // The fake API's deep-review questions ("…: deep case 3?") have the case number as their answer.
+    const answer = answers.get(prompt) ?? /deep case (\d+)\?$/.exec(prompt)?.[1];
     if (answer === undefined) throw new Error(`No fixture answer for "${prompt}"`);
     await page.getByPlaceholder("Type your answer").fill(right ? answer : "0");
     await page.getByRole("button", { name: "Check" }).click();
@@ -149,7 +150,7 @@ test.describe("scheduling", () => {
     await expect(page.locator('[data-todo="requiz"]')).toHaveCount(0);
   });
 
-  test("deep review comes due a week after the first answer, asks how long, and stays due until done", async ({ page, student }) => {
+  test("deep review comes due a week after the first answer, writes harder questions when it starts, and stays due until done", async ({ page, student }) => {
     await noModel(page);
     const answered = (objectiveId: string, questionId: string, topicId: string): AnswerEvent => ({
       kind: "answer",
@@ -166,31 +167,29 @@ test.describe("scheduling", () => {
       sessionId: "old",
     });
     const evidence = [answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement), answered(F.signExtend, F.tc4, F.twosComplement)];
-    const config = { ...FIXTURE_STATE.configs[F.course], deep: { duration: "5 min" as const, cadence: "Weekly" as const } };
-    await seedState(student, { ...FIXTURE_STATE, configs: { [F.course]: config }, evidence });
+    await seedState(student, { ...FIXTURE_STATE, evidence });
+    // The deck's stored pages: deep questions are written from where each objective is taught.
+    await seedPages(student, { [F.material]: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
     await page.goto("/home");
     const card = page.locator('[data-todo="deep"]');
     await expect(card).toContainText("Deep review");
     await card.click();
     await expect(page).toHaveURL(/kind=deep/);
 
-    // The student picks the length first and sees what it covers. Only answered objectives go in.
+    // The student picks the length and starts; nothing is listed ahead. 15 minutes is 4 questions (4 minutes each).
     await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toBeVisible();
-    const plan = page.locator('[data-part="deep-plan"]');
-    await expect(plan).toContainText("6 questions · about 5 min");
-    await expect(page.locator('[data-part="deep-coverage"]')).toHaveText("Covers 3 of 3 objectives, most urgent first.");
-
-    // One minute covers only the most urgent objective; the plan says how long covers them all.
-    await page.locator('[data-part="deep-custom"]').fill("1");
-    await expect(plan).toContainText("1 question · about 1 min");
-    await expect(page.locator('[data-part="deep-short"]')).toContainText("2 lower-priority objectives don't fit.");
-    await page.locator('[data-part="deep-cover-all"]').click();
-    await expect(page.locator('[data-part="deep-custom"]')).toHaveValue("3");
-    await expect(page.locator('[data-part="deep-coverage"]')).toHaveText("Covers 3 of 3 objectives, most urgent first.");
-    await expect(plan).toContainText("4 questions · about 3 min");
-
+    await expect(page.locator('[data-part="deep-plan"]')).toHaveCount(0);
+    await page.locator('[data-part="deep-minutes"][data-minutes="15"]').click();
     await page.locator('[data-part="deep-start"]').click();
-    await expect(page.getByText("1 / 4")).toBeVisible();
+    await expect(page.getByText("1 / 4")).toBeVisible({ timeout: 30_000 });
+    // One call per topic (the fixture has two), all through the deep step; nothing checks them after.
+    expect(await fakeCalls()).toEqual(["deep", "deep"]);
+    await expect(page.locator("h1").first()).toContainText("deep case");
+
+    const state = await stored(page, student);
+    const deep = Object.values(state.questionBank[F.course]).flat().filter((q) => q.deep);
+    expect(deep).toHaveLength(4);
+    expect(new Set(deep.map((q) => q.objectiveId))).toEqual(new Set([F.simplify, F.convert, F.signExtend]));
     await answerAll(page, true);
 
     // The end card offers another deep review, which asks for its length again.
@@ -198,6 +197,10 @@ test.describe("scheduling", () => {
     await expect(page.getByRole("heading", { name: "How long do you want to study?" })).toBeVisible();
     const modes = (await stored(page, student)).results.map((r) => r.mode);
     expect(modes).toEqual(["deep"]);
+
+    // Deep-review questions stay out of the topic quiz.
+    await page.goto(`/quiz/${COURSE}/${F.booleanAlgebra}`);
+    await expect(page.getByText("1 / 2")).toBeVisible();
 
     await page.goto("/home");
     await expect(page.locator('[data-todo="deep"]')).toHaveCount(0);
@@ -212,7 +215,7 @@ test.describe("scheduling", () => {
     await answerAll(page, true);
     await expect(page.locator('[data-part="top-up"]')).toHaveText("2 new questions written and checked for next time.", { timeout: 30_000 });
     // A job on the server wrote them, from the stored page, through the fake API.
-    expect(await fakeCalls()).toEqual(["generate", "solve"]);
+    expect(await fakeCalls()).toEqual(["generate"]);
     const s = await stored(page, student);
     expect(s.questionBank[F.course][F.booleanAlgebra].map((q) => q.prompt)).toEqual(["Simplify x + xy.", "Simplify a + a'c.", "Simplify an expression: case 1?", "Simplify an expression: case 2?"]);
     expect(s.runs).toEqual([expect.objectContaining({ kind: "top-up", status: "done", materialId: F.material, questionsAdded: 2 })]);

@@ -286,6 +286,8 @@ export interface QuizQuestion {
   materialId?: string;
   /** The objective this question tests. Missing on generated questions until extraction assigns one. */
   objectiveId?: string;
+  /** A deep-review question (written when a deep review starts): longer and harder; only deep reviews ask it. */
+  deep?: boolean;
 }
 
 /* ── Defaults ─────────────────────────────────────────────────────────── */

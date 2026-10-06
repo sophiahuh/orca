@@ -2,12 +2,12 @@
 
 import { use, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Course, DEFAULT_CONFIG, DEFAULT_WEIGHTS, type QuizQuestion, trailTopics } from "@/lib/data";
+import { type Course, DEFAULT_CONFIG, type QuizQuestion, trailTopics } from "@/lib/data";
+import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import { reasonsOf } from "@/lib/mastery/priority";
 import {
   type AssembledSession,
-  assembleDeepReview,
   assembleQuickReview,
   assembleRequiz,
   durationSeconds,
@@ -19,7 +19,7 @@ import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
 import { QuizRunner, type RunnerItem } from "@/components/quiz/QuizRunner";
-import { DEEP_MAX_MINUTES, DeepReviewSetup, type DeepReviewPlan } from "@/components/quiz/DeepReviewSetup";
+import { DeepReviewSetup } from "@/components/quiz/DeepReviewSetup";
 
 const KINDS = ["quick", "deep", "requiz"] as const;
 type Kind = (typeof KINDS)[number];
@@ -64,7 +64,8 @@ function useSessionSources(course: Course) {
     for (const t of trailTopics(course)) {
       for (const q of questionBank[course.id]?.[t.id] ?? []) {
         const o = liveObjectiveOf(q, t.id, catalogue);
-        if (!o) continue;
+        // Deep-review questions are written for, and asked in, deep reviews only.
+        if (!o || q.deep) continue;
         byId.set(q.id, q);
         byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
       }
@@ -112,38 +113,46 @@ function ScheduledSession({ course, kind }: { course: Course; kind: "quick" | "r
 
 function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }) {
   const router = useRouter();
-  const { configs, weights, materials } = useOrca();
-  const { agenda, ctx, toItems, candidates } = useSessionSources(course);
+  const { configs, questionBank, refresh } = useOrca();
+  const agenda = useAgenda()[course.id];
+  if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
   const backHref = `/course/${course.slug}`;
-  // The course's deep-review length in Settings is the starting suggestion; the student picks the length here.
+  // The course's deep-review length is the starting suggestion; the student picks the length here.
   const [minutes, setMinutes] = useState(() => Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
-  const [items, setItems] = useState<RunnerItem[] | null>(null);
-  const [pool] = useState(() => candidates(agenda.ranked));
+  const [phase, setPhase] = useState<{ kind: "setup" | "writing" } | { kind: "error"; message: string } | { kind: "ready"; picked: Array<{ id: string; topicId: string }> }>({ kind: "setup" });
+  // What it covers: objectives the student has answered (not retired), most urgent first.
+  const [objectiveIds] = useState(() => agenda.ranked.filter((r) => r.status !== "unseen" && r.status !== "retired").map((r) => r.objectiveId));
 
-  const assembled = useMemo(
-    () =>
-      assembleDeepReview(pool, {
-        ...ctx,
-        budgetSeconds: minutes * 60,
-        sliders: weights[course.id] ?? DEFAULT_WEIGHTS,
-        materialTypeOf: (id) => materials.find((m) => m.id === id)?.type ?? null,
-      }),
-    [pool, ctx, minutes, weights, course.id, materials],
-  );
-  const plan = useMemo((): DeepReviewPlan => {
-    const perTopic = new Map<string, number>();
-    for (const i of assembled.items) perTopic.set(i.topicId, (perTopic.get(i.topicId) ?? 0) + 1);
-    const topics = trailTopics(course).flatMap((t) => (perTopic.has(t.id) ? [{ name: t.name, questions: perTopic.get(t.id)! }] : []));
-    return { questions: assembled.items.length, plannedSeconds: assembled.plannedSeconds, coverage: assembled.coverage, topics };
-  }, [assembled, course]);
+  const items = useMemo((): RunnerItem[] | null => {
+    if (phase.kind !== "ready") return null;
+    return phase.picked.map((p) => {
+      const question = questionBank[course.id]?.[p.topicId]?.find((q) => q.id === p.id);
+      if (!question) throw new Error(`Deep review question ${p.id} isn't in the course`);
+      return { question, topicId: p.topicId, notes: [] };
+    });
+  }, [phase, questionBank, course.id]);
 
-  if (assembled.coverage.objectives === 0) {
+  const start = async () => {
+    setPhase({ kind: "writing" });
+    try {
+      // Written now, on the server, from the material each objective is taught in (POST /api/deep-review).
+      const res = await fetch("/api/deep-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId: course.id, minutes, objectiveIds }) });
+      const out = (await res.json().catch(() => null)) as { questions?: Array<{ id: string; topicId: string }>; error?: string } | null;
+      if (!res.ok || !out?.questions) throw new Error(out?.error ?? "Orca couldn't write the deep review. Try again in a moment.");
+      await refresh();
+      setPhase({ kind: "ready", picked: out.questions });
+    } catch (error) {
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Orca couldn't write the deep review." });
+    }
+  };
+
+  if (objectiveIds.length === 0) {
     return <NothingToDo course={course} message="Nothing to deep review yet: answer some questions first." onBack={() => router.push(backHref)} />;
   }
   if (items) {
     return <QuizRunner course={course} items={items} mode="deep" title={course.name} backHref={backHref} again={{ label: "Start another deep review", onStart: onAgain }} />;
   }
-  return <DeepReviewSetup courseName={course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} plan={plan} onStart={() => setItems(toItems(assembled))} />;
+  return <DeepReviewSetup courseName={course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={phase.kind === "writing"} error={phase.kind === "error" ? phase.message : null} />;
 }
 
 function NothingToDo({ course, message, onBack }: { course: Course; message: string; onBack: () => void }) {

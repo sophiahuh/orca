@@ -101,10 +101,6 @@ function honestModel(per = 2, failOn?: string): { call: CallStep; steps: string[
         ),
       };
     }
-    if (step === "solve") {
-      const s = input as StepInput<"solve">;
-      return { answers: s.questions.map((q) => ({ id: q.id, choice: null, text: /case (\d+)\?$/.exec(q.prompt)?.[1] ?? "?" })) };
-    }
     throw new Error(`unexpected step ${step}`);
   }) as CallStep;
   return { call, steps };
@@ -124,7 +120,7 @@ test("processMaterial builds the structure from the stored pages and saves it wi
   assert.deepEqual(rows.topics!.map((t) => [t.name, t.review]), [["Boolean Algebra", "proposed"]]);
   assert.equal(rows.objectives!.length, 1);
   assert.equal(rows.questions!.length, 2);
-  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "matching", "writing", "checking"]);
+  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "matching", "writing"]);
 });
 
 test("a failed job records why, and saves nothing", async () => {
@@ -171,7 +167,7 @@ test("topUp writes questions for the session's objectives from their stored page
   // "elsewhere" is another course's objective: ignored.
   const out = await topUp({ store: mem.store, call: model.call, newId }, { runId: "run1", objectiveIds: ["o", "elsewhere"] });
   assert.equal(out.status, "done");
-  assert.deepEqual(model.steps, ["generate", "solve"]);
+  assert.deepEqual(model.steps, ["generate"]);
   const rows = mem.saves[0];
   assert.deepEqual(rows.runs!.map((r) => [r.kind, r.material_id, r.questions_added, r.status]), [["top-up", "m1", 2, "done"]]);
   assert.deepEqual(rows.questions!.map((x) => [x.prompt, x.sort_order]), [["Simplify: case 1?", 2], ["Simplify: case 2?", 3]]);

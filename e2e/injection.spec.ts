@@ -69,7 +69,7 @@ test("an injected deck: the screen and the model's report are recorded, planted 
   expect(dontCares.signals[0].places.map((p) => p.locator)).toEqual(["slide 2"]);
   // Questions were still written for the real objectives.
   expect(run.questionsAdded).toBe(4);
-  expect(await fakeCalls()).toEqual(["extract", "generate", "solve"]);
+  expect(await fakeCalls()).toEqual(["extract", "generate"]);
 
   const { data: events } = await admin().from("security_events").select("kind, check, severity, quote, run_id, material_id").eq("owner_id", student.id).order("check");
   expect(events!.length).toBeGreaterThanOrEqual(3);

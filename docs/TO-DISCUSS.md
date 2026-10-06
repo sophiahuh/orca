@@ -91,6 +91,10 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - Whether to author another course's content, like ALD, for demos and evaluation.
 
 ### Question checks: batched or one at a time
+- **Decided (owner, 2026-10-06):** no model checks at all. Questions go into the stock as written,
+  with only the code validators. Risk to watch: a wrong answer key marks right answers wrong and
+  pulls that objective's mastery down; if students report it, bring back a check (or a "this
+  question is wrong" button that drops the question and the evidence it recorded).
 - **Phase 2:** the blind solve, ambiguity and rubric-agreement checks each run as one call per
   batch of up to 30 questions. The platform ran one call per question.
 - **Decide:** keep batching (fewer calls, faster uploads) unless the evaluation shows batched

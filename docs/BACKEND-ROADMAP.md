@@ -129,8 +129,12 @@ For each upload:
    keeps the losing name as an alias so it matches instantly next time.
 3. **Review:** the student confirms new topics; `uncertain` matches are highlighted. Nothing waits
    on review to be practised (confirmation rule below).
-4. **Questions** are generated per objective (about 6), validated (port the platform's ambiguity
-   check and answer agreement) and stocked.
+4. **Questions** are generated per objective (about 6) and stocked. They used to be checked by a
+   second model (blind solve, ambiguity, rubric agreement); the owner dropped those checks on
+   2026-10-06 for speed and cost. Code still refuses rule-breaking output (untrusted-text rules,
+   anchors to slides that don't exist, wrong objective, bad structure). Deep reviews write their own
+   harder questions when they start (`POST /api/deep-review`), marked `deep` and asked only there;
+   the material-type sliders no longer shape a deep review's mix.
 
 Rules:
 - **Every objective belongs to the course whose material was uploaded**, and records the upload

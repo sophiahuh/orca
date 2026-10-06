@@ -207,7 +207,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
 /** Roughly how far along a running upload is, by stage. */
 function stageShare(stage: string | undefined): number {
-  return ({ mapping: 0.15, matching: 0.3, writing: 0.5, checking: 0.75, figures: 0.9 } as Record<string, number>)[stage ?? ""] ?? 0.1;
+  return ({ mapping: 0.15, matching: 0.3, writing: 0.6, figures: 0.9 } as Record<string, number>)[stage ?? ""] ?? 0.1;
 }
 
 function Duplicate({ kind, name, other, reasoning, onSame, onSeparate }: { kind: "topic" | "objective"; name: string; other: string; reasoning: string; onSame: () => void; onSeparate: () => void }) {
