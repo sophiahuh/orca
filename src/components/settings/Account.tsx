@@ -20,9 +20,8 @@ export function AccountCard() {
   const { timezone, setTimezone, avatar, setAvatar, name, setName, hydrated } = useOrca();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
+  const [confirmedEmail, setConfirmedEmail] = useState("");
   const [username, setUsername] = useState("");
-  const [nextEmail, setNextEmail] = useState("");
-  const [nextPhone, setNextPhone] = useState("");
   const [phoneCode, setPhoneCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [changingEmail, setChangingEmail] = useState(false);
@@ -36,6 +35,7 @@ export function AccountCard() {
       if (!live) return;
       if (!auth.user) return setProblem("Couldn't read your account.");
       setEmail(auth.user.email ?? "");
+      setConfirmedEmail(auth.user.email ?? "");
       setPhone(auth.user.phone ?? "");
       setUsername(name ?? "");
     })();
@@ -55,8 +55,8 @@ export function AccountCard() {
   };
 
   const requestEmailChange = async () => {
-    const value = nextEmail.trim();
-    if (!value || value === email) return setProblem("Enter a different email address.");
+    const value = email?.trim() ?? "";
+    if (!value || value === confirmedEmail) return setProblem("Enter a different email address.");
     setChangingEmail(true);
     setProblem(null);
     setNotice(null);
@@ -67,7 +67,7 @@ export function AccountCard() {
   };
 
   const requestPhoneChange = async () => {
-    const value = nextPhone.trim();
+    const value = phone?.trim() ?? "";
     if (!value) return setProblem("Enter a phone number with its country code, for example +12125551212.");
     setChangingPhone(true);
     setProblem(null);
@@ -80,15 +80,13 @@ export function AccountCard() {
   };
 
   const confirmPhoneChange = async () => {
-    const value = nextPhone.trim();
+    const value = phone?.trim() ?? "";
     if (!value || !phoneCode.trim()) return setProblem("Enter the phone number and confirmation code.");
     setChangingPhone(true);
     setProblem(null);
     const { error } = await browserSupabase().auth.verifyOtp({ phone: value, token: phoneCode.trim(), type: "phone_change" });
     setChangingPhone(false);
     if (error) return setProblem(error.message);
-    setPhone(value);
-    setNextPhone("");
     setPhoneCode("");
     setNotice("Phone number confirmed.");
   };
@@ -110,23 +108,21 @@ export function AccountCard() {
           <div className="flex flex-col gap-[8px]">
             <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
               Email
-              <input data-part="account-email" value={email} readOnly aria-label="Current email" className="rounded-[10px] border-2 border-alice-deep bg-alice px-[10px] py-[8px] text-[14px] font-medium text-prussian" />
+              <div className="flex gap-[8px]">
+                <input data-part="account-email" value={email} onChange={(e) => { setEmail(e.target.value); setNotice(null); }} type="email" autoComplete="email" aria-label="Email" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium text-prussian outline-none focus:border-wisteria" />
+                <Button size="sm" onClick={() => void requestEmailChange()} disabled={changingEmail || !email?.trim() || email.trim() === confirmedEmail}>Verify</Button>
+              </div>
             </label>
-            <div className="flex gap-[8px]">
-              <input value={nextEmail} onChange={(e) => { setNextEmail(e.target.value); setNotice(null); }} type="email" autoComplete="email" placeholder="New email address" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
-              <Button size="sm" onClick={() => void requestEmailChange()} disabled={changingEmail || !nextEmail.trim()}>Verify</Button>
-            </div>
             <span className="text-[12px] leading-snug text-wisteria-deep">Changing email requires confirmation from your inbox before it takes effect.</span>
           </div>
           <div className="flex flex-col gap-[8px]">
             <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
               Phone number
-              <input value={phone ?? ""} readOnly aria-label="Current phone number" placeholder="No phone number added" className="rounded-[10px] border-2 border-alice-deep bg-alice px-[10px] py-[8px] text-[14px] font-medium text-prussian placeholder:text-wisteria-deep" />
+              <div className="flex gap-[8px]">
+                <input value={phone ?? ""} onChange={(e) => { setPhone(e.target.value); setPhoneCode(""); setNotice(null); }} type="tel" autoComplete="tel" aria-label="Phone number" placeholder="Add phone number" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium text-prussian outline-none placeholder:text-wisteria-deep focus:border-wisteria" />
+                <Button size="sm" onClick={() => void requestPhoneChange()} disabled={changingPhone || !phone?.trim()}>Send code</Button>
+              </div>
             </label>
-            <div className="flex gap-[8px]">
-              <input value={nextPhone} onChange={(e) => { setNextPhone(e.target.value); setPhoneCode(""); setNotice(null); }} type="tel" autoComplete="tel" placeholder="+1 212 555 1212" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
-              <Button size="sm" onClick={() => void requestPhoneChange()} disabled={changingPhone || !nextPhone.trim()}>Send code</Button>
-            </div>
             {notice?.startsWith("We sent") && (
               <div className="flex gap-[8px]">
                 <input value={phoneCode} onChange={(e) => setPhoneCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="Confirmation code" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
