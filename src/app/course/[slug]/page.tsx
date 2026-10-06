@@ -59,7 +59,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] text-center">
           <p className="text-[22px] font-bold text-prussian">This island is uncharted.</p>
           <p className="text-[16px] text-wisteria-deep">Add lecture slides or homework and Orca will map its topics.</p>
-          <Button size="sm" onClick={() => router.push("/add-material")}>
+          <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)}>
             Add material
           </Button>
         </div>
