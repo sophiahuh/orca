@@ -143,6 +143,13 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
     if (nodeDrag.current?.moved) {
       ignoreClick.current = true;
       requestAnimationFrame(() => (ignoreClick.current = false));
+    } else if (nodeDrag.current) {
+      // A press and release that didn't move is a click. The map holds the pointer while a topic
+      // might be dragged, so the click itself lands on the map, not the topic: open it here.
+      const id = nodeDrag.current.id;
+      ignoreClick.current = true;
+      requestAnimationFrame(() => (ignoreClick.current = false));
+      onOpen(id);
     }
     nodeDrag.current = null;
     panDrag.current = null;
