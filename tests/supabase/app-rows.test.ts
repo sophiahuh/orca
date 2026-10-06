@@ -64,6 +64,7 @@ test("loading groups rows by course and puts questions in stock order", () => {
     questions: [{ ...questionToRow({ ...question, id: "q2" }, "t1", 1), ...owned }, { ...questionToRow(question, "t1", 0), ...owned }],
     sessions: [],
     calendar: [],
+    exams: [],
     evidence: [],
     snapshots: [],
   };

@@ -92,6 +92,16 @@ export function weightPercents(w: Weights): Record<string, number> {
 
 export type EventKind = "hw" | "lab" | "rev" | "exam";
 
+/** One of a course's exams: its date and, optionally, the topics it covers (ids; ones no longer live are ignored). */
+export interface Exam {
+  id: string;
+  courseId: string;
+  title: string;
+  /** ISO date, YYYY-MM-DD */
+  date: string;
+  topicIds: string[];
+}
+
 export interface CalendarEvent {
   id: string;
   /** ISO date, YYYY-MM-DD */

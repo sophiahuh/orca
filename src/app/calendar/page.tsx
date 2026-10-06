@@ -25,14 +25,14 @@ function monthOf(iso: string) {
 }
 
 export default function CalendarPage() {
-  const { events, courses } = useOrca();
+  const { events, exams, courses } = useOrca();
   const agendas = useAgenda();
   const mastery = useMasteryByCourse();
   const dayKey = useDayKey();
   const today = useToday();
-  // Stored entries (homework, exams) plus the scheduled reviews derived from each course's agenda.
+  // Stored entries (homework due dates), each course's exams, and the scheduled reviews derived from its agenda.
   const shown = useMemo(() => {
-    if (!today) return events;
+    if (!today) return [];
     const reviews = reviewDates(
       courses.map((c) => {
         const agenda = agendas[c.id];
@@ -43,8 +43,9 @@ export default function CalendarPage() {
       today,
       dayKey,
     );
-    return [...events, ...reviews];
-  }, [events, courses, agendas, mastery, dayKey, today]);
+    const examEntries = exams.map((e) => ({ id: e.id, date: e.date, kind: "exam" as const, title: e.title, courseId: e.courseId }));
+    return [...events, ...examEntries, ...reviews];
+  }, [events, exams, courses, agendas, mastery, dayKey, today]);
   // One course's entries, or every course's.
   const [courseFilter, setCourseFilter] = useState<string>(ALL);
   const visible = courseFilter === ALL ? shown : shown.filter((e) => e.courseId === courseFilter);

@@ -86,6 +86,25 @@ isOneToOne: false
       referencedColumns: ["id","course_id"]
     }
                   ]
+                },"exams": {
+                  Row: {
+                    "course_id": string,"created_at": string,"date": string,"id": string,"owner_id": string,"title": string,"topic_ids": (string)[]
+                  }
+                  Insert: {
+                    "course_id": string,"created_at"?: string,"date": string,"id": string,"owner_id"?: string,"title": string,"topic_ids"?: (string)[]
+                  }
+                  Update: {
+                    "course_id"?: string,"created_at"?: string,"date"?: string,"id"?: string,"owner_id"?: string,"title"?: string,"topic_ids"?: (string)[]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "exams_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
                 },"material_pages": {
                   Row: {
                     "material_id": string,"n": number,"owner_id": string,"text": string

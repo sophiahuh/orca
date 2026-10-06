@@ -1,6 +1,6 @@
 import { expect, F, FIXTURE_STATE, seedState, stored, test } from "./fixture";
 
-/** Edit Exams on a course page: add, rename, move and delete a course's exams; the calendar follows. */
+/** Edit Exams on a course page: add, rename, move, scope to topics and delete a course's exams (the exams table); the calendar follows. */
 const SLUG = FIXTURE_STATE.courses[0].slug;
 const inDays = (n: number) => {
   const d = new Date();
@@ -17,6 +17,8 @@ test("a course's exams are added, listed by date, renamed, moved and deleted, an
 
   await modal.getByLabel("New exam name").fill("Final");
   await modal.getByLabel("New exam date").fill(inDays(20));
+  // The topics it covers are optional; this one covers Boolean Algebra.
+  await modal.locator("form").getByRole("button", { name: "Boolean Algebra" }).click();
   await modal.getByRole("button", { name: "Add New Exam" }).click();
   await modal.getByLabel("New exam name").fill("Midterm");
   await modal.getByLabel("New exam date").fill(inDays(5));
@@ -29,11 +31,14 @@ test("a course's exams are added, listed by date, renamed, moved and deleted, an
   await midterm.getByLabel("Exam name").fill("Midterm 1");
   await midterm.getByLabel("Exam name").press("Enter");
   await midterm.getByLabel("Exam date").fill(inDays(6));
+  await midterm.getByRole("button", { name: "Two's Complement" }).click();
+  let exams = (await stored(page, student)).exams;
+  expect(exams.find((e) => e.title === "Final")!.topicIds).toEqual([F.booleanAlgebra]);
   await modal.getByRole("button", { name: "Delete Final" }).click();
   await expect(modal.locator("[data-part=exam]")).toHaveCount(1);
 
-  const exams = (await stored(page, student)).events.filter((e) => e.kind === "exam");
-  expect(exams.map((e) => [e.title, e.date, e.courseId])).toEqual([["Midterm 1", inDays(6), F.course]]);
+  exams = (await stored(page, student)).exams;
+  expect(exams.map((e) => [e.title, e.date, e.courseId, e.topicIds])).toEqual([["Midterm 1", inDays(6), F.course, [F.twosComplement]]]);
 
   await page.keyboard.press("Escape");
   await page.goto("/calendar");

@@ -33,6 +33,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { usePathname } from "next/navigation";
 import {
   type CalendarEvent,
+  type Exam,
   type Course,
   type IslandVariant,
   type Material,
@@ -63,7 +64,7 @@ import { courseObjectiveWeights } from "./course/weights";
 import { laidOut } from "./course/layout";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
-import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
+import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
 import type { Json } from "./supabase/database.types";
@@ -72,6 +73,8 @@ import { useNow } from "@/hooks/useNow";
 interface OrcaState {
   courses: Course[];
   events: CalendarEvent[];
+  /** Each course's exams (their dates and the topics they cover). */
+  exams: Exam[];
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
@@ -113,6 +116,7 @@ const LEGACY_KEYS = ["orca:v3", "orca:v4", "orca:v5", "orca:v6", "orca:v7", "orc
 const initialState: OrcaState = {
   courses: [],
   events: [],
+  exams: [],
   materials: [],
   configs: {},
   weights: {},
@@ -141,9 +145,9 @@ interface OrcaActions {
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
   clearConfigOverride: (courseId: string) => void;
-  /** A course's exams (calendar entries of kind "exam"): add one, rename or move it, or remove it. */
-  addExam: (courseId: string, title: string, date: string) => void;
-  updateExam: (id: string, change: { title?: string; date?: string }) => void;
+  /** A course's exams (the exams table): add one, rename it, move it, change its topics, or remove it. */
+  addExam: (courseId: string, title: string, date: string, topicIds: string[]) => void;
+  updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[] }) => void;
   removeExam: (id: string) => void;
   clearWeightOverride: (courseId: string) => void;
   /** Account defaults, inherited by courses without an override. */
@@ -557,26 +561,27 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addExam = useCallback<OrcaActions["addExam"]>(
-    (courseId, title, date) => {
-      const event: CalendarEvent = { id: crypto.randomUUID(), date, kind: "exam", title, courseId };
-      setState((s) => ({ ...s, events: [...s.events, event] }));
-      save(async () => void must(await browserSupabase().from("calendar_events").insert(calendarToRow(event, null))));
+    (courseId, title, date, topicIds) => {
+      const exam: Exam = { id: crypto.randomUUID(), courseId, title, date, topicIds };
+      setState((s) => ({ ...s, exams: [...s.exams, exam] }));
+      save(async () => void must(await browserSupabase().from("exams").insert(examToRow(exam))));
     },
     [save],
   );
 
   const updateExam = useCallback<OrcaActions["updateExam"]>(
     (id, change) => {
-      setState((s) => ({ ...s, events: s.events.map((e) => (e.id === id ? { ...e, ...change } : e)) }));
-      save(async () => mustChange(await browserSupabase().from("calendar_events").update(change).eq("id", id).eq("kind", "exam").select("id")));
+      setState((s) => ({ ...s, exams: s.exams.map((e) => (e.id === id ? { ...e, ...change } : e)) }));
+      const row = { ...(change.title !== undefined ? { title: change.title } : {}), ...(change.date !== undefined ? { date: change.date } : {}), ...(change.topicIds !== undefined ? { topic_ids: change.topicIds } : {}) };
+      save(async () => mustChange(await browserSupabase().from("exams").update(row).eq("id", id).select("id")));
     },
     [save],
   );
 
   const removeExam = useCallback<OrcaActions["removeExam"]>(
     (id) => {
-      setState((s) => ({ ...s, events: s.events.filter((e) => e.id !== id) }));
-      save(async () => mustChange(await browserSupabase().from("calendar_events").delete().eq("id", id).eq("kind", "exam").select("id")));
+      setState((s) => ({ ...s, exams: s.exams.filter((e) => e.id !== id) }));
+      save(async () => mustChange(await browserSupabase().from("exams").delete().eq("id", id).select("id")));
     },
     [save],
   );
@@ -906,7 +911,7 @@ export function useStreak(): number {
 
 /** What's due, per course: ranked objectives, quick and deep review, review to-dos and re-quizzes. */
 export function useAgenda(): Record<string, CourseAgenda> {
-  const { courses, objectives, relations, weights, configs, results, events } = useOrca();
+  const { courses, objectives, relations, weights, configs, results, events, exams } = useOrca();
   const mastery = useMasteryByCourse();
   const dayKey = useDayKey();
   const nowMs = useNow();
@@ -924,13 +929,14 @@ export function useAgenda(): Record<string, CourseAgenda> {
             weights: withNeutralWeights(m.objectives.keys(), computed, isUnsortedObjectiveId),
             config: configs[c.id] ?? DEFAULT_CONFIG,
             results,
-            examDays: events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date),
+            // Exams, and any uploaded exam's due date on the calendar.
+            examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
             now: new Date(nowMs),
             dayKey,
           });
           return [c.id, agenda];
         }),
       ),
-    [courses, objectives, relations, weights, configs, results, events, mastery, nowMs, dayKey],
+    [courses, objectives, relations, weights, configs, results, events, exams, mastery, nowMs, dayKey],
   );
 }

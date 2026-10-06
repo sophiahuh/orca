@@ -13,6 +13,7 @@ import type {
   AnswerRubric,
   CalendarEvent,
   Course,
+  Exam,
   IslandVariant,
   Material,
   Objective,
@@ -376,6 +377,14 @@ export function calendarFromRow(r: Row<"calendar_events">): CalendarEvent {
   return { id: r.id, date: r.date, kind: r.kind as CalendarEvent["kind"], title: r.title, ...(r.course_id !== null ? { courseId: r.course_id } : {}) };
 }
 
+export function examToRow(e: Exam): Omit<Row<"exams">, "owner_id" | "created_at"> {
+  return { id: e.id, course_id: e.courseId, title: e.title, date: e.date, topic_ids: e.topicIds };
+}
+
+export function examFromRow(r: Row<"exams">): Exam {
+  return { id: r.id, courseId: r.course_id, title: r.title, date: r.date, topicIds: r.topic_ids };
+}
+
 /* ── Everything at once (public.my_data()) ── */
 
 /** What `my_data()` returns: the profile and every row the student owns. */
@@ -390,6 +399,7 @@ export interface MyData {
   questions: Row<"questions">[];
   sessions: Row<"session_results">[];
   calendar: Row<"calendar_events">[];
+  exams: Row<"exams">[];
   evidence: EvidenceRow[];
   snapshots: SnapshotRow[];
 }
@@ -414,6 +424,7 @@ export interface LoadedState {
   materials: Material[];
   results: QuizResult[];
   events: CalendarEvent[];
+  exams: Exam[];
   evidence: EvidenceEvent[];
   snapshots: SnapshotRow[];
 }
@@ -468,6 +479,7 @@ export function loadedState(d: MyData): LoadedState {
     materials: d.materials.filter((m) => m.status === "ready").map(materialFromRow),
     results: d.sessions.map(sessionFromRow),
     events: d.calendar.map(calendarFromRow),
+    exams: d.exams.map(examFromRow),
     evidence: d.evidence.map(eventFromRow),
     snapshots: d.snapshots,
   };
