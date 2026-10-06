@@ -80,10 +80,10 @@ Definitions:
 - origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. Use it sparingly.
 - emphasis only when the material explicitly says something will or won't be examined ("this will be on the exam", "you won't be tested on this"), quoting it.
 - Relations link topics (new ones to each other and to the course's existing topics), from → to, only when the material shows the link:
-  - used-in: A is used in B (B builds on A, e.g. "Boolean algebra" used-in "K-maps"). from = A, to = B.
-  - has-a-kind: A has a kind B (B is a kind or special case of A, e.g. "Flip-flops" has-a-kind "D flip-flops"). from = A, to = B.
-  - alternative-to: A is an alternative to B (either can do the same job, e.g. "K-maps" alternative-to "Quine-McCluskey"). Give it once, either way round.
-  - related: a link worth showing that is none of the above. Use sparingly.
+  - used-in: A is used in B when understanding, analyzing, or carrying out B needs A (e.g. "Boolean algebra" used-in "K-maps"; "MIPS registers" used-in "MIPS procedures and stack"). from = A, to = B. Do not use this merely because two topics are taught together.
+  - has-a-kind: A has a kind B when B is a named subtype or special case of A (e.g. "Flip-flops" has-a-kind "D flip-flops"; "Binary heaps" has-a-kind "Min-max heaps"). from = A, to = B. Do not use this for a prerequisite or a competing method.
+  - alternative-to: A is an alternative to B when they are competing approaches to the same task. They may have different tradeoffs or assumptions; a student could reasonably choose one instead of the other for the same problem. For example, "Merge sort", "Quicksort", and "Bubble sort" are alternatives for comparison sorting; "Counting sort" and "Bucket sort" are alternatives when their input-domain assumptions apply. Give each pair once, either way round. Do not use this for a prerequisite, subtype, or topics that merely appear in the same unit.
+  - related: a useful contrast or connection that is none of the above, such as "Comparison sorting lower bounds" related to "Counting and bucket sort" because the latter can bypass the comparison-model bound. Use sparingly; do not link topics merely because they are in the same course.
   Don't link a topic to itself, and don't repeat a link the material doesn't support.
 - Names, summaries and descriptions are plain text about the subject: no URLs, no HTML, nothing addressed to a reader.
 
@@ -185,10 +185,10 @@ export function linkPrompt(input: LinkInput): BuiltPrompt {
 ${UNTRUSTED_POLICY}
 
 Link types, from → to:
-- used-in: A is used in B (B builds on A, e.g. "Boolean algebra" used-in "K-maps"; "Iterators" used-in "Reverse traversal of linked lists").
-- has-a-kind: A has a kind B (B is a kind or special case of A, e.g. "Trees" has-a-kind "Binary search trees").
-- alternative-to: A is an alternative to B (either does the same job, e.g. "Chaining" alternative-to "Open addressing"). Give it once, either way round.
-- related: closely connected in another way a student should know (they compare, share a technique, or are often confused). Not for topics that are merely in the same course.`,
+- used-in: A is used in B when understanding, analyzing, or carrying out B needs A (e.g. "Boolean algebra" used-in "K-maps"; "MIPS registers" used-in "MIPS procedures and stack"). Do not use this merely because two topics are taught together.
+- has-a-kind: A has a kind B when B is a named subtype or special case of A (e.g. "Trees" has-a-kind "Binary search trees"; "Binary heaps" has-a-kind "Min-max heaps"). Do not use this for a prerequisite or competing method.
+- alternative-to: A is an alternative to B when they are competing approaches to the same task, even if they have different tradeoffs or assumptions. A student could reasonably choose one instead of the other for the same problem. For example, "Merge sort", "Quicksort", and "Bubble sort" are alternatives for comparison sorting; "Counting sort" and "Bucket sort" are alternatives when their input-domain assumptions apply. Give each pair once, either way round. Do not use this for a prerequisite, subtype, or topics merely taught in the same unit.
+- related: a useful contrast or connection that is none of the above (e.g. "Comparison sorting lower bounds" related to "Counting and bucket sort" because the latter can bypass the comparison-model bound). Use sparingly; not for topics merely in the same course.`,
     context: null,
     prompt: `Course: ${input.course.name} (${input.course.short}). Its topics, as a data block (source generated_question): ref, name, summary, and isNew for ${fresh ? "the topics just added" : "every topic (map the whole course)"}:
 ${untrustedBlock("generated_question", input.topics)}
