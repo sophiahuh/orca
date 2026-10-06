@@ -99,13 +99,32 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
               </button>
             )}
           </motion.div>
-          {(finding.kind === "done" || finding.kind === "error") && (
-            <motion.p variants={fadeUp} className="text-[13px] font-semibold text-prussian" role={finding.kind === "error" ? "alert" : "status"} data-part="find-connections-result">
+          {finding.kind === "done" && (
+            <motion.p variants={fadeUp} className="text-[13px] font-semibold text-prussian" role="status" data-part="find-connections-result">
               {finding.message}
             </motion.p>
           )}
         </div>
       </motion.header>
+      {finding.kind === "error" && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-prussian/20 p-[20px]" role="alertdialog" aria-modal="true" aria-labelledby="find-connections-error-title" data-part="find-connections-error">
+          <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-full max-w-[28rem] rounded-[20px] border-2 border-alice-deep bg-parchment p-[20px] text-prussian lip-4 lip-parchment">
+            <div className="flex items-start justify-between gap-[16px]">
+              <div className="min-w-0">
+                <h2 id="find-connections-error-title" className="text-[17px] font-bold">
+                  Couldn&apos;t find connections
+                </h2>
+                <p className="mt-[6px] max-w-full break-words text-[14px] font-semibold leading-[1.45]" data-part="find-connections-result">
+                  {finding.message}
+                </p>
+              </div>
+              <button type="button" autoFocus onClick={() => setFinding({ kind: "idle" })} className="pressable shrink-0 rounded-pill border-2 border-alice-deep bg-parchment px-[10px] py-[4px] text-[13px] font-bold lip-2 lip-alice" aria-label="Close error">
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </AppShell>
   );
 }
