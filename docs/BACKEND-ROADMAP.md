@@ -298,6 +298,13 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   thread so the read budget is real; emailed links from `SITE_URL`; token-hash links accepted by the
   callback. Dependencies: none added in Tasks 7b–9 (`worker_threads` and `Intl` are Node's).
 
+### Since Phase 4 (2026-10-06, owner's decisions)
+Exams have their own table (`exams`: course, title, date, optional `topic_ids`), edited from the
+course page and shown on the calendar; hand-added exam calendar entries moved into it. Dives (deep
+review) write their questions when they start, course-wide or for one topic. Course review settings
+and weights are overrides of account defaults kept on the profile (null inherits). Relations are
+between topics (see Uploads above). No new dependency or persistence layer was added for any of it.
+
 ### Phase 5 — Relation mastery, exams, calendar
 Connection questions record evidence on a relation, which gets its own derived state (weak or
 strong). (Relations are between topics since 2026-10-06, so the `implies` shielding below needs
