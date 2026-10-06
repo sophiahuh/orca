@@ -143,7 +143,6 @@ export function AccountCard() {
             <span className="text-[14px] font-bold text-prussian">Timezone</span>
             <Select size="sm" label="Timezone" value={timezone} options={zones(timezone)} onChange={setTimezone} />
           </div>
-          <p className="-mt-[6px] text-[13px] text-wisteria-deep">Streaks and due dates change over at midnight here.</p>
         </>
       )}
       {notice && <p role="status" className="text-[13px] font-semibold text-good-deep">{notice}</p>}
