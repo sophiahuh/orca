@@ -75,6 +75,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const [selected, setSelected] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
   const [grading, setGrading] = useState(false);
+  /** Kept here for Deep Review, whose Check button lives in the footer. */
+  const [deepResponse, setDeepResponse] = useState("");
   const [grade, setGrade] = useState<GradeResult | null>(null);
   /** The objective's display percent before the answer was recorded (Figma: Your mastery, 60% → 52%). */
   const [before, setBefore] = useState(0);
@@ -239,6 +241,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     setSelected(null);
     setChecked(false);
     setGrade(null);
+    setDeepResponse("");
     bodyRef.current?.scrollTo({ top: 0 });
   }, [checked, index, total, item]);
 
@@ -369,6 +372,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
                   result={grade}
                   noModel={noModel}
                   selfMarkNow={gradingOff !== null}
+                  {...(q.deep ? { value: deepResponse, onValueChange: setDeepResponse, hideCheck: true } : {})}
                   onSubmit={(r) => void submitShort(r)}
                   onSelfReport={(ok) =>
                     settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." }, "self")
@@ -418,6 +422,23 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
           <Button size="sm" onClick={advance}>
             {index + 1 >= total ? "Finish" : "Continue"}
           </Button>
+        ) : q.kind === "Short answer" && q.deep ? (
+          // A dive's Check sits here, across from Skip. Once the answer is being self-marked (no AI to
+          // grade it), the card shows the key and the self-report buttons instead.
+          gradingOff !== null && !q.exact?.length ? null : (
+            <Button
+              size="sm"
+              data-part="deep-check"
+              onClick={() => {
+                if (!deepResponse.trim()) return;
+                if (!q.exact?.length && noModel !== null) setGradingOff("no AI connected");
+                else void submitShort(deepResponse);
+              }}
+              disabled={!deepResponse.trim() || grading}
+            >
+              {grading ? "Checking…" : "Check"}
+            </Button>
+          )
         ) : q.kind === "Short answer" ? (
           <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
         ) : (
