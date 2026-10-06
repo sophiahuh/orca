@@ -28,6 +28,15 @@ const NODE: Record<TopicStrength, { fill: string; stroke: string; dash?: string;
   unverified: { fill: "var(--color-parchment)", stroke: "var(--color-periwinkle-deep)", dash: "4 4", glyph: "none" },
 };
 
+const LABEL_T = [0.75, 0.58, 0.9, 0.42, 0.26, 0.98, 0.1] as const;
+const LABEL_GAP = 12;
+
+function labelOverlap(a: { x: number; y: number; w: number }, b: { x: number; y: number; w: number }) {
+  const x = Math.max(0, (a.w + b.w) / 2 + LABEL_GAP - Math.abs(a.x - b.x));
+  const y = Math.max(0, 20 + LABEL_GAP - Math.abs(a.y - b.y));
+  return x * y;
+}
+
 /** The strength glyph, drawn at the node's centre for radius `r`. */
 function Glyph({ strength, r }: { strength: TopicStrength; r: number }) {
   const s = r * 0.42;
@@ -88,12 +97,22 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
   }, [hover, graph.edges]);
   const lit = (e: { from: string; to: string }) => hover !== null && (e.from === hover || e.to === hover);
   const hovered = hover ? graph.nodes.find((n) => n.topic.id === hover) ?? null : null;
-  // Label positions stay exactly on their arrows. When one topic has several visible labels, spread
-  // them along their own paths so their pills do not stack at the same visual depth.
+  // Label positions stay exactly on their arrows. Each starts in the normal position; only labels
+  // whose padded bounds collide slide to another point on their own path.
   const edgeLabels = useMemo(() => {
-    const shown = edges.filter((edge) => hover !== null && (edge.from === hover || edge.to === hover) && edge.type !== "related");
-    const positions = shown.length === 1 ? [0.75] : shown.map((_, index) => 0.52 + (0.38 * index) / (shown.length - 1));
-    return shown.map((edge, index) => ({ ...edge, label: edgePath(nodesById.get(edge.from)!, nodesById.get(edge.to)!, positions[index]!).mid }));
+    const shown = edges
+      .filter((edge) => hover !== null && (edge.from === hover || edge.to === hover) && edge.type !== "related")
+      .sort((a, b) => RELATION_LABEL[b.type].length - RELATION_LABEL[a.type].length);
+    const placed: Array<{ x: number; y: number; w: number }> = [];
+    return shown.map((edge) => {
+      const w = RELATION_LABEL[edge.type].length * 6.4 + 18;
+      const candidates = LABEL_T.map((t) => edgePath(nodesById.get(edge.from)!, nodesById.get(edge.to)!, t).mid);
+      const label = candidates
+        .map((candidate) => ({ candidate, overlap: placed.reduce((total, other) => total + labelOverlap({ ...candidate, w }, other), 0) }))
+        .sort((a, b) => a.overlap - b.overlap)[0]!.candidate;
+      placed.push({ ...label, w });
+      return { ...edge, label };
+    });
   }, [edges, hover, nodesById]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
