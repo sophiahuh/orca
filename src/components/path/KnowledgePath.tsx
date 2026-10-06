@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
 import { pathCanvasHeight, trailFromPoints, trailTopics } from "@/lib/data";
@@ -47,6 +48,9 @@ export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
   // START goes to the first topic in progress, else the first not started; none when everything is done.
   const firstInProgress = topics.findIndex((t) => progressOf(t).status === "in-progress");
   const current = firstInProgress >= 0 ? firstInProgress : topics.findIndex((t) => progressOf(t).status === "not-started");
+  const currentTopic = current >= 0 ? topics[current] : null;
+  const currentTopicId = currentTopic?.id;
+  const currentTopicY = currentTopic?.pos.y;
   const visualOf = (t: Topic, i: number): NodeVisual => {
     const status = progressOf(t).status;
     if (status === "done") return "done";
@@ -57,6 +61,17 @@ export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
   // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
   const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
   const d = course.trail ?? trailFromPoints(topics.map((t) => t.pos));
+
+  // Opening a course should put the pulsing START/play node in view, even when a long path has
+  // already scrolled far past it. Coordinates inside the fixed canvas need the same fit scale.
+  useEffect(() => {
+    const container = ref.current;
+    if (!container || currentTopicY === undefined) return;
+    const top = Math.max(0, currentTopicY * scale - container.clientHeight / 2);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frame = requestAnimationFrame(() => container.scrollTo({ top, behavior: reduced ? "auto" : "smooth" }));
+    return () => cancelAnimationFrame(frame);
+  }, [course.id, currentTopicId, currentTopicY, ref, scale]);
 
   return (
     <div ref={ref} className="absolute inset-0 overflow-y-auto overflow-x-hidden">

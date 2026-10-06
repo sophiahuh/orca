@@ -122,15 +122,26 @@ Phase 4 moves it server-side.
 For each upload:
 1. **Extraction** (Claude) reads the material together with the course's existing topics,
    objectives and aliases, and proposes new topics, new objectives, which existing objectives the
-   material covers, relations, and weight signals. It may use general knowledge of the subject.
+   material covers, relations between topics, and weight signals. It may use general knowledge
+   of the subject. Relations link topics, not objectives (owner, 2026-10-06), and are the Concept
+   Atlas's edges: used-in, has-a-kind, alternative-to, and related (an unlabelled edge). The same
+   extraction call proposes them between the new and existing topics, and a focused link step
+   (`src/lib/pipeline/link.ts`: topic names and summaries only, general knowledge allowed) then
+   checks every pair involving a new topic, since extraction alone missed obvious links. "Find
+   connections" on the Atlas (`POST /api/relink`) runs the link step over the whole course. A
+   topic's node grows with the topics it's used in (`topicUses`), and so do its objectives' weights.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
    keeps the losing name as an alias so it matches instantly next time.
 3. **Review:** the student confirms new topics; `uncertain` matches are highlighted. Nothing waits
    on review to be practised (confirmation rule below).
-4. **Questions** are generated per objective (about 6), validated (port the platform's ambiguity
-   check and answer agreement) and stocked.
+4. **Questions** are generated per objective (about 6) and stocked. They used to be checked by a
+   second model (blind solve, ambiguity, rubric agreement); the owner dropped those checks on
+   2026-10-06 for speed and cost. Code still refuses rule-breaking output (untrusted-text rules,
+   anchors to slides that don't exist, wrong objective, bad structure). Deep reviews write their own
+   harder questions when they start (`POST /api/deep-review`), marked `deep` and asked only there;
+   the material-type sliders no longer shape a deep review's mix.
 
 Rules:
 - **Every objective belongs to the course whose material was uploaded**, and records the upload
@@ -287,10 +298,18 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   thread so the read budget is real; emailed links from `SITE_URL`; token-hash links accepted by the
   callback. Dependencies: none added in Tasks 7b–9 (`worker_threads` and `Intl` are Node's).
 
+### Since Phase 4 (2026-10-06, owner's decisions)
+Exams have their own table (`exams`: course, title, date, optional `topic_ids`), edited from the
+course page and shown on the calendar; hand-added exam calendar entries moved into it. Dives (deep
+review) write their questions when they start, course-wide or for one topic. Course review settings
+and weights are overrides of account defaults kept on the profile (null inherits). Relations are
+between topics (see Uploads above). No new dependency or persistence layer was added for any of it.
+
 ### Phase 5 — Relation mastery, exams, calendar
 Connection questions record evidence on a relation, which gets its own derived state (weak or
-strong). `implies` shielding: a correct answer on an objective counts as a partial review of the
-objectives it implies. A miss triggers one diagnostic question on what it builds on. Exam tier
+strong). (Relations are between topics since 2026-10-06, so the `implies` shielding below needs
+rethinking: there is no objective-level `implies` any more.) `implies` shielding: a correct answer
+on an objective counts as a partial review of the objectives it implies. A miss triggers one diagnostic question on what it builds on. Exam tier
 (port `stage-boundaries.ts`): retired objectives in scope come back; retrieval → mixed → transfer.
 Calendar shows deep reviews, exam blocks and material due dates.
 

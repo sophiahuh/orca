@@ -92,6 +92,16 @@ export function weightPercents(w: Weights): Record<string, number> {
 
 export type EventKind = "hw" | "lab" | "rev" | "exam";
 
+/** One of a course's exams: its date and, optionally, the topics it covers (ids; ones no longer live are ignored). */
+export interface Exam {
+  id: string;
+  courseId: string;
+  title: string;
+  /** ISO date, YYYY-MM-DD */
+  date: string;
+  topicIds: string[];
+}
+
 export interface CalendarEvent {
   id: string;
   /** ISO date, YYYY-MM-DD */
@@ -196,17 +206,25 @@ export interface Objective {
   signals: ObjectiveSignal[];
 }
 
-export type RelationType = "builds-on" | "implies" | "contrasts-with" | "applies-to";
+/**
+ * How two topics are linked (the Concept Atlas's edges), `from` → `to`: used-in ("Boolean algebra"
+ * used-in "K-maps"), has-a-kind ("Flip-flops" has-a-kind "D flip-flop"), alternative-to (either
+ * does the job; one row, read both ways), related (any other link; drawn unlabelled).
+ */
+export type RelationType = "used-in" | "has-a-kind" | "alternative-to" | "related";
 
-/** `from` <type> `to`, e.g. "K-map grouping" builds-on "Gray code adjacency". */
+/** `from` <type> `to` between two topics of a course, proposed by an upload. */
 export interface Relation {
   id: string;
+  /** Topic id. */
   from: string;
+  /** Topic id. */
   to: string;
   type: RelationType;
   anchor: Anchor | null;
   review: Review;
-  materialId: string;
+  /** The upload it came from; null when "Find connections" linked the whole course. */
+  materialId: string | null;
 }
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */
@@ -215,14 +233,18 @@ export type RunStatus = "queued" | "waiting" | "running" | "done" | "failed";
 
 export interface PipelineRun {
   id: string;
-  /** An upload, or questions topped up after a session (absent on older records: an upload). */
-  kind?: "upload" | "top-up";
+  /** An upload, a post-session top-up, or a durable Dive In (absent on older records: an upload). */
+  kind?: "upload" | "top-up" | "deep-review";
   courseId: string;
   /** The material it was built from. A top-up written from several materials (or none) names none. */
   materialId: string | null;
   /** ISO time. */
   at: string;
   model: string;
+  /** Requested duration for a durable deep-review run. */
+  deepMinutes?: number;
+  /** The exact questions a durable Dive In wrote, in the order it should ask them. */
+  questionIds?: string[];
   /** Where its job is (runs are written by the server's jobs): queued → running → done | failed. */
   status: RunStatus;
   /** While running: the stage it's at (`Progress` in pipeline/run.ts). */
@@ -286,6 +308,8 @@ export interface QuizQuestion {
   materialId?: string;
   /** The objective this question tests. Missing on generated questions until extraction assigns one. */
   objectiveId?: string;
+  /** A deep-review question (written when a deep review starts): longer and harder; only deep reviews ask it. */
+  deep?: boolean;
 }
 
 /* ── Defaults ─────────────────────────────────────────────────────────── */

@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
  * Figma: Button/Primary, Button/Secondary, Button/Dark, Button/Ghost.
  * 20px radius, 17px bold label, 5px lip shadow, sinks on press.
  */
-export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost" | "danger";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -21,6 +21,8 @@ const styles: Record<ButtonVariant, string> = {
   secondary: "bg-parchment text-wisteria-deep border-[2.5px] border-periwinkle-deep lip-periwinkle",
   dark: "bg-prussian text-parchment lip-ink",
   ghost: "bg-alice text-prussian lip-alice",
+  /** Rejecting or removing something. */
+  danger: "bg-parchment text-bad-text border-[2.5px] border-bad lip-bad",
 };
 
 export function Button({ variant = "primary", icon, full, size = "md", className, children, type = "button", ...rest }: ButtonProps) {

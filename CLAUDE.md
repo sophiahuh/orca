@@ -18,64 +18,76 @@ links), **Next** (the next step), **Notes** (only explanations or decisions the 
 A few bullets each; no restating the plan, no long background, no option surveys. Answer a
 question directly first, then stop.
 
-## Start here (handoff, updated 2026-10-05)
+## Start here (handoff, updated 2026-10-06, evening)
 
 **Who it's for.** A college student who wants to actually master their classes, not cram. They
 create a course, upload its material (lecture decks, syllabus, homework, past exams), and Orca
-turns it into objectives ("can do X") with checked quiz questions, then tracks mastery per
-objective from their answers and spaces reviews (FSRS) until each one sticks. The test course is
-Advanced Logic Design (ALD, Columbia ELEN); `docs/samples/ald/` has its real decks, and Sophia
-authored and reviewed the reference objectives, questions and quiz rubric.
+turns it into topics and objectives ("can do X") with quiz questions, then tracks mastery per
+objective from their answers and spaces reviews (FSRS) until each one sticks. The first test course
+was Advanced Logic Design (ALD, Columbia ELEN; `docs/samples/ald/`); the owner now tests with their
+own courses (Data Structures, Fundamentals of Computer Systems) on the hosted project.
 
 **Where things stand.**
-- **Phase 4 is merged into `backend-implementation`** (2026-10-06, with the owner's OK; `phase-4`
-  points at the same commit). `backend-implementation` holds Phases 1–4; `main` is far behind (the
-  pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
-- Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device. Phase 4 (plan Tasks 1–9, status notes at the top of
-  `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`): the local Supabase stack, the schema
-  with row-level security, Storage and `save_structure`, the evidence path (`objective_state`
-  snapshots, `record_evidence`, `POST /api/evidence`, `GET /api/state`), auth, the store on Supabase,
-  uploads to Storage read into `material_pages`, the pipeline as server jobs (`processMaterial` /
-  `topUp`, inline locally, Trigger.dev tasks written but never run), grading behind sign-in, the
-  cost guard (metering, daily budgets with waiting runs, one job at a time per student, rate limits,
-  bounded calls), the injection defences (data-block prompts, pattern screen, output validators,
-  `security_events`), CI with the Supabase stack, the review findings from Tasks 3–7 and the
-  whole-branch review's fixes (Wave 3), then the Figma sync (the top bar, avatars, the new
-  account screens, the quiz feedback state and the Concept Atlas). Checks last run green
-  (2026-10-06, after the Figma sync): `npx tsc --noEmit`, `npm run lint`, `npm test` (267),
-  `npm run test:db` (177), `npm run check:isolation` (43), `npm run check:evidence` (44),
-  `npm run test:e2e` (57), `npm run build`. CI now runs on `phase-*` too, but GitHub
-  hasn't run it yet. **Nothing has run against a hosted Supabase, Trigger.dev or Anthropic**; the
-  owner's setup steps are in `docs/SETUP-HOSTED.md` and the live checks are Task 10.
-- No app data is kept in the browser any more (the old `orca:materialPages` key is cleared on
-  load); don't build on browser storage.
-- **Never run against a real model.** Unit tests inject fake step callers; the browser tests run
-  against `e2e/fake-anthropic.ts`, a fake Messages API Playwright starts on port 3101 (the dev
-  server gets `ANTHROPIC_BASE_URL` pointing there and a fake key, beating `.env.local`), and
-  `e2e/global-setup.ts` stops the run if the server's model calls aren't local (e.g. a reused
-  dev server started with a real key). Only `npm run score:extraction` and uploading in `npm run dev`
-  spend money. No session so far has
-  had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` (rewritten for data
-  blocks in Task 7b) are untested against Claude, `npm run score:extraction` has no baseline
-  (`scripts/extraction-baseline.json` doesn't exist), and the weight constants are untuned.
-- The Vercel deploy (https://orca-lake-omega.vercel.app) is from before Phase 1; it doesn't show
-  any of this.
+- **Work happens on `phase-4`** (pushed to `origin/phase-4`; Vercel builds the deploy at
+  https://orca-lake-omega.vercel.app from it). `backend-implementation` holds Phases 1–4 as merged on
+  2026-10-06 and is behind `phase-4`; `main` is the pre-Phase-1 prototype. No PRs are open.
+- Phases 1–4 are built (mastery core, uploads build the course, scheduling and sessions, Supabase
+  with auth, RLS, Storage, server jobs, cost guard, injection defences, CI). See
+  `docs/BACKEND-ROADMAP.md` and the Phase 4 plan's status notes for what each contains.
+- **Built on top of Phase 4 since (2026-10-06; product decisions by the owner, recorded in
+  `docs/BACKEND-ROADMAP.md` and `docs/TO-DISCUSS.md`):**
+  - Generated questions are **no longer checked by a second model** (no solve/ambiguity/agreement
+    steps); only the code validators refuse bad output.
+  - **Dive in** (deep review): its harder questions are **written when it starts**
+    (`POST /api/deep-review`, the `deep` pipeline step), course-wide or for **one topic** (a
+    topic's play button on the path, or its Atlas node, opens "Dive into [topic]" to pick a length).
+    Deep questions are marked `deep` and only dives ask them.
+  - **Topic links**: relations connect topics (used-in, has-a-kind, alternative-to, related). The
+    extraction call proposes some, and the **link step** (`src/lib/pipeline/link.ts`) runs after each
+    upload and from "Find connections" on the Atlas (`POST /api/relink`).
+  - **Concept Atlas** is a topic graph (`src/lib/course/topic-graph.ts`, `src/components/atlas/`):
+    foundations on top, nodes sized by how many topics they're used in, strength glyphs.
+  - **Course settings are overrides**: a course's `review_config` / `weights` are null to inherit the
+    account defaults on the profile (Settings page), set to override (the course's settings popup,
+    the gear on its page).
+  - **Exams** have their own table (each course's exams, dates, optional topics), edited with
+    "Edit Exams" on the course page; they show on the calendar and drive the exam cadences.
+  - Homework reflection is a text box on the upload page; the calendar shows scheduled reviews,
+    has a course filter and expanding weeks.
+- **The owner runs `npm run dev` on port 3000 against the hosted Supabase project and a real
+  OpenAI key** (`.env`, OpenAI default model `gpt-6.1-sol`): uploads there spend money and write real
+  data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
+- **Hosted migrations:** pushed up to `20261006050000`. Still to push (the owner runs
+  `npx supabase db push`; the agent's auto mode blocks it): `20261006060000_link_step`,
+  `20261006070000_course_setting_overrides`, `20261006080000_exams`. Until then "Find connections",
+  course overrides and exams fail on the hosted project. Check with
+  `npx supabase migration list --linked` (read-only).
+- **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
+  against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
+  `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
+  and the weight constants are untuned.
+- Checks were run per change (Fix mode); the full merge gate (below) hasn't been run on `phase-4`
+  since the Phase 4 merge.
 
 **Next, in order.**
-1. **Task 10, with the owner's credentials in the cloud environment** (`docs/SETUP-HOSTED.md`): link
-   the hosted Supabase project and push the migrations, run `npm run check:isolation` against it,
-   set `SITE_URL`, `ORCA_JOBS`, `ORCA_DAILY_BUDGET_USD` and `ANTHROPIC_API_KEY` on Vercel, switch the
-   hosted email templates to token-hash links, deploy, and do one real ALD upload end to end. Then
-   `ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline` (it includes an injected deck
-   now) and look at the review screen; fix prompts where extraction or question checks go wrong.
-2. The Phase 3 numbers and the assumptions listed in `docs/TO-DISCUSS.md` ("Assumed while
-   finishing Phase 4") want a decision or real use.
-3. Phase 5 per `docs/BACKEND-ROADMAP.md`.
+1. Push the three pending migrations to the hosted project (above).
+2. Run the full merge gate on `phase-4` (Conventions) and fix what it finds.
+3. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
+   exam review proper (the "Exam review" setting is stored but no session uses it yet; Phase 5),
+   and the rest of Phase 5 per `docs/BACKEND-ROADMAP.md`.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
 
 **Environment gotchas.**
+- The machine's default `node` may be 16; Next needs ≥ 20.9 and the tests ≥ 22.6. Use
+  `export PATH=$HOME/.nvm/versions/node/v24.20.0/bin:$PATH` (or `nvm use`).
+- `.env` holds the hosted project's keys and the OpenAI key; `.env.local` may not exist. The e2e
+  config takes the local stack's keys from `supabase status` and overrides the model settings, so
+  tests stay local either way.
+- Next refuses a second `next dev` in the same directory. If the owner's dev server is running,
+  the e2e web server can't start: either ask them to stop it, or temporarily add
+  `distDir: process.env.SCRATCH_DIST ?? ".next"` to `next.config.ts` and run with
+  `SCRATCH_DIST=.next-e2e` (Next also edits `tsconfig.json` then); revert both before committing.
 - Cloud containers: Playwright's Chromium build doesn't match; run e2e with
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
@@ -147,12 +159,20 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   and the clock. Spacing uses FSRS (`ts-fsrs`, Anki's scheduler) under Orca's own mastery bar.
   The mastery rule is a fold (`applyAnswer`), so the server can keep snapshots instead of
   replaying the log.
-- **Weights.** Every topic and objective has a weight (neutral 1.0). Claude records signals from the
-  material (coverage, material type, explicit emphasis, what builds on what); code computes the
-  weight. The Settings material-type sliders feed it and set deep review's question mix.
-- **Practice.** Questions are generated ahead into a per-objective stock; a quiz session is
-  assembled instantly at start, sized to the course's time budget. Deep review follows each
-  course's own cadence.
+- **Weights.** Every topic and objective has a weight (neutral 1.0). The model records signals from
+  the material (coverage, material type, explicit emphasis); code computes the weight, and an
+  objective gains weight for each topic its topic is used in. The material-type sliders (account
+  defaults in Settings, a course's override in its popup) feed it.
+- **Topic links.** Relations connect topics: used-in, has-a-kind, alternative-to, related. They are
+  the Concept Atlas's edges and feed the weights.
+- **Practice.** Quick reviews and re-quizzes draw from a per-objective stock written ahead (at upload,
+  topped up after each session), assembled instantly and sized to the course's time budget.
+  **Dive in** (deep review) writes harder questions when it starts, for the whole course or one
+  topic, at the length the student picks; its cadence is the course's setting.
+- **Exams.** Each course's exams (date, optional topics) are their own table; they show on the
+  calendar and set the "1 wk before exam" cadences. A dedicated exam review is Phase 5.
+- **Settings.** The account holds default review settings and weights; a course inherits them until
+  its own settings popup overrides them.
 - **Self-reported confusion** in a homework reflection resets the matching objectives to learning.
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
 - **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
@@ -194,10 +214,19 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `materials.ts`. Screens only talk to `useOrca()`. `src/lib/supabase/app-rows.ts`
   (pure) maps the app's types to rows and back, and computes the changed rows a structure save sends.
   Tables added in Phase 4's second half: `model_usage` and `rate_limits` (7c) and `security_events`
-  (7b), all service-role only; `pipeline_runs` gained `objective_ids` and `security`.
+  (7b), all service-role only; `pipeline_runs` gained `objective_ids` and `security`. Since:
+  `profiles.default_review_config` / `default_weights` (account defaults), `courses.review_config` /
+  `weights` nullable (null inherits), `questions.deep`, `relations` rebuilt between topics
+  (`from_topic`, `to_topic`, four types, `material_id` nullable), and `exams` (owner-only, in
+  `my_data`).
   Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
   service-wide daily ceiling; unset = none), `TRIGGER_*`.
+- The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
+  (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
+  `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
+  must be priced. OpenAI goes through its Responses API in the same `completeJson` (strict schema
+  from `src/lib/openai-schema.ts`, explicit caching of the material, same bounds and metering).
 - Model calls use the Claude API (`claude-opus-5-5`) through `completeJson` (`src/lib/llm-server.ts`:
   10-minute timeout, at most 2 retries of transient failures, spend-limit answers never retried,
   every reply's tokens reported to `onUsage`). Load the `claude-api` skill before writing any model
@@ -228,168 +257,41 @@ sets its color, `pressable` sinks the control into its lip on :active, `eyebrow`
 Type scale from Figma: H1 40 bold, H2 28 semibold, Button 17 bold, Caption 14 regular; big headlines
 34–68 bold; eyebrows 15 semibold tracked 1.5px.
 
-## What exists (all 11 Figma screens are built)
+## What exists (a map; read the code for detail)
 
-This describes the code as it is.
+All 11 Figma screens are built. Where things live:
 
-- `src/lib/motion.ts` — every spring/variant/loop preset. All animation pulls from here.
-- `src/lib/data.ts` — model + defaults + weight and date helpers. No seed courses, due items,
-  calendar events, materials or streak (nothing built in or fabricated). `Topic`'s only status is its
-  review status (`proposed | confirmed | archived`); progress is derived, never stored.
-- `src/lib/mastery/` — pure domain modules (tested with `npm test`): `types.ts` (evidence events,
-  objective info and state), `catalogue.ts` (objectives per topic, unsorted bucket),
-  `objective-state.ts` (FSRS via `ts-fsrs` under Orca's mastery bar; the `applyAnswer` / `stateAt`
-  fold; a check passed in a deep review stretches the next one 1.5×), `progress.ts` (topic progress, island level), `course-mastery.ts` (per-course roll-up),
-  `priority.ts` (overdue, weight, gap, mix-up and open confusion, each with a reason sentence),
-  `agenda.ts` (per course: ranked due list, quick- and deep-review cadence, poor-session review
-  to-dos and next-day re-quizzes), `session.ts` (quick review, re-quiz and deep review assembled
-  from the question stock within the time budget; deep review covers every objective once, by
-  priority, before going deeper, and reports its coverage for the length picker), `todo.ts` (sidebar cards from the agenda),
-  `streak.ts` (consecutive local days with an unaided graded answer). `catalogue.ts` follows `mergedInto` and leaves archived objectives out; `applyConfusion`
-  resets an objective to learning. `attribution.ts` says which objective each event counts for
-  now (shared by `course-mastery.ts` and the server's snapshots); `snapshots.ts` is the snapshot
-  path (`recordEvent`, `readCourseState`) behind a `SnapshotStore` interface. `RULES_VERSION` and
-  `dayKeyIn(timeZone)` live in `objective-state.ts`: bump the version whenever the fold's result
-  could change, and record its hash and golden replay in `tests/mastery/snapshot.test.ts`.
-- `src/lib/store.tsx` — `OrcaProvider`, `useOrca()`, `useCourse(slug)`, `useDayKey()`. Loads the
-  signed-in student's data once (`my_data()`, one consistent read; `GET /api/state` for courses
-  with stale snapshots) and saves every action optimistically, one save at a time in order: course
-  structure through `save_structure` (only changed rows), evidence through `POST /api/evidence`,
-  the rest by direct writes under RLS. A failed save is undone and shows "Couldn't save: …"
-  (`SaveStatus`, `src/components/store/`); a failed load shows its own screen. Holds per-course
-  `objectives` and `relations`, pipeline `runs`, `materials` (only read uploads; page text is
-  never held, top-ups load it from `material_pages`), finished sessions (`results`), the `evidence` log (answers and confusion
-  events) and the server's `snapshots`; `recordEvidence` and `recordReflection` are its only
-  evidence writers. Runs are the server's: the store reads them, never writes them. Objective state comes from the snapshots; streak, agenda and the rest from
-  the loaded events, with days in the profile's timezone. The bring-your-own model setting is kept
-  in memory only. `orca:v3`–`orca:v8` and `orca:materialPages` keys are removed on load. Course structure changes in the browser only through `editStructure` (an op from
-  `src/lib/course/ops.ts`; saves send only changed columns); jobs change it on the server, and
-  `refresh()` reloads after one finishes; `afterSaves()` waits for the save queue. Derived reads:
-  `useMasteryByCourse()`, `useAgenda()`, `useTodos()`, `useStreak()`.
-- `src/lib/course/` — pure course-structure modules (tested with `npm test`): `ops.ts` (confirm,
-  reject, restore, rename, merge and un-merge topics and objectives; settle uncertain duplicates),
-  `match.ts` (name normalisation, exact name/alias matching that follows merges and reports
-  rejected matches, shortlist for reconciliation), `weights.ts` (weights from upload signals,
-  `WEIGHT_RULES`), `review.ts` (what still needs review), `study.ts` (where an objective is taught,
-  as "file, slides 18–20").
-- `src/app/providers.tsx` — store + `MotionConfig reducedMotion="user"`. `src/app/template.tsx` — page transitions.
-- `src/hooks/useFitScale.ts` (854×834 canvas scaling), `src/hooks/useToday.ts` (hydration-safe date),
-  `src/hooks/useNow.ts` (clock for derived state), `src/hooks/useTopUp.ts` (starts the top-up job
-  after a session, `POST /api/top-up`), `src/hooks/useRun.ts` (follows a pipeline run: Realtime,
-  a read on subscribe, a 5 s poll; reloads the store when it finishes).
-- `src/components/icons.tsx` (+ IconSettings, IconLogOut from Header & Nav Assets), `brand/` (OrcaLogo,
-  with `waves` for the header mark, Island with four mastery looks, Wave, Bubble, Avatar: the five
-  sea buddies drawn by hand after the Figma renders, `avatar-preview.tsx` for the sign-up pick).
-- `src/components/ui/` — Button, Chip/ContextPill, RoundButton, ProgressBar, Card, Tag, Stat, Select,
-  Toggle, Slider, AnswerOption, DueCard, PathNode (done / current / upcoming, no locks) (barrel in `ui/index.ts`).
-- `src/components/layout/` — TopBar (Figma Header/Top Bar on every screen, rendered by `providers.tsx`:
-  lockup, Settings, Log out, the avatar; account screens show only the avatar; height `--topbar-h`,
-  which `h-screen-below-bar` and friends subtract), AppShell (main + 340px Sidebar with NavBar),
-  BackButton, Screen.
-- `src/components/auth/` — AuthShell (form left, aside right: 12 · Log in, 13 · Sign up), forms
-  (the 76 px fields with Show, the timezone added at submit), AvatarPicker, IslandAside.
-- `src/components/atlas/` — the Concept Atlas (Figma 12 · Concept Atlas + its design spec):
-  ConceptAtlas (unit rings = topics in trail order, concept pills = live objectives with their
-  mastery glyph, links = relations, the orca badge, a slow sonar sweep; selecting dims the rest to
-  30%), ConceptPanel (the right rail for a selected concept: unit, name, mastery bar, connected
-  concepts, Next up, legend, "Review …" to the topic quiz), AtlasSwitch (Path | Atlas). Layout is
-  pure in `src/lib/course/atlas.ts`; the display percent in `src/lib/mastery/percent.ts`.
-- Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (QuizRunner,
-  shared by topic quizzes and sessions; TruthTable, QuizEnd, ShortAnswer, DeepReviewSetup: the
-  "how long do you want to study?" picker with the coverage plan; ResultBanner and Feedback from
-  Figma 04a/04b: the three-second banner, option tags, the Solution card with the source, Your
-  mastery before → after with when it comes back, a Suggested review card), `config/` (ConfigRow,
-  ClassConfigModal), `calendar/MonthGrid`.
-- Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`, `/atlas`),
-  `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
-  `/api/materials`, `/api/materials/[id]/process`, `/api/top-up`, `/api/reflect`, `/api/evidence`,
-  `/api/state` (these need Supabase and a signed-in student), `/api/grade`, `/api/llm/*`, `/sign-in`, `/sign-up`,
-  `/forgot-password`, `/reset-password`, `/auth/callback`. Dynamic
-  pages read `params`/`searchParams` with React `use()` and the generated `PageProps<...>` types
-  (run `npx next typegen` before `tsc`).
-- Bring-your-own-LLM (`src/lib/llm.ts`, `llm-server.ts`, `src/components/settings/YourAI.tsx`, now
-  hidden from Settings; the pipeline ignores it, `/api/grade` still accepts it until Task 8): the student picks
-  Anthropic / OpenAI / Gemini / OpenRouter / Ollama + a key; it lives in the store (browser only) and
-  rides along with each request. Anthropic goes through `@anthropic-ai/sdk`; the rest use the
-  OpenAI-compatible chat.completions shape; Ollama is called from the browser. Model routes fall
-  back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`); with neither, uploads are saved
-  without generating anything and prose answers are self-marked. Whether to keep
-  this is open (`docs/TO-DISCUSS.md`).
-- Untrusted text (decision 13), `src/lib/untrusted/` (pure): `sanitize.ts` (NFKC with super- and
-  subscripts spelled as `^{…}`/`_{…}`, invisible and control characters removed, tabs kept, runs
-  collapsed), `encode.ts` (`untrustedBlock`, `UNTRUSTED_POLICY`: every prompt sends material, course
-  items, questions under check and notes as labelled JSON data blocks), `screen.ts` (the pattern
-  screen: OWASP phrasing with spacing, misspellings and swapped letters, role tags, Base64 and hex
-  payloads decoded; never blocks; each hit is `strong` or `weak`, weak being phrasing honest course
-  text also uses), `validate.ts` (generated text refused for a URL the material lacks, HTML, a
-  markdown link or a strong screen hit), `hidden-text.ts`. The pipeline records what it found on the
-  run (`security`, with what the validators refused), the review screen warns on strong hits, and a
-  trigger writes `security_events` (with `severity`; refusals as `generated`); the reflect route
-  logs its hits and the grader one event per flagged answer; three answers with a strong hit in a
-  week turn a student's model grading off (the owner clears the events to turn it back on).
-  Red-team fixtures: `tests/fixtures/injection/`.
-- Cost guard (decision 10): `src/lib/limits.ts` (every limit), `src/lib/pricing.ts`,
-  `src/lib/jobs/budget.ts` (the daily-budget decision and the student's day start), the jobs check
-  the budget when they claim a run and go `waiting` with why; `resumeNext` (`src/lib/jobs/start.ts`)
-  starts the student's next queued or resumable run when one finishes, when they start a job while
-  nothing of theirs is running (so a run waiting for yesterday's limit, or orphaned by a crash,
-  resumes in inline mode too) and hourly on Trigger.dev, failing dead runs first (judged from
-  `started_at`, set when the job claims the run); rate limits through `hit_rate_limit`. The upload,
-  reflect and top-up routes, and the grader, answer 429 with `retry-after` past a limit. A reply cut
-  off mid-stream is still metered; a fallback model with no recorded price is recorded at the
-  requested model's price and labelled.
-- Uploads (Task 6): `src/lib/uploads.ts` hashes the file, `POST /api/materials` answers with a
-  signed upload URL into `<owner>/<material>/<safe name>` (PDF only, 25 MB) or "the course already
-  has this file" (SHA-256), the browser uploads to Storage, and `POST /api/materials/:id/process`
-  (`src/lib/server/materials.ts`) reads it on the server (`src/lib/material/read-pdf.ts`: pdf.js
-  in Node, at most 150 pages, text under 2 pt dropped and counted in `materials.hidden_text`,
-  every page through `src/lib/untrusted/sanitize.ts`) into `material_pages`. Limits are in
-  `src/lib/limits.ts`. Only `ready` materials load into the store.
-- Jobs (Task 7a): the upload routes start `processMaterial` and answer with `generation` (started,
-  running, queued, waiting, built, no model, no text); `POST /api/top-up` starts `topUp` after a finished session.
-  `src/lib/jobs/jobs.ts` (pure, over a `JobStore`; `src/lib/server/job-store.ts` scopes every
-  service-role query to the student), `src/lib/server/jobs/start.ts` (creates the queued run and
-  dispatches: `ORCA_JOBS=inline` runs it after the response, `trigger` enqueues
-  `src/trigger/jobs.ts`; `trigger.config.ts` needs `TRIGGER_PROJECT_REF`), `run.ts` (what a
-  worker calls). Each job claims its run, writes `progress`, and saves the run (done) with what it
-  built in one `save_structure`, or records why it failed. `src/lib/server/model.ts` is the step
-  caller (Orca's `ANTHROPIC_API_KEY` only, streamed); `src/lib/server/figures.ts` renders figure
-  slides on the server from the stored file only if its hash still matches.
-- Upload pipeline (run by the jobs), `src/lib/pipeline/`: `runUpload` (`run.ts`) calls the steps through an injected caller:
-  **extract** (structure and signals against the course's existing topics and objectives, with
-  material-type rules), **reconcile** (only when something is close; same/new/uncertain),
-  **generate** (questions per objective, topped up to 6), then **solve** (blind, compared in code
-  for choice and exact answers), **ambiguity** and **agreement** checks; failures and duplicates are
-  dropped with a reason in the run record. Prompts (`prompts.ts`) and zod schemas (`schemas.ts`)
-  are used by the server step caller. `apply.ts` merges the plan; uploads land on
-  `/course/[slug]/review?run=`, which follows the job. `writeQuestions` (generate + checks) is shared with `topup.ts`, which
-  writes more questions after a session for objectives under 3 unseen, from only the stored
-  pages of the material each objective is anchored to (plus one either side). `npm run score:extraction` scores extraction on the ALD decks against
-  `docs/OBJECTIVES-ALD.md` (needs `ANTHROPIC_API_KEY`; `--dry` checks the decks without a model).
-- ALD reference material (not shipped in the app): `docs/samples/ald/L01–L04` (real ALD lecture
-  decks; syllabus in L01) to upload, and draft objectives in `docs/OBJECTIVES-ALD.md`. The 69
-  questions Sophia authored from them were removed from the app; they're in git history
-  (`src/lib/content/ald.ts` at 89e042b) for evaluating extraction.
-- `e2e/` — browser tests: `mastery-core.spec.ts` (fresh browser, empty states, the trail, quiz
-  answers writing evidence), `upload.spec.ts` (a real ALD deck through pdf.js and the server job
-  against the fake API; re-uploading adds nothing; a failed job says why and a re-upload retries), `review.spec.ts` (review screen and
-  objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective),
-  `scheduling.spec.ts` (quick review, poor-quiz to-dos and re-quiz, deep review cadence, top-up),
-  `store.spec.ts` (a second browser sees the same data; a failed save is undone and not counted and
-  the quiz's score isn't saved; an action during the reload is refused with a message; a mid-session
-  reload counts nothing twice; old local state cleared), `auth.spec.ts` (sign-up, confirm, reset,
-  `SITE_URL` links, token-hash links, the sea buddy and name from sign-up), `atlas.spec.ts` (the
-  rings, concepts and links; the panel; Esc; the review action; Path | Atlas), `grade.spec.ts` (grading behind sign-in, screening, the
-  repeat-offender switch, the rate limit, metering), `cost-guard.spec.ts` (a waiting run, a queued
-  second upload, a spend-limit answer, the upload rate limit), `injection.spec.ts` (an injected
-  deck: refused rows, the warning, `security_events`; a flagged reflection note), `settings.spec.ts`
-  (sliders save on release). `e2e/fixture.ts` signs in a throwaway student and seeds through the
-  secret key. The fake Anthropic API reads its inputs from the prompts' data blocks and can answer
-  with a spend-limit error or a given grade.
-  Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
-- Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app; last deployed before Phase 1). Deploy with
-  `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy
-  is not linked yet. `.vercelignore` keeps docs/ out of uploads.
+- `src/lib/mastery/` — pure learner model (FSRS fold `applyAnswer`/`stateAt`, progress, agenda,
+  sessions, streak, snapshots). Bump `RULES_VERSION` in `objective-state.ts` whenever the fold's
+  result could change, and record its hash in `tests/mastery/snapshot.test.ts`.
+- `src/lib/course/` — pure course-structure ops (confirm, merge, rename…), matching, weights
+  (`topicUses`), the Atlas's topic graph layout (`topic-graph.ts`).
+- `src/lib/deep-review.ts` — dive sizes (minutes per question, presets, the longest dive).
+- `src/lib/store.tsx` — `useOrca()`: loads the student's data once, saves optimistically in order
+  (structure via `save_structure`, evidence only via `POST /api/evidence`, the rest under RLS).
+  Structure changes in the browser only through `editStructure`; jobs change it on the server.
+- `src/lib/pipeline/` — upload pipeline (extract, reconcile, generate; no model check of the
+  questions since 2026-10-06), prompts and zod schemas; `topup.ts` writes more questions after a
+  session and a deep review's harder ones (`runDeepReview`, the "deep" step, called by
+  `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there);
+  `link.ts` is the link step (topic links from names and summaries, after each upload and from
+  "Find connections" on the Atlas, `POST /api/relink`).
+- `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`).
+- `src/lib/server/` — route helpers, model step caller (`model.ts`), grading, usage metering, rate limits.
+- `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
+- `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
+- `src/lib/material/read-pdf.ts`, `src/lib/uploads.ts` — PDFs to Storage, read on the server into `material_pages`.
+- `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, NavBar: on a course page its
+  gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
+  (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`
+  (TopicGraph), `auth/`, `brand/`; `src/lib/motion.ts` holds every animation preset.
+- `src/app/` — routes (`/home`, `/course/[slug]/…`, `/quiz/…`, `/session/…`, `/add-material`,
+  `/settings`, `/calendar`, auth screens, `/api/*` including `deep-review` and `relink`). Run
+  `npx next typegen` before `tsc` after adding a route.
+- `e2e/` — Playwright specs, one per area; `fixture.ts` signs in a throwaway student. Tests find
+  things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
+- `docs/samples/ald/` — real ALD decks for trying uploads; `docs/OBJECTIVES-ALD.md` the benchmark.
+- Deploy: Vercel (https://orca-lake-omega.vercel.app) builds from `backend-implementation`, linked to GitHub; the commit that triggers a deploy must be authored by the Vercel account's GitHub email. `phase-4` is the working branch and is merged into `backend-implementation` to deploy.
 
 ## What to build next
 
@@ -401,7 +303,9 @@ topics, objectives, weights and relations (on-device), (3) scheduling and sessio
 (auth, tables, Storage, snapshots, server-side pipeline), (5) relation mastery, exams and calendar,
 (6) ALD drills, (7) MCP connector. Build each phase with
 `superpowers:writing-plans` → `superpowers:subagent-driven-development`; plans go in
-`docs/superpowers/plans/`. Animation next steps are in `docs/ANIMATION.md`.
+`docs/superpowers/plans/` (phases only; bug fixes use Fix mode, see Conventions). Animation next steps are in `docs/ANIMATION.md`.
+Phase 5's "relation mastery" was written for objective-level relations; relations are topic-level
+now, so that part needs rethinking before it's planned.
 
 ## Invariants (ported from ai-native-learning-platform)
 
@@ -438,10 +342,20 @@ topics, objectives, weights and relations (on-device), (3) scheduling and sessio
 
 - Keep screens thin: data from `useOrca()`, visuals from components, timing from `motion.ts`.
 - Pixel values from Figma are fine inline (`text-[22px]`, `rounded-[20px]`); colors must be tokens.
-- Testing is lean while the project is early: write tests for the happy path and the edge cases
-  that matter (security, data loss, mastery rules), not exhaustive matrices. Per commit: `npx tsc
-  --noEmit`, `npm run lint`, and only the tests covering what changed (one unit file, one pgTAP
-  file, one e2e spec). Run the whole suite (`npm test`, `npm run test:db`, `npm run test:e2e`,
-  the check scripts) once at the end of a task that changed the store, a migration or shared
-  code, and always before merging a branch.
-  `npm run dev` for the preview.
+- **Fix mode (the default for bug fixes and small changes).** Make the narrowest fix, then run
+  only `npx tsc --noEmit`, `npx eslint` on the changed files, and the one unit test file covering
+  the change (add a test only for mastery rules, security or data loss). Check UI changes by hand
+  in `npm run dev` or with one e2e spec, not the whole suite. Run `npm run test:db` only when a
+  migration changed. No plan doc, no subagents or reviews, no worktrees. Update docs only when
+  setup or a decision changed. Commit messages are one or two lines.
+- **Merge or deploy gate (once, not per change).** Before merging a branch or deploying: `npm test`,
+  `npm run test:db`, `npm run test:e2e`, `npm run check:isolation`, `npm run check:evidence`.
+- **Phase work** (a new roadmap phase or a large feature) still uses the plan doc and task-by-task
+  flow described above, with Fix mode's checks per commit.
+- `npm run dev` for the preview.
+
+<!-- TRIGGER.DEV SKILLS START -->
+## Trigger.dev agent skills
+
+This project has Trigger.dev agent skills installed in `.claude/skills/`. Before writing or changing Trigger.dev code (background tasks, scheduled tasks, realtime, or chat.agent AI agents), load the most relevant skill: `trigger-authoring-chat-agent`.
+<!-- TRIGGER.DEV SKILLS END -->

@@ -22,13 +22,13 @@ export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/obj
   const mastery = useMasteryByCourse();
   const catalogue = useMemo(() => (course ? (objectives[course.id] ?? {}) : {}), [course, objectives]);
   const objectiveWeights = useMemo(
-    () => (course ? courseObjectiveWeights(catalogue, relations[course.id] ?? [], weights[course.id] ?? DEFAULT_WEIGHTS) : new Map<string, number>()),
+    () => (course ? courseObjectiveWeights(catalogue, course.topics, relations[course.id] ?? [], weights[course.id] ?? DEFAULT_WEIGHTS) : new Map<string, number>()),
     [course, catalogue, relations, weights],
   );
 
   if (!course) {
     return (
-      <Screen bg="alice">
+      <Screen bg="ocean">
         <div className="flex flex-col items-start gap-4 p-[32px]">
           <BackButton />
           {hydrated && <p className="text-[22px] font-bold text-prussian">We couldn&apos;t find that island.</p>}
@@ -45,18 +45,20 @@ export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/obj
   const rejectedTopics = course.topics.filter((t) => t.review === "archived" && !t.mergedInto);
 
   return (
-    <Screen bg="alice" className="overflow-y-auto">
-      <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
-        <BackButton />
-        <div className="flex flex-col gap-[4px]">
+    <Screen bg="ocean" className="overflow-y-auto">
+      <header className="relative flex justify-center px-[100px] pt-[28px] text-center">
+        <div className="absolute left-[28px] top-[28px]">
+          <BackButton />
+        </div>
+        <div className="flex flex-col items-center gap-[4px]">
           <h1 className="text-[40px] font-bold leading-none text-prussian">{course.short} objectives</h1>
           <p className="text-[15px] font-medium text-wisteria-deep">
-            {live.length} objective{live.length === 1 ? "" : "s"}. Weight sets what gets practised first; it never changes what counts as mastered.
+            {live.length} objective{live.length === 1 ? "" : "s"}
           </p>
         </div>
       </header>
 
-      <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="flex w-[900px] max-w-full flex-col gap-[20px] px-[28px] py-[28px]">
+      <motion.div variants={stagger(0.05)} initial="hidden" animate="show" className="mx-auto flex w-[900px] max-w-full flex-col gap-[20px] px-[28px] py-[28px]">
         {visibleTopics.length === 0 && <p className="text-[18px] font-bold text-prussian">No objectives yet. Upload material to map this course.</p>}
         {visibleTopics.map((t) => (
           <TopicSection
@@ -143,7 +145,7 @@ function TopicSection({
                 </div>
                 <div className="flex flex-wrap items-center gap-[14px]">
                   {o.review === "proposed" && <TextAction onClick={() => onConfirm(o.id)}>Confirm</TextAction>}
-                  <TextAction tone="quiet" onClick={() => onReject(o.id)}>
+                  <TextAction tone="danger" onClick={() => onReject(o.id)}>
                     Reject
                   </TextAction>
                   <label className="flex items-center gap-[6px] text-[13px] font-bold text-prussian/60">

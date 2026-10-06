@@ -59,6 +59,10 @@ jobs:
             echo "::error::ANTHROPIC_BASE_URL points off this machine ($ANTHROPIC_BASE_URL)."
             exit 1
           fi
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            echo "::error::OPENAI_API_KEY is set in CI. Tests must never reach a real model; remove it from the workflow's environment."
+            exit 1
+          fi
           echo "No model key in the environment."
 
       - name: Playwright browser cache

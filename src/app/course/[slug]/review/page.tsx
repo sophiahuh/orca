@@ -30,7 +30,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
   if (!course) {
     return (
-      <Screen bg="alice">
+      <Screen bg="ocean">
         <div className="flex flex-col items-start gap-4 p-[32px]">
           <BackButton />
           {hydrated && <p className="text-[22px] font-bold text-prussian">We couldn&apos;t find that island.</p>}
@@ -49,9 +49,9 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
   const edit = editStructure.bind(null, course.id);
 
   return (
-    <Screen bg="alice" className="overflow-y-auto">
+    <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
-        <BackButton />
+        <BackButton href={`/course/${course.slug}`} />
         <div className="flex flex-col gap-[4px]">
           <h1 className="text-[40px] font-bold leading-none text-prussian">Review {course.short}</h1>
           <p className="text-[15px] font-medium text-wisteria-deep">New topics are quizzable now, marked Unreviewed until you confirm them.</p>
@@ -207,7 +207,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
 /** Roughly how far along a running upload is, by stage. */
 function stageShare(stage: string | undefined): number {
-  return ({ mapping: 0.15, matching: 0.3, writing: 0.5, checking: 0.75, figures: 0.9 } as Record<string, number>)[stage ?? ""] ?? 0.1;
+  return ({ mapping: 0.15, matching: 0.3, writing: 0.6, figures: 0.9 } as Record<string, number>)[stage ?? ""] ?? 0.1;
 }
 
 function Duplicate({ kind, name, other, reasoning, onSame, onSeparate }: { kind: "topic" | "objective"; name: string; other: string; reasoning: string; onSame: () => void; onSeparate: () => void }) {
@@ -256,7 +256,7 @@ function NewTopic({
                 <span className="text-[15px] text-prussian">{o.name}</span>
                 <OriginPill origin={o.origin} />
               </span>
-              <TextAction tone="quiet" onClick={() => onRejectObjective(o.id)}>
+              <TextAction tone="danger" onClick={() => onRejectObjective(o.id)}>
                 Reject
               </TextAction>
             </li>
@@ -269,7 +269,7 @@ function NewTopic({
         <Button size="sm" onClick={onConfirm}>
           Confirm topic
         </Button>
-        <Button size="sm" variant="secondary" onClick={onReject}>
+        <Button size="sm" variant="danger" onClick={onReject}>
           Reject topic
         </Button>
       </div>

@@ -6,8 +6,8 @@ import { cn } from "@/lib/cn";
 import { popIn, pulseHalo, springBouncy } from "@/lib/motion";
 
 /**
- * Figma: Knowledge Path node. done = periwinkle + check, current = large
- * wisteria + play with a pulsing halo and a START bubble (the first topic not
+ * Figma: Knowledge Path node. done = mastered green + check, current = large
+ * wisteria + play with a pulsing alice halo and a START bubble (the first topic not
  * yet done), in-progress = parchment + small play with full-colour label, upcoming = parchment + small play with faded label. Topics are never locked.
  * Positioned absolutely by its centre inside the 854×834 path canvas.
  */
@@ -33,9 +33,9 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
 
   const face =
     visual === "done"
-      ? "bg-periwinkle border-periwinkle-deep text-prussian lip-periwinkle"
+      ? "bg-good-tint border-good text-good-deep lip-good"
       : visual === "current"
-        ? "bg-wisteria border-wisteria-deep text-parchment lip-wisteria"
+        ? "bg-wisteria border-wisteria text-parchment lip-wisteria"
         : "bg-parchment border-alice-deep text-periwinkle-deep lip-alice";
 
   return (
@@ -44,7 +44,7 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
         <motion.div
           data-part="halo"
           aria-hidden
-          className="absolute rounded-pill bg-periwinkle"
+          className="absolute rounded-pill bg-alice"
           style={{ width: HALO, height: HALO, left: -HALO / 2, top: -HALO / 2 }}
           animate={pulseHalo}
         />
@@ -94,7 +94,8 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
         animate="show"
         transition={{ ...springBouncy, delay: 0.35 + index * 0.08 }}
         className="absolute flex flex-col gap-[2px] whitespace-nowrap"
-        style={{ left: size / 2 + 18, top: -22 }}
+        // The current node's label clears its halo at its widest pulse.
+        style={{ left: (visual === "current" ? (HALO * Math.max(...pulseHalo.scale)) / 2 : size / 2) + 18, top: -22 }}
       >
         <span className={cn("text-[22px] font-bold leading-tight", faded ? "text-periwinkle-deep" : "text-prussian")}>{name}</span>
         <span className={cn("text-[15px] font-medium", faded ? "text-periwinkle-deep" : "text-wisteria-deep")}>{sub}</span>

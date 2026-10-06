@@ -32,21 +32,24 @@ const BUBBLES = [
 export default function OnboardingPage({ searchParams }: PageProps<"/">) {
   const sp = use(searchParams);
   const router = useRouter();
-  const { setOnboarded, onboarded, hydrated } = useOrca();
+  const { setOnboarded } = useOrca();
   const preview = sp.preview !== undefined;
 
-  // Returning students land on the map; `/?preview` always shows this screen.
+  // Everyone here is signed in (the proxy sends visitors to sign-in), so they go to their courses;
+  // `/?preview` still shows this screen.
   useEffect(() => {
-    if (hydrated && onboarded && !preview) router.replace("/home");
-  }, [hydrated, onboarded, preview, router]);
+    if (!preview) router.replace("/home");
+  }, [preview, router]);
 
   const go = () => {
     setOnboarded(true);
     router.push("/home");
   };
 
+  if (!preview) return null;
+
   return (
-    <Screen bg="alice">
+    <Screen bg="ocean">
       <motion.div
         variants={stagger(0.1, 0.09)}
         initial="hidden"

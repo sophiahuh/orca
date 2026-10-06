@@ -15,7 +15,7 @@ import { MessageChannel, Worker } from "node:worker_threads";
 import { LIMITS } from "../limits.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { type PageBox, visibleItems } from "../untrusted/hidden-text.ts";
-import { pageText } from "./page-text.ts";
+import { likelyHeadings, pageText } from "./page-text.ts";
 
 export interface ReadPage {
   n: number;
@@ -170,7 +170,10 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
         hidden.items += visible.hidden;
         hidden.pages.push(n);
       }
-      const clean = sanitize(pageText(visible.items), LIMITS.pageChars);
+      const text = pageText(visible.items);
+      const headings = likelyHeadings(visible.items);
+      const annotated = headings.length ? `[Likely section headings, inferred from comparatively large text: ${headings.join(" | ")}]\n${text}` : text;
+      const clean = sanitize(annotated, LIMITS.pageChars);
       removed += clean.removed;
       if (clean.truncated) truncated.push(n);
       pages.push({ n, text: clean.text });

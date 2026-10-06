@@ -13,7 +13,10 @@ import { fadeUp, popIn, stagger } from "@/lib/motion";
 export interface QuizEndProps {
   topicName: string;
   correct: number;
+  /** Scored answers (skipped and ungraded ones aren't). */
   total: number;
+  /** Questions skipped: nothing recorded for them. */
+  skipped?: number;
   seconds: number;
   streak: number;
   onContinue: () => void;
@@ -26,12 +29,12 @@ export interface QuizEndProps {
 }
 
 /** Figma: Quiz End. Centred 640px result card on an alice sea. */
-export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue, onReview, onClose, again, extra }: QuizEndProps) {
+export function QuizEnd({ topicName, correct, total, skipped = 0, seconds, streak, onContinue, onReview, onClose, again, extra }: QuizEndProps) {
   const misses = total - correct;
   const accuracy = total ? Math.round((correct / total) * 100) : 0;
 
   return (
-    <div className="relative flex min-h-screen-below-bar flex-1 items-center justify-center overflow-y-auto bg-alice p-6">
+    <div className="relative flex min-h-screen-below-bar flex-1 items-center justify-center overflow-y-auto bg-ocean p-6">
       <Wave tone="light" x={120} y={160} width={70} seed={1} />
       <Wave tone="light" x={960} y={220} width={60} seed={2} />
       <Wave tone="light" x={180} y={650} width={80} seed={3} />
@@ -53,10 +56,12 @@ export function QuizEnd({ topicName, correct, total, seconds, streak, onContinue
           </motion.div>
 
           <motion.h1 variants={fadeUp} className="mt-[4px] text-[38px] font-bold leading-tight text-prussian">
-            {correct === total ? "Perfect. Keep going!" : "Nice work. Keep going!"}
+            {total === 0 ? "Nothing answered this time" : correct === total ? "Perfect. Keep going!" : "Nice work. Keep going!"}
           </motion.h1>
-          <motion.p variants={fadeUp} className="mt-[8px] text-[16px] text-prussian/80">
-            You answered {correct} of {total} correctly. {topicName} is getting stronger.
+          <motion.p variants={fadeUp} className="mt-[8px] text-[16px] text-prussian/80" data-part="quiz-end-summary">
+            {total === 0
+              ? "You skipped every question, so nothing was recorded and your mastery is unchanged."
+              : `You answered ${correct} of ${total} correctly.${skipped ? ` ${skipped} skipped, not counted.` : ""}${correct > 0 ? ` ${topicName} is getting stronger.` : ""}`}
           </motion.p>
 
           <motion.div variants={stagger(0.1, 0.06)} className="mt-[22px] flex w-full gap-[14px]">

@@ -33,6 +33,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { usePathname } from "next/navigation";
 import {
   type CalendarEvent,
+  type Exam,
   type Course,
   type IslandVariant,
   type Material,
@@ -63,7 +64,7 @@ import { courseObjectiveWeights } from "./course/weights";
 import { laidOut } from "./course/layout";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
-import { type MyData, type StructureState, calendarToRow, courseToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
+import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
 import type { Json } from "./supabase/database.types";
@@ -72,9 +73,17 @@ import { useNow } from "@/hooks/useNow";
 interface OrcaState {
   courses: Course[];
   events: CalendarEvent[];
+  /** Each course's exams (their dates and the topics they cover). */
+  exams: Exam[];
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
+  /** Explicit course settings, if any. Null inherits the account default. */
+  configOverrides: Record<string, ReviewConfig | null>;
+  weightOverrides: Record<string, Weights | null>;
+  /** Account defaults, used by every course without an explicit override. */
+  defaultConfig: ReviewConfig;
+  defaultWeights: Weights;
   results: QuizResult[];
   onboarded: boolean;
   /** The student's IANA timezone (profile); every day boundary uses it. */
@@ -89,7 +98,7 @@ interface OrcaState {
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
   /** Course structure: courseId → objectiveId → objective. Created once, at upload; archived or merged, never deleted. */
   objectives: Record<string, Record<string, Objective>>;
-  /** courseId → relations between objectives, from uploads. */
+  /** courseId → relations between topics (used-in, has-a-kind, alternative-to, related), from uploads. */
   relations: Record<string, Relation[]>;
   /** Every upload's pipeline run, oldest first. */
   runs: PipelineRun[];
@@ -107,9 +116,14 @@ const LEGACY_KEYS = ["orca:v3", "orca:v4", "orca:v5", "orca:v6", "orca:v7", "orc
 const initialState: OrcaState = {
   courses: [],
   events: [],
+  exams: [],
   materials: [],
   configs: {},
   weights: {},
+  configOverrides: {},
+  weightOverrides: {},
+  defaultConfig: DEFAULT_CONFIG,
+  defaultWeights: DEFAULT_WEIGHTS,
   results: [],
   onboarded: false,
   timezone: "UTC",
@@ -126,8 +140,18 @@ const initialState: OrcaState = {
 
 interface OrcaActions {
   addCourse: (name: string) => Course;
+  /** Rename a course without changing its stable URL slug or compact labels elsewhere. */
+  renameCourse: (courseId: string, name: string) => void;
   setConfig: (courseId: string, config: ReviewConfig) => void;
   setWeights: (courseId: string, weights: Weights) => void;
+  clearConfigOverride: (courseId: string) => void;
+  /** A course's exams (the exams table): add one, rename it, move it, change its topics, or remove it. */
+  addExam: (courseId: string, title: string, date: string, topicIds: string[]) => void;
+  updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[] }) => void;
+  removeExam: (id: string) => void;
+  clearWeightOverride: (courseId: string) => void;
+  /** Account defaults, inherited by courses without an override. */
+  setDefaults: (config: ReviewConfig, weights: Weights) => void;
   /**
    * Add a material to its course (and its due date to the calendar). `saved`: the server already
    * recorded it (an uploaded file, `src/lib/uploads.ts`); otherwise it's saved here as a record
@@ -140,6 +164,8 @@ interface OrcaActions {
   /** A homework reflection: one confusion event per objective the student confirmed, and the note kept on the material. */
   recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note">>) => void;
   setOnboarded: (v: boolean) => void;
+  /** The student's display name (profile), independent of the sign-in email. */
+  setName: (name: string) => void;
   setTimezone: (timezone: string) => void;
   setAvatar: (avatar: AvatarId) => void;
   setLlm: (c: LlmConfig | null) => void;
@@ -234,7 +260,7 @@ async function loadAll(): Promise<Omit<OrcaState, "llm">> {
   await Promise.all([...staleCourses].map(async (id) => (snapshots[id] = await fetchSnapshots(id))));
   const { snapshots: _rows, ...rest } = loaded;
   void _rows;
-  return { ...rest, snapshots };
+  return { ...rest, defaultConfig: loaded.defaultConfig ?? DEFAULT_CONFIG, defaultWeights: loaded.defaultWeights ?? DEFAULT_WEIGHTS, snapshots };
 }
 
 async function sessionUser(): Promise<string | null> {
@@ -457,29 +483,47 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       setState((s) => ({
         ...s,
         courses: [...s.courses, course],
-        configs: { ...s.configs, [id]: DEFAULT_CONFIG },
-        weights: { ...s.weights, [id]: DEFAULT_WEIGHTS },
+        configs: { ...s.configs, [id]: s.defaultConfig },
+        weights: { ...s.weights, [id]: s.defaultWeights },
+        configOverrides: { ...s.configOverrides, [id]: null },
+        weightOverrides: { ...s.weightOverrides, [id]: null },
         objectives: { ...s.objectives, [id]: {} },
         relations: { ...s.relations, [id]: [] },
         snapshots: { ...s.snapshots, [id]: {} },
       }));
       save(
-        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, DEFAULT_CONFIG, DEFAULT_WEIGHTS))),
+        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, null, null))),
       );
       return course;
     },
     [save],
   );
 
+  const renameCourse = useCallback<OrcaActions["renameCourse"]>(
+    (courseId, name) => {
+      const clean = name.trim();
+      if (!clean) throw new Error("A course needs a name");
+      const course = stateRef.current.courses.find((c) => c.id === courseId);
+      if (!course) throw new Error(`No course ${courseId}`);
+      if (course.name === clean) return;
+      setState((s) => ({ ...s, courses: s.courses.map((c) => (c.id === courseId ? { ...c, name: clean } : c)) }));
+      save(
+        async () => {
+          mustChange(await browserSupabase().from("courses").update({ name: clean }).eq("id", courseId).select("id"));
+        },
+      );
+    },
+    [save],
+  );
+
   const setConfig = useCallback<OrcaActions["setConfig"]>(
     (courseId, config) => {
-      setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: config } }));
+      setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: config }, configOverrides: { ...s.configOverrides, [courseId]: config } }));
       const course = stateRef.current.courses.find((c) => c.id === courseId);
       if (!course) throw new Error(`No course ${courseId}`);
       save(
         async () => {
-          const row = courseToRow(course, config, stateRef.current.weights[courseId] ?? DEFAULT_WEIGHTS);
-          mustChange(await browserSupabase().from("courses").update({ review_config: row.review_config }).eq("id", courseId).select("id"));
+          mustChange(await browserSupabase().from("courses").update({ review_config: config as unknown as Json }).eq("id", courseId).select("id"));
         },
       );
     },
@@ -488,15 +532,58 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const setWeights = useCallback<OrcaActions["setWeights"]>(
     (courseId, weights) => {
-      setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: weights } }));
+      setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: weights }, weightOverrides: { ...s.weightOverrides, [courseId]: weights } }));
       const course = stateRef.current.courses.find((c) => c.id === courseId);
       if (!course) throw new Error(`No course ${courseId}`);
       save(
         async () => {
-          const row = courseToRow(course, stateRef.current.configs[courseId] ?? DEFAULT_CONFIG, weights);
-          mustChange(await browserSupabase().from("courses").update({ weights: row.weights }).eq("id", courseId).select("id"));
+          mustChange(await browserSupabase().from("courses").update({ weights }).eq("id", courseId).select("id"));
         },
       );
+    },
+    [save],
+  );
+
+  const clearConfigOverride = useCallback<OrcaActions["clearConfigOverride"]>(
+    (courseId) => {
+      const fallback = stateRef.current.defaultConfig;
+      setState((s) => ({ ...s, configs: { ...s.configs, [courseId]: fallback }, configOverrides: { ...s.configOverrides, [courseId]: null } }));
+      save(async () => mustChange(await browserSupabase().from("courses").update({ review_config: null }).eq("id", courseId).select("id")));
+    },
+    [save],
+  );
+
+  const clearWeightOverride = useCallback<OrcaActions["clearWeightOverride"]>(
+    (courseId) => {
+      const fallback = stateRef.current.defaultWeights;
+      setState((s) => ({ ...s, weights: { ...s.weights, [courseId]: fallback }, weightOverrides: { ...s.weightOverrides, [courseId]: null } }));
+      save(async () => mustChange(await browserSupabase().from("courses").update({ weights: null }).eq("id", courseId).select("id")));
+    },
+    [save],
+  );
+
+  const addExam = useCallback<OrcaActions["addExam"]>(
+    (courseId, title, date, topicIds) => {
+      const exam: Exam = { id: crypto.randomUUID(), courseId, title, date, topicIds };
+      setState((s) => ({ ...s, exams: [...s.exams, exam] }));
+      save(async () => void must(await browserSupabase().from("exams").insert(examToRow(exam))));
+    },
+    [save],
+  );
+
+  const updateExam = useCallback<OrcaActions["updateExam"]>(
+    (id, change) => {
+      setState((s) => ({ ...s, exams: s.exams.map((e) => (e.id === id ? { ...e, ...change } : e)) }));
+      const row = { ...(change.title !== undefined ? { title: change.title } : {}), ...(change.date !== undefined ? { date: change.date } : {}), ...(change.topicIds !== undefined ? { topic_ids: change.topicIds } : {}) };
+      save(async () => mustChange(await browserSupabase().from("exams").update(row).eq("id", id).select("id")));
+    },
+    [save],
+  );
+
+  const removeExam = useCallback<OrcaActions["removeExam"]>(
+    (id) => {
+      setState((s) => ({ ...s, exams: s.exams.filter((e) => e.id !== id) }));
+      save(async () => mustChange(await browserSupabase().from("exams").delete().eq("id", id).select("id")));
     },
     [save],
   );
@@ -628,6 +715,20 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  const setName = useCallback<OrcaActions["setName"]>(
+    (name) => {
+      const clean = name.trim();
+      if (!clean) throw new Error("A username is required.");
+      setState((s) => ({ ...s, name: clean }));
+      save(async () => {
+        const { data } = await browserSupabase().auth.getSession();
+        if (!data.session) throw new Error("you're signed out");
+        mustChange(await browserSupabase().from("profiles").update({ name: clean }).eq("owner_id", data.session.user.id).select("owner_id"));
+      });
+    },
+    [save],
+  );
+
   const setTimezone = useCallback(
     (timezone: string) => {
       setState((s) => ({ ...s, timezone }));
@@ -642,6 +743,26 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       );
     },
     [save, refreshAfterSave],
+  );
+
+  const setDefaults = useCallback<OrcaActions["setDefaults"]>(
+    (config, weights) => {
+      setState((s) => {
+        const configs = { ...s.configs };
+        const courseWeights = { ...s.weights };
+        for (const c of s.courses) {
+          if (s.configOverrides[c.id] === null) configs[c.id] = config;
+          if (s.weightOverrides[c.id] === null) courseWeights[c.id] = weights;
+        }
+        return { ...s, defaultConfig: config, defaultWeights: weights, configs, weights: courseWeights };
+      });
+      save(async () => {
+        const { data } = await browserSupabase().auth.getSession();
+        if (!data.session) throw new Error("you're signed out");
+        mustChange(await browserSupabase().from("profiles").update(defaultsToRow(config, weights)).eq("owner_id", data.session.user.id).select("owner_id"));
+      });
+    },
+    [save],
   );
 
   const setAvatar = useCallback(
@@ -696,13 +817,21 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       saving,
       saveError,
       addCourse,
+      renameCourse,
       setConfig,
       setWeights,
+      clearConfigOverride,
+      clearWeightOverride,
+      addExam,
+      updateExam,
+      removeExam,
+      setDefaults,
       addMaterial,
       recordQuiz,
       recordEvidence,
       recordReflection,
       setOnboarded,
+      setName,
       setTimezone,
       setAvatar,
       setLlm,
@@ -712,7 +841,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
@@ -799,7 +928,7 @@ export function useStreak(): number {
 
 /** What's due, per course: ranked objectives, quick and deep review, review to-dos and re-quizzes. */
 export function useAgenda(): Record<string, CourseAgenda> {
-  const { courses, objectives, relations, weights, configs, results, events } = useOrca();
+  const { courses, objectives, relations, weights, configs, results, events, exams } = useOrca();
   const mastery = useMasteryByCourse();
   const dayKey = useDayKey();
   const nowMs = useNow();
@@ -810,20 +939,21 @@ export function useAgenda(): Record<string, CourseAgenda> {
           const m = mastery[c.id];
           if (!m) throw new Error(`No mastery computed for course ${c.id}`);
           const sliders = weights[c.id] ?? DEFAULT_WEIGHTS;
-          const computed = courseObjectiveWeights(objectives[c.id] ?? {}, relations[c.id] ?? [], sliders);
+          const computed = courseObjectiveWeights(objectives[c.id] ?? {}, c.topics, relations[c.id] ?? [], sliders);
           const agenda = courseAgenda({
             courseId: c.id,
             mastery: m,
             weights: withNeutralWeights(m.objectives.keys(), computed, isUnsortedObjectiveId),
             config: configs[c.id] ?? DEFAULT_CONFIG,
             results,
-            examDays: events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date),
+            // Exams, and any uploaded exam's due date on the calendar.
+            examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
             now: new Date(nowMs),
             dayKey,
           });
           return [c.id, agenda];
         }),
       ),
-    [courses, objectives, relations, weights, configs, results, events, mastery, nowMs, dayKey],
+    [courses, objectives, relations, weights, configs, results, events, exams, mastery, nowMs, dayKey],
   );
 }

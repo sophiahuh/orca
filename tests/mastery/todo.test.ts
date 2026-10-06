@@ -45,7 +45,7 @@ test("deep review today or tomorrow, study items, re-quizzes and tomorrow's chec
     names,
   );
   assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title]), [
-    ["deep", "today", "Deep review"],
+    ["deep", "today", "Dive in"],
     ["study", "today", "Review: Obj a"],
     ["study", "today", "Review: Obj b"],
     ["requiz", "today", "Re-quiz · 1 objective"],

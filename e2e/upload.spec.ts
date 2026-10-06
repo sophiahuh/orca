@@ -29,7 +29,7 @@ const LECTURE = {
     { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
     { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
   ],
-  relations: [{ from: "o2", to: "o1", type: "builds-on", anchor: null }],
+  relations: [{ from: "t1", to: "t2", type: "used-in", anchor: null }],
 };
 
 const ONE_TOPIC = {
@@ -49,9 +49,8 @@ async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
   await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
-  await expect(page.locator("[data-part=model-note]")).toHaveText("Orca (Claude Opus 5.5) will build topics and quizzes from this file.");
   await page.getByRole("button", { name: type, exact: true }).click();
-  await page.getByRole("button", { name: /generate quizzes/ }).click();
+  await page.getByRole("button", { name: "Add to course" }).click();
 }
 
 test("a lecture upload is built by a job on the server; the review screen follows it and lands the questions on the trail", async ({ page, student }) => {
@@ -65,7 +64,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
-  expect(await fakeCalls()).toEqual(["extract", "generate", "generate", "solve"]);
+  expect(await fakeCalls()).toEqual(["extract", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -100,6 +99,25 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
   await page.goto(`/quiz/logic/${course.topics[0].id}`);
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
+});
+
+test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await upload(page);
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  const state = await stored(page, student);
+  const material = state.materials[0];
+  // Reloading the upload page for it (its URL once the server made it) opens its run's review.
+  await page.goto(`/add-material?course=logic&material=${material.id}`);
+  await expect(page).toHaveURL(new RegExp(`/course/logic/review\\?run=${state.runs[0].id}`), { timeout: 15_000 });
+
+  // A reload while the browser was still sending the file: the file never arrived.
+  const stranded = crypto.randomUUID();
+  const inserted = await admin().from("materials").insert({ id: stranded, owner_id: student.id, course_id: state.courses[0].id, filename: "half.pdf", type: "Lecture", reflect: false, status: "uploaded", mime: "application/pdf", size_bytes: 10 });
+  expect(inserted.error).toBeNull();
+  await page.goto(`/add-material?course=logic&material=${stranded}`);
+  await expect(page.locator("[data-part=resume-upload]")).toContainText("half.pdf didn't finish uploading before the page reloaded.", { timeout: 15_000 });
 });
 
 test("re-uploading the same deck is recognised by its content and adds nothing", async ({ page, student }) => {

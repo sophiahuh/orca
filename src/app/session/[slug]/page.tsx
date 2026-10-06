@@ -1,13 +1,13 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Course, DEFAULT_CONFIG, DEFAULT_WEIGHTS, type QuizQuestion, trailTopics } from "@/lib/data";
+import { type Course, DEFAULT_CONFIG, type QuizQuestion, trailTopics } from "@/lib/data";
+import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import { reasonsOf } from "@/lib/mastery/priority";
 import {
   type AssembledSession,
-  assembleDeepReview,
   assembleQuickReview,
   assembleRequiz,
   durationSeconds,
@@ -19,7 +19,9 @@ import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
 import { QuizRunner, type RunnerItem } from "@/components/quiz/QuizRunner";
-import { DEEP_MAX_MINUTES, DeepReviewSetup, type DeepReviewPlan } from "@/components/quiz/DeepReviewSetup";
+import { DeepReviewSetup } from "@/components/quiz/DeepReviewSetup";
+import { PreparingDive } from "@/components/quiz/PreparingDive";
+import { isFinished, useRun } from "@/hooks/useRun";
 
 const KINDS = ["quick", "deep", "requiz"] as const;
 type Kind = (typeof KINDS)[number];
@@ -40,13 +42,17 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
       </Screen>
     );
   }
-  return <SessionBody key={`${course.id}:${kind}`} course={course} kind={kind} />;
+  // A topic's dive ("Dive into [topic]" on the path or the Atlas): that topic only, at the length picked there.
+  const topicId = typeof sp.topic === "string" && trailTopics(course).some((t) => t.id === sp.topic) ? sp.topic : undefined;
+  const picked = Number(sp.minutes);
+  const minutes = Number.isInteger(picked) && picked >= 1 && picked <= DEEP_MAX_MINUTES ? picked : undefined;
+  return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}`} course={course} kind={kind} topicId={topicId} minutes={minutes} />;
 }
 
 /** Mounted once the store is loaded. A deep review asks for its length first and can be run again from its end card. */
-function SessionBody({ course, kind }: { course: Course; kind: Kind }) {
+function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind: Kind; topicId?: string; minutes?: number }) {
   const [round, setRound] = useState(0);
-  if (kind === "deep") return <DeepReview key={round} course={course} onAgain={() => setRound((r) => r + 1)} />;
+  if (kind === "deep") return <DeepReview key={round} course={course} topicId={topicId} startMinutes={minutes} onAgain={() => setRound((r) => r + 1)} />;
   return <ScheduledSession course={course} kind={kind} />;
 }
 
@@ -64,7 +70,8 @@ function useSessionSources(course: Course) {
     for (const t of trailTopics(course)) {
       for (const q of questionBank[course.id]?.[t.id] ?? []) {
         const o = liveObjectiveOf(q, t.id, catalogue);
-        if (!o) continue;
+        // Deep-review questions are written for, and asked in, deep reviews only.
+        if (!o || q.deep) continue;
         byId.set(q.id, q);
         byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
       }
@@ -110,40 +117,81 @@ function ScheduledSession({ course, kind }: { course: Course; kind: "quick" | "r
   return <QuizRunner course={course} items={items} mode={kind} title={course.name} backHref={backHref} />;
 }
 
-function DeepReview({ course, onAgain }: { course: Course; onAgain: () => void }) {
+/**
+ * A dive: a deep review whose harder questions are written when it starts. Course-wide it asks for
+ * its length first and covers the objectives the student has answered; for one topic (topicId) it
+ * covers every live objective of that topic and starts at once with the length picked in the popup.
+ */
+function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course; onAgain: () => void; topicId?: string; startMinutes?: number }) {
   const router = useRouter();
-  const { configs, weights, materials } = useOrca();
-  const { agenda, ctx, toItems, candidates } = useSessionSources(course);
+  const { configs, questionBank, runs } = useOrca();
+  const agenda = useAgenda()[course.id];
+  if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
   const backHref = `/course/${course.slug}`;
-  // The course's deep-review length in Settings is the starting suggestion; the student picks the length here.
-  const [minutes, setMinutes] = useState(() => Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
-  const [items, setItems] = useState<RunnerItem[] | null>(null);
-  const [pool] = useState(() => candidates(agenda.ranked));
-
-  const assembled = useMemo(
-    () =>
-      assembleDeepReview(pool, {
-        ...ctx,
-        budgetSeconds: minutes * 60,
-        sliders: weights[course.id] ?? DEFAULT_WEIGHTS,
-        materialTypeOf: (id) => materials.find((m) => m.id === id)?.type ?? null,
-      }),
-    [pool, ctx, minutes, weights, course.id, materials],
+  // The course's deep-review length is the starting suggestion; the student picks the length here.
+  const [minutes, setMinutes] = useState(() => startMinutes ?? Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
+  const autostart = topicId !== undefined && startMinutes !== undefined;
+  const [phase, setPhase] = useState<{ kind: "setup" | "starting" } | { kind: "following"; runId: string } | { kind: "error"; message: string }>({ kind: autostart ? "starting" : "setup" });
+  // What it covers, most urgent first: one topic's live objectives, or every objective the student has answered (not retired).
+  const [objectiveIds] = useState(() =>
+    agenda.ranked.filter((r) => (topicId ? r.topicId === topicId && r.status !== "retired" : r.status !== "unseen" && r.status !== "retired")).map((r) => r.objectiveId),
   );
-  const plan = useMemo((): DeepReviewPlan => {
-    const perTopic = new Map<string, number>();
-    for (const i of assembled.items) perTopic.set(i.topicId, (perTopic.get(i.topicId) ?? 0) + 1);
-    const topics = trailTopics(course).flatMap((t) => (perTopic.has(t.id) ? [{ name: t.name, questions: perTopic.get(t.id)! }] : []));
-    return { questions: assembled.items.length, plannedSeconds: assembled.plannedSeconds, coverage: assembled.coverage, topics };
-  }, [assembled, course]);
+  const topicName = topicId ? trailTopics(course).find((t) => t.id === topicId)?.name : undefined;
+  // A refreshed page has no component state, but the stored run is still authoritative. There is
+  // only one course-level Dive In in flight, so safely resume following it without another write.
+  const resumedRunId = runs.find((r) => r.courseId === course.id && r.kind === "deep-review" && !isFinished(r))?.id;
+  const followedRunId = phase.kind === "following" ? phase.runId : resumedRunId;
+  const { run } = useRun(followedRunId);
 
-  if (assembled.coverage.objectives === 0) {
-    return <NothingToDo course={course} message="Nothing to deep review yet: answer some questions first." onBack={() => router.push(backHref)} />;
+  const items = useMemo((): RunnerItem[] | null => {
+    if (run?.status !== "done" || !run.questionIds?.length) return null;
+    const byQuestion = new Map<string, { question: QuizQuestion; topicId: string }>();
+    for (const [currentTopicId, questions] of Object.entries(questionBank[course.id] ?? {})) for (const question of questions) byQuestion.set(question.id, { question, topicId: currentTopicId });
+    const picked = run.questionIds.map((id) => byQuestion.get(id));
+    if (picked.some((p) => !p)) return null; // useRun has asked the provider to refresh; wait for its saved questions.
+    return picked.map((p) => {
+      const question = p!.question;
+      return { question, topicId: p!.topicId, notes: [] };
+    });
+  }, [run, questionBank, course.id]);
+
+  const write = async () => {
+    try {
+      // The response only gives us a durable run id; it keeps writing after this page is left.
+      const res = await fetch("/api/deep-review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId: course.id, minutes, objectiveIds }) });
+      const out = (await res.json().catch(() => null)) as { state?: "started" | "running" | "queued" | "waiting"; runId?: string; error?: string } | null;
+      if (!res.ok || !out?.runId || !out.state) throw new Error(out?.error ?? "Orca couldn't prepare your dive in. Try again in a moment.");
+      setPhase({ kind: "following", runId: out.runId });
+    } catch (error) {
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Orca couldn't prepare your dive in." });
+    }
+  };
+  const start = () => {
+    setPhase({ kind: "starting" });
+    void write();
+  };
+  // From the topic popup: the length is already chosen, so the questions are written right away.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autostart || started.current || objectiveIds.length === 0) return;
+    started.current = true;
+    void write();
+  });
+
+  if (objectiveIds.length === 0) {
+    return <NothingToDo course={course} message={topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet: answer some questions first."} onBack={() => router.push(backHref)} />;
   }
   if (items) {
-    return <QuizRunner course={course} items={items} mode="deep" title={course.name} backHref={backHref} again={{ label: "Start another deep review", onStart: onAgain }} />;
+    return <QuizRunner course={course} items={items} mode="deep" title={topicName ?? course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} />;
   }
-  return <DeepReviewSetup courseName={course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} plan={plan} onStart={() => setItems(toItems(assembled))} />;
+  const writing = phase.kind === "starting" || (!!followedRunId && (!run || !isFinished(run) || (run.status === "done" && !items)));
+  const error = phase.kind === "error" ? phase.message : run?.status === "failed" ? run.error ?? "Orca couldn't prepare your dive in." : null;
+  // Once it's on its way (a topic dive from the start, a course dive after Start), only a loading
+  // screen until the questions are ready, then the quiz. A topic dive's failure is shown there too.
+  if (writing || (autostart && error)) {
+    return <PreparingDive title={topicName ?? course.name} backHref={backHref} error={writing ? null : error} onRetry={start} />;
+  }
+  return <DeepReviewSetup courseName={topicName ? `${course.name} · ${topicName}` : course.name} backHref={backHref} minutes={minutes} onMinutes={setMinutes} onStart={start} writing={writing} error={error} />;
 }
 
 function NothingToDo({ course, message, onBack }: { course: Course; message: string; onBack: () => void }) {

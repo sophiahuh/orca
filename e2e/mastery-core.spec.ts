@@ -19,7 +19,8 @@ test.describe("a fresh browser", () => {
     await expect(page.locator("[data-level]")).toHaveCount(0);
     await expect(page.getByText("0 day streak")).toBeVisible();
     await expect(page.getByText("Nothing due. Nice.")).toHaveCount(2);
-    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link")).toHaveCount(3);
+    // Calendar and Add material: Settings is in the top bar, and hidden from this nav on home (8970e4e).
+    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link")).toHaveCount(2);
   });
 
   test("asks for a course before taking material", async ({ page }) => {
@@ -29,13 +30,18 @@ test.describe("a fresh browser", () => {
     await expect(page).toHaveURL(/\/new-course$/);
   });
 
+  test("a signed-in student at / goes straight to their courses", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/home$/);
+  });
+
   test("has no in-app chat", async ({ page }) => {
     const response = await page.goto("/chat");
     expect(response?.status()).toBe(404);
   });
 
   test("onboarding shows all four island looks", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?preview");
     for (const level of ["thriving", "growing", "sprouting", "uncharted"]) {
       await expect(page.locator(`[data-level="${level}"]`).first()).toBeVisible();
     }

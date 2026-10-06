@@ -39,10 +39,21 @@ export type UploadOutcome =
   | { kind: "read"; material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation }
   | { kind: "duplicate"; id: string; filename: string; generation: Generation };
 
+/** Read one public, server-rendered course website as material. */
+export async function importWebsite(url: string, meta: UploadMeta): Promise<Extract<UploadOutcome, { kind: "read" }>> {
+  return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/web", { ...meta, url });
+}
+
+/** Save a pasted AI-chat export or scrape a public shared-chat snapshot as one material page. */
+export async function importAIChat(input: { text?: string; url?: string }, meta: UploadMeta): Promise<Extract<UploadOutcome, { kind: "read" }>> {
+  return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/chat", { ...meta, ...input });
+}
+
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
-  if (!res.ok) throw new Error(out?.error ?? `the server answered ${res.status}`);
+  // The status code means nothing to a student; the route's own message, when it sent one, does.
+  if (!res.ok) throw new Error(out?.error ?? "The upload didn't go through. Try again in a moment.");
   if (out === null) throw new Error("the server sent nothing back");
   return out;
 }
@@ -60,7 +71,8 @@ export function uploadProblem(file: File): string | null {
   return null;
 }
 
-export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: UploadStage) => void): Promise<UploadOutcome> {
+/** `onStarted` gets the material's id as soon as the server has made it (the page keeps it in its URL, so a reload can follow it). */
+export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: UploadStage) => void, onStarted?: (materialId: string) => void): Promise<UploadOutcome> {
   const problem = uploadProblem(file);
   if (problem) throw new Error(problem);
   onStage("hashing");
@@ -69,6 +81,7 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
   type Started = { material: Material; upload: { path: string; token: string } } | Duplicate;
   const started = await post<Started>("/api/materials", { ...meta, filename: file.name, size: file.size, mime: file.type || LIMITS.uploadMime, hash });
   if ("duplicate" in started) return { kind: "duplicate", ...started.duplicate, generation: started.generation };
+  onStarted?.(started.material.id);
 
   onStage("uploading");
   // Storage takes the type from the body itself, and some systems give a PDF no type (or a generic one).

@@ -1,15 +1,15 @@
 /**
- * The upload pipeline: extract → match duplicates → write questions → check them. Model calls are
+ * The upload pipeline: extract → match duplicates → write questions. Model calls are
  * injected (`call`), so the orchestration is tested with fakes; the result is a plan that
  * `applyUploadPlan` merges into the course. Nothing here touches the store.
  */
 import type { Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
-import { gradeExact } from "../grading.ts";
 import { type Named, exactMatch, normaliseName, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
+import { linkKey, linkTopics } from "./link.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "./schemas.ts";
 
@@ -19,7 +19,6 @@ export type Progress =
   | { stage: "mapping" }
   | { stage: "matching"; candidates: number }
   | { stage: "writing"; objectives: number }
-  | { stage: "checking"; questions: number }
   | { stage: "figures"; slides: number };
 
 export interface RunInput {
@@ -60,7 +59,6 @@ export interface UploadPlan {
   run: PipelineRun;
 }
 
-const CHECK_BATCH = 30;
 const OBJECTIVES_PER_CALL = 8;
 
 /** Run `fn` over `items`, at most `limit` at a time, keeping order. */
@@ -338,16 +336,18 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     objectiveByRef.set(o.localId, objective.id);
   });
 
-  /* 4. Relations */
-  const allObjectiveIds = new Set([...Object.keys(input.objectives), ...newObjectives.map((o) => o.id)]);
-  const objectiveId = (ref: string) => objectiveByRef.get(ref) ?? (allObjectiveIds.has(ref) ? ref : null);
-  const seenRelations = new Set(input.relations.map((r) => `${r.from}|${r.to}|${r.type}`));
+  /* 4. Relations between topics (new and existing; a merged topic's links go to its survivor) */
+  const linkTopic = (ref: string) => {
+    const id = topicIdOf(ref);
+    return id === null || id === "dropped" ? null : id;
+  };
+  const seenRelations = new Set(input.relations.map((r) => linkKey(r.from, r.to, r.type)));
   const relations: Relation[] = [];
   for (const r of extracted.relations) {
-    const from = objectiveId(r.from);
-    const to = objectiveId(r.to);
+    const from = linkTopic(r.from);
+    const to = linkTopic(r.to);
     if (!from || !to || from === to) continue;
-    const key = `${from}|${to}|${r.type}`;
+    const key = linkKey(from, to, r.type);
     if (seenRelations.has(key)) continue;
     if (r.anchor) {
       const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));
@@ -358,6 +358,27 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     }
     seenRelations.add(key);
     relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id });
+  }
+
+  /* 5. A focused pass for links (the link step): this upload's new topics against every topic. Extraction
+     links only what the slides spell out; this one may use the subject. A failure costs only the links. */
+  if (newTopics.length) {
+    try {
+      relations.push(
+        ...(await linkTopics(
+          {
+            course: input.course,
+            topics: [...input.course.topics, ...newTopics],
+            newIds: new Set(newTopics.map((t) => t.id)),
+            existing: [...input.relations, ...relations],
+            materialId: input.material.id,
+          },
+          { call, newId },
+        )),
+      );
+    } catch (e) {
+      dropped.push({ prompt: "Links between topics", reason: `couldn't be found: ${errorText(e)}` });
+    }
   }
 
   const runRecord = (questions: UploadPlan["questions"]): PipelineRun => ({
@@ -431,12 +452,15 @@ export interface WriteInput {
   targets: readonly WriteTarget[];
   /** Every question the course has (topicId → questions), for spotting duplicates. */
   bank: Readonly<Record<string, readonly QuizQuestion[]>>;
+  /** Deep-review questions (the "deep" step: longer, harder short answers), marked `deep`. */
+  deep?: boolean;
 }
 
 /**
- * Write questions for objectives from one material, then check them: a blind solve, an ambiguity
- * check for choice questions and rubric agreement for prose answers. Questions that fail, duplicate
- * one the course has, or need a figure that can't be rendered are dropped with a reason.
+ * Write questions for objectives from one material. They aren't checked by a second model call
+ * (owner's decision, 2026-10-06); code still refuses what breaks the rules (wrong objective, bad
+ * structure, untrusted-text rules, anchors to slides the material lacks), and duplicates of a
+ * question the course has or questions whose figure can't be rendered are dropped with a reason.
  */
 export async function writeQuestions(
   input: WriteInput,
@@ -459,7 +483,7 @@ export async function writeQuestions(
     await pool(jobs, 3, async ({ topicId, xs }) => {
       const topic = topicsById.get(topicId)!;
       try {
-        const out = await call("generate", {
+        const out = await call(input.deep ? "deep" : "generate", {
           course: { name: input.course.name, short: input.course.short },
           material: { filename: input.material.filename, type: input.material.type },
           pages: input.pages,
@@ -519,6 +543,7 @@ export async function writeQuestions(
               id: newId(),
               materialId: input.material.id,
               objectiveId: g.objectiveId,
+              ...(input.deep ? { deep: true } : {}),
               kind: g.kind,
               tier: g.tier,
               topic: topic.name,
@@ -548,73 +573,12 @@ export async function writeQuestions(
     })
   ).flat();
 
-  /* Check: blind solve, ambiguity for choice questions, rubric agreement */
-  progress({ stage: "checking", questions: generated.length });
   const slideText = new Map(input.pages.map((p) => [p.n, p.text]));
-  const failures = new Map<string, string>();
-  const batches = Array.from({ length: Math.ceil(generated.length / CHECK_BATCH) }, (_, i) => generated.slice(i * CHECK_BATCH, (i + 1) * CHECK_BATCH));
-  await pool(batches, 2, async (batch) => {
-    const forCheck = batch.map(({ q, figureSlide }) => ({ id: q.id, kind: q.kind, prompt: q.prompt, options: q.options, context: figureSlide ? (slideText.get(figureSlide) ?? null) : null }));
-    const fail = (ids: string[], reason: string) => ids.forEach((id) => failures.has(id) || failures.set(id, reason));
-    let solved: StepOutput<"solve">;
-    try {
-      solved = await call("solve", { questions: forCheck });
-    } catch (e) {
-      fail(batch.map((b) => b.q.id), `couldn't be checked: ${errorText(e)}`);
-      return;
-    }
-    const answers = new Map(solved.answers.map((a) => [a.id, a]));
-    const rubricItems: StepInput<"agreement">["items"] = [];
-    for (const { q } of batch) {
-      const a = answers.get(q.id);
-      if (!a) {
-        fail([q.id], "the independent check skipped it");
-      } else if (q.kind !== "Short answer") {
-        if (a.choice !== q.answer) fail([q.id], `an independent solve picked "${q.options[a.choice ?? -1] ?? "nothing"}", not the marked answer`);
-      } else if (q.exact) {
-        if (gradeExact(a.text ?? "", q.exact).outcome !== "correct") fail([q.id], `an independent solve answered "${a.text ?? ""}", not ${q.exact[0]}`);
-      } else if (q.rubric) {
-        rubricItems.push({ id: q.id, prompt: q.prompt, rubric: q.rubric, independentAnswer: a.text ?? "" });
-      }
-    }
-    const choice = batch.filter(({ q }) => q.kind !== "Short answer" && !failures.has(q.id));
-    await Promise.all([
-      choice.length
-        ? call("ambiguity", { questions: choice.map(({ q, figureSlide }) => ({ ...forCheck.find((f) => f.id === q.id)!, context: figureSlide ? (slideText.get(figureSlide) ?? null) : null, marked: q.answer })) })
-            .then((r) => {
-              const results = new Map(r.results.map((x) => [x.id, x]));
-              for (const { q } of choice) {
-                const x = results.get(q.id);
-                if (!x) fail([q.id], "the ambiguity check skipped it");
-                else if (x.ambiguous) fail([q.id], `ambiguous: ${shown(x.reasoning)}`);
-              }
-            })
-            .catch((e) => fail(choice.map((c) => c.q.id), `couldn't be checked: ${errorText(e)}`))
-        : null,
-      rubricItems.length
-        ? call("agreement", { items: rubricItems })
-            .then((r) => {
-              const results = new Map(r.results.map((x) => [x.id, x]));
-              for (const item of rubricItems) {
-                const x = results.get(item.id);
-                if (!x) fail([item.id], "the answer check skipped it");
-                else if (!x.agrees) fail([item.id], `an independent answer disagreed with the rubric: ${shown(x.reasoning)}`);
-              }
-            })
-            .catch((e) => fail(rubricItems.map((i) => i.id), `couldn't be checked: ${errorText(e)}`))
-        : null,
-    ]);
-  });
 
   /* Duplicates and figures */
   const seen = new Set(Object.values(input.bank).flat().map((q) => promptKey(q.prompt)));
   const passed: typeof generated = [];
   for (const g of generated) {
-    const failure = failures.get(g.q.id);
-    if (failure) {
-      dropped.push({ prompt: g.q.prompt, reason: failure });
-      continue;
-    }
     const key = promptKey(g.q.prompt);
     if (seen.has(key)) {
       dropped.push({ prompt: g.q.prompt, reason: "the course already has this question" });
@@ -626,7 +590,7 @@ export async function writeQuestions(
   const slides = [...new Set(passed.map((p) => p.figureSlide).filter((n): n is number => n !== null && slideText.has(n)))];
   if (slides.length) progress({ stage: "figures", slides: slides.length });
   const figures = new Map<number, string | null>();
-  for (const n of slides) figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null);
+  await pool(slides, 4, async (n) => figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null));
   const questions: Record<string, QuizQuestion[]> = {};
   for (const p of passed) {
     if (p.figureSlide !== null) {

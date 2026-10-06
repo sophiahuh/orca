@@ -37,6 +37,8 @@ export const LIMITS = {
     grade: { max: 60, windowSeconds: 60 },
     /** Asking for a top-up after a session (POST /api/top-up); each one is a run row and a job. */
     topUp: { max: 30, windowSeconds: 3600 },
+    /** "Find connections" on the Atlas (POST /api/relink): one model call over the course's topics. */
+    relink: { max: 10, windowSeconds: 3600 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */

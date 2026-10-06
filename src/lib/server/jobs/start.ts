@@ -16,15 +16,15 @@
  */
 import { after } from "next/server";
 import { tasks } from "@trigger.dev/sdk";
-import type { processMaterialTask, topUpTask } from "@/trigger/jobs";
+import type { deepReviewTask, processMaterialTask, topUpTask } from "@/trigger/jobs";
 import * as core from "@/lib/jobs/start";
 import type { Dispatch, Generation, StartDeps, TopUpStart } from "@/lib/jobs/start";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 import { serverModel } from "@/lib/server/model";
 import { checkBudget } from "@/lib/server/usage";
-import { runMaterialJob, runTopUpJob } from "./run";
+import { runDeepReviewJob, runMaterialJob, runTopUpJob } from "./run";
 
-export type { Generation, TopUpStart } from "@/lib/jobs/start";
+export type { DeepReviewStart, Generation, TopUpStart } from "@/lib/jobs/start";
 
 export type JobsMode = "inline" | "trigger";
 
@@ -43,7 +43,7 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
     budget: (ownerId, pages) => checkBudget(db, ownerId, pages),
     async dispatch(d: Dispatch) {
       if (mode === "inline") {
-        const work = () => (d.kind === "material" ? runMaterialJob(d.job) : runTopUpJob(d.job)).then(() => undefined);
+        const work = () => (d.kind === "material" ? runMaterialJob(d.job) : d.kind === "top-up" ? runTopUpJob(d.job) : runDeepReviewJob(d.job)).then(() => undefined);
         // From a route: after its response. From a finishing job (already after a response): right
         // away, and awaited, so the enclosing after() covers the chained job too.
         if (run === "after-response") after(work);
@@ -53,7 +53,9 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
       const handle =
         d.kind === "material"
           ? await tasks.trigger<typeof processMaterialTask>("process-material", d.job)
-          : await tasks.trigger<typeof topUpTask>("top-up", d.job);
+          : d.kind === "top-up"
+            ? await tasks.trigger<typeof topUpTask>("top-up", d.job)
+            : await tasks.trigger<typeof deepReviewTask>("deep-review", d.job);
       const { error } = await db.from("pipeline_runs").update({ job_id: handle.id }).eq("owner_id", d.job.ownerId).eq("id", d.job.runId);
       if (error) throw new Error(error.message);
     },
@@ -68,6 +70,11 @@ export function startUploadJob(db: OrcaSupabase, ownerId: string, materialId: st
 /** See `startTopUpJob` in src/lib/jobs/start.ts. */
 export function startTopUpJob(db: OrcaSupabase, ownerId: string, req: { courseId: string; sessionId: string; objectiveIds: string[] }): Promise<TopUpStart> {
   return core.startTopUpJob(deps(db), ownerId, req);
+}
+
+/** See `startDeepReviewJob` in src/lib/jobs/start.ts. */
+export function startDeepReviewJob(db: OrcaSupabase, ownerId: string, req: { courseId: string; minutes: number; objectiveIds: string[] }): Promise<import("@/lib/jobs/start").DeepReviewStart> {
+  return core.startDeepReviewJob(deps(db), ownerId, req);
 }
 
 /**

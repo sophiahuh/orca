@@ -86,9 +86,9 @@ export function RenameField({ name, onSave, label }: { name: string; onSave: (na
 }
 
 /** A plain text button for row actions. */
-export function TextAction({ children, onClick, tone = "accent" }: { children: React.ReactNode; onClick: () => void; tone?: "accent" | "quiet" }) {
+export function TextAction({ children, onClick, tone = "accent" }: { children: React.ReactNode; onClick: () => void; tone?: "accent" | "quiet" | "danger" }) {
   return (
-    <button type="button" onClick={onClick} className={cn("shrink-0 text-[13px] font-bold hover:underline", tone === "accent" ? "text-wisteria-deep" : "text-prussian/60")}>
+    <button type="button" onClick={onClick} className={cn("shrink-0 text-[13px] font-bold hover:underline", tone === "accent" ? "text-wisteria-deep" : tone === "danger" ? "text-bad-text" : "text-prussian/60")}>
       {children}
     </button>
   );

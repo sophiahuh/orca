@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../../src/lib/data.ts";
-import { type JobStore, processMaterial, topUp } from "../../src/lib/jobs/jobs.ts";
+import { type JobStore, deepReview, processMaterial, topUp } from "../../src/lib/jobs/jobs.ts";
 import type { CallStep, Progress } from "../../src/lib/pipeline/run.ts";
 import type { StepInput } from "../../src/lib/pipeline/schemas.ts";
 import type { StructureRows, StructureState } from "../../src/lib/supabase/app-rows.ts";
@@ -101,10 +101,7 @@ function honestModel(per = 2, failOn?: string): { call: CallStep; steps: string[
         ),
       };
     }
-    if (step === "solve") {
-      const s = input as StepInput<"solve">;
-      return { answers: s.questions.map((q) => ({ id: q.id, choice: null, text: /case (\d+)\?$/.exec(q.prompt)?.[1] ?? "?" })) };
-    }
+    if (step === "link") return { links: [] };
     throw new Error(`unexpected step ${step}`);
   }) as CallStep;
   return { call, steps };
@@ -124,7 +121,7 @@ test("processMaterial builds the structure from the stored pages and saves it wi
   assert.deepEqual(rows.topics!.map((t) => [t.name, t.review]), [["Boolean Algebra", "proposed"]]);
   assert.equal(rows.objectives!.length, 1);
   assert.equal(rows.questions!.length, 2);
-  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "matching", "writing", "checking"]);
+  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "matching", "writing"]);
 });
 
 test("a failed job records why, and saves nothing", async () => {
@@ -171,7 +168,7 @@ test("topUp writes questions for the session's objectives from their stored page
   // "elsewhere" is another course's objective: ignored.
   const out = await topUp({ store: mem.store, call: model.call, newId }, { runId: "run1", objectiveIds: ["o", "elsewhere"] });
   assert.equal(out.status, "done");
-  assert.deepEqual(model.steps, ["generate", "solve"]);
+  assert.deepEqual(model.steps, ["generate"]);
   const rows = mem.saves[0];
   assert.deepEqual(rows.runs!.map((r) => [r.kind, r.material_id, r.questions_added, r.status]), [["top-up", "m1", 2, "done"]]);
   assert.deepEqual(rows.questions!.map((x) => [x.prompt, x.sort_order]), [["Simplify: case 1?", 2], ["Simplify: case 2?", 3]]);
@@ -208,4 +205,22 @@ test("a top-up asks the budget with no pages and is held the same way", async ()
   assert.deepEqual(m.budgetAsked, [0]);
   assert.equal(m.state.status, "waiting");
   assert.deepEqual(model.steps, []);
+});
+
+test("a Dive In asks the dive questions written before and never answered first, and writes nothing when they're enough", async () => {
+  const topic: Topic = { id: "t", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 } };
+  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", aliases: [], origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [] };
+  const deepQ = (id: string): QuizQuestion => ({ id, kind: "Short answer", tier: "application", topic: "Boolean Algebra", prompt: `${id}?`, options: [], answer: -1, exact: ["1"], explanation: "", anchor, objectiveId: "o", deep: true });
+  // d1 was answered in an earlier dive; d2, d3 and d4 never were. 10 minutes is 3 questions.
+  const structure: StructureState = { topics: [topic], objectives: { o: objective }, bank: { t: [deepQ("d1"), deepQ("d2"), deepQ("d3"), deepQ("d4")] }, relations: [] };
+  const mem = memoryStore({ run: queued({ kind: "deep-review", materialId: null, deepMinutes: 10 }), structure, pages, answered: ["d1"] });
+  const model = honestModel();
+  const out = await deepReview({ store: mem.store, call: model.call, newId }, { runId: "run1", objectiveIds: ["o"], minutes: 10 });
+  assert.equal(out.status, "done");
+  assert.deepEqual(model.steps, [], "no model call: the stock covers it");
+  assert.deepEqual(mem.budgetAsked, [], "nothing is spent, so no budget is checked");
+  const runRow = mem.saves[0].runs![0];
+  assert.deepEqual(runRow.question_ids, ["d2", "d3", "d4"]);
+  assert.equal(runRow.questions_added, 0);
+  assert.equal(mem.saves[0].questions, undefined, "no questions are written");
 });

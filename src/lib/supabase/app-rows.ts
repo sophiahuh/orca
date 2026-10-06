@@ -13,6 +13,7 @@ import type {
   AnswerRubric,
   CalendarEvent,
   Course,
+  Exam,
   IslandVariant,
   Material,
   Objective,
@@ -25,6 +26,7 @@ import type {
   Topic,
   Weights,
 } from "../data.ts";
+import { DEFAULT_CONFIG, DEFAULT_WEIGHTS } from "../data.ts";
 import type { EvidenceEvent } from "../mastery/types.ts";
 import type { Database, Json } from "./database.types.ts";
 import { type EvidenceRow, type SnapshotRow, eventFromRow } from "./rows.ts";
@@ -44,9 +46,14 @@ const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min"
 export const ReviewConfigSchema = z.object({ quick: ReviewRowSchema, deep: ReviewRowSchema, exam: ReviewRowSchema });
 export const WeightsSchema = z.record(z.string(), z.number().min(0));
 
+/** The profile's defaults for new courses, as written to `profiles`. */
+export function defaultsToRow(config: ReviewConfig, weights: Weights) {
+  return { default_review_config: jsonValue(ReviewConfigSchema.parse(config)), default_weights: jsonValue(WeightsSchema.parse(weights)) };
+}
+
 /* ── Courses ── */
 
-export function courseToRow(c: Course, config: ReviewConfig, weights: Weights): Omit<Row<"courses">, "owner_id" | "created_at"> {
+export function courseToRow(c: Course, config: ReviewConfig | null, weights: Weights | null): Omit<Row<"courses">, "owner_id" | "created_at"> {
   return {
     id: c.id,
     slug: c.slug,
@@ -56,8 +63,8 @@ export function courseToRow(c: Course, config: ReviewConfig, weights: Weights): 
     pos_x: c.pos.x,
     pos_y: c.pos.y,
     trail: c.trail ?? null,
-    review_config: jsonValue(ReviewConfigSchema.parse(config)),
-    weights: jsonValue(WeightsSchema.parse(weights)),
+    review_config: config === null ? null : jsonValue(ReviewConfigSchema.parse(config)),
+    weights: weights === null ? null : jsonValue(WeightsSchema.parse(weights)),
   };
 }
 
@@ -132,14 +139,14 @@ export function objectiveFromRow(r: Row<"objectives">): Objective {
 }
 
 export function relationToRow(r: Relation): StructureRow<"relations"> {
-  return { id: r.id, from_objective: r.from, to_objective: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId };
+  return { id: r.id, from_topic: r.from, to_topic: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId };
 }
 
 export function relationFromRow(r: Row<"relations">): Relation {
   return {
     id: r.id,
-    from: r.from_objective,
-    to: r.to_objective,
+    from: r.from_topic,
+    to: r.to_topic,
     type: r.type as Relation["type"],
     anchor: r.anchor as unknown as Relation["anchor"],
     review: r.review as Relation["review"],
@@ -166,6 +173,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     anchor: json(q.anchor ?? null),
     figure: json(q.figure ?? null),
     material_id: q.materialId ?? null,
+    deep: q.deep ?? false,
   };
 }
 
@@ -186,11 +194,12 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     ...(r.figure !== null ? { figure: r.figure as unknown as NonNullable<QuizQuestion["figure"]> } : {}),
     ...(r.material_id !== null ? { materialId: r.material_id } : {}),
     ...(r.objective_id !== null ? { objectiveId: r.objective_id } : {}),
+    ...(r.deep ? { deep: true } : {}),
   };
 }
 
 /** A finished (or failed) run as the job saves it; its Trigger.dev job id, a top-up's request (objective_ids) and when it was claimed (started_at) are left as they are. */
-export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at"> {
+export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at" | "deep_minutes"> {
   return {
     id: r.id,
     material_id: r.materialId,
@@ -204,6 +213,7 @@ export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "j
     objectives_created: r.objectivesCreated,
     objectives_attached: r.objectivesAttached,
     questions_added: r.questionsAdded,
+    question_ids: r.questionIds ?? [],
     dropped: jsonValue(r.dropped),
     hidden_text: r.hiddenText ? jsonValue(r.hiddenText) : null,
     security: r.security ? jsonValue(r.security) : null,
@@ -218,6 +228,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     materialId: r.material_id,
     at: new Date(r.at).toISOString(),
     model: r.model,
+    ...(r.deep_minutes !== null ? { deepMinutes: r.deep_minutes } : {}),
     status: r.status as PipelineRun["status"],
     ...(r.progress !== null ? { progress: r.progress as unknown as NonNullable<PipelineRun["progress"]> } : {}),
     ...(r.error !== null ? { error: r.error } : {}),
@@ -225,6 +236,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     objectivesCreated: r.objectives_created,
     objectivesAttached: r.objectives_attached,
     questionsAdded: r.questions_added,
+    ...(r.question_ids.length ? { questionIds: r.question_ids } : {}),
     dropped: r.dropped as unknown as PipelineRun["dropped"],
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<PipelineRun["hiddenText"]> } : {}),
     ...(r.security !== null ? { security: r.security as unknown as NonNullable<PipelineRun["security"]> } : {}),
@@ -245,7 +257,7 @@ type SavedRow<K extends keyof Tables> = StructureRow<K> | (Partial<StructureRow<
 
 export interface StructureRows {
   /** Only the server's jobs save runs (students can't write them). */
-  runs?: Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at">[];
+  runs?: Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids" | "started_at" | "deep_minutes">[];
   topics?: SavedRow<"topics">[];
   objectives?: SavedRow<"objectives">[];
   relations?: SavedRow<"relations">[];
@@ -368,6 +380,14 @@ export function calendarFromRow(r: Row<"calendar_events">): CalendarEvent {
   return { id: r.id, date: r.date, kind: r.kind as CalendarEvent["kind"], title: r.title, ...(r.course_id !== null ? { courseId: r.course_id } : {}) };
 }
 
+export function examToRow(e: Exam): Omit<Row<"exams">, "owner_id" | "created_at"> {
+  return { id: e.id, course_id: e.courseId, title: e.title, date: e.date, topic_ids: e.topicIds };
+}
+
+export function examFromRow(r: Row<"exams">): Exam {
+  return { id: r.id, courseId: r.course_id, title: r.title, date: r.date, topicIds: r.topic_ids };
+}
+
 /* ── Everything at once (public.my_data()) ── */
 
 /** What `my_data()` returns: the profile and every row the student owns. */
@@ -382,6 +402,7 @@ export interface MyData {
   questions: Row<"questions">[];
   sessions: Row<"session_results">[];
   calendar: Row<"calendar_events">[];
+  exams: Row<"exams">[];
   evidence: EvidenceRow[];
   snapshots: SnapshotRow[];
 }
@@ -391,9 +412,14 @@ export interface LoadedState {
   onboarded: boolean;
   avatar: AvatarId;
   name: string | null;
+  /** Settings' defaults for new courses; null = Orca's built-in ones. */
+  defaultConfig: ReviewConfig | null;
+  defaultWeights: Weights | null;
   courses: Course[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
+  configOverrides: Record<string, ReviewConfig | null>;
+  weightOverrides: Record<string, Weights | null>;
   objectives: Record<string, Record<string, Objective>>;
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
   relations: Record<string, Relation[]>;
@@ -401,6 +427,7 @@ export interface LoadedState {
   materials: Material[];
   results: QuizResult[];
   events: CalendarEvent[];
+  exams: Exam[];
   evidence: EvidenceEvent[];
   snapshots: SnapshotRow[];
 }
@@ -431,14 +458,22 @@ export function loadedState(d: MyData): LoadedState {
   const relations = byCourse<Relation[]>(() => []);
   for (const r of d.relations) relations[r.course_id].push(relationFromRow(r));
   if (!isAvatar(d.profile.avatar)) throw new Error(`Your profile's avatar "${d.profile.avatar}" isn't one Orca knows`);
+  const defaultConfig = d.profile.default_review_config === null ? null : ReviewConfigSchema.parse(d.profile.default_review_config);
+  const defaultWeights = d.profile.default_weights === null ? null : WeightsSchema.parse(d.profile.default_weights);
+  const configOverrides = Object.fromEntries(d.courses.map((c) => [c.id, c.review_config === null ? null : ReviewConfigSchema.parse(c.review_config)]));
+  const weightOverrides = Object.fromEntries(d.courses.map((c) => [c.id, c.weights === null ? null : WeightsSchema.parse(c.weights)]));
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
     avatar: d.profile.avatar,
     name: d.profile.name,
+    defaultConfig,
+    defaultWeights,
     courses,
-    configs: Object.fromEntries(d.courses.map((c) => [c.id, ReviewConfigSchema.parse(c.review_config)])),
-    weights: Object.fromEntries(d.courses.map((c) => [c.id, WeightsSchema.parse(c.weights)])),
+    configs: Object.fromEntries(d.courses.map((c) => [c.id, configOverrides[c.id] ?? defaultConfig ?? DEFAULT_CONFIG])),
+    weights: Object.fromEntries(d.courses.map((c) => [c.id, weightOverrides[c.id] ?? defaultWeights ?? DEFAULT_WEIGHTS])),
+    configOverrides,
+    weightOverrides,
     objectives,
     questionBank,
     relations,
@@ -447,6 +482,7 @@ export function loadedState(d: MyData): LoadedState {
     materials: d.materials.filter((m) => m.status === "ready").map(materialFromRow),
     results: d.sessions.map(sessionFromRow),
     events: d.calendar.map(calendarFromRow),
+    exams: d.exams.map(examFromRow),
     evidence: d.evidence.map(eventFromRow),
     snapshots: d.snapshots,
   };

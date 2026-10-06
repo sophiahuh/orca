@@ -5,10 +5,11 @@
  * anything. It recognises each pipeline step by its system prompt and answers with canned output:
  *
  * - extract: the scenario's `extract` (default: nothing found);
- * - reconcile: "new"; ambiguity: never ambiguous; agreement: agrees; grade: correct;
+ * - reconcile: "new"; grade: correct;
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
- * - solve: answers those correctly (the number after "case"), and choice questions with option 0;
+ * - deep: the same for a deep review, "<objective name>: deep case <i>?", tier application;
+ * - link: the scenario's `links`, by topic name (default: none);
  * - reflect: the scenario's `reflect` matches, by objective name.
  *
  * Control (tests run one at a time): POST /__scenario { extract?, perObjective?, fail?, reflect?,
@@ -28,6 +29,8 @@ export interface Scenario {
    */
   fail?: { step: string; status?: number; message?: string; type?: "spend-limit" | "rate-limit" };
   reflect?: { matches: Array<{ name: string; sure: boolean; reasoning: string }> };
+  /** What the link step finds, by topic name. */
+  links?: Array<{ from: string; to: string; type: string }>;
   /** What the grade step answers (default: correct). */
   grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string };
   /** Wait this long before answering each call (to watch progress). */
@@ -38,9 +41,8 @@ const STEPS: Array<[string, string]> = [
   ["You map one piece of college course material", "extract"],
   ["You decide whether a newly extracted course item", "reconcile"],
   ["You write quick-review quiz questions", "generate"],
-  ["You answer quiz questions yourself", "solve"],
-  ["You review quiz questions for ambiguity", "ambiguity"],
-  ["You check whether an independently written answer", "agreement"],
+  ["You write deep-review questions", "deep"],
+  ["You connect the topics of one college course", "link"],
   ["You match a student's reflection", "reflect"],
   ["You grade one short student answer", "grade"],
 ];
@@ -73,7 +75,9 @@ function answer(step: string, prompt: string): unknown {
       return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
     case "reconcile":
       return { decision: "new", matchId: null, reasoning: "The fake API keeps them separate." };
-    case "generate": {
+    case "generate":
+    case "deep": {
+      const deep = step === "deep";
       const out: unknown[] = [];
       const [task] = blocks(prompt, "generated_question") as Array<{ objectives: Array<{ id: string; name: string; write: number; inferred?: boolean }> }>;
       for (const o of task?.objectives ?? []) {
@@ -82,8 +86,8 @@ function answer(step: string, prompt: string): unknown {
           out.push({
             objectiveId: o.id,
             kind: "Short answer",
-            tier: "retrieval",
-            prompt: `${o.name}: case ${k}?`,
+            tier: deep ? "application" : "retrieval",
+            prompt: `${o.name}: ${deep ? "deep " : ""}case ${k}?`,
             options: [],
             answer: -1,
             exact: [String(k)],
@@ -96,18 +100,10 @@ function answer(step: string, prompt: string): unknown {
       }
       return { questions: out };
     }
-    case "solve": {
-      const [questions] = blocks(prompt, "generated_question") as Array<Array<{ id: string; kind: string; prompt: string }>>;
-      const answers = (questions ?? []).map((q) => (q.kind === "Short answer" ? { id: q.id, choice: null, text: /case (\d+)\?$/.exec(q.prompt)?.[1] ?? "?" } : { id: q.id, choice: 0, text: null }));
-      return { answers };
-    }
-    case "ambiguity": {
-      const [questions] = blocks(prompt, "generated_question") as Array<Array<{ id: string }>>;
-      return { results: (questions ?? []).map((q) => ({ id: q.id, ambiguous: false, reasoning: "Clear." })) };
-    }
-    case "agreement": {
-      const [items] = blocks(prompt, "generated_question") as Array<Array<{ id: string }>>;
-      return { results: (items ?? []).map((q) => ({ id: q.id, agrees: true, reasoning: "Agrees." })) };
+    case "link": {
+      const [topics] = blocks(prompt, "generated_question") as Array<Array<{ ref: string; name: string }>>;
+      const ref = new Map((topics ?? []).map((t) => [t.name, t.ref]));
+      return { links: (scenario.links ?? []).flatMap((l) => (ref.has(l.from) && ref.has(l.to) ? [{ from: ref.get(l.from), to: ref.get(l.to), type: l.type }] : [])) };
     }
     case "reflect": {
       const [objectives] = blocks(prompt, "generated_question") as Array<Array<{ id: string; name: string }>>;

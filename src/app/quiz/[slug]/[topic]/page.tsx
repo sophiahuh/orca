@@ -19,11 +19,11 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
 
   const generated = course ? questionBank[course.id]?.[topicId] : undefined;
   const catalogue = course ? objectives[course.id] : undefined;
-  // Rejected (archived) objectives are never quizzed.
+  // Rejected (archived) objectives are never quizzed; deep-review questions are only for deep reviews.
   const items = useMemo<RunnerItem[]>(
     () =>
       (generated ?? [])
-        .filter((q) => liveObjectiveOf(q, topicId, catalogue ?? {}) !== null)
+        .filter((q) => !q.deep && liveObjectiveOf(q, topicId, catalogue ?? {}) !== null)
         .slice(0, 8)
         .map((question) => ({ question, topicId, notes: [] })),
     [generated, topicId, catalogue],
@@ -48,7 +48,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
           <>
             <p className="text-[22px] font-bold text-prussian">No questions for {topic.name} yet.</p>
             <p className="text-[16px] text-wisteria-deep">Add course material for this topic and Orca will write some.</p>
-            <Button size="sm" onClick={() => router.push("/add-material")}>
+            <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)}>
               Add material
             </Button>
           </>

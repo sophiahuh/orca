@@ -51,9 +51,9 @@ export const ExtractOutput = z.object({
   relations: z
     .array(
       z.object({
-        from: z.string().max(60).describe("Objective localId or existing objective id"),
-        to: z.string().max(60),
-        type: z.enum(["builds-on", "implies", "contrasts-with", "applies-to"]),
+        from: z.string().max(60).describe("Topic localId or existing topic id"),
+        to: z.string().max(60).describe("Topic localId or existing topic id"),
+        type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
         anchor: Anchor.nullable(),
       }),
     )
@@ -100,23 +100,18 @@ export type GeneratedQuestion = z.infer<typeof GeneratedQuestion>;
 export const GenerateOutput = z.object({ questions: z.array(GeneratedQuestion).max(60) });
 export type GenerateOutput = z.infer<typeof GenerateOutput>;
 
-/* ── Validate ──────────────────────────────────────────────────────────── */
+/* ── Deep: harder questions written when a deep review starts ───────── */
 
-/** Blind solve: the solver sees only the question (and, for a figure question, that slide's text). */
-export const SolveOutput = z.object({
-  answers: z.array(z.object({ id: z.string().max(60), choice: z.number().int().nullable().describe("Option index for a choice question, else null"), text: z.string().max(TEXT).nullable().describe("Your answer for a short-answer question, else null") })).max(80),
+/** A deep-review question: a short answer that takes a few minutes (no recall tier, no choices). */
+export const DeepQuestion = GeneratedQuestion.extend({
+  kind: z.literal("Short answer"),
+  tier: z.enum(["mechanism", "application", "connection", "transfer"]),
+  options: z.array(z.string()).max(0).describe("Always empty"),
+  answer: z.literal(-1),
+  prompt: z.string().min(1).max(TEXT).describe("Readable plain text: short paragraphs, line-separated givens, and numbered line-separated steps when appropriate; use \\n for line breaks, never Markdown or HTML"),
 });
-export type SolveOutput = z.infer<typeof SolveOutput>;
-
-export const AmbiguityOutput = z.object({
-  results: z.array(z.object({ id: z.string().max(60), ambiguous: z.boolean(), reasoning: z.string().max(400) })).max(80),
-});
-export type AmbiguityOutput = z.infer<typeof AmbiguityOutput>;
-
-export const AgreementOutput = z.object({
-  results: z.array(z.object({ id: z.string().max(60), agrees: z.boolean(), reasoning: z.string().max(400) })).max(80),
-});
-export type AgreementOutput = z.infer<typeof AgreementOutput>;
+export const DeepOutput = z.object({ questions: z.array(DeepQuestion).max(40) });
+export type DeepOutput = z.infer<typeof DeepOutput>;
 
 /* ── Step inputs (checked by the route) ────────────────────────────────── */
 
@@ -162,18 +157,29 @@ export const GenerateInput = z.object({
 });
 export type GenerateInput = z.infer<typeof GenerateInput>;
 
-const QuestionForCheck = z.object({ id: z.string(), kind: z.string(), prompt: z.string(), options: z.array(z.string()), context: z.string().max(6000).nullable() });
+/* ── Link: how a course's topics relate (a focused pass after each upload, or on demand) ── */
 
-export const SolveInput = z.object({ questions: z.array(QuestionForCheck).min(1).max(60) });
-export type SolveInput = z.infer<typeof SolveInput>;
-
-export const AmbiguityInput = z.object({ questions: z.array(QuestionForCheck.extend({ marked: z.number().int() })).min(1).max(60) });
-export type AmbiguityInput = z.infer<typeof AmbiguityInput>;
-
-export const AgreementInput = z.object({
-  items: z.array(z.object({ id: z.string(), prompt: z.string(), rubric: Rubric, independentAnswer: z.string() })).min(1).max(60),
+export const LinkInput = z.object({
+  course: Course,
+  /** Each topic by a short ref ("t1"…), with its summary; `isNew` marks this upload's topics. */
+  topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2).max(200),
+  /** Links the course already has, by ref (not to be repeated). */
+  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })).max(1000),
 });
-export type AgreementInput = z.infer<typeof AgreementInput>;
+export type LinkInput = z.infer<typeof LinkInput>;
+
+export const LinkOutput = z.object({
+  links: z
+    .array(
+      z.object({
+        from: z.string().max(20).describe("A topic ref"),
+        to: z.string().max(20).describe("A topic ref"),
+        type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
+      }),
+    )
+    .max(120),
+});
+export type LinkOutput = z.infer<typeof LinkOutput>;
 
 /* ── Reflect: which objectives a homework reflection says the student doesn't understand ── */
 
@@ -203,9 +209,8 @@ export const STEPS = {
   extract: { input: ExtractInput, output: ExtractOutput },
   reconcile: { input: ReconcileInput, output: ReconcileOutput },
   generate: { input: GenerateInput, output: GenerateOutput },
-  solve: { input: SolveInput, output: SolveOutput },
-  ambiguity: { input: AmbiguityInput, output: AmbiguityOutput },
-  agreement: { input: AgreementInput, output: AgreementOutput },
+  deep: { input: GenerateInput, output: DeepOutput },
+  link: { input: LinkInput, output: LinkOutput },
   reflect: { input: ReflectInput, output: ReflectOutput },
 } as const;
 export type StepName = keyof typeof STEPS;

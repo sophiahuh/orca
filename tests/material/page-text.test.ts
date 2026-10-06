@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { pageText } from "../../src/lib/material/page-text.ts";
+import { likelyHeadings, pageText } from "../../src/lib/material/page-text.ts";
 import { readPdf } from "../../src/lib/material/read-pdf.ts";
 
 /** A pdf.js-like text item: size and baseline from the transform. */
@@ -23,6 +23,11 @@ test("same-size text on one line, a bigger run, and the next line are never scri
   assert.equal(pageText([run("small", 10, 500), run("BIG", 24, 505, true)]), "small BIG");
   // Items without a transform (older readers, tests) read as before.
   assert.equal(pageText([{ str: "Hello", hasEOL: true }, { str: "world " }, { str: "again" }]), "Hello\nworld again");
+});
+
+test("larger text supplies conservative heading hints", () => {
+  assert.deepEqual(likelyHeadings([run("MIPS instruction formats", 28, 700, true), run("The instruction fields", 12, 660, true), run("are decoded by the control unit.", 12, 640, true)]), ["MIPS instruction formats"]);
+  assert.deepEqual(likelyHeadings([run("Body text", 12, 700, true), run("More body text", 12, 680, true)]), []);
 });
 
 test("the ALD decks read their exponents and indices unambiguously", async () => {

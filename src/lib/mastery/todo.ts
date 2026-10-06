@@ -41,7 +41,7 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
     });
   }
   if (agenda.deepReview.due) {
-    cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Deep review", detail: `On your ${config.deep.cadence.toLowerCase()} cadence · you choose how long`, ref: null });
+    cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Dive in", detail: `On your ${config.deep.cadence.toLowerCase()} cadence · you choose how long`, ref: null });
   }
   for (const item of agenda.study) {
     cards.push({ id: `${c}:study:${item.objectiveId}`, courseId: c, kind: "study", when: "today", title: `Review: ${names.objective(item.objectiveId)}`, detail: `${plural(item.missedQuestionIds.length, "missed question")} to go over`, ref: item.objectiveId });
@@ -58,7 +58,7 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
     cards.push({ id: `${c}:checks:${topicId}`, courseId: c, kind: "checks", when: "tomorrow", title: `${names.topic(topicId)} · ${plural(n, "check")}`, detail: null, ref: topicId });
   }
   if (agenda.deepReview.tomorrow) {
-    cards.push({ id: `${c}:deep:tomorrow`, courseId: c, kind: "deep", when: "tomorrow", title: "Deep review", detail: null, ref: null });
+    cards.push({ id: `${c}:deep:tomorrow`, courseId: c, kind: "deep", when: "tomorrow", title: "Dive in", detail: null, ref: null });
   }
   return cards;
 }
