@@ -113,9 +113,15 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </Link>
         )}
         {agenda.deepReview.candidates > 0 && (
-          <Link href={`/session/${course.slug}?kind=deep`} data-part="start-deep" className="pressable rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice">
-            Dive in{agenda.deepReview.due ? " · due" : ""}
-          </Link>
+          <div className="group relative">
+            <Link href={`/session/${course.slug}?kind=deep`} data-part="start-deep" aria-describedby="dive-in-info" className="pressable rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice">
+              Dive in{agenda.deepReview.due ? " · due" : ""}
+            </Link>
+            <div id="dive-in-info" role="tooltip" className="pointer-events-none absolute right-0 top-full z-10 mt-[10px] w-[248px] rounded-[14px] border-2 border-alice-deep bg-parchment px-[14px] py-[11px] text-left text-[13px] font-semibold leading-[1.35] text-prussian opacity-0 shadow-[0_5px_0_var(--color-alice-deep)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              <span className="block font-bold">Deep review.</span>
+              Solidify your understanding with harder questions
+            </div>
+          </div>
         )}
       </motion.div>
     </AppShell>
