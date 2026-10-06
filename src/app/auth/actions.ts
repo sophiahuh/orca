@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { safeNext } from "@/lib/auth/paths";
+import { SiteUrlError, linkOrigin, siteUrl } from "@/lib/auth/site";
 import { passwordProblem, validEmail } from "@/lib/auth/validate";
 import { SupabaseNotConfiguredError } from "@/lib/supabase/env";
 import { cookieClient } from "@/lib/supabase/server";
@@ -12,19 +13,31 @@ export type AuthState = { error?: string; notice?: string } | undefined;
 
 const text = (data: FormData, key: string) => (typeof data.get(key) === "string" ? (data.get(key) as string) : "");
 
+/** Where an emailed link brings the student back: `SITE_URL` (src/lib/auth/site.ts); the request's host only in development. */
 async function origin(): Promise<string> {
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") || host?.startsWith("127.") ? "http" : "https");
-  return `${proto}://${host}`;
+  return linkOrigin({
+    siteUrl: siteUrl(),
+    production: process.env.NODE_ENV === "production",
+    host: h.get("x-forwarded-host") ?? h.get("host"),
+    proto: h.get("x-forwarded-proto"),
+  });
 }
 
-/** Runs one auth call; a database that isn't configured is reported as such, never as a bad password. */
+/**
+ * Runs one auth call; a database that isn't configured is reported as such, never as a bad
+ * password, and a site address that's missing stops the email with a message instead of a link
+ * to the wrong place (the cause is logged for the owner; the student sees that it's Orca's fault).
+ */
 async function withClient(run: (client: Awaited<ReturnType<typeof cookieClient>>) => Promise<AuthState>): Promise<AuthState> {
   try {
     return await run(await cookieClient());
   } catch (e) {
     if (e instanceof SupabaseNotConfiguredError) return { error: e.message };
+    if (e instanceof SiteUrlError) {
+      console.error(`auth: ${e.message}`);
+      return { error: "Orca can't send email links right now (its site address isn't configured). Try again later." };
+    }
     throw e;
   }
 }

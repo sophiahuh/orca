@@ -22,6 +22,8 @@ const FAKE_MODEL = {
   ANTHROPIC_BASE_URL: `http://127.0.0.1:${FAKE_MODEL_PORT}`,
   OPENAI_API_KEY: "",
   ORCA_JOBS: "inline",
+  // Emailed links point here (src/lib/auth/site.ts); the local stack allows this address.
+  SITE_URL: `http://localhost:${PORT}`,
 };
 
 /**

@@ -1,5 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -241,4 +242,52 @@ test("another student can't process, read or download your upload", async ({ pag
   } finally {
     await admin().auth.admin.deleteUser(created.data.user!.id);
   }
+});
+
+/* ── Cleanup of uploads that never became material ── */
+
+test("abandoned uploads and old failed reads are removed with their files; recent and ready ones stay", async ({ page, student }) => {
+  const courseId = await newCourse(student);
+  const { id: readyId, processed } = await sendFile(page.request, student, courseId, makePdf([lines("Kept")]));
+  expect(processed.status()).toBe(200);
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+  const file = makePdf([lines("Never read")]);
+  const rows = {
+    abandoned: crypto.randomUUID(),
+    recent: crypto.randomUUID(),
+    oldFailed: crypto.randomUUID(),
+    newFailed: crypto.randomUUID(),
+  };
+  const path = (id: string) => `${student.id}/${id}/deck.pdf`;
+  for (const id of [rows.abandoned, rows.recent]) {
+    const sent = await admin().storage.from("materials").upload(path(id), new Blob([file as BlobPart], { type: "application/pdf" }));
+    expect(sent.error).toBeNull();
+  }
+  const base = { owner_id: student.id, course_id: courseId, filename: "deck.pdf", type: "Lecture", reflect: false, mime: "application/pdf", size_bytes: file.byteLength };
+  const inserted = await admin()
+    .from("materials")
+    .insert([
+      { ...base, id: rows.abandoned, status: "uploaded", storage_path: path(rows.abandoned), created_at: daysAgo(2) },
+      { ...base, id: rows.recent, status: "uploaded", storage_path: path(rows.recent), created_at: daysAgo(0.5) },
+      { ...base, id: rows.oldFailed, status: "failed", error: "This file isn't a PDF.", created_at: daysAgo(8) },
+      { ...base, id: rows.newFailed, status: "failed", error: "This file isn't a PDF.", created_at: daysAgo(2) },
+    ]);
+  expect(inserted.error).toBeNull();
+
+  const out = execFileSync("node", ["--experimental-strip-types", "--no-warnings", "scripts/cleanup-uploads.ts"], {
+    encoding: "utf8",
+    env: { ...process.env, SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY },
+  });
+  expect(out).toContain(`removed abandoned upload ${rows.abandoned}`);
+  expect(out).toContain(`removed failed upload ${rows.oldFailed}`);
+  expect(out).not.toContain(rows.recent);
+  expect(out).not.toContain(rows.newFailed);
+  expect(out).not.toContain(readyId);
+
+  const { data: left } = await admin().from("materials").select("id, status").eq("owner_id", student.id).order("created_at");
+  expect(new Set(left!.map((m) => m.id))).toEqual(new Set([readyId, rows.recent, rows.newFailed]));
+  expect((await admin().storage.from("materials").download(path(rows.abandoned))).data).toBeNull();
+  expect((await admin().storage.from("materials").download(path(rows.recent))).data).not.toBeNull();
+  const { count } = await admin().from("material_pages").select("n", { count: "exact", head: true }).eq("material_id", readyId);
+  expect(count).toBe(1);
 });

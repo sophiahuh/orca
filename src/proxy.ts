@@ -46,6 +46,11 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
+  // getClaims() checks the token's signature and expiry locally, so a session revoked at Supabase
+  // (sign-out elsewhere, a deleted account) still passes here until its hour is up. Accepted (Task 4
+  // review): the proxy only chooses between a page and the sign-in redirect; every route and every
+  // data read checks the session with Supabase Auth (`signedInUser` → `getUser`), and the browser's
+  // own client fails on the next request, so a revoked session sees an empty shell at most.
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims);
   const { pathname, search } = request.nextUrl;

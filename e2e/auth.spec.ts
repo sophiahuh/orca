@@ -133,3 +133,46 @@ test("forgot password: the emailed link lets you choose a new one", async ({ pag
   await signInVia(page, email, "a-brand-new-pass-2");
   await expect(page).not.toHaveURL(/\/sign-in/);
 });
+
+test("emailed links bring you back to SITE_URL, not to whatever address the request used", async ({ page }) => {
+  const email = `auth-${crypto.randomUUID()}@example.test`;
+  // The same server, reached by another name: a link built from the Host header would point here.
+  await page.goto("http://127.0.0.1:3100/sign-up");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByRole("status")).toContainText("Check your email");
+  const link = new URL(await emailedLink(email));
+  expect(link.searchParams.get("redirect_to")).toBe("http://localhost:3100/auth/callback");
+  const { data: users } = await admin().auth.admin.listUsers({ perPage: 1000 });
+  const user = users.users.find((u) => u.email === email);
+  if (user) created.push(user.id);
+});
+
+test("a token-hash link (hosted email templates) signs you in from any browser; a recovery one lands on the new-password form", async ({ browser, baseURL }) => {
+  const email = await confirmedStudent();
+  // What the hosted templates put in the email: the hash, not a one-browser code.
+  const magic = await admin().auth.admin.generateLink({ type: "magiclink", email });
+  expect(magic.error).toBeNull();
+  // A browser that never asked for the link.
+  const other = await browser.newContext();
+  const page = await other.newPage();
+  await page.goto(`${baseURL}/auth/callback?token_hash=${magic.data.properties!.hashed_token}&type=magiclink&next=/settings`);
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.locator("[data-part=account-email]")).toHaveText(email);
+  await other.close();
+
+  const recovery = await admin().auth.admin.generateLink({ type: "recovery", email });
+  const third = await browser.newContext();
+  const page3 = await third.newPage();
+  await page3.goto(`${baseURL}/auth/callback?token_hash=${recovery.data.properties!.hashed_token}&type=recovery&next=/home`);
+  await expect(page3).toHaveURL(/\/reset-password$/);
+  await third.close();
+
+  // A bad or reused hash goes to sign-in with the link notice, signed out.
+  const fourth = await browser.newContext();
+  const page4 = await fourth.newPage();
+  await page4.goto(`${baseURL}/auth/callback?token_hash=${magic.data.properties!.hashed_token}&type=magiclink`);
+  await expect(page4).toHaveURL(/\/sign-in\?notice=link$/);
+  await fourth.close();
+});

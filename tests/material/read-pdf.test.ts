@@ -58,6 +58,43 @@ test("a file that takes longer than the time budget is refused as unreadable", a
   await assert.rejects(readPdf(deck, { timeoutMs: 1 }), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422 && /gave up/.test(e.message));
 });
 
+test("the budget stops a parser that never yields: the thread is terminated and the file refused on time", async () => {
+  // A parser that opens the file and then spins forever, as a hostile PDF makes pdf.js do. On the
+  // main thread this would block the event loop and no timer could fire; on its own thread it's cut off.
+  const spinning = `
+    const { workerData } = require("node:worker_threads");
+    workerData.port.on("message", () => { for (;;) {} });
+  `;
+  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const started = Date.now();
+  await assert.rejects(readPdf(deck, { timeoutMs: 400, workerSource: spinning }), (e: unknown) => e instanceof UnreadablePdfError && /gave up/.test(e.message));
+  assert.ok(Date.now() - started < 3000, "refused soon after the budget, not when the platform killed the request");
+  // (If the spinning thread weren't terminated, this test process couldn't exit.)
+});
+
+test("a parser thread that dies before opening the file is replaced by a read on this thread", async () => {
+  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const out = await readPdf(deck, { workerSource: "process.exit(3)" });
+  assert.equal(out.engine, "main-thread");
+  assert.ok(out.pages.length > 20);
+  const usual = await readPdf(deck);
+  assert.equal(usual.engine, "worker");
+  assert.deepEqual(usual.pages, out.pages);
+});
+
+test("a parser thread that dies with the file open makes the file unreadable, not a retry here", async () => {
+  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  // Answers pdf.js's first message (so the document opens), then dies.
+  const dying = `
+    const { workerData } = require("node:worker_threads");
+    import("pdfjs-dist/legacy/build/pdf.worker.mjs").then((m) => {
+      m.WorkerMessageHandler.initializeFromPort(workerData.port);
+      setTimeout(() => process.exit(7), 150);
+    });
+  `;
+  await assert.rejects(readPdf(deck, { workerSource: dying }), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422);
+});
+
 test("a slide renders on the server as a JPEG figure", async () => {
   const bytes = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
   const src = await renderSlide(bytes, 12);
