@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { UploadRequest, startUpload } from "@/lib/server/materials";
+import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { forStudent, reply } from "@/lib/server/student";
 import { uploadReply } from "@/lib/server/upload-reply";
 
@@ -24,6 +25,9 @@ export async function POST(request: Request) {
     }
     const parsed = UploadRequest.safeParse(raw);
     if (!parsed.success) return reply(400, { error: "Those aren't an upload's details.", issues: z.flattenError(parsed.error).fieldErrors });
+    // Decision 10: at most LIMITS.rate.upload starts a day per student (a re-upload of a known file counts too).
+    const rate = await rateLimit(db, student.id, "upload");
+    if (!rate.ok) return tooManyRequests(rate);
     return uploadReply(db, student.id, await startUpload(db, student.id, parsed.data));
   });
 }

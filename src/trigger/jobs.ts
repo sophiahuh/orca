@@ -4,9 +4,11 @@
  * tests run. Not retried, so a failed model run isn't paid for twice; the run row says why it failed
  * and the student can upload again. Deployed in Task 10 (`npx trigger.dev deploy`).
  */
-import { task } from "@trigger.dev/sdk";
+import { schedules, task } from "@trigger.dev/sdk";
 import { JOB_MAX_SECONDS, type MaterialJob, type TopUpJob } from "@/lib/jobs/start";
 import { runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
+import { ownersWithWaitingRuns, resumeNext } from "@/lib/server/jobs/start";
+import { adminClient } from "@/lib/supabase/server";
 
 export const processMaterialTask = task({
   id: "process-material",
@@ -20,4 +22,25 @@ export const topUpTask = task({
   retry: { maxAttempts: 1 },
   maxDuration: JOB_MAX_SECONDS["top-up"],
   run: (payload: TopUpJob) => runTopUpJob(payload),
+});
+
+/**
+ * Runs held by a daily budget (`waiting`) resume when the student's day changes, which no job of
+ * theirs may be around to notice: once an hour, try every student with a waiting run (decision 10).
+ * Inline mode has no schedule; there a waiting run resumes when the student next starts or
+ * finishes a job.
+ */
+export const resumeWaitingTask = schedules.task({
+  id: "resume-waiting",
+  cron: "11 * * * *",
+  maxDuration: 300,
+  run: async () => {
+    const db = adminClient();
+    const started: string[] = [];
+    for (const ownerId of await ownersWithWaitingRuns(db)) {
+      const d = await resumeNext(db, ownerId);
+      if (d) started.push(d.job.runId);
+    }
+    return { started };
+  },
 });

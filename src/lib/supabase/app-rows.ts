@@ -188,8 +188,8 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
   };
 }
 
-/** A finished (or failed) run as the job saves it; its Trigger.dev job id, if any, is left as it is. */
-export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id"> {
+/** A finished (or failed) run as the job saves it; its Trigger.dev job id and a top-up's request (objective_ids) are left as they are. */
+export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids"> {
   return {
     id: r.id,
     material_id: r.materialId,
@@ -242,7 +242,7 @@ type SavedRow<K extends keyof Tables> = StructureRow<K> | (Partial<StructureRow<
 
 export interface StructureRows {
   /** Only the server's jobs save runs (students can't write them). */
-  runs?: Omit<StructureRow<"pipeline_runs">, "job_id">[];
+  runs?: Omit<StructureRow<"pipeline_runs">, "job_id" | "objective_ids">[];
   topics?: SavedRow<"topics">[];
   objectives?: SavedRow<"objectives">[];
   relations?: SavedRow<"relations">[];

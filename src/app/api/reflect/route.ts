@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { stepCaller, StepError } from "@/lib/server/model";
+import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { forStudent, reply } from "@/lib/server/student";
 import { sanitize } from "@/lib/untrusted/sanitize";
 
@@ -21,6 +22,9 @@ export async function POST(request: Request) {
     if (!parsed.success) return reply(400, { error: "Send the material and a note of at most 2,000 characters." });
     const call = stepCaller({ ownerId: student.id, kind: "reflect" });
     if (!call) return reply(503, { error: "No AI is connected, so Orca can't match your reflection." });
+    // Decision 10: at most LIMITS.rate.reflect matches an hour per student.
+    const rate = await rateLimit(db, student.id, "reflect");
+    if (!rate.ok) return tooManyRequests(rate);
     const { data: material, error } = await db.from("materials").select("id, course_id, filename, type").eq("owner_id", student.id).eq("id", parsed.data.materialId).maybeSingle();
     if (error) throw new Error(`Couldn't read the material: ${error.message}`);
     if (!material) return reply(404, { error: "No such material." });

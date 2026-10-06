@@ -21,8 +21,12 @@ export interface Scenario {
   extract?: unknown;
   /** At most this many questions per objective (default: what the prompt asks for). */
   perObjective?: number;
-  /** Answer this step with an error (400 by default: the SDK doesn't retry it). */
-  fail?: { step: string; status?: number; message?: string };
+  /**
+   * Answer this step with an error (400 by default: the SDK doesn't retry it). `type: "spend-limit"`
+   * answers as the real API does when the organization's monthly spend cap is reached: 429,
+   * rate_limit_error, error_code enforced_spend_limit_reached, no retry-after.
+   */
+  fail?: { step: string; status?: number; message?: string; type?: "spend-limit" | "rate-limit" };
   reflect?: { matches: Array<{ name: string; sure: boolean; reasoning: string }> };
   /** What the grade step answers (default: correct). */
   grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string };
@@ -134,7 +138,19 @@ createServer(async (req, res) => {
   calls.push({ step });
   if (scenario.delayMs) await new Promise((r) => setTimeout(r, scenario.delayMs));
   if (scenario.fail?.step === step) {
-    return send(scenario.fail.status ?? 400, { type: "error", error: { type: "invalid_request_error", message: scenario.fail.message ?? `The fake API refused the ${step} step.` } });
+    const f = scenario.fail;
+    if (f.type === "spend-limit") {
+      return send(429, {
+        type: "error",
+        error: { type: "rate_limit_error", message: f.message ?? "You have reached your API usage limits: your organization has crossed its monthly API usage threshold, set based on your organization's API tier. You will regain access on 2026-11-01 at 00:00 UTC.", details: { error_code: "enforced_spend_limit_reached" } },
+        request_id: "req_fake_spend",
+      });
+    }
+    if (f.type === "rate-limit") {
+      res.writeHead(429, { "content-type": "application/json", "retry-after": "1" });
+      return res.end(JSON.stringify({ type: "error", error: { type: "rate_limit_error", message: f.message ?? "Rate limited by the fake API." } }));
+    }
+    return send(f.status ?? 400, { type: "error", error: { type: "invalid_request_error", message: f.message ?? `The fake API refused the ${step} step.` } });
   }
   const prompt = body.messages.map((m) => text(m.content)).join("\n");
   const reply = JSON.stringify(answer(step, prompt));

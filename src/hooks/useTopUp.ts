@@ -42,7 +42,7 @@ export function useTopUp(serverModel: string | null | undefined) {
         .then(async (res) => {
           const out = (await res.json().catch(() => null)) as { state?: string; runId?: string; error?: string } | null;
           if (!res.ok) throw new Error(out?.error ?? `the server answered ${res.status}`);
-          if (out?.state === "started" && out.runId) setStart({ state: "following", runId: out.runId });
+          if ((out?.state === "started" || out?.state === "queued") && out.runId) setStart({ state: "following", runId: out.runId });
           else if (out?.state === "busy") setStart({ state: "unavailable", reason: "New questions for this course are already being written." });
           else if (out?.state === "no-model") setStart({ state: "unavailable", reason: "No AI is connected, so Orca can't write new questions." });
           else throw new Error("the server's answer made no sense");
@@ -57,6 +57,7 @@ export function useTopUp(serverModel: string | null | undefined) {
   else if (start.state === "starting") status = { state: "running" };
   else if (start.state === "unavailable") status = { state: "unavailable", reason: start.reason };
   else if (start.state === "error") status = { state: "error", message: start.message };
+  else if (run?.status === "waiting") status = { state: "unavailable", reason: `${(run.progress as { message?: string } | null | undefined)?.message ?? "Daily limit reached: processing resumes tomorrow."} New questions are written then.` };
   else if (!run || !isFinished(run)) status = { state: "running" };
   else if (run.status === "failed") status = { state: "error", message: run.error ?? "the job failed" };
   else {

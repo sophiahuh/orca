@@ -124,6 +124,19 @@ isOneToOne: false
       referencedColumns: ["id","owner_id"]
     }
                   ]
+                },"model_usage": {
+                  Row: {
+                    "at": string,"cache_read_tokens": number,"cache_write_tokens": number,"cost_usd": number,"id": string,"input_tokens": number,"kind": string,"model": string,"output_tokens": number,"owner_id": string,"run_id": string | null
+                  }
+                  Insert: {
+                    "at"?: string,"cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd": number,"id"?: string,"input_tokens": number,"kind": string,"model": string,"output_tokens": number,"owner_id": string,"run_id"?: string | null
+                  }
+                  Update: {
+                    "at"?: string,"cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"id"?: string,"input_tokens"?: number,"kind"?: string,"model"?: string,"output_tokens"?: number,"owner_id"?: string,"run_id"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"objective_state": {
                   Row: {
                     "accumulator": Json | null,"course_id": string,"last_event_at": string | null,"objective_id": string,"owner_id": string,"rules_version": number | null,"stale": boolean,"updated_at": string,"version": number
@@ -194,13 +207,13 @@ isOneToOne: false
                   ]
                 },"pipeline_runs": {
                   Row: {
-                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string | null,"model": string,"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"status": string,"topics_created": (string)[]
+                    "at": string,"course_id": string,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string | null,"model": string,"objective_ids": (string)[],"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"questions_added": number,"status": string,"topics_created": (string)[]
                   }
                   Insert: {
-                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id"?: string | null,"model": string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
+                    "at": string,"course_id": string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id"?: string | null,"model": string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
                   }
                   Update: {
-                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string | null,"model"?: string,"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
+                    "at"?: string,"course_id"?: string,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string | null,"model"?: string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"questions_added"?: number,"status"?: string,"topics_created"?: (string)[]
                   }
                   Relationships: [
                     {
@@ -266,6 +279,19 @@ isOneToOne: false
       referencedRelation: "topics"
       referencedColumns: ["id","course_id"]
     }
+                  ]
+                },"rate_limits": {
+                  Row: {
+                    "action": string,"count": number,"owner_id": string,"window_start": string
+                  }
+                  Insert: {
+                    "action": string,"count"?: number,"owner_id": string,"window_start": string
+                  }
+                  Update: {
+                    "action"?: string,"count"?: number,"owner_id"?: string,"window_start"?: string
+                  }
+                  Relationships: [
+                    
                   ]
                 },"relations": {
                   Row: {
@@ -368,6 +394,9 @@ isOneToOne: false
           Functions: {
             "course_structure":
 { Args: { "course": string,"owner": string }; Returns: Json
+                           },
+"hit_rate_limit":
+{ Args: { "action": string,"max_hits": number,"owner": string,"window_seconds": number }; Returns: Json
                            },
 "my_data":
 { Args: Record<PropertyKey, never>; Returns: Json

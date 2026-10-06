@@ -16,6 +16,9 @@ import { parseLooseJson } from "@/lib/pipeline/parse";
 import { buildPrompt } from "@/lib/pipeline/prompts";
 import type { CallStep } from "@/lib/pipeline/run";
 import { STEPS, type StepName } from "@/lib/pipeline/schemas";
+import type { TokenUsage } from "@/lib/pricing";
+import { checkBudget, recordUsage } from "@/lib/server/usage";
+import { type OrcaSupabase, adminClient } from "@/lib/supabase/server";
 
 export const ORCA_MODEL = "claude-opus-5-5";
 
@@ -65,13 +68,41 @@ export class StepError extends Error {
 }
 
 /**
+ * Metering for one call made for `ctx` (decision 10): every reply's token counts and cost go to
+ * `model_usage`. Used by `stepCaller` and by the grader; pass it as `completeJson`'s `onUsage`.
+ */
+export function meter(ctx: ModelCtx, db: OrcaSupabase = adminClient()): (usage: TokenUsage, model: string) => Promise<void> {
+  return (usage, model) => recordUsage(db, ctx, model, usage);
+}
+
+export interface StepCallerOptions {
+  /**
+   * Check the student's daily budgets and the global ceiling before every call ("each-call": the
+   * reflection route) or not at all ("none": the jobs check once when they start, and go waiting).
+   */
+  guard?: "each-call" | "none";
+}
+
+/** The message a guarded call fails with when a budget is spent (the student's day, or everyone's). */
+export class BudgetError extends Error {
+  readonly reason: string;
+  constructor(reason: string, message: string) {
+    super(message);
+    this.name = "BudgetError";
+    this.reason = reason;
+  }
+}
+
+/**
  * The step caller the jobs and the reflection route inject into the pure pipeline. Each step's input
  * is checked against its schema before a prompt is built from it, and its reply against the output
- * schema. Every call is made for `ctx`. Null without a key.
+ * schema. Every call is made for `ctx`, metered in `model_usage`, and (with `guard: "each-call"`)
+ * refused with a 429 StepError when the student's or Orca's daily budget is spent. Null without a key.
  */
-export function stepCaller(ctx: ModelCtx): CallStep | null {
+export function stepCaller(ctx: ModelCtx, options: StepCallerOptions = {}): CallStep | null {
   const config = orcaConfig();
   if (!config) return null;
+  const guard = options.guard ?? "each-call";
   return (async (step: StepName, input: unknown) => {
     const spec = STEPS[step];
     if (!spec) throw new Error(`Unknown pipeline step "${String(step)}"`);
@@ -79,8 +110,13 @@ export function stepCaller(ctx: ModelCtx): CallStep | null {
     if (!parsed.success) throw new StepError(step, `The ${step} step got input it can't take: ${parsed.error.issues[0]?.message ?? "invalid"}`, 400);
     const built = buildPrompt(step, parsed.data as never);
     const schema: z.ZodType<unknown> = spec.output;
+    const db = adminClient();
+    if (guard === "each-call") {
+      const verdict = await checkBudget(db, ctx.ownerId, 0);
+      if (!verdict.ok) throw new StepError(step, verdict.message, 429);
+    }
     try {
-      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ctx });
+      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ctx, onUsage: meter(ctx, db) });
     } catch (error) {
       if (error instanceof LlmError) throw new StepError(step, error.message, error.status);
       throw new StepError(step, `The ${step} step failed: ${error instanceof Error ? error.message : String(error)}`, 502);

@@ -19,6 +19,7 @@ import * as core from "@/lib/jobs/start";
 import type { Dispatch, Generation, StartDeps, TopUpStart } from "@/lib/jobs/start";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 import { serverModel } from "@/lib/server/model";
+import { checkBudget } from "@/lib/server/usage";
 import { runMaterialJob, runTopUpJob } from "./run";
 
 export type { Generation, TopUpStart } from "@/lib/jobs/start";
@@ -32,14 +33,18 @@ export function jobsMode(): JobsMode {
   throw new Error(`ORCA_JOBS must be "inline" or "trigger" (it is ${mode ? `"${mode}"` : "unset"}); see .env.example.`);
 }
 
-function deps(db: OrcaSupabase): StartDeps {
+function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"): StartDeps {
   const mode = jobsMode();
   return {
     db,
     model: serverModel(),
+    budget: (ownerId, pages) => checkBudget(db, ownerId, pages),
     async dispatch(d: Dispatch) {
       if (mode === "inline") {
-        after(() => (d.kind === "material" ? runMaterialJob(d.job) : runTopUpJob(d.job)).then(() => undefined));
+        const work = () => (d.kind === "material" ? runMaterialJob(d.job) : runTopUpJob(d.job)).then(() => undefined);
+        // From a route: after its response. From a finishing job (already after a response): right away.
+        if (run === "after-response") after(work);
+        else void work();
         return;
       }
       const handle =
@@ -60,4 +65,20 @@ export function startUploadJob(db: OrcaSupabase, ownerId: string, materialId: st
 /** See `startTopUpJob` in src/lib/jobs/start.ts. */
 export function startTopUpJob(db: OrcaSupabase, ownerId: string, req: { courseId: string; sessionId: string; objectiveIds: string[] }): Promise<TopUpStart> {
   return core.startTopUpJob(deps(db), ownerId, req);
+}
+
+/**
+ * Start the student's next queued or resumable waiting job (see `resumeNext`). Called by a job
+ * that just finished (`src/lib/server/jobs/run.ts`), so the next one runs at once, not after a
+ * response that already went out.
+ */
+export function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+  return core.resumeNext(deps(db, "now"), ownerId);
+}
+
+/** Every student with a waiting run, for the scheduled sweep (trigger mode). */
+export async function ownersWithWaitingRuns(db: OrcaSupabase): Promise<string[]> {
+  const { data, error } = await db.from("pipeline_runs").select("owner_id").eq("status", "waiting");
+  if (error) throw new Error(`Couldn't read the waiting runs: ${error.message}`);
+  return [...new Set(data.map((r) => r.owner_id))];
 }

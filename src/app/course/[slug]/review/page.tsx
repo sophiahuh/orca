@@ -67,13 +67,22 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
           </motion.div>
         )}
 
-        {working && (
+        {working && run.status === "waiting" && (
+          <motion.div variants={fadeUp}>
+            <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part="run-waiting" role="status">
+              <span className="text-[17px] font-bold text-prussian">{material?.filename ?? "Your upload"} is saved and waiting</span>
+              <span className="text-[14px] font-semibold text-wisteria-deep">{progressMessage(run.progress)} Nothing to do: Orca builds the topics and questions when the limit resets, and they appear here.</span>
+            </Card>
+          </motion.div>
+        )}
+
+        {working && run.status !== "waiting" && (
           <motion.div variants={fadeUp}>
             <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part="run-progress" role="status">
               <span className="text-[17px] font-bold text-prussian">Building from {material?.filename ?? "your upload"}</span>
               <ProgressBar value={run.status === "running" ? stageShare(run.progress?.stage) : 0.05} height={10} label="Building" />
               <span className="text-[14px] font-semibold text-wisteria-deep">
-                {run.status === "running" ? progressMessage(run.progress) : "Waiting to start…"} This takes a few minutes: every question is checked before you see it. You can leave this page; it keeps going.
+                {run.status === "running" ? progressMessage(run.progress) : "Waiting for your other upload to finish; this one starts next."} This takes a few minutes: every question is checked before you see it. You can leave this page; it keeps going.
               </span>
             </Card>
           </motion.div>

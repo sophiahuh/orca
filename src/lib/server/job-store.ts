@@ -4,8 +4,9 @@
  * carried in the job's payload, never anything the browser sent.
  */
 import type { Material, MaterialPages, QuizQuestion } from "@/lib/data";
-import type { JobStore, LoadedCourse } from "@/lib/jobs/jobs";
+import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
+import { checkBudget } from "@/lib/server/usage";
 import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -43,8 +44,19 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
         .eq("id", runId)
         .in("status", ["queued", "waiting"])
         .select("id");
+      // Another of the student's runs is running (the one-running-per-student index): leave this one queued.
+      if (error?.code === "23505") return false;
       if (error) throw new Error(`Couldn't start the run: ${error.message}`);
       return data.length > 0;
+    },
+
+    budget(pages) {
+      return checkBudget(db, ownerId, pages);
+    },
+
+    async wait(runId, verdict) {
+      const progress: WaitingProgress = { stage: "waiting", reason: verdict.reason, message: verdict.message };
+      check("hold the run", await db.from("pipeline_runs").update({ status: "waiting", progress: progress as unknown as Json }).eq("owner_id", ownerId).eq("id", runId).eq("status", "running"));
     },
 
     async progress(runId, progress) {

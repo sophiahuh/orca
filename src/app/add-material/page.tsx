@@ -138,9 +138,10 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         setDoc(outcome.pages);
       }
       const g = outcome.generation;
-      if (g.state === "started" || g.state === "running") {
-        // The server builds it (a job); the review screen follows its progress.
-        setPhase({ kind: "working", message: "Orca is building topics and questions from it." });
+      if (g.state === "started" || g.state === "running" || g.state === "queued") {
+        // The server builds it (a job); the review screen follows its progress. Queued: it starts
+        // when the student's other job finishes (one at a time).
+        setPhase({ kind: "working", message: g.state === "queued" ? "Orca will build topics and questions from it after your other upload finishes." : "Orca is building topics and questions from it." });
         router.push(`/course/${course.slug}/review?run=${g.runId}`);
         return;
       }

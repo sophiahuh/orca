@@ -5,6 +5,7 @@ import { type JobStore, processMaterial, topUp } from "../../src/lib/jobs/jobs.t
 import type { CallStep, Progress } from "../../src/lib/pipeline/run.ts";
 import type { StepInput } from "../../src/lib/pipeline/schemas.ts";
 import type { StructureRows, StructureState } from "../../src/lib/supabase/app-rows.ts";
+import type { BudgetVerdict } from "../../src/lib/jobs/budget.ts";
 
 const anchor = { locator: "slide 2", excerpt: "x + xy = x" };
 const material: Material = { id: "m1", courseId: "c", filename: "L02.pdf", type: "Lecture", assigned: null, due: null, reflect: false };
@@ -25,11 +26,12 @@ const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
 });
 
 /** An in-memory JobStore for one student: what the jobs saved, the progress they wrote, the run's state. */
-function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; lostReply?: boolean }) {
+function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; lostReply?: boolean; budget?: BudgetVerdict }) {
   const run = { ...init.run };
   const structure: StructureState = init.structure ?? { topics: [], objectives: {}, bank: {}, relations: [] };
   const saves: StructureRows[] = [];
   const progress: Progress[] = [];
+  const budgetAsked: number[] = [];
   const store: JobStore = {
     run: async (id) => (id === run.id ? { ...run } : null),
     claim: async (id, p) => {
@@ -44,6 +46,15 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
       run.status = "failed";
       run.error = error;
     },
+    budget: async (pages) => {
+      budgetAsked.push(pages);
+      return init.budget ?? { ok: true };
+    },
+    wait: async (_id, verdict) => {
+      if (run.status !== "running") throw new Error("only a running run waits");
+      run.status = "waiting";
+      run.progress = { stage: "waiting", reason: verdict.reason, message: verdict.message };
+    },
     course: async (id) => (id === "c" ? { course: { id: "c", name: "Logic", short: "LOG", topics: structure.topics }, structure } : null),
     materials: async () => [material],
     pages: async (ids) => Object.fromEntries(ids.flatMap((id) => (init.pages?.[id] ? [[id, init.pages[id]]] : []))),
@@ -54,7 +65,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
       if (init.lostReply) throw new Error("fetch failed");
     },
   };
-  return { store, saves, progress, state: run };
+  return { store, saves, progress, budgetAsked, state: run };
 }
 
 /** A model that maps one topic and objective, writes `per` exact questions per objective and solves them right. */
@@ -173,4 +184,28 @@ test("a save that landed but whose reply was lost leaves the run done, so a re-u
   assert.equal(out.status, "failed");
   assert.equal(mem.saves.length, 1);
   assert.equal(mem.state.status, "done");
+});
+
+test("an upload over the daily budget is held: the run goes to waiting with why, the model is never called, nothing is saved", async () => {
+  const held: BudgetVerdict = { ok: false, reason: "daily-pages", message: "Daily limit reached: processing resumes tomorrow." };
+  const m = memoryStore({ run: queued(), pages: { m1: [{ n: 1, text: "x + xy = x" }, { n: 2, text: "more" }] }, budget: held });
+  const model = honestModel();
+  const out = await processMaterial({ store: m.store, call: model.call, newId: () => "id" }, { runId: "run1", materialId: "m1" });
+  assert.deepEqual(out, { status: "waiting", reason: "daily-pages" });
+  assert.equal(m.state.status, "waiting");
+  assert.deepEqual(m.state.progress, { stage: "waiting", reason: "daily-pages", message: held.message });
+  assert.deepEqual(m.budgetAsked, [2], "asked with the pages this upload would add");
+  assert.deepEqual(model.steps, []);
+  assert.deepEqual(m.saves, []);
+});
+
+test("a top-up asks the budget with no pages and is held the same way", async () => {
+  const held: BudgetVerdict = { ok: false, reason: "global-budget", message: "Orca's model budget for today is used up: processing resumes tomorrow." };
+  const m = memoryStore({ run: queued({ kind: "top-up", materialId: null }), budget: held });
+  const model = honestModel();
+  const out = await topUp({ store: m.store, call: model.call, newId: () => "id" }, { runId: "run1", objectiveIds: [] });
+  assert.deepEqual(out, { status: "waiting", reason: "global-budget" });
+  assert.deepEqual(m.budgetAsked, [0]);
+  assert.equal(m.state.status, "waiting");
+  assert.deepEqual(model.steps, []);
 });

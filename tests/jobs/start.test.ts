@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, type StartDeps, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
+import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, type StartDeps, resumeNext, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
 
 type Row = Record<string, unknown>;
 
@@ -51,6 +51,8 @@ function fakeDb(tables: Record<string, Row[]>, opts: { uniqueInFlight?: boolean 
         return q;
       },
       eq: (k: string, v: unknown) => (filters.push((r) => r[k] === v), q),
+      neq: (k: string, v: unknown) => (filters.push((r) => r[k] !== v), q),
+      gte: (k: string, v: string) => (filters.push((r) => (r[k] as string) >= v), q),
       in: (k: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[k])), q),
       lt: (k: string, v: string) => (filters.push((r) => (r[k] as string) < v), q),
       order: () => q,
@@ -74,7 +76,8 @@ const session = { id: "s-row", owner_id: OWNER, course_id: "c1", session_id: "se
 
 function deps(db: StartDeps["db"], model: string | null, dispatch: (d: Dispatch) => Promise<void> = async () => {}) {
   const sent: Dispatch[] = [];
-  return { deps: { db, model, now: () => now, newId: () => "run-new", dispatch: async (d: Dispatch) => (sent.push(d), dispatch(d)) } satisfies StartDeps, sent };
+  const d: StartDeps = { db, model, now: () => now, newId: () => "run-new", dispatch: async (x: Dispatch) => (sent.push(x), dispatch(x)) };
+  return { deps: d, sent };
 }
 
 test("without a model key an upload answers no-model and queues nothing", async () => {
@@ -141,4 +144,64 @@ test("a hand-off that fails marks the run failed and says why", async () => {
     f.tables.pipeline_runs.map((r) => [r.status, r.error]),
     [["failed", "Orca couldn't start the job: Trigger.dev is unreachable"]],
   );
+});
+
+/* ── One job at a time per student (decision 10) ── */
+
+test("a second upload while another job is in flight is queued, not dispatched, and starts when resumeNext runs", async () => {
+  const other = { id: "run-busy", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: now.toISOString() };
+  const f = fakeDb({ materials: [material, { id: "m0", owner_id: OWNER, course_id: "c1", status: "ready" }], material_pages: [page], pipeline_runs: [other] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "queued", runId: "run-new" });
+  assert.deepEqual(sent, [], "nothing handed off while another job runs");
+  assert.equal(f.tables.pipeline_runs.find((r) => r.id === "run-new")!.status, "queued");
+
+  // The running job hasn't finished: nothing to resume.
+  assert.equal(await resumeNext(d, OWNER), null);
+  assert.deepEqual(sent, []);
+  // It finishes: the queued one is handed off.
+  other.status = "done";
+  assert.deepEqual(await resumeNext(d, OWNER), { kind: "material", job: { ownerId: OWNER, runId: "run-new", materialId: "m1" } });
+  assert.deepEqual(sent, [{ kind: "material", job: { ownerId: OWNER, runId: "run-new", materialId: "m1" } }]);
+});
+
+test("a queued top-up keeps its objectives on the run and is resumed with them, oldest first", async () => {
+  const f = fakeDb({ session_results: [session], pipeline_runs: [{ id: "run-busy", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: now.toISOString() }] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startTopUpJob(d, OWNER, { courseId: "c1", sessionId: "sess-1", objectiveIds: ["o1", "o2"] }), { state: "queued", runId: "run-new" });
+  assert.deepEqual(f.tables.pipeline_runs.find((r) => r.id === "run-new")!.objective_ids, ["o1", "o2"]);
+  f.tables.pipeline_runs[0].status = "failed";
+  assert.deepEqual(await resumeNext(d, OWNER), { kind: "top-up", job: { ownerId: OWNER, runId: "run-new", objectiveIds: ["o1", "o2"] } });
+  assert.deepEqual(sent.length, 1);
+});
+
+test("a waiting run resumes only when its budget allows; one still held is skipped for a later one that fits", async () => {
+  const waitingUpload = { id: "run-wait", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "waiting", at: new Date(now.getTime() - 60_000).toISOString() };
+  const queuedTopUp = { id: "run-top", owner_id: OWNER, course_id: "c1", material_id: null, kind: "top-up", status: "waiting", at: now.toISOString(), objective_ids: ["o1"] };
+  const f = fakeDb({ materials: [material], material_pages: [page, { ...page, n: 2 }], pipeline_runs: [waitingUpload, queuedTopUp] });
+  const asked: number[] = [];
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  d.budget = async (_owner, pages) => {
+    asked.push(pages);
+    return pages > 0 ? { ok: false, reason: "daily-pages", message: "Daily limit reached: processing resumes tomorrow." } : { ok: true };
+  };
+  // The upload (2 pages) is still held; the top-up (no pages) fits and goes.
+  assert.deepEqual(await resumeNext(d, OWNER), { kind: "top-up", job: { ownerId: OWNER, runId: "run-top", objectiveIds: ["o1"] } });
+  assert.deepEqual(asked, [2, 0]);
+  assert.equal(waitingUpload.status, "waiting");
+  assert.equal(queuedTopUp.status, "queued", "back to queued so the job can claim it");
+  assert.equal(sent.length, 1);
+  // Tomorrow: the upload fits too.
+  d.budget = async () => ({ ok: true });
+  queuedTopUp.status = "done";
+  assert.deepEqual(await resumeNext(d, OWNER), { kind: "material", job: { ownerId: OWNER, runId: "run-wait", materialId: "m1" } });
+});
+
+test("a queued run is never taken for dead, however old: it waits its turn", async () => {
+  const at = new Date(now.getTime() - 10 * DEAD_RUN_MS.upload).toISOString();
+  const queued = { id: "run-q", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "queued", at };
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [queued] });
+  const { deps: d } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "running", runId: "run-q" });
+  assert.equal(queued.status, "queued");
 });

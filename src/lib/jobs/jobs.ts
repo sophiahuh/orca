@@ -16,6 +16,7 @@ import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
 import { runTopUp } from "../pipeline/topup.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
+import type { BudgetVerdict } from "./budget.ts";
 
 export interface LoadedCourse {
   course: Pick<Course, "id" | "name" | "short" | "topics">;
@@ -30,6 +31,13 @@ export interface JobStore {
   progress(runId: string, progress: Progress): Promise<void>;
   /** Mark a run that is still in flight failed; a finished run is left as it is. */
   fail(runId: string, error: string): Promise<void>;
+  /**
+   * Whether the student may put `pages` more pages (0 for a top-up) through the model now: their
+   * daily budgets and Orca's ceiling (decision 10; src/lib/jobs/budget.ts decides).
+   */
+  budget(pages: number): Promise<BudgetVerdict>;
+  /** Put a claimed run back to `waiting` with why: it resumes when the budget allows (start.ts's sweep). */
+  wait(runId: string, verdict: Extract<BudgetVerdict, { ok: false }>): Promise<void>;
   course(courseId: string): Promise<LoadedCourse | null>;
   /** The course's materials that were read (status ready). */
   materials(courseId: string): Promise<Material[]>;
@@ -49,7 +57,27 @@ export interface JobDeps {
   renderFigure?: (material: Material, slide: number) => Promise<string | null>;
 }
 
-export type JobOutcome = { status: "done"; run: PipelineRun } | { status: "failed"; error: string } | { status: "skipped"; reason: string };
+export type JobOutcome =
+  | { status: "done"; run: PipelineRun }
+  | { status: "failed"; error: string }
+  | { status: "skipped"; reason: string }
+  /** Held by a daily budget; the run is `waiting` and will be resumed. */
+  | { status: "waiting"; reason: string };
+
+/** What a waiting run's progress says: `{ stage: "waiting", reason, message }`. */
+export interface WaitingProgress {
+  stage: "waiting";
+  reason: string;
+  message: string;
+}
+
+/** Check the budget just after claiming; over it, the run goes back to waiting and nothing is called. */
+async function heldByBudget(store: JobStore, runId: string, pages: number): Promise<JobOutcome | null> {
+  const verdict = await store.budget(pages);
+  if (verdict.ok) return null;
+  await store.wait(runId, verdict);
+  return { status: "waiting", reason: verdict.reason };
+}
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -92,6 +120,8 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
     if (!material) throw new Error("the material isn't in the course any more, or hasn't been read");
     const pages = (await store.pages([material.id]))[material.id];
     if (!pages?.length) throw new Error("Orca found no text in this file to build from");
+    const held = await heldByBudget(store, run.id, pages.length);
+    if (held) return held;
     const loaded = await store.course(run.courseId);
     if (!loaded) throw new Error("the course is gone");
     const before = loaded.structure;
@@ -134,6 +164,9 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
   const { run } = begun;
   const progress = progressWriter(store, run.id);
   try {
+    // A top-up's pages aren't counted (its calls are bounded by the token budget it's checked against).
+    const held = await heldByBudget(store, run.id, 0);
+    if (held) return held;
     const loaded = await store.course(run.courseId);
     if (!loaded) throw new Error("the course is gone");
     const before = loaded.structure;
