@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import type { Course } from "@/lib/data";
@@ -23,6 +24,24 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 760, y: 760, w: 70 },
 ];
 
+/** Two roomy columns keep the island frames and their full-name pills from colliding. */
+const SAFE_SLOTS = [
+  { x: 70, y: 40 }, { x: 500, y: 40 },
+  { x: 70, y: 300 }, { x: 500, y: 300 },
+  { x: 70, y: 560 }, { x: 500, y: 560 },
+];
+const MAP_GAP = 24;
+
+function footprint(course: Course, pos: { x: number; y: number }) {
+  // A label is 14px bold text plus horizontal padding. Cap the estimate to the map's usable width.
+  const labelWidth = Math.min(390, Math.max(ISLAND_W, course.name.length * 8.4 + 50));
+  return { x: pos.x + (ISLAND_W - labelWidth) / 2, y: pos.y, w: labelWidth, h: 242 };
+}
+
+function collides(a: ReturnType<typeof footprint>, b: ReturnType<typeof footprint>) {
+  return a.x < b.x + b.w + MAP_GAP && a.x + a.w + MAP_GAP > b.x && a.y < b.y + b.h + MAP_GAP && a.y + a.h + MAP_GAP > b.y;
+}
+
 /**
  * The island map: a fixed 854×834 canvas scaled to fit its container.
  * Clicking an island or its label pill opens its path (its configuration is on that page).
@@ -30,6 +49,15 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
 export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCount: (courseId: string) => number }) {
   const router = useRouter();
   const mastery = useMasteryByCourse();
+  const positions = useMemo(() => {
+    const placed: Array<{ course: Course; pos: { x: number; y: number } }> = [];
+    for (const course of courses) {
+      const candidates = [course.pos, ...SAFE_SLOTS];
+      const pos = candidates.find((candidate) => !placed.some((other) => collides(footprint(course, candidate), footprint(other.course, other.pos)))) ?? SAFE_SLOTS[placed.length % SAFE_SLOTS.length];
+      placed.push({ course, pos });
+    }
+    return new Map(placed.map(({ course, pos }) => [course.id, pos]));
+  }, [courses]);
   const levelOf = (courseId: string) => {
     const m = mastery[courseId];
     if (!m) throw new Error(`No mastery computed for course ${courseId}`);
@@ -51,7 +79,7 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
         ))}
 
         {courses.map((c, i) => (
-          <div key={c.id} className="absolute" style={{ left: c.pos.x, top: c.pos.y, width: ISLAND_W, height: ISLAND_H }}>
+          <div key={c.id} className="absolute" style={{ left: positions.get(c.id)?.x ?? c.pos.x, top: positions.get(c.id)?.y ?? c.pos.y, width: ISLAND_W, height: ISLAND_H }}>
             <motion.button
               type="button"
               aria-label={`Open ${c.name}`}
