@@ -27,6 +27,11 @@ picks up environment changes.
 5. **Emails to real students** (Authentication → SMTP Settings): Supabase's built-in sender is
    for testing (very low limits). Before real students sign up, connect an email provider
    (section 4).
+5b. **Email templates** (Authentication → Email Templates): change the link in *Confirm signup* to
+   `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=signup&next=/` and in *Reset
+   password* to `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery`. With these,
+   a link works from any browser or device (the default links only work in the browser that asked).
+   The Site URL from step 4 must equal the app's `SITE_URL` (section 5).
 6. **For the agent to push migrations**, create a personal access token (supabase.com account →
    Access Tokens).
 
@@ -69,8 +74,12 @@ work):
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key | public |
 | `SUPABASE_SECRET_KEY` | secret key | mark sensitive |
 | `ANTHROPIC_API_KEY` | Anthropic key | mark sensitive |
-| `ORCA_JOBS` | `trigger` | |
+| `ORCA_JOBS` | `trigger` (or `inline` until Trigger.dev is set up: jobs then run inside the request, fine for short decks) | |
 | `TRIGGER_SECRET_KEY` | `tr_prod_…` | mark sensitive |
+| `SITE_URL` | the production address | emailed links come back to it; production refuses to send links without it |
+| `ORCA_DAILY_BUDGET_USD` | e.g. `25` | the service-wide daily ceiling on estimated model spend; unset means none |
+
+The full list with explanations is `.env.example`.
 
 GitHub auto-deploy isn't linked yet (CLAUDE.md, Deploy).
 

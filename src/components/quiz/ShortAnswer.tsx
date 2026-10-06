@@ -19,17 +19,20 @@ export interface ShortAnswerProps {
   result: GradeResult | null;
   /** null = a model is available; otherwise the reason it isn't. */
   noModel: string | null;
+  /** The server refused to grade the submitted answer (grading turned off): show the key and the self-report at once. */
+  selfMarkNow?: boolean;
   onSubmit: (response: string) => void;
   onSelfReport: (correct: boolean) => void;
 }
 
-export function ShortAnswer({ question, grading, result, noModel, onSubmit, onSelfReport }: ShortAnswerProps) {
+export function ShortAnswer({ question, grading, result, noModel, selfMarkNow = false, onSubmit, onSelfReport }: ShortAnswerProps) {
   const [value, setValue] = useState("");
   const exact = Boolean(question.exact?.length);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const answered = result !== null;
   const needsSelfReport = !exact && noModel !== null && !answered;
-  const [submittedForSelfReport, setSubmitted] = useState(false);
+  const [submittedLocally, setSubmitted] = useState(false);
+  const submittedForSelfReport = submittedLocally || (selfMarkNow && needsSelfReport);
 
   useEffect(() => {
     ref.current?.focus();

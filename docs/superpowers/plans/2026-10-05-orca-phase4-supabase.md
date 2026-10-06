@@ -1,7 +1,8 @@
 # Orca Phase 4: Accounts, Supabase and the Server Pipeline
 
-> **Status: approved 2026-10-05, in progress on branch `phase-4`** (from `backend-implementation`;
-> merge back into it, as Phase 3 was). CI doesn't run on `phase-4`, so run every check by hand.
+> **Status: approved 2026-10-05; Tasks 1–9 built on branch `phase-4`** (from `backend-implementation`;
+> merge back into it, as Phase 3 was, once the owner confirms). CI runs on `phase-*` since Task 9a.
+> Task 10 (hosted live checks) is owner-gated.
 > The owner accepted decisions 4 (load everything, revisit later), 5 (no guest mode) and 10 (300
 > pages a day, revisit later); 4 and 10 are under "Watch" in `docs/TO-DISCUSS.md`.
 >
@@ -159,12 +160,78 @@
 >   poll wasn't told apart in a test. 7a has **not had its task review yet**: review it first
 >   (base 81abfff). **Next:** 7b (injection defences), 7c (cost guard, daily page limit), then
 >   Tasks 8–10. Tasks 3–6 were each reviewed and their Important findings fixed.
-> - **How the rest is run:** in parallel waves, per
->   `2026-10-05-orca-phase4-execution.md` (proposed 2026-10-05): a short Wave 0 (7a review and
->   shared contracts), then 7b, 7c, Task 8, the deferred findings and CI side by side, then
->   integration, a whole-branch review and docs before merging into `backend-implementation`.
->   This plan still defines what each task builds.
-> - **Review findings deferred (fix before merge or record why not):**
+> - **How the rest was run:** per `2026-10-05-orca-phase4-execution.md`: Wave 0 (the 7a review
+>   and the shared contracts: `ModelCtx`, `src/lib/untrusted/encode.ts`, `scripts/stack-lock.sh`),
+>   then the six Wave 1 workstreams. The teammate's parallel agents ran out of credits after Wave 0
+>   (two finished branches were never pushed and were redone), so a single session finished Waves
+>   1–3 sequentially on `phase-4` in the plan's merge order (F → E → C → D → B → A → integration),
+>   each as one commit with the full suite green. This plan still defines what each task builds.
+> - **7a review (Wave 0, 2026-10-05, local):** three Important findings fixed: a run left queued or
+>   running after its job died is marked failed when the student next starts a job (uploading again
+>   retries it); a bad `ORCA_JOBS` is caught before a run row is written; a finished run can no longer
+>   be flipped to failed (a re-upload can't pay twice). `check:evidence` repaired (broken since
+>   Task 6). Minor findings went to the workstreams below.
+> - **Task 9a (CI, 2026-10-06, local):** `.github/workflows/ci.yml` has a second job that starts the
+>   Supabase CLI stack on the runner and runs `test:db`, `check:isolation`, `check:evidence` and the
+>   Playwright suite (fake Anthropic API, inline jobs), fails if a real model key is set, uploads
+>   traces and every Supabase container's logs on failure, and runs on `phase-*` branches too.
+>   The same command sequence ran locally; GitHub has not run it yet (first push).
+> - **Deferred findings (2026-10-06, local).** Auth: emailed links come from `SITE_URL`
+>   (`src/lib/auth/site.ts`; development falls back to the request's host, production refuses to send
+>   without it); the callback also takes token-hash links (`verifyOtp`), so with the hosted email
+>   templates changed (Task 10; `docs/SETUP-HOSTED.md`) a confirm or reset link works from any browser;
+>   the proxy's `getClaims` is accepted (every data path verifies with `getUser`). Uploads: abandoned
+>   uploads (24 h) and old failed reads (7 days) are removed with their files by
+>   `src/lib/material/cleanup.ts` (`npm run cleanup:uploads`; daily Trigger.dev task in
+>   `src/trigger/maintenance.ts`), never `ready` or `processing` material; the sanitiser keeps tabs
+>   and spells super- and subscripts as `^{…}`/`_{…}`; the ALD decks turned out to draw exponents and
+>   indices as raised and lowered glyphs, which `page-text.ts` now reads the same way; PDFs are parsed
+>   on a worker thread so the 40 s budget can terminate a parser that never yields. Snapshots: a
+>   newer `rules_version` is read from the log and never overwritten, a write to it is refused (503);
+>   the 409 names its cause (another answer or a structure change); same-millisecond events fold in
+>   id order; `dayKeyIn` caches its formatter; the 503 missing-env path has a test (route modules
+>   load under Node through `tests/support/hooks.mjs`). Store: a quiz's score isn't saved when an
+>   answer of it failed to save; actions during the reload after a failed save are refused with a
+>   message; reflection confusion events have deterministic ids (a retry records nothing twice);
+>   sliders save on release; a mid-session reload is proved to count nothing twice; the scheduling
+>   e2e waits past midnight. Left alone: `my_data` returns the whole log (Watch).
+> - **Task 8 (2026-10-06, local):** `/api/grade` takes `{ questionId, response }` only, loads the
+>   question and rubric from the student's rows, refuses a body carrying a question, rubric or model
+>   (400), sends the answer as an untrusted data block, keeps the reply to the rubric, and answers
+>   503 without a key (the quiz self-marks). `/api/llm/status` and `/models` need a session; the e2e
+>   guard signs in a throwaway student and also checks the route refuses a signed-out caller.
+> - **Task 7c (2026-10-06, local):** every model call is metered in `model_usage` with a cost from
+>   `src/lib/pricing.ts` (prices copied from Anthropic's pricing page on 2026-10-06; no `claude-api`
+>   skill was available). Budgets per student per day (300 pages, 2,000,000 tokens, in the
+>   student's timezone) and `ORCA_DAILY_BUDGET_USD` for everyone are checked when a job claims its
+>   run: over one, the run `waiting`s with why; the reflect route checks before each call (429). One
+>   job runs at a time per student (unique index on running runs; a second upload or top-up is
+>   `queued`) and the next starts when one finishes, hourly for waiting runs in trigger mode. Rate
+>   limits in Postgres (`hit_rate_limit`: uploads 20/day, reflection 10/hour, grading 60/minute;
+>   429 with `retry-after`). Calls have a 10-minute timeout, at most 2 retries of transient failures,
+>   and the documented spend-limit answers (429 without `retry-after`, `enforced_spend_limit_reached`;
+>   the owner's 400) are never retried and read as "Orca's model budget is used up for this month".
+>   Deviation: the page budget counts uploads only (a top-up sends excerpts; its tokens are
+>   budgeted). Budgets are checked once per job.
+> - **Task 7b (2026-10-06, local):** every prompt sends untrusted text as labelled JSON data blocks
+>   (material as `uploaded_pdf`, course items and questions under check as `generated_question`,
+>   notes as `reflection_note`) with `UNTRUSTED_POLICY` in every system prompt; a pattern screen
+>   (`src/lib/untrusted/screen.ts`: OWASP phrasing with spacing and misspellings, role tags, Base64
+>   and hex payloads decoded) runs over material and notes and never blocks; output validators
+>   (`validate.ts`, applied in the pipeline) refuse, never repair, generated text with a URL the
+>   material lacks, HTML, a markdown link or instruction-like phrasing, and anchors naming slides
+>   that don't exist; every schema string has a length limit; extraction reports
+>   `instructionsFound`; the run records `security` and the review screen warns; `security_events`
+>   (service role only) gets a row per finding through a trigger, and from the reflect route and the
+>   grader. Red-team fixtures run in unit, e2e and `score:extraction` (an injected L02). **This is a
+>   prompt-format change on every step: rerun `score:extraction` with a key before merging.**
+> - **Integration (2026-10-06, local):** `/api/grade` screens answers (events as `student_answer`),
+>   turns model grading off after 3 flagged answers in 7 days (403 `graded: "self"`;
+>   `/api/llm/status` says `grading: "self"`; the quiz self-marks; cleared by deleting the events),
+>   and has the rate limit, the budget check and metering. Final local run: see the integration
+>   commit. **Not run hosted; Task 10 is next** (`docs/SETUP-HOSTED.md`, plus the email-template
+>   change and `ORCA_DAILY_BUDGET_USD`).
+> - **Review findings deferred (all handled 2026-10-06; kept for the record):**
 >   - Snapshots: a newer `rules_version` is treated as stale, so during a rolling deploy an old
 >     server overwrites newer snapshots; the 409 message blames a concurrent answer when a structure
 >     change caused it; two events in the same millisecond can fold in a different order on extend

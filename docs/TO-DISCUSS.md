@@ -55,10 +55,16 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   The Settings sliders default to equal (25 each, decided 2026-10-05), so by default every
   material type's coverage counts the same; the student's sliders are what make one type count more.
 
-### Before Phase 4 (Supabase + Trigger.dev)
-- **Credentials a Phase 4 session needs** to run the live checks the invariants require: a
-  Supabase project (URL, anon and service-role keys), a Trigger.dev project (secret key), and
-  `ANTHROPIC_API_KEY`. Without them the work can only be typechecked, which isn't the same claim.
+### Before Phase 4's live checks (Task 10)
+- **Credentials the session needs** to run the live checks the invariants require: the owner's
+  Supabase project (URL, publishable and secret keys, a personal access token to push migrations), a
+  Trigger.dev project (secret key, project ref), `ANTHROPIC_API_KEY`, `SITE_URL` and
+  `ORCA_DAILY_BUDGET_USD`, set in the cloud environment (`docs/SETUP-HOSTED.md`). Everything in Tasks
+  1–9 ran against the local stack only; the hosted claims are unmade until then.
+- **Trigger.dev or inline?** The jobs are written for Trigger.dev and run inline locally. The owner
+  may deploy with `ORCA_JOBS=inline` first (fine for short decks; a 300 s route limit) and switch to
+  Trigger.dev when the project exists; waiting runs then resume only when the student next starts
+  or finishes a job (the hourly sweep is a Trigger.dev schedule).
 
 ### Answers to questions not sorted into an objective
 - **Assumed in Phase 4 Task 3 (2026-10-05):** `POST /api/evidence` refuses (422) an answer to a
@@ -103,6 +109,49 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   the start of each deep review; see Decided. The Settings value is only the starting suggestion,
   30 minutes by default, decided 2026-10-05.)
 
+### Assumed while finishing Phase 4 (2026-10-06): decide or accept
+Judgement calls the agents made to keep building; each is in code behind one constant or branch.
+- **Daily token budget: 2,000,000 tokens per student** (`LIMITS.tokensPerDay`; about $8 of Opus 5.5
+  input, less with caching; one 40-slide deck runs 200–400k tokens). The plan named a budget without
+  a number.
+- **The 300-page daily budget counts uploads only.** A top-up sends excerpts of stored pages, not
+  files, so its pages aren't counted; its cost is bounded by the token budget. Deviation from
+  "uploads and top-ups together".
+- **Budgets are checked once per job, when it claims its run**, so a job that starts under a limit may
+  overshoot by one job (bounded by the page cap and per-step `max_tokens`); the pipeline isn't
+  resumable mid-way.
+- **`ORCA_DAILY_BUDGET_USD` unset means no service-wide ceiling.** Right for development only;
+  production must set it (`docs/SETUP-HOSTED.md`).
+- **Repeat offenders:** 3 flagged prose answers in 7 days turn model grading off for a student
+  (`REPEAT_OFFENDER` in `src/lib/server/grade.ts`); the owner clears it by deleting their
+  `student_answer` rows in `security_events`. No notification is sent yet ("the owner has been
+  notified" in the message is the monitoring query, not an email).
+- **Upload cleanup ages:** `uploaded`/`reading` after 24 h, `failed` after 7 days
+  (`CLEANUP` in `src/lib/material/cleanup.ts`). `ready` and `processing` material is never touched.
+- **Metering failures throw:** a call whose usage can't be written fails the step after the model was
+  paid, rather than leaving a quiet hole in the budget.
+- **A snapshot folded by a newer Orca refuses writes (503)** during a rolling deploy rather than
+  being extended with older rules; reads compute from the log without saving.
+- **Same-millisecond events fold in id order without a `RULES_VERSION` bump**: the fold's logic is
+  unchanged and nothing is deployed, so no stored snapshot can disagree.
+- **Anchors that don't name slides are kept unchecked** ("problem 3" in homework); only slide and
+  page locators must exist in the material.
+- **The pattern screen flags legitimate discussion** of injection (a security course's "a system
+  prompt is…"). A hit only warns; nothing is removed.
+- **The grader refuses exact-answer questions (400)** rather than grading them: code checks what
+  code can check, and a model couldn't be talked into a "correct" on one. It never changes the
+  model's outcome, only drops ideas and misconceptions the rubric doesn't list.
+- **Every prompt's format changed** (data blocks): `npm run score:extraction` with a key is the
+  check that recall and precision didn't move. Not run yet (no key).
+- **`SITE_URL` must be https in production** unless it's a local address; development may still
+  build links from the request's host.
+- **Hosted email templates** should switch to token-hash links (Task 10 steps in `docs/SETUP-HOSTED.md`)
+  so confirm and reset links open on any device; the default PKCE links keep working.
+- **The proxy's `getClaims` is accepted**: a revoked session sees an empty shell for at most the
+  token's hour; every data path verifies with Supabase Auth.
+- **Prices** in `src/lib/pricing.ts` were copied from Anthropic's pricing page on 2026-10-06 (no
+  `claude-api` skill existed in the session); change them there when they change.
+
 ## Watch
 
 ### Loading all of a student's data at sign-in (revisit)
@@ -115,9 +164,10 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   with objective state from snapshots alone.
 
 ### Daily processing limit: 300 pages per student (revisit)
-- **Decided for Phase 4 (2026-10-05):** the model processes at most 300 pages a day per student,
-  uploads and top-ups together; past that, a file is stored and read but waits until the next
-  day with "Daily limit reached, processing resumes tomorrow".
+- **Decided for Phase 4 (2026-10-05):** the model processes at most 300 pages a day per student;
+  past that, a file is stored and read but waits until the next day with "Daily limit reached:
+  processing resumes tomorrow". Built 2026-10-06 counting uploads' pages only, with a 2,000,000-token
+  budget alongside (see "Assumed while finishing Phase 4").
 - **Revisit:** once real costs per page are measured (Task 10's live upload), and if students hit
   it in normal use (a textbook upload would). Options: a higher limit, a per-course one, or
   limits by plan.

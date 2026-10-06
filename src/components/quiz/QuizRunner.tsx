@@ -17,7 +17,7 @@ import { RoundButton } from "@/components/ui/RoundButton";
 import { TruthTable } from "@/components/quiz/TruthTable";
 import { ShortAnswer } from "@/components/quiz/ShortAnswer";
 import { type GradeResult, gradeExact } from "@/lib/grading";
-import { useServerModel } from "@/hooks/useServerModel";
+import { useServerStatus } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { Pill } from "@/components/review/parts";
@@ -54,7 +54,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const router = useRouter();
   const streak = useStreak();
   const { recordQuiz, recordEvidence, objectives } = useOrca();
-  const serverModel = useServerModel();
+  const serverStatus = useServerStatus();
+  const serverModel = serverStatus === undefined ? undefined : serverStatus.serverModel;
   const topUp = useTopUp(serverModel);
   const catalogue = objectives[course.id];
   // null = every item; a list = the "review misses" subset.
@@ -138,8 +139,12 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     logAnswer(item, ok ? "correct" : "incorrect", "choice");
   }, [selected, checked, item, logAnswer]);
 
-  // Prose answers are graded by Orca's server (Task 8); with no model there, the student self-marks.
-  const noModel: string | null = serverModel === null ? "no AI connected" : null;
+  // Prose answers are graded by Orca's server (Task 8); with no model there, or model grading turned
+  // off for this student (decision 13), the student self-marks. The server can also say so on a grade
+  // request itself (403/503 with graded: "self"), e.g. when the status hadn't loaded yet.
+  const [gradingOff, setGradingOff] = useState<string | null>(null);
+  const noModel: string | null =
+    gradingOff ?? (serverStatus === undefined ? null : serverStatus.serverModel === null ? "no AI connected" : serverStatus.grading === "self" ? "model grading is off for your account" : null);
 
   const settle = useCallback(
     (result: GradeResult, grader: Grader | null) => {
@@ -169,7 +174,12 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ questionId: q.id, response }),
         });
-        const data = (await res.json()) as GradeResult & { error?: string };
+        const data = (await res.json()) as GradeResult & { error?: string; graded?: "self" };
+        if (data.graded === "self") {
+          // Not graded, not counted: the key is shown and the student marks it (ShortAnswer's self-report panel).
+          setGradingOff(res.status === 403 ? "model grading is off for your account" : "no AI connected");
+          return;
+        }
         if (!res.ok || data.error) throw new Error(data.error ?? "Grading failed.");
         settle(data, "rubric");
       } catch (error) {
@@ -320,6 +330,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
                   grading={grading}
                   result={grade}
                   noModel={noModel}
+                  selfMarkNow={gradingOff !== null}
                   onSubmit={(r) => void submitShort(r)}
                   onSelfReport={(ok) =>
                     settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." }, "self")

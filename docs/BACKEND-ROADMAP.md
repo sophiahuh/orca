@@ -210,9 +210,10 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
 - **Poor-quiz loop:** a Review to-do with the slide range and missed explanations, and a re-quiz
   the next day.
 
-### Phase 4 — Supabase
-Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; in progress
-on branch `phase-4`).
+### Phase 4 — Supabase (built locally; live checks pending)
+Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; Tasks 1–9
+built on branch `phase-4` by 2026-10-06, every check green against the local stack; Task 10's live
+checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
 - Auth screens in Orca's style; `proxy.ts` session refresh (Next 16's name for middleware).
   Email + password through Supabase Auth (email confirmation, password reset, custom SMTP before
   real students); Google sign-in later as a second provider (decided 2026-10-05).
@@ -256,11 +257,29 @@ on branch `phase-4`).
   queues work. The tasks (`src/trigger/jobs.ts`) only call the jobs; locally and in tests
   `ORCA_JOBS=inline` runs the same jobs inside the route, so the SDK is used only to define and
   enqueue tasks. No Trigger.dev project exists yet (Task 10).
-- **Done so far (local only, nothing hosted):** Task 1 (local stack), Task 2 (schema, RLS,
-  Storage, `save_structure`), Task 3 (`objective_state` snapshots written with each event by
-  `record_evidence`, stale marks on merges, re-tags, archives, mechanism-tier changes and timezone
-  changes, `RULES_VERSION`, `dayKeyIn`, `POST /api/evidence`, `GET /api/state`). The store still
-  persists to localStorage until Task 5.
+- **Built (local only, nothing hosted):** the local stack; the schema with owner-only RLS, Storage
+  and `save_structure`; `objective_state` snapshots with `record_evidence` and stale marks;
+  `POST /api/evidence`, `GET /api/state`; auth; the store on Supabase; uploads into Storage read
+  into `material_pages`; the pipeline as server jobs (inline locally; Trigger.dev tasks written,
+  never run); grading behind sign-in; the cost guard; the injection defences; CI with the stack.
+- **Cost guard (decision 10, built 2026-10-06):** `model_usage` (every call's tokens and cost, from
+  `src/lib/pricing.ts`), `rate_limits` with `hit_rate_limit` (fixed windows counted in Postgres: no
+  other service), daily budgets per student (300 pages of uploads, 2,000,000 tokens, the student's
+  day) and `ORCA_DAILY_BUDGET_USD` for everyone, checked when a job claims its run (`waiting` with
+  why, resumed by `resumeNext` when the student's jobs finish and hourly on Trigger.dev), one job at
+  a time per student (a unique index on running runs), bounded calls (timeout, 2 retries of transient
+  failures only, spend-limit answers never retried). Both tables are service-role only. No new
+  dependency: the SDK's own retries are off and `completeJson` retries itself.
+- **Injection defences (decision 13, built 2026-10-06):** `security_events` (service-role only; one
+  row per finding from a trigger on `pipeline_runs.security`, from the reflect route and from the
+  grader), `pipeline_runs.security`, and no model pre-screen (Watch). Prompts send untrusted text as
+  JSON data blocks; outputs are validated and refused, never repaired. The prompt format changed on
+  every step, so `score:extraction` must be rerun with a key before anything is tuned.
+- **Also recorded:** `pipeline_runs.objective_ids` (a top-up's request, so a queued run can start
+  later); upload cleanup (`src/lib/material/cleanup.ts`, `npm run cleanup:uploads`, a daily
+  Trigger.dev schedule) removing abandoned uploads and old failed reads; PDFs parsed on a worker
+  thread so the read budget is real; emailed links from `SITE_URL`; token-hash links accepted by the
+  callback. Dependencies: none added in Tasks 7b–9 (`worker_threads` and `Intl` are Node's).
 
 ### Phase 5 — Relation mastery, exams, calendar
 Connection questions record evidence on a relation, which gets its own derived state (weak or

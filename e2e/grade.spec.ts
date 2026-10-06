@@ -1,5 +1,6 @@
 import type { QuizQuestion } from "../src/lib/data";
-import { F, FIXTURE_STATE, type SeedState, expect, ids, seedState, stored, test } from "./fixture";
+import { F, FIXTURE_STATE, type SeedState, admin, expect, ids, seedState, stored, test } from "./fixture";
+import { LIMITS } from "../src/lib/limits";
 import { fakeCalls, fakeModel } from "./fake-model";
 
 /**
@@ -73,4 +74,55 @@ test("when grading fails nothing is recorded, and the student is told it wasn't 
   await expect(page.getByText(/so it wasn't counted/)).toBeVisible();
   expect(await fakeCalls()).toEqual(["grade"]);
   expect((await stored(page, student)).evidence).toEqual([]);
+});
+
+/* ── Integration (Wave 2): screening, repeat offenders, the rate limit and metering on grading ── */
+
+test("an answer that talks to the grader is still graded, but logged as a security event, and the call is metered", async ({ page, student }) => {
+  await seedState(student, STATE);
+  await fakeModel({ grade: { outcome: "incorrect", feedback: "That isn't an answer." } });
+  const res = await page.request.post("/api/grade", { data: { questionId: G.prose, response: ANSWER } });
+  expect(res.status()).toBe(200);
+  const { data: events } = await admin().from("security_events").select("kind, check, question_id, quote").eq("owner_id", student.id);
+  expect(events).toEqual([expect.objectContaining({ kind: "student_answer", check: "phrase", question_id: G.prose })]);
+  expect(events![0].quote).toMatch(/ignore the rubric/i);
+  const { data: usage } = await admin().from("model_usage").select("kind, model, input_tokens, output_tokens").eq("owner_id", student.id);
+  expect(usage).toEqual([{ kind: "grade", model: "claude-opus-5-5", input_tokens: 100, output_tokens: 100 }]);
+  // A plain answer logs nothing.
+  const plain = await page.request.post("/api/grade", { data: { questionId: G.prose, response: "Invert every bit, then add one." } });
+  expect(plain.status()).toBe(200);
+  expect((await admin().from("security_events").select("id").eq("owner_id", student.id)).data).toHaveLength(1);
+});
+
+test("after three flagged answers in a week, model grading is off for the student: 403, the status says so, and the quiz self-marks", async ({ page, student }) => {
+  await seedState(student, STATE);
+  for (let i = 0; i < 3; i++) expect((await page.request.post("/api/grade", { data: { questionId: G.prose, response: `${ANSWER} (${i})` } })).status()).toBe(200);
+  const off = await page.request.post("/api/grade", { data: { questionId: G.prose, response: "Invert every bit, then add one." } });
+  expect(off.status()).toBe(403);
+  expect(await off.json()).toEqual({ error: expect.stringMatching(/Model grading is turned off for your account/), graded: "self" });
+  const status = (await (await page.request.get("/api/llm/status")).json()) as { grading: string; serverModel: string };
+  expect(status).toEqual({ serverModel: "claude-opus-5-5", local: true, grading: "self" });
+  // The quiz offers self-marking instead of sending the answer anywhere.
+  const calls = (await fakeCalls()).length;
+  await page.goto(`/quiz/logic-e2e/${F.twosComplement}`);
+  await page.getByPlaceholder(/One or two sentences/).fill("Invert every bit, then add one.");
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.getByRole("button", { name: "I had it" })).toBeVisible();
+  expect((await fakeCalls()).length).toBe(calls);
+  // The owner clears the events; grading is back.
+  await admin().from("security_events").delete().eq("owner_id", student.id);
+  expect((await page.request.post("/api/grade", { data: { questionId: G.prose, response: "Invert every bit, then add one." } })).status()).toBe(200);
+});
+
+test("grading is rate-limited per student: the 61st answer in a minute is 429 with retry-after", async ({ page, student }) => {
+  await seedState(student, STATE);
+  let last: { status: number; retryAfter: string | null } | null = null;
+  for (let i = 0; i < LIMITS.rate.grade.max + 1; i++) {
+    const res = await page.request.post("/api/grade", { data: { questionId: G.prose, response: `Invert every bit, then add one. Try ${i}.` } });
+    last = { status: res.status(), retryAfter: res.headers()["retry-after"] ?? null };
+    if (i < LIMITS.rate.grade.max) expect(res.status()).toBe(200);
+  }
+  expect(last!.status).toBe(429);
+  expect(Number(last!.retryAfter)).toBeGreaterThan(0);
+  expect((await fakeCalls()).filter((c) => c === "grade")).toHaveLength(LIMITS.rate.grade.max);
 });

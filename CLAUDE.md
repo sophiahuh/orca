@@ -25,25 +25,24 @@ Advanced Logic Design (ALD, Columbia ELEN); `docs/samples/ald/` has its real dec
 authored and reviewed the reference objectives, questions and quiz rubric.
 
 **Where things stand.**
-- **Phase 4 is in progress on branch `phase-4`** (from `backend-implementation`; merge it back
-  when done, as Phase 3 was). `backend-implementation` holds Phases 1–3 (CI runs on it); `main` is
-  far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
+- **Phase 4 is built on branch `phase-4`, local only** (from `backend-implementation`; merge it
+  back once the owner confirms, as Phase 3 was). `backend-implementation` holds Phases 1–3; `main`
+  is far behind (the pre-Phase-1 prototype), and nothing has been merged into it or opened as a PR.
 - Phases 1 (mastery core), 2 (uploads build the course) and 3 (scheduling and sessions) are built
-  on-device. Phase 4 so far (plan Tasks 1–6, most of 7a, plus an isolation audit, local only): the local
-  Supabase stack, the schema with row-level security, the Storage bucket and `save_structure` in
-  `supabase/migrations/`, the evidence path (`objective_state` snapshots, `record_evidence`, stale
-  marks, `POST /api/evidence`, `GET /api/state`), auth, and the store on Supabase (Task 5: the app
-  loads and saves the signed-in student's data there) and uploads to Storage (Task 6: the file goes
-  to the `materials` bucket, the server reads it into sanitised `material_pages`) and jobs (Task 7a:
-  the pipeline runs on the server as `processMaterial` / `topUp`, inline locally, Trigger.dev
-  tasks written but never run; the review screen and session end card follow the run). Checks
-  last run green (2026-10-05, Task 7a): `npx tsc --noEmit`, `npm run lint`, `npm test` (203 unit
-  tests), `npm run test:e2e` (36 browser tests), `npm run test:db` (145 pgTAP checks),
-  `npm run check:isolation` (43 HTTP checks); `npm run build` and `npm run check:evidence` (44)
-  were last run at Task 6. CI only runs on pushes to `main` and
-  `backend-implementation` and on pull requests, so `phase-4` isn't checked by CI: run the checks
-  yourself. Nothing has run against a hosted Supabase or Trigger.dev project; the owner's setup
-  steps are in `docs/SETUP-HOSTED.md`.
+  on-device. Phase 4 (plan Tasks 1–9, status notes at the top of
+  `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`): the local Supabase stack, the schema
+  with row-level security, Storage and `save_structure`, the evidence path (`objective_state`
+  snapshots, `record_evidence`, `POST /api/evidence`, `GET /api/state`), auth, the store on Supabase,
+  uploads to Storage read into `material_pages`, the pipeline as server jobs (`processMaterial` /
+  `topUp`, inline locally, Trigger.dev tasks written but never run), grading behind sign-in, the
+  cost guard (metering, daily budgets with waiting runs, one job at a time per student, rate limits,
+  bounded calls), the injection defences (data-block prompts, pattern screen, output validators,
+  `security_events`), CI with the Supabase stack, and the review findings from Tasks 3–7. Checks
+  last run green (2026-10-06, integration): `npx tsc --noEmit`, `npm run lint`, `npm test`,
+  `npm run test:e2e`, `npm run test:db`, `npm run check:isolation`, `npm run check:evidence`,
+  `npm run build` (counts in the integration commit). CI now runs on `phase-*` too, but GitHub
+  hasn't run it yet. **Nothing has run against a hosted Supabase, Trigger.dev or Anthropic**; the
+  owner's setup steps are in `docs/SETUP-HOSTED.md` and the live checks are Task 10.
 - No app data is kept in the browser any more (the old `orca:materialPages` key is cleared on
   load); don't build on browser storage.
 - **Never run against a real model.** Unit tests inject fake step callers; the browser tests run
@@ -52,30 +51,23 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   `e2e/global-setup.ts` stops the run if the server's model calls aren't local (e.g. a reused
   dev server started with a real key). Only `npm run score:extraction` and uploading in `npm run dev`
   spend money. No session so far has
-  had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` are untested against
-  Claude, `npm run score:extraction` has no baseline (`scripts/extraction-baseline.json` doesn't
-  exist), and the weight constants are untuned.
+  had `ANTHROPIC_API_KEY`, so the prompts in `src/lib/pipeline/prompts.ts` (rewritten for data
+  blocks in Task 7b) are untested against Claude, `npm run score:extraction` has no baseline
+  (`scripts/extraction-baseline.json` doesn't exist), and the weight constants are untuned.
 - The Vercel deploy (https://orca-lake-omega.vercel.app) is from before Phase 1; it doesn't show
   any of this.
 
 **Next, in order.**
-1. With a key: `ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline`, then upload
-   an ALD deck in `npm run dev` and look at the review screen. Fix prompts where extraction or
-   question checks go wrong; commit the baseline. Then finish a session in `npm run dev` and check
-   the top-up writes sensible questions (it has only run against a stubbed model).
-2. The Phase 3 numbers in `docs/TO-DISCUSS.md` ("Phase 3 scheduling numbers") still need real
-   use before anyone can judge them; deep review's length and its check stretch are decided.
-3. Phase 4, Supabase (auth, tables, snapshots, server-side pipeline on Trigger.dev, material
-   storage as decided in the roadmap). The plan is written
-   (`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`), approved 2026-10-05, and in
-   progress on branch `phase-4`: Tasks 1–6 are done and Task 7a mostly (status notes at the top of
-   the plan, with what's left of 7a: a test for the no-key path, rerunning `npm run build` and
-   `check:evidence`). **Next: review Task 7a (it hasn't had its review yet), then Task 7b
-   (injection defences), then 7c (cost guard and the daily page limit)**, then Tasks 8–10. The
-   plan's status block lists the review findings deferred so far; settle them before merging. Tasks 1–9 need no hosted projects (local Supabase,
-   inline jobs, a fake Anthropic API); only Task 10's live checks do, once the owner has done
-   `docs/SETUP-HOSTED.md`. The owner's Phase 4 decisions are in `docs/TO-DISCUSS.md` (Decided, and
-   "Watch" for the two to revisit).
+1. **Task 10, with the owner's credentials in the cloud environment** (`docs/SETUP-HOSTED.md`): link
+   the hosted Supabase project and push the migrations, run `npm run check:isolation` against it,
+   set `SITE_URL`, `ORCA_JOBS`, `ORCA_DAILY_BUDGET_USD` and `ANTHROPIC_API_KEY` on Vercel, switch the
+   hosted email templates to token-hash links, deploy, and do one real ALD upload end to end. Then
+   `ANTHROPIC_API_KEY=… npm run score:extraction -- --update-baseline` (it includes an injected deck
+   now) and look at the review screen; fix prompts where extraction or question checks go wrong.
+2. Merge `phase-4` into `backend-implementation` once the owner confirms (CI runs the whole proof
+   on the push). Then the Phase 3 numbers and the assumptions listed in `docs/TO-DISCUSS.md`
+   ("Assumed while finishing Phase 4") want a decision or real use.
+3. Phase 5 per `docs/BACKEND-ROADMAP.md`.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
 them silently; list what you assumed.
 
@@ -95,8 +87,22 @@ them silently; list what you assumed.
   Docker Hub, since the CLI's default AWS registry is blocked there:
   `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io npm run db:start`. Docker Hub rate-limits anonymous
   pulls; if it answers 429, wait and retry.
+- **Anything that resets or writes the local database, or binds ports 3100/3101, goes through the
+  stack lock:** `npm run locked -- npm run test:e2e` (also `test:db`, `check:isolation`,
+  `check:evidence`, `db:types`). It takes `/tmp/orca-supabase-stack.lock`, runs `db:reset` from your
+  worktree first, then the command (`scripts/stack-lock.sh`; rules in
+  `docs/superpowers/plans/2026-10-05-orca-phase4-execution.md`, section D). `tsc`, lint and
+  `npm test` run freely. Migrations added by parallel work use per-workstream timestamp blocks.
+- A background suite in a cloud container can be cut off by a container restart (the Docker daemon
+  dies with it): rerun `sudo dockerd`, `npx supabase stop --no-backup`, then `db:start`.
 - Run `npx next typegen` before `tsc` after adding a route; delete a stale `.next/dev` if `tsc`
   complains about a route that no longer exists.
+- `npm test` loads `tests/support/register.mjs`, which resolves `@/…` and Next's bare subpaths, so a
+  unit test may import a route module (`tests/server/evidence-route.test.ts`). Pure modules still
+  keep Node-loadable imports and don't rely on it.
+- PDFs are parsed on a `worker_threads` thread (`src/lib/material/read-pdf.ts`); the worker runs
+  pdf.js's worker module by its package name, so `next.config.ts` lists it in
+  `outputFileTracingIncludes` for the process route.
 - The server stamps answers with its own clock, so e2e tests run on the real clock and seed past
   days relative to it (`daysAgo` in `e2e/fixture.ts`; see `e2e/scheduling.spec.ts`); freezing the
   browser's clock wouldn't move the server's. (Playwright's `page.clock.setFixedTime` also freezes
@@ -177,20 +183,33 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   from `e2e/fixture.ts`, which signs in a throwaway student; Playwright reads the Supabase URL and
   keys from `supabase status` (stack must be up) unless `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`
   and `SUPABASE_SECRET_KEY` are set.
-  `src/lib/server/` holds route helpers (`student.ts`: 503/401 and the verified user) and the
-  Supabase `SnapshotStore`. Screens only talk to `useOrca()`. `src/lib/supabase/app-rows.ts`
+  `src/lib/server/` holds route helpers (`student.ts`: 503/401 and the verified user), the
+  Supabase `SnapshotStore`, the job store and job start/run adapters, `model.ts` (the step caller:
+  Orca's key, metering, per-call budget guard), `usage.ts` (metering and the daily sums),
+  `rate-limit.ts`, `security.ts` (security events), `grade.ts` (the prose grader) and
+  `materials.ts`. Screens only talk to `useOrca()`. `src/lib/supabase/app-rows.ts`
   (pure) maps the app's types to rows and back, and computes the changed rows a structure save sends.
-- Model calls use the Claude API (`claude-opus-5-5`). Load the `claude-api` skill before writing
-  any API route. Without a key (and no student model), uploads are saved without generating
-  anything and prose answers are self-marked.
+  Tables added in Phase 4's second half: `model_usage` and `rate_limits` (7c) and `security_events`
+  (7b), all service-role only; `pipeline_runs` gained `objective_ids` and `security`.
+  Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`
+  (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
+  service-wide daily ceiling; unset = none), `TRIGGER_*`.
+- Model calls use the Claude API (`claude-opus-5-5`) through `completeJson` (`src/lib/llm-server.ts`:
+  10-minute timeout, at most 2 retries of transient failures, spend-limit answers never retried,
+  every reply's tokens reported to `onUsage`). Load the `claude-api` skill before writing any model
+  call if it's available; prices live in `src/lib/pricing.ts` with their source and date. Without a
+  key, uploads are saved without generating anything and prose answers are self-marked; the same
+  when model grading is turned off for a student (`/api/llm/status` → `grading: "self"`).
 - Unit tests: `node:test` with Node's type stripping (Node ≥ 22.6), run with `npm test`.
 - Browser tests: Playwright (`e2e/`, `playwright.config.ts`), run with `npm run test:e2e`. It starts
   `next dev` on port 3100 (reuses a running one locally, never in CI) at the 1194×834 frame size; each test gets a fresh
   browser and a fresh throwaway student on local Supabase. First run: `npx playwright install chromium`, or set `PLAYWRIGHT_CHROMIUM_PATH` to
   an installed Chromium (cloud containers ship one at `/opt/pw-browsers/chromium-*/chrome-linux/chrome`).
-- CI: `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build, and the Playwright
-  suite in a second job (traces uploaded on failure), on pushes to `main` / `backend-implementation`
-  and on pull requests.
+- CI: `.github/workflows/ci.yml` runs typecheck, lint, unit tests and build, and in a second job
+  starts the Supabase CLI stack on the runner and runs `test:db`, `check:isolation`,
+  `check:evidence` and the Playwright suite against the fake Anthropic API (a guard step fails the
+  job if a real model key is set; traces and the Supabase containers' logs uploaded on failure), on
+  pushes to `main`, `backend-implementation` and `phase-*` and on pull requests.
 
 ## Design tokens (already in `src/app/globals.css`)
 
@@ -276,6 +295,22 @@ This describes the code as it is.
   back to the server `ANTHROPIC_API_KEY` (`claude-opus-5-5`); with neither, uploads are saved
   without generating anything and prose answers are self-marked. Whether to keep
   this is open (`docs/TO-DISCUSS.md`).
+- Untrusted text (decision 13), `src/lib/untrusted/` (pure): `sanitize.ts` (NFKC with super- and
+  subscripts spelled as `^{…}`/`_{…}`, invisible and control characters removed, tabs kept, runs
+  collapsed), `encode.ts` (`untrustedBlock`, `UNTRUSTED_POLICY`: every prompt sends material, course
+  items, questions under check and notes as labelled JSON data blocks), `screen.ts` (the pattern
+  screen: OWASP phrasing with spacing and misspellings, role tags, Base64 and hex payloads decoded;
+  never blocks), `validate.ts` (generated text refused for a URL the material lacks, HTML, a markdown
+  link or instruction-like phrasing), `hidden-text.ts`. The pipeline records what it found on the run
+  (`security`), the review screen warns, and a trigger writes `security_events`; the reflect route
+  and the grader log their hits; three flagged answers in a week turn a student's model grading off.
+  Red-team fixtures: `tests/fixtures/injection/`.
+- Cost guard (decision 10): `src/lib/limits.ts` (every limit), `src/lib/pricing.ts`,
+  `src/lib/jobs/budget.ts` (the daily-budget decision and the student's day start), the jobs check
+  the budget when they claim a run and go `waiting` with why; `resumeNext` (`src/lib/jobs/start.ts`)
+  starts the student's next queued or resumable run when one finishes (and hourly on Trigger.dev);
+  rate limits through `hit_rate_limit`. The upload and reflect routes, and the grader, answer 429
+  with `retry-after` past a limit.
 - Uploads (Task 6): `src/lib/uploads.ts` hashes the file, `POST /api/materials` answers with a
   signed upload URL into `<owner>/<material>/<safe name>` (PDF only, 25 MB) or "the course already
   has this file" (SHA-256), the browser uploads to Storage, and `POST /api/materials/:id/process`
@@ -284,7 +319,7 @@ This describes the code as it is.
   every page through `src/lib/untrusted/sanitize.ts`) into `material_pages`. Limits are in
   `src/lib/limits.ts`. Only `ready` materials load into the store.
 - Jobs (Task 7a): the upload routes start `processMaterial` and answer with `generation` (started,
-  running, built, no model, no text); `POST /api/top-up` starts `topUp` after a finished session.
+  running, queued, built, no model, no text); `POST /api/top-up` starts `topUp` after a finished session.
   `src/lib/jobs/jobs.ts` (pure, over a `JobStore`; `src/lib/server/job-store.ts` scopes every
   service-role query to the student), `src/lib/server/jobs/start.ts` (creates the queued run and
   dispatches: `ORCA_JOBS=inline` runs it after the response, `trigger` enqueues
@@ -313,9 +348,16 @@ This describes the code as it is.
   against the fake API; re-uploading adds nothing; a failed job says why and a re-upload retries), `review.spec.ts` (review screen and
   objective list actions, Unreviewed tag), `reflect.spec.ts` (a reflection resetting an objective),
   `scheduling.spec.ts` (quick review, poor-quiz to-dos and re-quiz, deep review cadence, top-up),
-  `store.spec.ts` (a second browser sees the same data; a failed save is undone and not counted;
-  old local state cleared), `auth.spec.ts`. `e2e/fixture.ts` signs in a throwaway student and
-  seeds through the secret key.
+  `store.spec.ts` (a second browser sees the same data; a failed save is undone and not counted and
+  the quiz's score isn't saved; an action during the reload is refused with a message; a mid-session
+  reload counts nothing twice; old local state cleared), `auth.spec.ts` (sign-up, confirm, reset,
+  `SITE_URL` links, token-hash links), `grade.spec.ts` (grading behind sign-in, screening, the
+  repeat-offender switch, the rate limit, metering), `cost-guard.spec.ts` (a waiting run, a queued
+  second upload, a spend-limit answer, the upload rate limit), `injection.spec.ts` (an injected
+  deck: refused rows, the warning, `security_events`; a flagged reflection note), `settings.spec.ts`
+  (sliders save on release). `e2e/fixture.ts` signs in a throwaway student and seeds through the
+  secret key. The fake Anthropic API reads its inputs from the prompts' data blocks and can answer
+  with a spend-limit error or a given grade.
   Tests find things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - Deploy: Vercel project `orca` (https://orca-lake-omega.vercel.app; last deployed before Phase 1). Deploy with
   `npx vercel deploy --prod --yes` from a session that has the Vercel credential; GitHub auto-deploy

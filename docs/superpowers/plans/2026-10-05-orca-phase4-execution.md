@@ -1,6 +1,10 @@
 # Phase 4: Parallel Execution Plan for What's Left
 
-> **Status: proposed 2026-10-05, not started.** Replaces the "How the rest is run" line in
+> **Status: done 2026-10-06** (Waves 0–3 built; Wave 3's merge into `backend-implementation` waits for
+> the owner). Wave 0 ran as planned on the teammate's machine; the six Wave 1 agents then ran out of
+> credits (two had finished but never pushed), so one session redid Waves 1–3 sequentially on
+> `phase-4` in the merge order, one commit per workstream, and the 9b fold-in is in the Phase 4 plan's
+> status block, CLAUDE.md, the roadmap and TO-DISCUSS. Originally: Replaces the "How the rest is run" line in
 > `2026-10-05-orca-phase4-supabase.md` (one subagent per task, one after another). That plan still
 > defines *what* each task builds; this one defines *how* the rest is run: which agents, in which
 > waves, owning which files. Scope: the 7a review and its loose ends, Tasks 7b, 7c, 8 and 9, and

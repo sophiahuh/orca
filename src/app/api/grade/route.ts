@@ -8,7 +8,9 @@ import { forStudent, reply } from "@/lib/server/student";
  * with Orca's key against the rubric stored with the question (`src/lib/server/grade.ts`).
  * 401 signed out; 400 if the body carries a question, rubric or model of its own (the request
  * decides nothing about how it's graded), or isn't an id and an answer; 404 not the student's
- * question; 503 when the server has no model key (the quiz then lets the student self-mark).
+ * question; 503 when the server has no model key (the quiz then lets the student self-mark); 429 past
+ * the rate limit (retry-after) or a daily budget; 403 { graded: "self" } when model grading is turned
+ * off for the student (repeat flagged answers). Integration (decision 13 and 10) lives in grade.ts.
  */
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
     const parsed = Body.safeParse(raw);
     if (!parsed.success) return reply(400, { error: "Send { questionId, response }: a question id and an answer." });
     const out = await gradeAnswer(db, student.id, parsed.data.questionId, parsed.data.response);
-    return reply(out.status, out.body);
+    const retryAfter = "retryAfterSeconds" in out.body ? out.body.retryAfterSeconds : undefined;
+    return retryAfter ? Response.json(out.body, { status: out.status, headers: { "cache-control": "no-store", "retry-after": String(retryAfter) } }) : reply(out.status, out.body);
   });
 }
