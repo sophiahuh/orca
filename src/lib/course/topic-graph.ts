@@ -170,8 +170,8 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
   return { nodes, edges, width, height };
 }
 
-/** Room left at an arrow's end for its head. */
-const ARROW = 7;
+/** Room left at an arrow's end for its head, plus a gap before the topic it points at. */
+const ARROW = 15;
 
 /** A name in lines of about `labelChars` characters, breaking at spaces; the last line ends "…" when it doesn't fit. */
 export function wrapLabel(name: string, chars: number = GRAPH.labelChars, max: number = GRAPH.labelLines): string[] {

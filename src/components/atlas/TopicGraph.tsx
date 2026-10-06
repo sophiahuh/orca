@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import type { RelationType } from "@/lib/data";
-import { GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary } from "@/lib/course/topic-graph";
+import { GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary, wrapLabel } from "@/lib/course/topic-graph";
 import { popIn, stagger } from "@/lib/motion";
 
 /**
@@ -221,18 +221,31 @@ function TopicNode({ node: n, active, dim, onHover, onOpen }: { node: GraphNode;
   );
 }
 
+/** At most this wide; its lines wrap to fit (characters per line at each size). */
+const TOOLTIP = { width: 210, titleChars: 30, detailChars: 38, pad: 12, titleLine: 15, detailLine: 13 } as const;
+
 function Tooltip({ node: n }: { node: GraphNode }) {
-  const title = `${n.topic.name} · ${STRENGTH_LABEL[n.strength]}`;
-  const detail = topicSummary(n);
-  const w = Math.max(title.length * 7, detail.length * 5.6) + 24;
+  const title = wrapLabel(`${n.topic.name} · ${STRENGTH_LABEL[n.strength]}`, TOOLTIP.titleChars, 4);
+  const detail = wrapLabel(topicSummary(n), TOOLTIP.detailChars, 3);
+  const longest = Math.max(...title.map((l) => l.length * 6.8), ...detail.map((l) => l.length * 5.5));
+  const w = Math.min(TOOLTIP.width, longest + 2 * TOOLTIP.pad);
+  const h = TOOLTIP.pad * 2 + title.length * TOOLTIP.titleLine + detail.length * TOOLTIP.detailLine;
   return (
-    <g transform={`translate(${n.x + n.r + 10} ${n.y + 4})`} pointerEvents="none" data-part="topic-tooltip">
-      <rect width={w} height={42} rx={8} fill="var(--color-prussian)" />
-      <text x={12} y={17} fontSize={12} fontWeight={700} fill="var(--color-parchment)">
-        {title}
+    <g transform={`translate(${n.x + n.r + 10} ${n.y - 8})`} pointerEvents="none" data-part="topic-tooltip">
+      <rect width={w} height={h} rx={8} fill="var(--color-prussian)" />
+      <text fontSize={12} fontWeight={700} fill="var(--color-parchment)">
+        {title.map((line, i) => (
+          <tspan key={i} x={TOOLTIP.pad} y={TOOLTIP.pad + TOOLTIP.titleLine * (i + 1) - 3}>
+            {line}
+          </tspan>
+        ))}
       </text>
-      <text x={12} y={33} fontSize={10.5} fill="var(--color-alice)">
-        {detail}
+      <text fontSize={10.5} fill="var(--color-alice)">
+        {detail.map((line, i) => (
+          <tspan key={i} x={TOOLTIP.pad} y={TOOLTIP.pad + title.length * TOOLTIP.titleLine + TOOLTIP.detailLine * (i + 1)}>
+            {line}
+          </tspan>
+        ))}
       </text>
     </g>
   );
