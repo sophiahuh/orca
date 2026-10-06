@@ -9,6 +9,7 @@ import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
+import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { fadeUp, stagger } from "@/lib/motion";
 import { trailTopics } from "@/lib/data";
 import { pendingReview } from "@/lib/course/review";
@@ -73,6 +74,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
             <ProgressBar value={pct} height={12} label="Course progress" />
           </motion.div>
           <motion.nav variants={fadeUp} aria-label="Course structure" className="mt-[4px] flex items-center gap-[10px]">
+            <AtlasSwitch slug={course.slug} current="path" />
             {toReview > 0 && (
               <Link href={`/course/${course.slug}/review`} className="pressable rounded-pill bg-wisteria px-[12px] py-[6px] text-[13px] font-bold text-parchment lip-2 lip-wisteria">
                 {toReview} to review

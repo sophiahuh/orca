@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signOut } from "@/app/auth/actions";
+import { AvatarPicker } from "@/components/auth/AvatarPicker";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Select } from "@/components/ui/Select";
@@ -13,10 +14,10 @@ function zones(current: string): string[] {
   return all.includes(current) ? all : [current, ...all];
 }
 
-/** Who is signed in, their timezone (every day boundary uses it), and sign out. */
+/** Who is signed in, their sea buddy, their timezone (every day boundary uses it), and sign out. */
 export function AccountCard() {
-  // The timezone lives in the store (it sets every day boundary); a failed save shows there.
-  const { timezone, setTimezone, hydrated } = useOrca();
+  // The timezone and avatar live in the store; a failed save shows there.
+  const { timezone, setTimezone, avatar, setAvatar, name, hydrated } = useOrca();
   const [email, setEmail] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -39,8 +40,12 @@ export function AccountCard() {
       {email !== null && hydrated && (
         <>
           <p data-part="account-email" className="text-[15px] font-semibold text-prussian">
-            {email}
+            {name ? `${name} · ${email}` : email}
           </p>
+          <div className="flex flex-col gap-[8px]">
+            <span className="text-[14px] font-bold text-prussian">Sea buddy</span>
+            <AvatarPicker value={avatar} onChange={setAvatar} compact className="items-start" />
+          </div>
           <div className="flex items-center justify-between gap-3">
             <span className="text-[14px] font-bold text-prussian">Timezone</span>
             <Select size="sm" label="Timezone" value={timezone} options={zones(timezone)} onChange={setTimezone} />

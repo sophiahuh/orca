@@ -3,7 +3,7 @@
 -- to an API role the way PostgREST does (role + JWT claims).
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(46);
+select plan(51);
 
 \set A aaaaaaaa-0000-4000-8000-000000000001
 \set B bbbbbbbb-0000-4000-8000-000000000002
@@ -28,6 +28,15 @@ insert into auth.users (id, email, raw_user_meta_data) values
   (:'B', 'b@example.com', '{"timezone": "Mars/Olympus_Mons"}');
 select is((select timezone from public.profiles where owner_id = :'A'), 'America/New_York', 'sign-up creates a profile with the browser''s timezone');
 select is((select timezone from public.profiles where owner_id = :'B'), 'UTC', 'an unknown timezone falls back to UTC');
+-- The avatar and name from sign-up (Figma sync): a real creature is kept, anything else is the orca.
+select is((select avatar from public.profiles where owner_id = :'A'), 'orca', 'no avatar in the metadata: the orca');
+select is((select name from public.profiles where owner_id = :'A'), null, 'no name in the metadata: none');
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('cccccccc-0000-4000-8000-000000000001', 'c@example.com', '{"avatar": "turtle", "name": "  Sophia  "}'),
+  ('cccccccc-0000-4000-8000-000000000002', 'd@example.com', '{"avatar": "kraken", "name": ""}');
+select is((select avatar || '/' || name from public.profiles where owner_id = 'cccccccc-0000-4000-8000-000000000001'), 'turtle/Sophia', 'the chosen creature and the trimmed name are kept');
+select is((select avatar from public.profiles where owner_id = 'cccccccc-0000-4000-8000-000000000002'), 'orca', 'an unknown creature falls back to the orca');
+select is((select name from public.profiles where owner_id = 'cccccccc-0000-4000-8000-000000000002'), null, 'an empty name is none');
 
 -- A builds a course the way the app will.
 select pg_temp.act_as(:'A');

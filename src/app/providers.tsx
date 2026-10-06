@@ -1,6 +1,8 @@
 "use client";
 
 import { MotionConfig } from "motion/react";
+import { AvatarPreviewProvider } from "@/components/brand/avatar-preview";
+import { TopBar } from "@/components/layout/TopBar";
 import { LoadFailed, SaveStatus } from "@/components/store/SaveStatus";
 import { OrcaProvider, useOrca } from "@/lib/store";
 
@@ -21,7 +23,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MotionConfig reducedMotion="user">
       <OrcaProvider>
-        <Loaded>{children}</Loaded>
+        <AvatarPreviewProvider>
+          <TopBar />
+          <Loaded>{children}</Loaded>
+        </AvatarPreviewProvider>
       </OrcaProvider>
     </MotionConfig>
   );

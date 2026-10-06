@@ -4,8 +4,9 @@ import { motion, type HTMLMotionProps } from "motion/react";
 import { swimOrca } from "@/lib/motion";
 
 /**
- * The Orca mascot (Figma: Logo/Orca, master component 9:5).
- * Natural aspect ratio is 150 × 123.85. Pass `width`; height follows.
+ * The Orca mascot (Figma: Logo/Orca, master component 9:5), and with `waves` the header mark
+ * (Figma: Logo/Orca Waves, 128:547: the same orca plus two sound-wave arcs, 178 × 124).
+ * Natural aspect ratio is 150 × 123.85 (178 × 123.85 with waves). Pass `width`; height follows.
  *
  * Each body part is its own <path>, so later you can animate the tail,
  * blink the eye patch, etc. by targeting the data-part attributes.
@@ -18,10 +19,30 @@ export interface OrcaLogoProps extends Omit<HTMLMotionProps<"div">, "children"> 
   shadow?: boolean;
   /** Dark-on-light (default) or pale periwinkle body for dark surfaces. */
   tone?: "dark" | "pale";
+  /** The listening arcs to the right of the head (the header mark). */
+  waves?: boolean;
 }
 
-export function OrcaLogo({ width = 150, swim = false, shadow = true, tone = "dark", className, ...rest }: OrcaLogoProps) {
-  const height = (width * 123.853) / 150;
+/** The arcs of Logo/Orca Waves: two concentric strokes centred near the orca's ear, in Wisteria Blue. */
+const WAVE_ARCS = [
+  { r: 19, width: 4.5 },
+  { r: 33, width: 5 },
+] as const;
+const WAVE_CENTRE = { x: 142, y: 37 };
+const WAVE_HALF_ANGLE = (56 * Math.PI) / 180;
+
+function arcPath(r: number): string {
+  const a = WAVE_HALF_ANGLE;
+  const x1 = WAVE_CENTRE.x + r * Math.cos(-a);
+  const y1 = WAVE_CENTRE.y + r * Math.sin(-a);
+  const x2 = WAVE_CENTRE.x + r * Math.cos(a);
+  const y2 = WAVE_CENTRE.y + r * Math.sin(a);
+  return `M${x1.toFixed(2)} ${y1.toFixed(2)} A${r} ${r} 0 0 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+}
+
+export function OrcaLogo({ width = 150, swim = false, shadow = true, tone = "dark", waves = false, className, ...rest }: OrcaLogoProps) {
+  const boxWidth = waves ? 178 : 150;
+  const height = (width * 123.853) / boxWidth;
   const body = tone === "dark" ? "var(--color-prussian)" : "var(--color-periwinkle)";
   const belly = tone === "dark" ? "var(--color-parchment)" : "var(--color-alice)";
 
@@ -32,7 +53,7 @@ export function OrcaLogo({ width = 150, swim = false, shadow = true, tone = "dar
       animate={swim ? swimOrca : undefined}
       {...rest}
     >
-      <svg viewBox="0 0 150 123.853" width={width} height={height} fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Orca">
+      <svg viewBox={`0 0 ${boxWidth} 123.853`} width={width} height={height} fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Orca">
         {shadow && (
           <path
             data-part="shadow"
@@ -65,6 +86,10 @@ export function OrcaLogo({ width = 150, swim = false, shadow = true, tone = "dar
           d="M77.0642 90.1376C75.6881 100.459 77.0642 111.468 82.5688 116.697C88.0734 117.661 100.459 107.339 108.716 94.9541C112.844 86.6972 112.844 79.8165 110.367 73.211L77.0642 90.1376Z"
           fill={body}
         />
+        {waves &&
+          WAVE_ARCS.map((arc) => (
+            <path key={arc.r} data-part="wave" d={arcPath(arc.r)} stroke="var(--color-wisteria)" strokeWidth={arc.width} strokeLinecap="round" fill="none" />
+          ))}
       </svg>
     </motion.div>
   );

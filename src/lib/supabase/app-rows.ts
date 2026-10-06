@@ -8,6 +8,7 @@
  * a field (an un-merge, a settled duplicate) writes the null.
  */
 import { z } from "zod";
+import { type AvatarId, isAvatar } from "../avatars.ts";
 import type {
   AnswerRubric,
   CalendarEvent,
@@ -388,6 +389,8 @@ export interface MyData {
 export interface LoadedState {
   timezone: string;
   onboarded: boolean;
+  avatar: AvatarId;
+  name: string | null;
   courses: Course[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
@@ -427,9 +430,12 @@ export function loadedState(d: MyData): LoadedState {
   }
   const relations = byCourse<Relation[]>(() => []);
   for (const r of d.relations) relations[r.course_id].push(relationFromRow(r));
+  if (!isAvatar(d.profile.avatar)) throw new Error(`Your profile's avatar "${d.profile.avatar}" isn't one Orca knows`);
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
+    avatar: d.profile.avatar,
+    name: d.profile.name,
     courses,
     configs: Object.fromEntries(d.courses.map((c) => [c.id, ReviewConfigSchema.parse(c.review_config)])),
     weights: Object.fromEntries(d.courses.map((c) => [c.id, WeightsSchema.parse(c.weights)])),

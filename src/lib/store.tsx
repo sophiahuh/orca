@@ -49,6 +49,7 @@ import {
   slugify,
 } from "./data";
 import type { LlmConfig } from "./llm";
+import { type AvatarId, DEFAULT_AVATAR } from "./avatars";
 import type { QuizQuestion } from "./data";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types";
 import type { CourseStructure } from "./course/ops";
@@ -78,6 +79,10 @@ interface OrcaState {
   onboarded: boolean;
   /** The student's IANA timezone (profile); every day boundary uses it. */
   timezone: string;
+  /** The student's sea-buddy avatar (profile), shown in the top bar. */
+  avatar: AvatarId;
+  /** The name given at sign-up (profile); null when none. */
+  name: string | null;
   /** The student's own model connection (bring-your-own-LLM). In memory only: it holds a key. */
   llm: LlmConfig | null;
   /** Generated questions: courseId → topicId → questions. */
@@ -108,6 +113,8 @@ const initialState: OrcaState = {
   results: [],
   onboarded: false,
   timezone: "UTC",
+  avatar: DEFAULT_AVATAR,
+  name: null,
   llm: null,
   questionBank: {},
   objectives: {},
@@ -134,6 +141,7 @@ interface OrcaActions {
   recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note">>) => void;
   setOnboarded: (v: boolean) => void;
   setTimezone: (timezone: string) => void;
+  setAvatar: (avatar: AvatarId) => void;
   setLlm: (c: LlmConfig | null) => void;
   /**
    * Read everything again from the database, after the saves already queued (a job finished on the
@@ -636,6 +644,18 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save, refreshAfterSave],
   );
 
+  const setAvatar = useCallback(
+    (avatar: AvatarId) => {
+      setState((s) => ({ ...s, avatar }));
+      save(async () => {
+        const { data } = await browserSupabase().auth.getSession();
+        if (!data.session) throw new Error("you're signed out");
+        mustChange(await browserSupabase().from("profiles").update({ avatar }).eq("owner_id", data.session.user.id).select("owner_id"));
+      });
+    },
+    [save],
+  );
+
   const refresh = useCallback<OrcaActions["refresh"]>(() => {
     const next = queue.current.then(async () => {
       try {
@@ -684,6 +704,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       recordReflection,
       setOnboarded,
       setTimezone,
+      setAvatar,
       setLlm,
       refresh,
       afterSaves,
@@ -691,7 +712,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, setConfig, setWeights, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

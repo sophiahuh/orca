@@ -53,7 +53,7 @@ test("a row that disappears is refused: nothing is ever deleted", () => {
 
 test("loading groups rows by course and puts questions in stock order", () => {
   const data: MyData = {
-    profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, created_at: owned.created_at },
+    profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, created_at: owned.created_at },
     courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, weights: { lectures: 25 }, created_at: owned.created_at }],
     materials: [],
     runs: [],

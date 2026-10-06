@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { DEFAULT_AVATAR, isAvatar } from "@/lib/avatars";
 import { safeNext } from "@/lib/auth/paths";
 import { SiteUrlError, linkOrigin, siteUrl } from "@/lib/auth/site";
 import { passwordProblem, validEmail } from "@/lib/auth/validate";
@@ -61,6 +62,11 @@ export async function signUp(_: AuthState, data: FormData): Promise<AuthState> {
   const email = text(data, "email").trim();
   const password = text(data, "password");
   const timezone = text(data, "timezone");
+  // The name and the sea-buddy avatar (Figma: 13 · Sign up) ride along as metadata; the profile
+  // trigger keeps a real creature and a non-empty name, and falls back otherwise.
+  const name = text(data, "name").trim().slice(0, 80);
+  const avatarChoice = text(data, "avatar");
+  const avatar = isAvatar(avatarChoice) ? avatarChoice : DEFAULT_AVATAR;
   if (!validEmail(email)) return { error: "Enter a valid email address." };
   const problem = passwordProblem(password);
   if (problem) return { error: problem };
@@ -68,7 +74,7 @@ export async function signUp(_: AuthState, data: FormData): Promise<AuthState> {
     const { error } = await client.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${await origin()}/auth/callback`, data: timezone ? { timezone } : {} },
+      options: { emailRedirectTo: `${await origin()}/auth/callback`, data: { ...(timezone ? { timezone } : {}), ...(name ? { name } : {}), avatar } },
     });
     // The same answer whether or not the address already has an account.
     if (error && error.status !== undefined && error.status >= 500) return { error: "Couldn't create the account. Try again in a moment." };

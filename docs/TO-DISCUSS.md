@@ -138,6 +138,26 @@ Judgement calls the agents made to keep building; each is in code behind one con
   A finished session id still works for any number of top-ups within that (W0's open point).
 - **A quiz with ungraded answers (a grading outage) records a smaller total**, and a quiz with nothing
   graded records no session (so no re-quiz is queued for it).
+
+### Assumed in the Figma sync (2026-10-06)
+- **The Concept Atlas is screen 12 (the rings), not the "Concept graph v4" explorations** (E1/E2,
+  React Flow + ELK, red/amber/green hues). The rings need no new dependency and stay in the
+  palette; the spec's interaction model is followed where it fits (select → panel, dim to 30%, Esc
+  clears, one action per panel). Units are topics in trail order; concepts are live objectives;
+  links are relations (`builds-on` → Prerequisite, the rest → Related).
+- **Concept mastery words:** mastered → Mastered; learning → Building; fading, mixed up or retired →
+  Review; unseen → Not started. **The percent** ("60% mastered") is a display number: progress toward
+  the credit bar before mastery (capped at 80), FSRS's predicted recall after it.
+- **The formula chip and the truth-table row note** in the quiz feedback mockup need content the
+  questions don't carry (a formula, which row is wrong); not drawn until the pipeline writes them.
+- **The nav bar's fourth icon (chat)** isn't built: AI chat is marked removed from the MVP in Figma.
+  Settings is reachable twice (top bar and nav bar), as both are in the mockups.
+- **Name is optional at sign-up** (the mockup shows the field; nothing in the app needs it yet).
+- **Dark mode:** the Orca Ocean Dark values are in `globals.css` under `[data-theme="dark"]` with no
+  toggle; the screens' own surfaces (parchment, alice) have no dark variables in Figma yet.
+- **Figma vectors were hand-traced**, not exported: this environment can't fetch figma.com. The
+  Orca Waves arcs, the two header icons, the five avatars and the sea-life decorations (left out)
+  should be replaced by Figma's SVG exports (`docs/figma/README.md`).
 - **Upload cleanup ages:** `uploaded`/`reading` after 24 h, `failed` after 7 days
   (`CLEANUP` in `src/lib/material/cleanup.ts`). `ready` and `processing` material is never touched.
 - **Metering failures throw:** a call whose usage can't be written fails the step after the model was

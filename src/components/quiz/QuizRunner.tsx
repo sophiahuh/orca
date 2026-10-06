@@ -7,7 +7,12 @@ import { AnimatePresence, motion } from "motion/react";
 import type { Course, QuizQuestion, SessionMode } from "@/lib/data";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { EvidenceSource, Grader, Outcome } from "@/lib/mastery/types";
-import { useOrca, useStreak } from "@/lib/store";
+import { useDayKey, useMasteryByCourse, useOrca, useStreak, useTodos } from "@/lib/store";
+import { useNow } from "@/hooks/useNow";
+import { masteryPercent, reviewPhrase } from "@/lib/mastery/percent";
+import { todoHref } from "@/components/layout/Sidebar";
+import { Feedback } from "@/components/quiz/Feedback";
+import { ResultBanner } from "@/components/quiz/ResultBanner";
 import { IconClose } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { AnswerOption, type AnswerState } from "@/components/ui/AnswerOption";
@@ -54,6 +59,10 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const router = useRouter();
   const streak = useStreak();
   const { recordQuiz, recordEvidence, objectives } = useOrca();
+  const masteryByCourse = useMasteryByCourse();
+  const todos = useTodos();
+  const dayKey = useDayKey();
+  const nowMs = useNow();
   const serverStatus = useServerStatus();
   const serverModel = serverStatus === undefined ? undefined : serverStatus.serverModel;
   const topUp = useTopUp(serverModel);
@@ -67,6 +76,10 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const [checked, setChecked] = useState(false);
   const [grading, setGrading] = useState(false);
   const [grade, setGrade] = useState<GradeResult | null>(null);
+  /** The objective's display percent before the answer was recorded (Figma: Your mastery, 60% → 52%). */
+  const [before, setBefore] = useState(0);
+  /** The result banner's outcome; the nonce restarts its timer for each answer. */
+  const [banner, setBanner] = useState<{ outcome: Outcome; line: string | null; nonce: number }>({ outcome: "correct", line: null, nonce: 0 });
   const [correct, setCorrect] = useState(0);
   /** Answers that couldn't be graded (a grading outage): no evidence, and not in the score either. */
   const [ungraded, setUngraded] = useState(0);
@@ -112,6 +125,15 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const item = items[index];
   const q = item?.question;
   const total = questions.length;
+  const objective = q ? liveObjectiveOf(q, item.topicId, catalogue ?? {}) : null;
+  const objectiveState = objective ? masteryByCourse[course.id]?.objectives.get(objective.id) : undefined;
+  const showResult = useCallback(
+    (outcome: Outcome, line: string | null) => {
+      setBefore(masteryPercent(objectiveState));
+      setBanner((b) => ({ outcome, line, nonce: b.nonce + 1 }));
+    },
+    [objectiveState],
+  );
 
   /** One graded answer → one evidence event. Called only after grading has finished. */
   const logAnswer = useCallback(
@@ -141,8 +163,9 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     const ok = selected === item.question.answer;
     if (ok) setCorrect((c) => c + 1);
     else setMissed((m) => [...m, item]);
+    showResult(ok ? "correct" : "incorrect", ok ? null : `The answer is ${item.question.options[item.question.answer]}.`);
     logAnswer(item, ok ? "correct" : "incorrect", "choice");
-  }, [selected, checked, item, logAnswer]);
+  }, [selected, checked, item, logAnswer, showResult]);
 
   // Prose answers are graded by Orca's server (Task 8); with no model there, or model grading turned
   // off for this student (decision 13), the student self-marks. The server can also say so on a grade
@@ -158,9 +181,10 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
       setChecked(true);
       if (result.outcome === "correct") setCorrect((c) => c + 1);
       else setMissed((m) => [...m, item]);
+      showResult(result.outcome, grader === null ? "Not counted." : grader === "self" ? result.feedback : null);
       if (grader) logAnswer(item, result.outcome, grader);
     },
-    [item, checked, logAnswer],
+    [item, checked, logAnswer, showResult],
   );
 
   const submitShort = useCallback(
@@ -278,11 +302,22 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     if (!checked) return selected === i ? "selected" : "idle";
     if (i === q.answer) return "correct";
     if (i === selected) return "wrong";
-    return "idle";
+    return "dimmed";
   };
+  // Figma: Option tag. The right answer is tagged "Correct answer" unless it was the student's.
+  const tagFor = (i: number): string | undefined => {
+    if (!checked) return undefined;
+    if (i === selected) return "Your answer";
+    if (i === q.answer) return "Correct answer";
+    return undefined;
+  };
+  const outcomeShown: Outcome = q.kind === "Short answer" ? (grade?.outcome ?? "incorrect") : selected === q.answer ? "correct" : "incorrect";
+  const suggestedCard = todos.find((t) => t.courseId === course.id && t.when === "today");
+  const suggested = suggestedCard ? { course: course.short, title: suggestedCard.title, detail: suggestedCard.detail, href: todoHref(suggestedCard, course), kind: suggestedCard.kind } : null;
 
   return (
-    <Screen bg="parchment" className="h-screen max-h-screen">
+    <Screen bg="parchment" className="h-screen-below-bar max-h-screen-below-bar">
+      <ResultBanner outcome={checked ? banner.outcome : null} line={banner.line} nonce={banner.nonce} />
       <header className="flex shrink-0 items-center gap-[24px] px-[40px] pt-[28px]">
         <RoundButton size={48} label="Exit quiz" onClick={() => router.push(backHref)}>
           <IconClose size={20} />
@@ -347,7 +382,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
             ) : (
               <div className="mt-[24px] flex flex-col gap-[12px]">
                 {q.options.map((opt, i) => (
-                  <AnswerOption key={opt} letter={LETTERS[i]} state={stateFor(i)} disabled={checked} onClick={() => setSelected(i)}>
+                  <AnswerOption key={opt} letter={LETTERS[i]} state={stateFor(i)} tag={tagFor(i)} disabled={checked} onClick={() => setSelected(i)}>
                     {opt}
                   </AnswerOption>
                 ))}
@@ -356,38 +391,17 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
 
             <AnimatePresence>
               {checked && (
-                <motion.div
-                  key="explain"
-                  variants={fadeUp}
-                  initial="hidden"
-                  animate="show"
-                  exit="exit"
-                  className="mt-[18px] rounded-[18px] bg-alice px-[20px] py-[14px] text-[16px] leading-relaxed text-prussian"
-                >
-                  <span className="font-bold text-wisteria-deep">
-                    {q.kind === "Short answer"
-                      ? grade?.outcome === "correct"
-                        ? "Correct. "
-                        : grade?.outcome === "partial"
-                          ? "Partly. "
-                          : "Not quite. "
-                      : selected === q.answer
-                        ? "Correct. "
-                        : "Not quite. "}
-                  </span>
-                  {q.kind === "Short answer" && grade?.feedback && grade.outcome !== "correct" && <span className="text-prussian">{grade.feedback} </span>}
-                  {q.explanation}
-                  {q.kind === "Short answer" && q.rubric && grade?.outcome !== "correct" && (
-                    <span className="mt-[8px] block text-[15px] text-prussian/80">
-                      Key: {q.rubric.requiredIdeas.join(" · ")}
-                    </span>
-                  )}
-                  {q.anchor && (
-                    <span className="mt-[8px] block text-[14px] text-wisteria-deep">
-                      From {q.anchor.locator}: “{q.anchor.excerpt}”
-                    </span>
-                  )}
-                </motion.div>
+                <Feedback
+                  key="feedback"
+                  question={q}
+                  outcome={outcomeShown}
+                  grade={grade}
+                  objectiveName={objective?.name ?? q.topic}
+                  before={before}
+                  after={masteryPercent(objectiveState)}
+                  reviewLine={reviewPhrase(objectiveState, new Date(nowMs), dayKey)}
+                  suggested={suggested}
+                />
               )}
             </AnimatePresence>
           </motion.div>

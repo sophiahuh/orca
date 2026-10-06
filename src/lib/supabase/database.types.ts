@@ -232,13 +232,13 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "created_at": string,"onboarded": boolean,"owner_id": string,"timezone": string
+                    "avatar": string,"created_at": string,"name": string | null,"onboarded": boolean,"owner_id": string,"timezone": string
                   }
                   Insert: {
-                    "created_at"?: string,"onboarded"?: boolean,"owner_id": string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"name"?: string | null,"onboarded"?: boolean,"owner_id": string,"timezone"?: string
                   }
                   Update: {
-                    "created_at"?: string,"onboarded"?: boolean,"owner_id"?: string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"name"?: string | null,"onboarded"?: boolean,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
                     

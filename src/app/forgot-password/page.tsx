@@ -5,7 +5,7 @@ export const metadata = { title: "Reset password · Orca" };
 
 export default function ForgotPasswordPage() {
   return (
-    <AuthShell title="Reset your password" lead="Enter your email and we'll send a link.">
+    <AuthShell eyebrow="Forgot password" title="Reset your password" lead="Enter your email and we'll send a link.">
       <ForgotForm />
     </AuthShell>
   );

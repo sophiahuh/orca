@@ -4,9 +4,12 @@ Orca turns every college class into an "island" on a knowledge map. Inside an is
 Duolingo-style trail of topics; topics run quizzes; the orca mascot nudges reviews on a cadence the
 student configures per class. Tagline: "Mastery Made Easy."
 
-Design source of truth: Figma file `Xt9CiD6SpdN0BPma1q2pzZ` ("Orca – Study App Mockups").
-Reference renders live in `docs/figma/` (`screens.png` = all 11 screens, `styleguide.png`, and the
-traced SVG assets in `docs/figma/assets/`). Frames are 1194×834; v1 ships as a laptop website.
+Design source of truth: Figma file `Xt9CiD6SpdN0BPma1q2pzZ` ("Orca – Study App Mockups"), read
+through the Figma MCP (pages: Style Guide, Header & Nav Assets, Screens, Concept Atlas).
+Reference renders live in `docs/figma/` (`screens.png` = the 11 screens before the 2026-10-06
+redesign, `styleguide.png`, and the traced SVG assets in `docs/figma/assets/`; `docs/figma/README.md`
+lists what still needs exporting). Frames are 1194×834 below an 88 px top bar; v1 ships as a laptop
+website.
 
 ## Reporting to the owner
 
@@ -38,10 +41,11 @@ authored and reviewed the reference objectives, questions and quiz rubric.
   cost guard (metering, daily budgets with waiting runs, one job at a time per student, rate limits,
   bounded calls), the injection defences (data-block prompts, pattern screen, output validators,
   `security_events`), CI with the Supabase stack, the review findings from Tasks 3–7 and the
-  whole-branch review's fixes (Wave 3). Checks last run green (2026-10-06, after Wave 3):
-  `npx tsc --noEmit`, `npm run lint`, `npm test` (262), `npm run test:db` (172),
-  `npm run check:isolation` (43), `npm run check:evidence` (44), `npm run test:e2e` (55),
-  `npm run build`. CI now runs on `phase-*` too, but GitHub
+  whole-branch review's fixes (Wave 3), then the Figma sync (the top bar, avatars, the new
+  account screens, the quiz feedback state and the Concept Atlas). Checks last run green
+  (2026-10-06, after the Figma sync): `npx tsc --noEmit`, `npm run lint`, `npm test` (267),
+  `npm run test:db` (177), `npm run check:isolation` (43), `npm run check:evidence` (44),
+  `npm run test:e2e` (57), `npm run build`. CI now runs on `phase-*` too, but GitHub
   hasn't run it yet. **Nothing has run against a hosted Supabase, Trigger.dev or Anthropic**; the
   owner's setup steps are in `docs/SETUP-HOSTED.md` and the live checks are Task 10.
 - No app data is kept in the browser any more (the old `orca:materialPages` key is cleared on
@@ -273,14 +277,30 @@ This describes the code as it is.
   `src/hooks/useNow.ts` (clock for derived state), `src/hooks/useTopUp.ts` (starts the top-up job
   after a session, `POST /api/top-up`), `src/hooks/useRun.ts` (follows a pipeline run: Realtime,
   a read on subscribe, a 5 s poll; reloads the store when it finishes).
-- `src/components/icons.tsx`, `brand/` (OrcaLogo, Island with four mastery looks, Wave, Bubble).
+- `src/components/icons.tsx` (+ IconSettings, IconLogOut from Header & Nav Assets), `brand/` (OrcaLogo,
+  with `waves` for the header mark, Island with four mastery looks, Wave, Bubble, Avatar: the five
+  sea buddies drawn by hand after the Figma renders, `avatar-preview.tsx` for the sign-up pick).
 - `src/components/ui/` — Button, Chip/ContextPill, RoundButton, ProgressBar, Card, Tag, Stat, Select,
   Toggle, Slider, AnswerOption, DueCard, PathNode (done / current / upcoming, no locks) (barrel in `ui/index.ts`).
-- `src/components/layout/` — AppShell (main + 340px Sidebar with NavBar), BackButton, Screen.
+- `src/components/layout/` — TopBar (Figma Header/Top Bar on every screen, rendered by `providers.tsx`:
+  lockup, Settings, Log out, the avatar; account screens show only the avatar; height `--topbar-h`,
+  which `h-screen-below-bar` and friends subtract), AppShell (main + 340px Sidebar with NavBar),
+  BackButton, Screen.
+- `src/components/auth/` — AuthShell (form left, aside right: 12 · Log in, 13 · Sign up), forms
+  (the 76 px fields with Show, the timezone added at submit), AvatarPicker, IslandAside.
+- `src/components/atlas/` — the Concept Atlas (Figma 12 · Concept Atlas + its design spec):
+  ConceptAtlas (unit rings = topics in trail order, concept pills = live objectives with their
+  mastery glyph, links = relations, the orca badge, a slow sonar sweep; selecting dims the rest to
+  30%), ConceptPanel (the right rail for a selected concept: unit, name, mastery bar, connected
+  concepts, Next up, legend, "Review …" to the topic quiz), AtlasSwitch (Path | Atlas). Layout is
+  pure in `src/lib/course/atlas.ts`; the display percent in `src/lib/mastery/percent.ts`.
 - Feature components: `map/` (KnowledgeMap, LabelPill), `path/KnowledgePath`, `quiz/` (QuizRunner,
   shared by topic quizzes and sessions; TruthTable, QuizEnd, ShortAnswer, DeepReviewSetup: the
-  "how long do you want to study?" picker with the coverage plan), `config/` (ConfigRow, ClassConfigModal), `calendar/MonthGrid`.
-- Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`),
+  "how long do you want to study?" picker with the coverage plan; ResultBanner and Feedback from
+  Figma 04a/04b: the three-second banner, option tags, the Solution card with the source, Your
+  mastery before → after with when it comes back, a Suggested review card), `config/` (ConfigRow,
+  ClassConfigModal), `calendar/MonthGrid`.
+- Routes: `/`, `/home`, `/course/[slug]` (+ `/review`, `/objectives`, `/reflect`, `/study`, `/atlas`),
   `/quiz/[slug]/[topic]`, `/session/[slug]?kind=quick|deep|requiz`, `/settings`, `/calendar`, `/add-material`, `/new-course`,
   `/api/materials`, `/api/materials/[id]/process`, `/api/top-up`, `/api/reflect`, `/api/evidence`,
   `/api/state` (these need Supabase and a signed-in student), `/api/grade`, `/api/llm/*`, `/sign-in`, `/sign-up`,
@@ -358,7 +378,8 @@ This describes the code as it is.
   `store.spec.ts` (a second browser sees the same data; a failed save is undone and not counted and
   the quiz's score isn't saved; an action during the reload is refused with a message; a mid-session
   reload counts nothing twice; old local state cleared), `auth.spec.ts` (sign-up, confirm, reset,
-  `SITE_URL` links, token-hash links), `grade.spec.ts` (grading behind sign-in, screening, the
+  `SITE_URL` links, token-hash links, the sea buddy and name from sign-up), `atlas.spec.ts` (the
+  rings, concepts and links; the panel; Esc; the review action; Path | Atlas), `grade.spec.ts` (grading behind sign-in, screening, the
   repeat-offender switch, the rate limit, metering), `cost-guard.spec.ts` (a waiting run, a queued
   second upload, a spend-limit answer, the upload rate limit), `injection.spec.ts` (an injected
   deck: refused rows, the warning, `security_events`; a flagged reflection note), `settings.spec.ts`

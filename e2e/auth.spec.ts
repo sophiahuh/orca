@@ -33,7 +33,7 @@ async function signInVia(page: Page, email: string, password: string) {
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("button", { name: "Log in" }).click();
 }
 
 const created: string[] = [];
@@ -67,14 +67,18 @@ test.describe("sign up", () => {
   test("confirming from the email signs you in, with your timezone; sign out ends it", async ({ page }) => {
     const email = `auth-${crypto.randomUUID()}@example.test`;
     await page.goto("/sign-up");
+    await page.getByLabel("Name").fill("Sophia");
+    // The sea buddy (Figma: 13 · Sign up): picking one shows it in the top bar right away.
+    await page.getByRole("radio", { name: "Turtle" }).click();
+    await expect(page.locator("[data-part=top-bar] [data-avatar=turtle]")).toBeVisible();
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password").fill("short");
-    await page.getByRole("button", { name: "Create account" }).click();
+    await page.getByRole("button", { name: "Sign up" }).click();
     // The field's own minimum stops it before the server is asked.
     await expect(page).toHaveURL(/\/sign-up$/);
 
     await page.getByLabel("Password").fill(PASSWORD);
-    await page.getByRole("button", { name: "Create account" }).click();
+    await page.getByRole("button", { name: "Sign up" }).click();
     await expect(page.getByRole("status")).toContainText("Check your email");
 
     // Not signed in until the link is followed.
@@ -83,14 +87,17 @@ test.describe("sign up", () => {
 
     await page.goto(await emailedLink(email));
     await page.goto("/settings");
-    await expect(page.locator("[data-part=account-email]")).toHaveText(email);
+    await expect(page.locator("[data-part=account-email]")).toHaveText(`Sophia · ${email}`);
     await expect(page.getByRole("combobox", { name: "Timezone" })).toHaveValue("America/New_York");
+    // The profile's avatar and name came from sign-up; the top bar shows the avatar.
+    await expect(page.locator("[data-part=top-bar] [data-avatar=turtle]")).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Turtle" })).toHaveAttribute("aria-checked", "true");
 
     const { data: users } = await admin().auth.admin.listUsers({ perPage: 1000 });
     const user = users.users.find((u) => u.email === email);
     if (user) created.push(user.id);
-    const profile = await admin().from("profiles").select("timezone").eq("owner_id", user!.id).single();
-    expect(profile.data?.timezone).toBe("America/New_York");
+    const profile = await admin().from("profiles").select("timezone, avatar, name").eq("owner_id", user!.id).single();
+    expect(profile.data).toEqual({ timezone: "America/New_York", avatar: "turtle", name: "Sophia" });
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/sign-in/);
@@ -140,7 +147,7 @@ test("emailed links bring you back to SITE_URL, not to whatever address the requ
   await page.goto("http://127.0.0.1:3100/sign-up");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("button", { name: "Sign up" }).click();
   await expect(page.getByRole("status")).toContainText("Check your email");
   const link = new URL(await emailedLink(email));
   expect(link.searchParams.get("redirect_to")).toBe("http://localhost:3100/auth/callback");
