@@ -53,7 +53,10 @@ export function DiveModal({ topic, initialMinutes, onStart, onClose }: { topic: 
               <h2 id="dive-title" className="text-[28px] font-bold leading-tight text-prussian">
                 Dive into {topic.name}
               </h2>
-              <p className="text-[15px] font-medium text-wisteria-deep">Harder questions on this topic, written for you when you start. How long do you want to study?</p>
+              <p className="text-[15px] font-medium text-wisteria-deep">
+                <span className="block whitespace-nowrap">Harder questions on this topic, written for you when you start.</span>
+                <span className="block">How long do you want to study?</span>
+              </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-[10px]">
               {DEEP_MINUTE_PRESETS.map((m) => (
