@@ -3,7 +3,7 @@ import { fakeCalls, fakeModel } from "./fake-model";
 
 /**
  * The Concept Atlas (Figma: E1/E2 · Concept graph v4): the course's topics as nodes, its topic
- * relations as edges, foundations on top; hovering a topic lights its edges and shows a tooltip,
+ * relations as edges, foundations on top; hovering a topic lights its edges and labels them;
  * clicking opens its quiz.
  */
 const SLUG = FIXTURE_STATE.courses[0].slug;
@@ -25,8 +25,6 @@ test("the atlas draws topics and their links, foundations on top; hovering expla
   await expect(page.getByRole("heading", { name: "Due today" })).toBeVisible();
 
   await page.locator(`[data-topic="${F.booleanAlgebra}"]`).hover();
-  await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Boolean Algebra · New");
-  await expect(page.locator("[data-part=topic-tooltip]")).toContainText("Used in 1");
   await expect(page.locator("[data-part=edge-label]")).toHaveText("used in");
 
   // Clicking a topic offers a dive into it.
