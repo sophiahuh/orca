@@ -335,16 +335,20 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     objectiveByRef.set(o.localId, objective.id);
   });
 
-  /* 4. Relations */
-  const allObjectiveIds = new Set([...Object.keys(input.objectives), ...newObjectives.map((o) => o.id)]);
-  const objectiveId = (ref: string) => objectiveByRef.get(ref) ?? (allObjectiveIds.has(ref) ? ref : null);
-  const seenRelations = new Set(input.relations.map((r) => `${r.from}|${r.to}|${r.type}`));
+  /* 4. Relations between topics (new and existing; a merged topic's links go to its survivor) */
+  const linkTopic = (ref: string) => {
+    const id = topicIdOf(ref);
+    return id === null || id === "dropped" ? null : id;
+  };
+  // "alternative-to" reads both ways, so one row per pair; the others are directed.
+  const keyOf = (from: string, to: string, type: Relation["type"]) => (type === "alternative-to" ? `${[from, to].sort().join("|")}|${type}` : `${from}|${to}|${type}`);
+  const seenRelations = new Set(input.relations.map((r) => keyOf(r.from, r.to, r.type)));
   const relations: Relation[] = [];
   for (const r of extracted.relations) {
-    const from = objectiveId(r.from);
-    const to = objectiveId(r.to);
+    const from = linkTopic(r.from);
+    const to = linkTopic(r.to);
     if (!from || !to || from === to) continue;
-    const key = `${from}|${to}|${r.type}`;
+    const key = keyOf(from, to, r.type);
     if (seenRelations.has(key)) continue;
     if (r.anchor) {
       const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));

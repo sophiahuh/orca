@@ -76,8 +76,8 @@ const lectureExtract: ExtractOutput = {
     { localId: "o3", existingId: null, topicRef: "t2", name: "Read binary numbers", description: "", aliases: [], origin: "inferred", places: [], emphasis: null },
   ],
   relations: [
-    { from: "o2", to: "o1", type: "builds-on", anchor: null },
-    { from: "o2", to: "nope", type: "builds-on", anchor: null },
+    { from: "t1", to: "t2", type: "used-in", anchor: null },
+    { from: "t2", to: "nope", type: "related", anchor: null },
   ],
   instructionsFound: [],
 };
@@ -99,12 +99,12 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.deepEqual(plan.newTopics[1].aliases, ["K-Maps"]);
   assert.equal(plan.newObjectives.length, 3);
   assert.ok(plan.newObjectives.every((o) => o.review === "proposed" && o.runId === "run1"));
-  const [simplify, group, inferred] = plan.newObjectives;
+  const [, group, inferred] = plan.newObjectives;
   assert.equal(group.topicId, plan.newTopics[1].id);
   assert.deepEqual(group.signals, [{ materialId: "mat", materialType: "Lecture", places: [{ locator: "slide 3", excerpt: "groups" }], emphasis: { kind: "tested", quote: "on the exam" } }]);
   assert.equal(inferred.origin, "inferred");
   assert.deepEqual(inferred.signals, []);
-  assert.deepEqual(plan.relations.map((r) => [r.from, r.to, r.type]), [[group.id, simplify.id, "builds-on"]], "the relation to an unknown objective is dropped");
+  assert.deepEqual(plan.relations.map((r) => [r.from, r.to, r.type]), [[plan.newTopics[0].id, plan.newTopics[1].id, "used-in"]], "relations link topics; one to an unknown topic is dropped");
 
   const all = Object.values(plan.questions).flat();
   assert.equal(all.length, 3);

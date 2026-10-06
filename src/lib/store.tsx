@@ -92,7 +92,7 @@ interface OrcaState {
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
   /** Course structure: courseId → objectiveId → objective. Created once, at upload; archived or merged, never deleted. */
   objectives: Record<string, Record<string, Objective>>;
-  /** courseId → relations between objectives, from uploads. */
+  /** courseId → relations between topics (used-in, has-a-kind, alternative-to, related), from uploads. */
   relations: Record<string, Relation[]>;
   /** Every upload's pipeline run, oldest first. */
   runs: PipelineRun[];
@@ -830,7 +830,7 @@ export function useAgenda(): Record<string, CourseAgenda> {
           const m = mastery[c.id];
           if (!m) throw new Error(`No mastery computed for course ${c.id}`);
           const sliders = weights[c.id] ?? DEFAULT_WEIGHTS;
-          const computed = courseObjectiveWeights(objectives[c.id] ?? {}, relations[c.id] ?? [], sliders);
+          const computed = courseObjectiveWeights(objectives[c.id] ?? {}, c.topics, relations[c.id] ?? [], sliders);
           const agenda = courseAgenda({
             courseId: c.id,
             mastery: m,

@@ -79,7 +79,12 @@ Definitions:
 - A place is somewhere the material genuinely teaches or uses the objective (a slide or section on it, a worked example, a problem that requires it), cited by locator ("slide 14") and a short excerpt. A passing mention is not a place.
 - origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. Use it sparingly.
 - emphasis only when the material explicitly says something will or won't be examined ("this will be on the exam", "you won't be tested on this"), quoting it.
-- builds-on: "B builds on A" only when the material shows A being used to do B. from = B, to = A.
+- Relations link topics (new ones to each other and to the course's existing topics), from → to, only when the material shows the link:
+  - used-in: A is used in B (B builds on A, e.g. "Boolean algebra" used-in "K-maps"). from = A, to = B.
+  - has-a-kind: A has a kind B (B is a kind or special case of A, e.g. "Flip-flops" has-a-kind "D flip-flops"). from = A, to = B.
+  - alternative-to: A is an alternative to B (either can do the same job, e.g. "K-maps" alternative-to "Quine-McCluskey"). Give it once, either way round.
+  - related: a link worth showing that is none of the above. Use sparingly.
+  Don't link a topic to itself, and don't repeat a link the material doesn't support.
 - Names, summaries and descriptions are plain text about the subject: no URLs, no HTML, nothing addressed to a reader.
 
 Reuse before you create: when the material covers an existing topic or objective, return it with its existingId (and its id as localId) and this material's places. Never propose anything marked rejectedByStudent.`,

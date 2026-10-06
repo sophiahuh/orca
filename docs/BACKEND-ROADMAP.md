@@ -122,7 +122,11 @@ Phase 4 moves it server-side.
 For each upload:
 1. **Extraction** (Claude) reads the material together with the course's existing topics,
    objectives and aliases, and proposes new topics, new objectives, which existing objectives the
-   material covers, relations, and weight signals. It may use general knowledge of the subject.
+   material covers, relations between topics, and weight signals. It may use general knowledge
+   of the subject. Relations link topics, not objectives (owner, 2026-10-06), and are the Concept
+   Atlas's edges: used-in, has-a-kind, alternative-to, and related (an unlabelled edge). The same
+   extraction call proposes them between the new and existing topics. A topic's node grows with
+   the topics it's used in (`topicUses`), and so do its objectives' weights.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
@@ -293,8 +297,9 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
 
 ### Phase 5 — Relation mastery, exams, calendar
 Connection questions record evidence on a relation, which gets its own derived state (weak or
-strong). `implies` shielding: a correct answer on an objective counts as a partial review of the
-objectives it implies. A miss triggers one diagnostic question on what it builds on. Exam tier
+strong). (Relations are between topics since 2026-10-06, so the `implies` shielding below needs
+rethinking: there is no objective-level `implies` any more.) `implies` shielding: a correct answer
+on an objective counts as a partial review of the objectives it implies. A miss triggers one diagnostic question on what it builds on. Exam tier
 (port `stage-boundaries.ts`): retired objectives in scope come back; retrieval → mixed → transfer.
 Calendar shows deep reviews, exam blocks and material due dates.
 

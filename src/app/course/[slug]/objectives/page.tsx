@@ -22,7 +22,7 @@ export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/obj
   const mastery = useMasteryByCourse();
   const catalogue = useMemo(() => (course ? (objectives[course.id] ?? {}) : {}), [course, objectives]);
   const objectiveWeights = useMemo(
-    () => (course ? courseObjectiveWeights(catalogue, relations[course.id] ?? [], weights[course.id] ?? DEFAULT_WEIGHTS) : new Map<string, number>()),
+    () => (course ? courseObjectiveWeights(catalogue, course.topics, relations[course.id] ?? [], weights[course.id] ?? DEFAULT_WEIGHTS) : new Map<string, number>()),
     [course, catalogue, relations, weights],
   );
 

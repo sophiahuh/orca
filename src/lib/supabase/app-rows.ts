@@ -137,14 +137,14 @@ export function objectiveFromRow(r: Row<"objectives">): Objective {
 }
 
 export function relationToRow(r: Relation): StructureRow<"relations"> {
-  return { id: r.id, from_objective: r.from, to_objective: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId };
+  return { id: r.id, from_topic: r.from, to_topic: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId };
 }
 
 export function relationFromRow(r: Row<"relations">): Relation {
   return {
     id: r.id,
-    from: r.from_objective,
-    to: r.to_objective,
+    from: r.from_topic,
+    to: r.to_topic,
     type: r.type as Relation["type"],
     anchor: r.anchor as unknown as Relation["anchor"],
     review: r.review as Relation["review"],

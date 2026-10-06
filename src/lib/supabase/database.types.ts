@@ -295,13 +295,13 @@ isOneToOne: false
                   ]
                 },"relations": {
                   Row: {
-                    "anchor": Json | null,"course_id": string,"created_at": string,"from_objective": string,"id": string,"material_id": string,"owner_id": string,"review": string,"to_objective": string,"type": string
+                    "anchor": Json | null,"course_id": string,"created_at": string,"from_topic": string,"id": string,"material_id": string,"owner_id": string,"review": string,"to_topic": string,"type": string
                   }
                   Insert: {
-                    "anchor"?: Json | null,"course_id": string,"created_at"?: string,"from_objective": string,"id": string,"material_id": string,"owner_id"?: string,"review": string,"to_objective": string,"type": string
+                    "anchor"?: Json | null,"course_id": string,"created_at"?: string,"from_topic": string,"id": string,"material_id": string,"owner_id"?: string,"review": string,"to_topic": string,"type": string
                   }
                   Update: {
-                    "anchor"?: Json | null,"course_id"?: string,"created_at"?: string,"from_objective"?: string,"id"?: string,"material_id"?: string,"owner_id"?: string,"review"?: string,"to_objective"?: string,"type"?: string
+                    "anchor"?: Json | null,"course_id"?: string,"created_at"?: string,"from_topic"?: string,"id"?: string,"material_id"?: string,"owner_id"?: string,"review"?: string,"to_topic"?: string,"type"?: string
                   }
                   Relationships: [
                     {
@@ -311,10 +311,10 @@ isOneToOne: false
       referencedRelation: "courses"
       referencedColumns: ["id","owner_id"]
     },{
-      foreignKeyName: "relations_from_objective_course_id_fkey"
-      columns: ["from_objective","course_id"]
+      foreignKeyName: "relations_from_topic_course_id_fkey"
+      columns: ["from_topic","course_id"]
 isOneToOne: false
-      referencedRelation: "objectives"
+      referencedRelation: "topics"
       referencedColumns: ["id","course_id"]
     },{
       foreignKeyName: "relations_material_id_owner_id_fkey"
@@ -323,10 +323,10 @@ isOneToOne: false
       referencedRelation: "materials"
       referencedColumns: ["id","owner_id"]
     },{
-      foreignKeyName: "relations_to_objective_course_id_fkey"
-      columns: ["to_objective","course_id"]
+      foreignKeyName: "relations_to_topic_course_id_fkey"
+      columns: ["to_topic","course_id"]
 isOneToOne: false
-      referencedRelation: "objectives"
+      referencedRelation: "topics"
       referencedColumns: ["id","course_id"]
     }
                   ]

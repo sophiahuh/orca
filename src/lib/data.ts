@@ -196,12 +196,19 @@ export interface Objective {
   signals: ObjectiveSignal[];
 }
 
-export type RelationType = "builds-on" | "implies" | "contrasts-with" | "applies-to";
+/**
+ * How two topics are linked (the Concept Atlas's edges), `from` → `to`: used-in ("Boolean algebra"
+ * used-in "K-maps"), has-a-kind ("Flip-flops" has-a-kind "D flip-flop"), alternative-to (either
+ * does the job; one row, read both ways), related (any other link; drawn unlabelled).
+ */
+export type RelationType = "used-in" | "has-a-kind" | "alternative-to" | "related";
 
-/** `from` <type> `to`, e.g. "K-map grouping" builds-on "Gray code adjacency". */
+/** `from` <type> `to` between two topics of a course, proposed by an upload. */
 export interface Relation {
   id: string;
+  /** Topic id. */
   from: string;
+  /** Topic id. */
   to: string;
   type: RelationType;
   anchor: Anchor | null;

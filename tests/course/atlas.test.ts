@@ -25,7 +25,7 @@ test("concepts sit on their unit's ring, archived and merged objectives and rela
     c: objective("c", "t2", "Flip-Flops"),
     orphan: objective("orphan", "t9", "No topic"),
   };
-  const relations = [relation("r1", "a", "b", "builds-on"), relation("r2", "b", "c", "implies"), relation("r3", "a", "gone", "applies-to"), relation("r4", "a", "a", "implies"), { ...relation("r5", "a", "c", "contrasts-with"), review: "archived" as const }];
+  const relations = [relation("r1", "a", "b", "used-in"), relation("r2", "b", "c", "related"), relation("r3", "a", "gone", "has-a-kind"), relation("r4", "a", "a", "related"), { ...relation("r5", "a", "c", "alternative-to"), review: "archived" as const }];
   const states = new Map([["a", state("a", "mastered")], ["b", state("b", "learning")], ["c", state("c", "fading")]]);
   const layout = atlasLayout({ topics, objectives, relations, states });
   assert.deepEqual(layout.units.map((u) => [u.topic.id, u.index, u.radius]), [["t1", 1, 120], ["t2", 2, 345]]);

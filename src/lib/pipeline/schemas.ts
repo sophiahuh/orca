@@ -51,9 +51,9 @@ export const ExtractOutput = z.object({
   relations: z
     .array(
       z.object({
-        from: z.string().max(60).describe("Objective localId or existing objective id"),
-        to: z.string().max(60),
-        type: z.enum(["builds-on", "implies", "contrasts-with", "applies-to"]),
+        from: z.string().max(60).describe("Topic localId or existing topic id"),
+        to: z.string().max(60).describe("Topic localId or existing topic id"),
+        type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
         anchor: Anchor.nullable(),
       }),
     )

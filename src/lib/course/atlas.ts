@@ -1,7 +1,8 @@
 /**
  * The Concept Atlas (Figma: 12 · Concept Atlas, 105:47; Concept Atlas · Design spec). A course's
  * units (its topics, in trail order) are concentric rings, unit 1 innermost; its concepts (live
- * objectives) sit on their unit's ring; its connections (relations) are drawn between them. What
+ * objectives) sit on their unit's ring. Relations now link topics (2026-10-06), so links between
+ * concepts only appear once the Atlas draws topics as its nodes (the next UI step). What
  * each concept shows comes from its derived state: mastered, building (learning), review (fading,
  * mixed up or retired) or not started. Pure: the layout is a function of the structure, so the
  * screen is the same for the same course, and nothing here is stored.
@@ -38,9 +39,9 @@ export type LinkKind = "prerequisite" | "related";
 
 export const LINK_LABEL: Record<LinkKind, string> = { prerequisite: "Prerequisite", related: "Related" };
 
-/** builds-on is drawn as a prerequisite; implies, contrasts-with and applies-to as related. */
+/** used-in is drawn as a prerequisite; the other kinds as related. */
 export function linkKind(type: RelationType): LinkKind {
-  return type === "builds-on" ? "prerequisite" : "related";
+  return type === "used-in" ? "prerequisite" : "related";
 }
 
 export interface AtlasUnit {

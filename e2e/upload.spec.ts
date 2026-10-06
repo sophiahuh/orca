@@ -29,7 +29,7 @@ const LECTURE = {
     { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
     { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
   ],
-  relations: [{ from: "o2", to: "o1", type: "builds-on", anchor: null }],
+  relations: [{ from: "t1", to: "t2", type: "used-in", anchor: null }],
 };
 
 const ONE_TOPIC = {
