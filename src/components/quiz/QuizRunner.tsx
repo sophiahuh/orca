@@ -340,7 +340,11 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
                 </Pill>
               </motion.div>
             )}
-            <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-tight text-prussian">
+            <motion.h1
+              variants={fadeUp}
+              className={q.deep ? "whitespace-pre-line text-[18px] font-bold leading-[1.55] text-prussian" : "text-[34px] font-bold leading-tight text-prussian"}
+              data-part={q.deep ? "deep-question-prompt" : "question-prompt"}
+            >
               {q.prompt}
             </motion.h1>
 

@@ -108,6 +108,7 @@ export const DeepQuestion = GeneratedQuestion.extend({
   tier: z.enum(["mechanism", "application", "connection", "transfer"]),
   options: z.array(z.string()).max(0).describe("Always empty"),
   answer: z.literal(-1),
+  prompt: z.string().min(1).max(TEXT).describe("Readable plain text: short paragraphs, line-separated givens, and numbered line-separated steps when appropriate; use \\n for line breaks, never Markdown or HTML"),
 });
 export const DeepOutput = z.object({ questions: z.array(DeepQuestion).max(40) });
 export type DeepOutput = z.infer<typeof DeepOutput>;
