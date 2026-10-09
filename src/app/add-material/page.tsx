@@ -257,7 +257,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
 
       <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex flex-wrap items-start gap-[40px] px-[40px] pb-[48px] pt-[32px]">
         {/* Document preview / drop target */}
-        <motion.div variants={fadeUp} className="w-[440px] max-w-full">
+        {/* A letter page: 520 wide at 8.5 × 11, the inputs and preview spanning its width. */}
+        <motion.div variants={fadeUp} className="w-[520px] max-w-full">
           <input
             ref={fileRef}
             type="file"
@@ -282,7 +283,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
               const f = e.dataTransfer.files?.[0];
               if (f) onFile(f);
             }}
-            className="pressable flex min-h-[560px] cursor-pointer flex-col gap-[14px] px-[24px] pb-[28px] pt-[22px]"
+            className="pressable flex aspect-[8.5/11] cursor-pointer flex-col gap-[14px] overflow-hidden px-[28px] pb-[28px] pt-[22px]"
           >
             <div className="flex items-center justify-between gap-3">
               <span className={cn("truncate text-[15px] font-bold", chosenName ? "text-prussian" : "text-periwinkle-deep")}>{filename}</span>
@@ -342,7 +343,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         </motion.div>
 
         {/* Form */}
-        <div className="flex w-[560px] max-w-full flex-col gap-[28px]">
+        <div className="flex w-[520px] max-w-full flex-col gap-[28px]">
           <motion.section variants={fadeUp} className="flex flex-col gap-[14px]">
             <h2 className="text-[17px] font-bold text-prussian">What kind of material is this?</h2>
             <div className="flex flex-wrap gap-[10px]">
