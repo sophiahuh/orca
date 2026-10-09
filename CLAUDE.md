@@ -285,7 +285,7 @@ All 11 Figma screens are built. Where things live:
   gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
   (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`
   (TopicGraph), `auth/`, `brand/`; `src/lib/motion.ts` holds every animation preset.
-- `src/app/` — routes (`/home`, `/course/[slug]/…`, `/quiz/…`, `/session/…`, `/add-material`,
+- `src/app/` — routes (`/` is the courses map; `/home` redirects there; `/welcome` the old onboarding screen; `/course/[slug]/…`, `/quiz/…`, `/session/…`, `/add-material`,
   `/settings`, `/calendar`, auth screens, `/api/*` including `deep-review` and `relink`). Run
   `npx next typegen` before `tsc` after adding a route.
 - `e2e/` — Playwright specs, one per area; `fixture.ts` signs in a throwaway student. Tests find

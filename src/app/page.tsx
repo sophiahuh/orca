@@ -1,112 +1,41 @@
 "use client";
 
-import { use, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { motion } from "motion/react";
-import { Button } from "@/components/ui/Button";
-import { Screen } from "@/components/layout/Screen";
+import Link from "next/link";
+import { AppShell } from "@/components/layout/AppShell";
+import { KnowledgeMap } from "@/components/map/KnowledgeMap";
 import { OrcaLogo } from "@/components/brand/OrcaLogo";
-import { Island } from "@/components/brand/Island";
-import { Bubble, Wave } from "@/components/brand/Decor";
-import { useOrca } from "@/lib/store";
-import { fadeUp, popIn, stagger } from "@/lib/motion";
+import { IconPlus } from "@/components/icons";
+import { useOrca, useStreak, useTodos } from "@/lib/store";
 
-const ISLANDS = [
-  { x: 20, y: 120, variant: "ald", level: "thriving", scale: 0.78 },
-  { x: 330, y: 220, variant: "circuit", level: "growing", scale: 0.78 },
-  { x: 10, y: 410, variant: "linear", level: "sprouting", scale: 0.72 },
-  { x: 250, y: 560, variant: "signals", level: "uncharted", scale: 0.78 },
-  { x: 560, y: 470, variant: "stats", level: "uncharted", scale: 0.7 },
-] as const;
-
-const BUBBLES = [
-  { x: 190, y: 90, s: 18 },
-  { x: 650, y: 60, s: 10 },
-  { x: 700, y: 170, s: 12 },
-  { x: 290, y: 345, s: 10 },
-  { x: 560, y: 620, s: 22 },
-  { x: 150, y: 680, s: 8 },
-  { x: 720, y: 720, s: 14 },
-];
-
-export default function OnboardingPage({ searchParams }: PageProps<"/">) {
-  const sp = use(searchParams);
-  const router = useRouter();
-  const { setOnboarded } = useOrca();
-  const preview = sp.preview !== undefined;
-
-  // Everyone here is signed in (the proxy sends visitors to sign-in), so they go to their courses;
-  // `/?preview` still shows this screen.
-  useEffect(() => {
-    if (!preview) router.replace("/home");
-  }, [preview, router]);
-
-  const go = () => {
-    setOnboarded(true);
-    router.push("/home");
-  };
-
-  if (!preview) return null;
+export default function HomePage() {
+  const { courses, hydrated } = useOrca();
+  const todos = useTodos();
+  const streak = useStreak();
+  const dueCount = (courseId: string) => todos.filter((d) => d.courseId === courseId && d.when === "today").length;
 
   return (
-    <Screen bg="ocean">
-      <motion.div
-        variants={stagger(0.1, 0.09)}
-        initial="hidden"
-        animate="show"
-        className="relative z-10 flex max-w-[560px] flex-col px-[72px] pb-[56px] pt-[80px] lg:px-[100px]"
+    <AppShell bg="ocean">
+      <KnowledgeMap courses={courses} dueCount={dueCount} />
+
+      {hydrated && courses.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[8px] text-center">
+          <p className="text-[22px] font-bold text-prussian">No islands yet.</p>
+          <p className="text-[16px] text-wisteria-deep">Add a course, then upload its slides to map its topics.</p>
+        </div>
+      )}
+
+      <Link
+        href="/new-course"
+        className="pressable absolute right-[28px] top-[28px] inline-flex items-center gap-2 rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink"
       >
-        <motion.div variants={fadeUp} className="flex items-center gap-[10px]">
-          <OrcaLogo width={56} shadow={false} />
-          <span className="text-[24px] font-bold text-prussian">Orca</span>
-        </motion.div>
+        <IconPlus size={18} />
+        Add Course
+      </Link>
 
-        <motion.h1 variants={fadeUp} className="mt-[40px] text-[68px] font-bold leading-[1.0] tracking-[-1px] text-prussian">
-          Mastery
-          <br />
-          Made
-          <br />
-          Easy.
-        </motion.h1>
-
-        <motion.p variants={fadeUp} className="mt-[32px] max-w-[420px] text-[17px] leading-[1.45] text-prussian">
-          Turn every class into an island. Explore it in quick, calm sessions that fit around your week.
-        </motion.p>
-
-        <motion.div variants={fadeUp} className="mt-[40px] flex w-[340px] flex-col gap-[14px]">
-          <Button onClick={go}>Get started</Button>
-          <Button variant="secondary" onClick={go}>
-            I already have an account
-          </Button>
-        </motion.div>
-
-        <motion.div variants={fadeUp} className="mt-[64px] flex items-center gap-[8px]" aria-hidden>
-          <span className="h-[8px] w-[26px] rounded-pill bg-wisteria" />
-          <span className="h-[8px] w-[8px] rounded-pill bg-alice-deep" />
-          <span className="h-[8px] w-[8px] rounded-pill bg-alice-deep" />
-        </motion.div>
-      </motion.div>
-
-      {/* Decorative archipelago, anchored to the right edge. */}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 hidden w-[800px] md:block"
-        variants={stagger(0.2, 0.1)}
-        initial="hidden"
-        animate="show"
-      >
-        <Wave tone="light" x={-40} y={290} width={70} seed={1} />
-        <Wave tone="light" x={420} y={420} width={60} seed={2} />
-        <Wave tone="light" x={120} y={760} width={80} seed={3} />
-        {BUBBLES.map((b, i) => (
-          <Bubble key={i} x={b.x} y={b.y} size={b.s} seed={i} />
-        ))}
-        {ISLANDS.map((isl, i) => (
-          <motion.div key={i} variants={popIn} className="absolute" style={{ left: isl.x, top: isl.y }}>
-            <Island variant={isl.variant} level={isl.level} scale={isl.scale} float seed={i} />
-          </motion.div>
-        ))}
-      </motion.div>
-    </Screen>
+      <div className="absolute bottom-[28px] left-[28px] inline-flex items-center gap-[10px] rounded-pill border-2 border-alice-deep bg-parchment py-[8px] pl-[12px] pr-[18px] lip-3 lip-alice">
+        <OrcaLogo width={38} shadow={false} />
+        {hydrated && <span className="text-[15px] font-bold text-prussian">{streak} day streak</span>}
+      </div>
+    </AppShell>
   );
 }

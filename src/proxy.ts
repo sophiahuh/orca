@@ -70,7 +70,7 @@ export async function proxy(request: NextRequest) {
   if (!signedIn && !isPublicPath(pathname)) {
     return redirect(`/sign-in?next=${encodeURIComponent(pathname + search)}`);
   }
-  if (signedIn && isGuestOnlyPath(pathname)) return redirect("/home");
+  if (signedIn && isGuestOnlyPath(pathname)) return redirect("/");
   return response;
 }
 

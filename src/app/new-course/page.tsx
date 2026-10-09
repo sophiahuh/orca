@@ -21,7 +21,7 @@ export default function NewCoursePage() {
   const create = () => {
     if (!trimmed) return;
     addCourse(trimmed);
-    router.push("/home");
+    router.push("/");
   };
 
   return (
@@ -65,7 +65,7 @@ export default function NewCoursePage() {
             <Button type="submit" disabled={!trimmed}>
               Create Course
             </Button>
-            <Button variant="secondary" onClick={() => router.push("/home")}>
+            <Button variant="secondary" onClick={() => router.push("/")}>
               Cancel
             </Button>
           </motion.div>

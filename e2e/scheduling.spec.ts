@@ -61,7 +61,7 @@ test.describe("scheduling", () => {
   test("a quick review is due, starts instantly from the stock and is done for the day once finished", async ({ page, student }) => {
     await noModel(page);
     await seedState(student, FIXTURE_STATE);
-    await page.goto("/home");
+    await page.goto("/");
     const card = page.locator('[data-todo="quick"]');
     await expect(card).toContainText("Quick review · 10 min");
     await expect(card).toContainText("3 objectives due · New: not practiced yet");
@@ -79,7 +79,7 @@ test.describe("scheduling", () => {
     expect(new Set(evidence.map((e) => (e as AnswerEvent).source))).toEqual(new Set(["quick-review"]));
     expect(evidence.every((e) => (e as AnswerEvent).sessionId === results[0].sessionId)).toBe(true);
 
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.locator('[data-todo="quick"]')).toHaveCount(0);
   });
 
@@ -90,7 +90,7 @@ test.describe("scheduling", () => {
     await answerAll(page, false);
     await expect(page.getByText("You answered 0 of 6 correctly.")).toBeVisible();
 
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.locator('[data-todo="study"]')).toHaveCount(3);
     const requiz = page.locator('[data-todo="requiz"]');
     await expect(requiz).toContainText("Re-quiz · 3 objectives");
@@ -136,7 +136,7 @@ test.describe("scheduling", () => {
     ];
     const results = [{ courseId: F.course, topicId: null, mode: "quick" as const, sessionId: "poor", correct: 0, total: 3, seconds: 60, finishedAt: new Date(yesterday + 60_000).toISOString() }];
     await seedState(student, { ...FIXTURE_STATE, evidence, results });
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.getByRole("heading", { name: "Due today" }).locator("..").locator('[data-todo="requiz"]')).toContainText("Re-quiz · 3 objectives");
     await page.locator('[data-todo="requiz"]').click();
     await expect(page).toHaveURL(/kind=requiz/);
@@ -145,7 +145,7 @@ test.describe("scheduling", () => {
     // The finished session is saved just after the end card shows; wait for it rather than racing it.
     await expect.poll(async () => (await stored(page, student)).results.map((r) => r.mode)).toEqual(["quick", "requiz"]);
 
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.locator('[data-todo="study"]')).toHaveCount(0);
     await expect(page.locator('[data-todo="requiz"]')).toHaveCount(0);
   });
@@ -170,7 +170,7 @@ test.describe("scheduling", () => {
     await seedState(student, { ...FIXTURE_STATE, evidence });
     // The deck's stored pages: deep questions are written from where each objective is taught.
     await seedPages(student, { [F.material]: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
-    await page.goto("/home");
+    await page.goto("/");
     const card = page.locator('[data-todo="deep"]');
     await expect(card).toContainText("Dive in");
     await card.click();
@@ -202,7 +202,7 @@ test.describe("scheduling", () => {
     await page.goto(`/quiz/${COURSE}/${F.booleanAlgebra}`);
     await expect(page.getByText("1 / 2")).toBeVisible();
 
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.locator('[data-todo="deep"]')).toHaveCount(0);
   });
 
@@ -223,7 +223,7 @@ test.describe("scheduling", () => {
     });
     await seedState(student, { ...FIXTURE_STATE, evidence: [answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement)] });
     await seedPages(student, { [F.material]: [1, 2, 3, 4, 5].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.locator('[data-todo="deep"]')).toBeVisible();
     const { data: before } = await student.db.from("objective_state").select("objective_id, accumulator").order("objective_id");
 
@@ -237,7 +237,7 @@ test.describe("scheduling", () => {
     expect(state.results).toEqual([]);
     const { data: after } = await student.db.from("objective_state").select("objective_id, accumulator").order("objective_id");
     expect(after).toEqual(before);
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.locator('[data-todo="deep"]')).toBeVisible();
   });
 

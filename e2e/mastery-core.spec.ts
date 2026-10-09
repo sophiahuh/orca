@@ -14,7 +14,7 @@ async function answerShort(page: Page, text: string) {
 
 test.describe("a fresh browser", () => {
   test("starts with no courses and nothing computed", async ({ page }) => {
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.getByText("No islands yet.")).toBeVisible();
     await expect(page.locator("[data-level]")).toHaveCount(0);
     await expect(page.getByText("0 day streak")).toBeVisible();
@@ -30,9 +30,10 @@ test.describe("a fresh browser", () => {
     await expect(page).toHaveURL(/\/new-course$/);
   });
 
-  test("a signed-in student at / goes straight to their courses", async ({ page }) => {
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/home$/);
+  test("the courses map is /, and old /home links land there", async ({ page }) => {
+    await page.goto("/home");
+    await expect(page).toHaveURL(/:\d+\/$/);
+    await expect(page.getByText("No islands yet.")).toBeVisible();
   });
 
   test("has no in-app chat", async ({ page }) => {
@@ -41,7 +42,7 @@ test.describe("a fresh browser", () => {
   });
 
   test("onboarding shows all four island looks", async ({ page }) => {
-    await page.goto("/?preview");
+    await page.goto("/welcome");
     for (const level of ["thriving", "growing", "sprouting", "uncharted"]) {
       await expect(page.locator(`[data-level="${level}"]`).first()).toBeVisible();
     }
@@ -57,7 +58,7 @@ test.describe("a fresh browser", () => {
     await page.goto("/new-course");
     await page.getByPlaceholder("Advanced Logic Design").fill("Test Course");
     await page.getByRole("button", { name: "Create Course" }).click();
-    await expect(page).toHaveURL(/\/home$/);
+    await expect(page).toHaveURL(/:\d+\/$/);
     await expect(page.locator("[data-level]")).toHaveCount(1);
     await expect(page.locator("[data-level]")).toHaveAttribute("data-level", "uncharted");
     await page.goto("/course/test-course");
@@ -94,7 +95,7 @@ test.describe("a course with uploaded questions", () => {
     ]);
     expect(new Set(evidence.map((e) => e.sessionId)).size, "one session per quiz visit").toBe(1);
 
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.getByText("1 day streak")).toBeVisible();
     await expect(page.locator("[data-level]")).toHaveAttribute("data-level", "sprouting");
 

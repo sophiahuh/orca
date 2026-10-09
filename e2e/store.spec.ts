@@ -16,7 +16,7 @@ test("a second browser signed into the same account sees the same courses and pr
   await page.goto("/new-course");
   await page.getByPlaceholder("Advanced Logic Design").fill("Signal Processing");
   await page.getByRole("button", { name: "Create Course" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/:\d+\/$/);
 
   await page.goto(`/quiz/logic-e2e/${F.booleanAlgebra}`);
   await answerShort(page, "x");
@@ -30,7 +30,7 @@ test("a second browser signed into the same account sees the same courses and pr
   try {
     await signIn(other, student.email, student.password, baseURL!);
     const second = await other.newPage();
-    await second.goto("/home");
+    await second.goto("/");
     await expect(second.locator("[data-level]")).toHaveCount(2);
     await expect(second.getByText("Signal Processing")).toBeVisible();
     await expect(second.getByText("1 day streak")).toBeVisible();
@@ -65,7 +65,7 @@ test("an answer that couldn't be saved is undone, says so, and isn't counted", a
   const s = await stored(page, student);
   expect(s.evidence).toEqual([]);
   expect(s.results).toEqual([]);
-  await page.goto("/home");
+  await page.goto("/");
   await expect(page.getByText("0 day streak")).toBeVisible();
   await expect(page.locator("[data-level]")).toHaveAttribute("data-level", "uncharted");
 });
@@ -79,7 +79,7 @@ test("the browser's old local state is removed", async ({ page }) => {
       localStorage.setItem("orca:materialPages", JSON.stringify({ old: [{ n: 1, text: "kept in the browser before Task 6" }] }));
     }
   });
-  await page.goto("/home");
+  await page.goto("/");
   await expect(page.getByText("No islands yet.")).toBeVisible();
   expect(await page.evaluate(() => [localStorage.getItem("orca:v8"), localStorage.getItem("orca:v3"), localStorage.getItem("orca:materialPages")])).toEqual([null, null, null]);
 });

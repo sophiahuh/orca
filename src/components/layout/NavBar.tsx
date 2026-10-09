@@ -29,7 +29,7 @@ export function NavBar({ className }: { className?: string }) {
     <nav aria-label="Primary" className={cn("flex items-center justify-end gap-[12px]", className)}>
       {ITEMS.map(({ href, label, Icon }) => {
         // Home keeps its island canvas focused; Settings remains available from the top bar.
-        if (href === "/settings" && pathname === "/home") return null;
+        if (href === "/settings" && pathname === "/") return null;
         if (href === "/settings" && course) {
           return (
             <Link key={href} href={`/course/${course.slug}/settings`} aria-label={`${course.short} settings`} title={`${course.short} settings`} className={cn(BUTTON, IDLE)}>

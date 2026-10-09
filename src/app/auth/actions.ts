@@ -55,8 +55,8 @@ export async function signIn(_: AuthState, data: FormData): Promise<AuthState> {
     return { error: "Invalid email or password." };
   });
   if (result) return result;
-  // Signed in, the student's courses are home; "/" is only the welcome screen.
-  redirect(next === "/" ? "/home" : next);
+  // Signed in: where they were going, else their courses (`/`).
+  redirect(next);
 }
 
 export async function signUp(_: AuthState, data: FormData): Promise<AuthState> {
@@ -104,7 +104,7 @@ export async function updatePassword(_: AuthState, data: FormData): Promise<Auth
     return { error: "Couldn't update the password. Request a new link and try again." };
   });
   if (result) return result;
-  redirect("/home");
+  redirect("/");
 }
 
 export async function signOut(): Promise<void> {

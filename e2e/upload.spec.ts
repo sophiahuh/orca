@@ -42,7 +42,7 @@ async function createCourse(page: Page, name: string) {
   await page.goto("/new-course");
   await page.getByPlaceholder("Advanced Logic Design").fill(name);
   await page.getByRole("button", { name: "Create Course" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/:\d+\/$/);
 }
 
 async function upload(page: Page, type = "Lecture") {

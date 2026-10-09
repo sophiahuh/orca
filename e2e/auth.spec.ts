@@ -103,8 +103,8 @@ test.describe("sign up", () => {
 
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/sign-in/);
-    await page.goto("/home");
-    await expect(page).toHaveURL(/\/sign-in\?next=%2Fhome/);
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/sign-in\?next=%2F$/);
   });
 });
 
@@ -117,7 +117,7 @@ test("a wrong password gets the same generic error as an unknown email", async (
   await expect(page).toHaveURL(/\/sign-in/);
 
   await signInVia(page, email, PASSWORD);
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/:\d+\/$/);
 });
 
 test("forgot password: the emailed link lets you choose a new one", async ({ page }) => {
@@ -174,7 +174,7 @@ test("a token-hash link (hosted email templates) signs you in from any browser; 
   const recovery = await admin().auth.admin.generateLink({ type: "recovery", email });
   const third = await browser.newContext();
   const page3 = await third.newPage();
-  await page3.goto(`${baseURL}/auth/callback?token_hash=${recovery.data.properties!.hashed_token}&type=recovery&next=/home`);
+  await page3.goto(`${baseURL}/auth/callback?token_hash=${recovery.data.properties!.hashed_token}&type=recovery&next=/`);
   await expect(page3).toHaveURL(/\/reset-password$/);
   await third.close();
 

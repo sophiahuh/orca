@@ -53,7 +53,7 @@ test("Settings holds the defaults: a course without its own settings follows the
   await page.goto("/new-course");
   await page.getByPlaceholder("Advanced Logic Design").fill("Signals");
   await page.getByRole("button", { name: "Create Course" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/:\d+\/$/);
   const s = await stored(page, student);
   expect(s.defaultWeights?.homework).toBe(top);
   expect(s.weights[s.courses[0].id].homework).toBe(top);
