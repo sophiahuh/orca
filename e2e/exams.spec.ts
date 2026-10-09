@@ -19,7 +19,8 @@ test("a course's exams are added, listed by date, renamed, moved and deleted, an
   await modal.getByLabel("New exam date").fill(inDays(20));
   // The topics it covers are optional; this one covers Boolean Algebra.
   await modal.locator("form").getByRole("button", { name: "Topics it covers (optional)" }).click();
-  await modal.locator("form").getByRole("option", { name: "Boolean Algebra" }).getByRole("checkbox").check();
+  // The list floats over the dialog (a portal), so it's on the page, not inside the form.
+  await page.getByRole("option", { name: "Boolean Algebra" }).getByRole("checkbox").check();
   await expect(modal.locator("form").getByRole("button", { name: "Topics it covers (optional)" })).toHaveText("Boolean Algebra");
   await modal.getByRole("button", { name: "Add New Exam" }).click();
   await modal.getByLabel("New exam name").fill("Midterm");
@@ -34,7 +35,7 @@ test("a course's exams are added, listed by date, renamed, moved and deleted, an
   await midterm.getByLabel("Exam name").press("Enter");
   await midterm.getByLabel("Exam date").fill(inDays(6));
   await midterm.getByRole("button", { name: "Topics covered" }).click();
-  await midterm.getByRole("option", { name: "Two's Complement" }).getByRole("checkbox").check();
+  await page.getByRole("option", { name: "Two's Complement" }).getByRole("checkbox").check();
   let exams = (await stored(page, student)).exams;
   expect(exams.find((e) => e.title === "Final")!.topicIds).toEqual([F.booleanAlgebra]);
   await modal.getByRole("button", { name: "Delete Final" }).click();
