@@ -213,7 +213,7 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
           ))}
         </motion.g>
 
-        {/* A selected topic's relationships stay readable even where they cross other nodes. */}
+        {/* A hovered topic's relationships cross over unrelated nodes (its own neighbours are redrawn above them next). */}
         {hover && edges.filter(lit).map((e) => {
           const style = EDGE[e.type];
           return (
@@ -232,6 +232,11 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
             />
           );
         })}
+
+        {/* Layering while a topic is hovered: unrelated topics, then its arrows, then the topics it
+            connects to (and itself) drawn again on top, so its arrows run under its own neighbours
+            but over everything else. Copies of the nodes, so the real ones don't re-animate. */}
+        {hover && nodes.filter((n) => neighbours?.has(n.topic.id)).map((n) => <use key={`front-${n.topic.id}`} href={`#topic-art-${n.topic.id}`} pointerEvents="none" aria-hidden data-part="topic-front" />)}
 
         {/* Hover: the lit edges' kinds as pills (related edges stay unlabelled). */}
         {edgeLabels.map((e) => {
@@ -290,7 +295,7 @@ function TopicNode({ node: n, active, dim, onHover, onOpen, onDragStart }: { nod
       onClick={() => onOpen(id)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(id))}
     >
-      <g transform={`translate(${n.x} ${n.y})`}>
+      <g id={`topic-art-${id}`} transform={`translate(${n.x} ${n.y})`}>
         {n.usedIn > 0 && <circle r={n.r + 5} fill={style.fill} opacity={0.6} />}
         {active && <circle r={n.r + 4} fill="none" stroke="var(--color-wisteria-deep)" strokeWidth={2} data-part="topic-ring" />}
         <circle r={n.r} fill={style.fill} stroke={style.stroke} strokeWidth={2.5} strokeDasharray={style.dash} />
