@@ -6,7 +6,8 @@ import { cn } from "@/lib/cn";
 
 /**
  * A dropdown of checkboxes: closed it says what's chosen ("3 topics", one name, or the placeholder);
- * open it lists every option. Closes on a click outside or Escape. Matches Select's look.
+ * open it lists every option in place, pushing what's below down (so a scrolling dialog can't clip
+ * it). Closes on a click outside or Escape. Matches Select's look.
  */
 export interface MultiSelectProps {
   options: ReadonlyArray<{ id: string; name: string }>;
@@ -59,7 +60,7 @@ export function MultiSelect({ options, chosen, onToggle, label, noun, className 
         <IconDown size={16} className="shrink-0 text-prussian" />
       </button>
       {open && (
-        <ul id={listId} role="listbox" aria-multiselectable="true" aria-label={label} className="absolute left-0 right-0 top-full z-20 mt-[6px] max-h-[220px] overflow-y-auto rounded-[12px] border-2 border-alice-deep bg-parchment py-[6px] lip-3 lip-alice">
+        <ul id={listId} role="listbox" aria-multiselectable="true" aria-label={label} className="mt-[6px] max-h-[220px] overflow-y-auto rounded-[12px] border-2 border-alice-deep bg-parchment py-[6px] lip-3 lip-alice">
           {options.map((o) => {
             const on = chosen.includes(o.id);
             return (
