@@ -27,16 +27,18 @@ export function MultiSelect({ options, chosen, onToggle, label, noun, className 
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    // On the click, not the press: closing shrinks what's around it, and a press that closed it would
+    // move the button being clicked out from under the pointer (the click would then miss).
+    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation(); // close the dropdown, not the dialog it sits in
       setOpen(false);
     };
-    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("click", onDown);
     window.addEventListener("keydown", onKey, true);
     return () => {
-      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("click", onDown);
       window.removeEventListener("keydown", onKey, true);
     };
   }, [open]);
