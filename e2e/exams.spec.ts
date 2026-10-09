@@ -18,7 +18,9 @@ test("a course's exams are added, listed by date, renamed, moved and deleted, an
   await modal.getByLabel("New exam name").fill("Final");
   await modal.getByLabel("New exam date").fill(inDays(20));
   // The topics it covers are optional; this one covers Boolean Algebra.
-  await modal.locator("form").getByRole("button", { name: "Boolean Algebra" }).click();
+  await modal.locator("form").getByRole("button", { name: "Topics it covers (optional)" }).click();
+  await modal.locator("form").getByRole("option", { name: "Boolean Algebra" }).getByRole("checkbox").check();
+  await expect(modal.locator("form").getByRole("button", { name: "Topics it covers (optional)" })).toHaveText("Boolean Algebra");
   await modal.getByRole("button", { name: "Add New Exam" }).click();
   await modal.getByLabel("New exam name").fill("Midterm");
   await modal.getByLabel("New exam date").fill(inDays(5));
@@ -31,7 +33,8 @@ test("a course's exams are added, listed by date, renamed, moved and deleted, an
   await midterm.getByLabel("Exam name").fill("Midterm 1");
   await midterm.getByLabel("Exam name").press("Enter");
   await midterm.getByLabel("Exam date").fill(inDays(6));
-  await midterm.getByRole("button", { name: "Two's Complement" }).click();
+  await midterm.getByRole("button", { name: "Topics covered" }).click();
+  await midterm.getByRole("option", { name: "Two's Complement" }).getByRole("checkbox").check();
   let exams = (await stored(page, student)).exams;
   expect(exams.find((e) => e.title === "Final")!.topicIds).toEqual([F.booleanAlgebra]);
   await modal.getByRole("button", { name: "Delete Final" }).click();
