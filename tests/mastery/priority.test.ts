@@ -22,7 +22,7 @@ test("an unseen objective: overdue 1, its weight and a full gap", () => {
   const p = objectivePriority(s("unseen"), 1, null, now);
   assert.deepEqual(termsOf(p), { overdue: 1, importance: 1, gap: 1 });
   assert.equal(p.score, 3);
-  assert.deepEqual(reasonsOf(p), ["New: not practised yet"]);
+  assert.deepEqual(reasonsOf(p), ["New: not practiced yet"]);
 });
 
 test("a learning objective's gap shrinks with credit; no overdue term", () => {

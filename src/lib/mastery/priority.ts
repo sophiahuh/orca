@@ -1,5 +1,5 @@
 /**
- * What to practise first (docs/MASTERY-PLAN.md §2.6). A weighted sum of real reasons, each shown to
+ * What to practice first (docs/MASTERY-PLAN.md §2.6). A weighted sum of real reasons, each shown to
  * the student as a sentence. The "current topic" boost, the distance discount and exam proximity are
  * left out until they're decided (docs/TO-DISCUSS.md; exams arrive in Phase 5).
  */
@@ -63,7 +63,7 @@ export function objectivePriority(state: ObjectiveState, weight: number, confuse
   if (state.status === "retired") return { objectiveId: state.objectiveId, score: 0, terms };
 
   if (state.status === "unseen") {
-    terms.push({ term: "overdue", value: R.overdue, reason: "New: not practised yet" });
+    terms.push({ term: "overdue", value: R.overdue, reason: "New: not practiced yet" });
   } else if (state.status === "fading") {
     if (state.dueAt === null) throw new Error(`Objective ${state.objectiveId} is fading with no check due time`);
     const daysPast = Math.max(0, (now.getTime() - Date.parse(state.dueAt)) / DAY_MS);

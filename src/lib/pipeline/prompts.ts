@@ -59,7 +59,7 @@ const itemsBlock = (items: Listed[]) => untrustedBlock("generated_question", ite
 const TYPE_RULES: Record<ExtractInput["material"]["type"], string> = {
   Lecture: "This is a lecture: it introduces topics and objectives. Create topics for what it teaches and objectives for each skill.",
   Syllabus: "This is a syllabus: create the course's topics and objectives from its schedule and learning outcomes. Places are the syllabus lines that name them. Skip logistics (grading, office hours, policies).",
-  Homework: "This is homework: it practises what lectures taught. Attach coverage to existing objectives (existingId, with each problem that requires the skill as a place). Create a new objective or topic only when a problem clearly needs a skill nothing existing covers.",
+  Homework: "This is homework: it practices what lectures taught. Attach coverage to existing objectives (existingId, with each problem that requires the skill as a place). Create a new objective or topic only when a problem clearly needs a skill nothing existing covers.",
   "Past exam": "This is an exam: attach coverage to existing objectives (each question that requires the skill is a place). Create a new objective only when a question clearly needs a skill nothing existing covers.",
   "Practice exam": "This is a practice exam: attach coverage to existing objectives (each question that requires the skill is a place). Create a new objective only when a question clearly needs a skill nothing existing covers.",
   "Practice problems": "These are practice problems: attach coverage to existing objectives (each problem that requires the skill is a place). Create a new objective only when a problem clearly needs a skill nothing existing covers.",

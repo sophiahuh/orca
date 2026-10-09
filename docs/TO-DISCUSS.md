@@ -288,7 +288,7 @@ Judgement calls the agents made to keep building; each is in code behind one con
 
 - 2026-10-04: quick review defaults to 10 minutes per course (adds a "10 min" option).
 - 2026-10-04: the mastery bar is the same for every objective; weights change priority (what
-  gets practised first), never what counts as mastered.
+  gets practiced first), never what counts as mastered.
 
 - 2026-10-04: material-type sliders feed objective weights and set deep review's question mix.
 - 2026-10-04: inferred objectives count toward the island; the per-course objective list (origin,

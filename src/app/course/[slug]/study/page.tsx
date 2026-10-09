@@ -61,7 +61,7 @@ export default function StudyPage({ params, searchParams }: PageProps<"/course/[
       <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="flex w-[760px] max-w-full flex-col gap-[20px] px-[28px] py-[28px]">
         {!item ? (
           <motion.p variants={fadeUp} className="text-[17px] text-prussian">
-            Nothing to review here right now: you&apos;ve practised this since.
+            Nothing to review here right now: you&apos;ve practiced this since.
           </motion.p>
         ) : (
           <>

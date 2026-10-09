@@ -43,7 +43,7 @@ Open questions live in `docs/TO-DISCUSS.md`.
 - **Mastery is a decision, not an average:** 3 credited answers on 3 different questions, on at
   least 2 days, last two correct, no open mix-up, and at least 2 of the credit from graded (not
   self-marked) answers. The bar is the same for every objective: weights
-  change priority (what gets practised first), never what counts as mastered. Spacing after that is **FSRS** (`ts-fsrs`,
+  change priority (what gets practiced first), never what counts as mastered. Spacing after that is **FSRS** (`ts-fsrs`,
   Anki's scheduler): fed every answer from the first, 90% target recall, intervals capped at 60
   days; retired at 60-day stability with 3 passed checks. Details: `docs/MASTERY-PLAN.md` §2.5.
 - **A check coming due means fading.** When a mastered objective's spaced check comes due (or is
@@ -135,7 +135,7 @@ For each upload:
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
    keeps the losing name as an alias so it matches instantly next time.
 3. **Review:** the student confirms new topics; `uncertain` matches are highlighted. Nothing waits
-   on review to be practised (confirmation rule below).
+   on review to be practiced (confirmation rule below).
 4. **Questions** are generated per objective (about 6) and stocked. They used to be checked by a
    second model (blind solve, ambiguity, rubric agreement); the owner dropped those checks on
    2026-10-06 for speed and cost. Code still refuses rule-breaking output (untrusted-text rules,
