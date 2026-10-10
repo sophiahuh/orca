@@ -62,6 +62,7 @@ import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
 import { laidOut } from "./course/layout";
+import { islandSpot } from "./course/islands";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
 import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
@@ -199,16 +200,6 @@ type OrcaContextValue = OrcaState &
 const OrcaContext = createContext<OrcaContextValue | null>(null);
 
 const VARIANT_CYCLE: IslandVariant[] = ["ald", "circuit", "signals", "linear", "stats"];
-
-/** Free slots on the map for newly created islands (854×834 canvas). */
-const OPEN_SLOTS = [
-  { x: 70, y: 110 },
-  { x: 560, y: 260 },
-  { x: 120, y: 290 },
-  { x: 330, y: 20 },
-  { x: 560, y: 650 },
-  { x: 40, y: 20 },
-];
 
 /* ── Talking to Supabase ──────────────────────────────────────────────── */
 
@@ -476,7 +467,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         name,
         short: shortName(name),
         variant: VARIANT_CYCLE[n % VARIANT_CYCLE.length],
-        pos: OPEN_SLOTS[n % OPEN_SLOTS.length] ?? { x: 300, y: 300 },
+        // Its spot on the courses map (the map lays islands out by course order; this keeps the row in step).
+        pos: islandSpot(n),
         topics: [],
       };
       const id = course.id;
