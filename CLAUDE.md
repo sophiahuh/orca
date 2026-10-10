@@ -57,11 +57,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **The owner runs `npm run dev` on port 3000 against the hosted Supabase project and a real
   OpenAI key** (`.env`, OpenAI default model `gpt-6.1-sol`): uploads there spend money and write real
   data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** pushed up to `20261006050000`. Still to push (the owner runs
-  `npx supabase db push`; the agent's auto mode blocks it): `20261006060000_link_step`,
-  `20261006070000_course_setting_overrides`, `20261006080000_exams`. Until then "Find connections",
-  course overrides and exams fail on the hosted project. Check with
-  `npx supabase migration list --linked` (read-only).
+- **Hosted migrations:** pushed up to `20261006100000`. Still to push (the owner runs
+  `npx supabase db push`; the agent's auto mode blocks it): `20261010090000_pptx_uploads` (until
+  then the hosted bucket refuses .pptx uploads). Check with `npx supabase migration list --linked`
+  (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
@@ -70,7 +69,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   since the Phase 4 merge.
 
 **Next, in order.**
-1. Push the three pending migrations to the hosted project (above).
+1. Push the pending migration to the hosted project (above).
 2. Run the full merge gate on `phase-4` (Conventions) and fix what it finds.
 3. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
    exam review proper (the "Exam review" setting is stored but no session uses it yet; Phase 5),
@@ -280,7 +279,9 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/server/` — route helpers, model step caller (`model.ts`), grading, usage metering, rate limits.
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
-- `src/lib/material/read-pdf.ts`, `src/lib/uploads.ts` — PDFs to Storage, read on the server into `material_pages`.
+- `src/lib/material/read-pdf.ts`, `read-pptx.ts` (+ `unzip.ts`, `kind.ts`), `src/lib/uploads.ts` — PDFs and .pptx decks to
+  Storage, read on the server into `material_pages` (a .pptx: one page per slide, its text, tables and speaker notes; no
+  pictures, and no slide figures; see `docs/TO-DISCUSS.md`).
 - `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, LoadingScreen: the shared full-screen wait, NavBar: on a course page its
   gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
   (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`

@@ -231,6 +231,20 @@ Judgement calls the agents made to keep building; each is in code behind one con
 - **Atlas strength:** "New" (nothing answered), "Developing", "Strong" (every objective mastered),
   "Fragile" (something fading or mixed up). Confirming a topic doesn't change it.
 
+### Visuals and graphics in material aren't read (2026-10-10)
+
+Orca reads only the text of uploaded material: a PDF page's text (pdf.js) and a .pptx slide's text,
+tables and speaker notes (`src/lib/material/read-pptx.ts`, no model). Pictures, diagrams, graphs,
+plots, charts and SmartArt are never sent to the model, so what a slide shows only as a picture
+(a circuit, a tree, a plotted curve, a chart's numbers) is missing from extraction and from the
+questions. For PDFs, a question can still point at a slide ("In the figure, …") and show it as an
+image, but the writer picks the slide from its text without seeing the figure. For .pptx decks, slides
+can't be rendered at all, so those figure questions are dropped ("couldn't be rendered").
+This is a real gap for courses that teach through graphs or visualisations. Options: send images of
+figure-heavy pages to the model during extraction and writing (costs more per upload); render .pptx
+slides by converting to PDF on a worker with LibreOffice (a Trigger.dev task; layout isn't always
+faithful); or ask students to upload decks as PDFs (File → Save as PDF) when the visuals matter.
+
 ## Watch
 
 ### Loading all of a student's data at sign-in (revisit)
