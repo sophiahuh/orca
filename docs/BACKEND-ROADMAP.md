@@ -219,7 +219,10 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   sees what that covers; every objective gets one question, highest priority first, before any
   gets a second. The end card offers another deep review (decided 2026-10-05).
 - **Poor-quiz loop:** a Review to-do with the slide range and missed explanations, and a re-quiz
-  the next day.
+  the next day. *Removed 2026-10-10 (owner's decision):* missed objectives join the course's normal
+  quick-review queue instead, and anything practiced today waits until the next quick review (never
+  the same day). The study page and the `requiz` session are gone; old `requiz` evidence and results
+  still load.
 
 ### Phase 4 — Supabase (built locally; live checks pending)
 Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; Tasks 1–9

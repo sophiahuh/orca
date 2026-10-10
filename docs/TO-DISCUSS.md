@@ -102,8 +102,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### Phase 3 scheduling numbers (provisional)
 - **Set (Phase 3):** priority coefficients are 1 for overdue, weight, gap and open confusion and
-  2 for a mix-up (MASTERY-PLAN §2.6); a poor session is ≥ 3 answers under 60% correct, or two
-  misses on one objective (`AGENDA_RULES`); top-up when an objective has < 3 unseen questions,
+  2 for a mix-up (MASTERY-PLAN §2.6); (the poor-session rule went with the re-quiz on 2026-10-10:
+  misses now wait for the next quick review); top-up when an objective has < 3 unseen questions,
   back to 6, writing from only the pages the objective is anchored to plus one either side (its
   topic's range when it has no anchors; the whole file only up to 60 pages) (`TOP_UP_RULES`); question time 30 s choice, 45 s exact answer, 90 s one sentence.
 - **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Weekly` =

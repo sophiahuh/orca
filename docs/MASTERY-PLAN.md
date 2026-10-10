@@ -201,7 +201,13 @@ mixed-up → fading overdue → learning objectives in the current topic → fad
 anything else by priority. Within an objective, pick a question the student hasn't seen, else the
 one seen longest ago. Mix tiers: ≥ 1 mechanism question per session.
 
-**After a poor quiz** (< 60% in a session, or any objective with 2 misses):
+**After missed questions** (changed 2026-10-10 by the owner; the poor-quiz loop below is no longer
+built): there is no separate review or re-quiz. A missed objective drops back to learning and joins
+the course's normal quick-review queue, and nothing practiced today is due again the same day; it
+comes back in the next quick review on the course's cadence (`heldForNext` / `nextQuickDay` in
+`src/lib/mastery/agenda.ts`).
+
+*Superseded:* **After a poor quiz** (< 60% in a session, or any objective with 2 misses):
 1. Generate 6 fresh questions for each weak objective (one model call, about $0.03) so tomorrow's
    re-quiz isn't a replay.
 2. Add a **Review** item to the to-do list: the slide range the objective came from, shown as

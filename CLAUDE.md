@@ -164,7 +164,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   defaults in Settings, a course's override in its popup) feed it.
 - **Topic links.** Relations connect topics: used-in, has-a-kind, alternative-to, related. They are
   the Concept Atlas's edges and feed the weights.
-- **Practice.** Quick reviews and re-quizzes draw from a per-objective stock written ahead (at upload,
+- **Practice.** Missed questions have no review of their own: the objective joins the course's
+  quick-review queue and isn't due again the same day. Quick reviews draw from a per-objective stock written ahead (at upload,
   topped up after each session), assembled instantly and sized to the course's time budget.
   **Dive in** (deep review) writes harder questions when it starts, for the whole course or one
   topic, at the length the student picks; its cadence is the course's setting.
