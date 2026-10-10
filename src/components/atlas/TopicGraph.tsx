@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import type { RelationType } from "@/lib/data";
 import { edgePath, GRAPH, type GraphNode, RELATION_LABEL, STRENGTH_LABEL, type TopicGraph as Graph, type TopicStrength, topicSummary } from "@/lib/course/topic-graph";
 import { popIn, stagger } from "@/lib/motion";
+import { ZoomControls } from "@/components/ui/ZoomControls";
 
 /**
  * Figma: E1 · Concept graph v4 (foundations on top) and E2 (hover on a topic). The topics as nodes,
@@ -255,19 +256,7 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
       </svg>
 
       <div className="absolute bottom-[20px] right-[20px]">
-        <div className="flex gap-[8px]" role="group" aria-label="Zoom">
-          <ZoomButton label="Zoom out" onClick={() => zoom(1.25)}>
-            −
-          </ZoomButton>
-          <ZoomButton label="Zoom in" onClick={() => zoom(0.8)}>
-            +
-          </ZoomButton>
-          <ZoomButton label="Fit to screen" onClick={() => setView(full)}>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" />
-            </svg>
-          </ZoomButton>
-        </div>
+        <ZoomControls onZoomOut={() => zoom(1.25)} onZoomIn={() => zoom(0.8)} onFit={() => setView(full)} />
       </div>
     </div>
   );
@@ -312,10 +301,3 @@ function TopicNode({ node: n, active, dim, onHover, onOpen, onDragStart }: { nod
   );
 }
 
-function ZoomButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} className="pressable inline-flex h-[36px] w-[36px] items-center justify-center rounded-[10px] border-2 border-alice-deep bg-parchment text-[18px] font-bold text-prussian lip-2 lip-alice">
-      {children}
-    </button>
-  );
-}
