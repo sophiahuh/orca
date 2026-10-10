@@ -9,6 +9,7 @@
  */
 import type { Material, MaterialPages, MaterialType } from "./data";
 import { LIMITS } from "./limits";
+import { UNSUPPORTED_UPLOAD, UPLOAD_MIMES, uploadKind } from "./material/kind";
 import { browserSupabase } from "./supabase/browser";
 
 /** A sentence about the hidden text the server dropped from a file, or null when there was none. */
@@ -65,7 +66,7 @@ async function sha256(file: File): Promise<string> {
 
 /** What's wrong with a file before it's sent, or null. */
 export function uploadProblem(file: File): string | null {
-  if (file.type !== LIMITS.uploadMime && !/\.pdf$/i.test(file.name)) return "Only PDFs can be read for now.";
+  if (!uploadKind(file.name, file.type)) return UNSUPPORTED_UPLOAD;
   if (file.size > LIMITS.uploadBytes) return `This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.`;
   if (file.size === 0) return "This file is empty.";
   return null;
@@ -77,16 +78,17 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
   if (problem) throw new Error(problem);
   onStage("hashing");
   const hash = await sha256(file);
+  const mime = UPLOAD_MIMES[uploadKind(file.name, file.type) ?? "pdf"];
   type Duplicate = { duplicate: { id: string; filename: string }; generation: Generation };
   type Started = { material: Material; upload: { path: string; token: string } } | Duplicate;
-  const started = await post<Started>("/api/materials", { ...meta, filename: file.name, size: file.size, mime: file.type || LIMITS.uploadMime, hash });
+  const started = await post<Started>("/api/materials", { ...meta, filename: file.name, size: file.size, mime, hash });
   if ("duplicate" in started) return { kind: "duplicate", ...started.duplicate, generation: started.generation };
   onStarted?.(started.material.id);
 
   onStage("uploading");
-  // Storage takes the type from the body itself, and some systems give a PDF no type (or a generic one).
-  const body = new Blob([file], { type: LIMITS.uploadMime });
-  const sent = await browserSupabase().storage.from("materials").uploadToSignedUrl(started.upload.path, started.upload.token, body, { contentType: LIMITS.uploadMime });
+  // Storage takes the type from the body itself, and some systems give a file no type (or a generic one).
+  const body = new Blob([file], { type: mime });
+  const sent = await browserSupabase().storage.from("materials").uploadToSignedUrl(started.upload.path, started.upload.token, body, { contentType: mime });
   if (sent.error) throw new Error(`Couldn't upload the file: ${sent.error.message}`);
 
   onStage("reading");

@@ -114,7 +114,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   if (resumeId && phase.kind === "idle" && !file) {
     return <ResumeUpload materialId={resumeId} course={course} onAnother={() => router.replace(`/add-material?course=${course.slug}`)} />;
   }
-  const filename = aiChatUrl || (aiChatText.trim() ? "AI chat transcript" : websiteUrl || chosenName || "Choose a PDF…");
+  const filename = aiChatUrl || (aiChatText.trim() ? "AI chat transcript" : websiteUrl || chosenName || "Choose a PDF or .pptx…");
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
 
@@ -262,7 +262,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           <input
             ref={fileRef}
             type="file"
-            accept=".pdf,application/pdf"
+            accept=".pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -332,7 +332,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
                 ))}
                 <span className="my-[6px] flex h-[120px] items-center justify-center rounded-[12px] bg-alice text-[14px] font-semibold text-wisteria-deep">
-                  Drop a PDF, choose one, paste a course URL, or add an AI chat
+                  Drop a PDF or .pptx, choose one, paste a course URL, or add an AI chat
                 </span>
                 {SKELETON.slice(6).map((w, i) => (
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />

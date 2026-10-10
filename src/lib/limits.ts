@@ -8,9 +8,7 @@
 export const LIMITS = {
   /** Largest file a student can upload (the `materials` bucket enforces the same). */
   uploadBytes: 25 * 1024 * 1024,
-  /** File types Orca can read. */
-  uploadMime: "application/pdf",
-  /** Most pages read from one file. */
+  /** Most pages (or slides) read from one file. */
   pagesPerFile: 150,
   /** Most characters kept from one page after sanitising (a dense slide has a few thousand). */
   pageChars: 20_000,

@@ -14,7 +14,7 @@ $$;
 insert into auth.users (id, email) values (:'A', 'a@example.com'), (:'B', 'b@example.com');
 
 select results_eq($$select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'materials'$$,
-  $$values (false, 26214400::bigint, array['application/pdf'])$$, 'the materials bucket is private, 25 MB, PDF only');
+  $$values (false, 26214400::bigint, array['application/pdf', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'])$$, 'the materials bucket is private, 25 MB, PDF and .pptx only');
 
 select pg_temp.act_as(:'A');
 select lives_ok(format($$insert into storage.objects (bucket_id, name, owner_id) values ('materials', %L, %L)$$, :'A' || '/m1/L01.pdf', :'A'),

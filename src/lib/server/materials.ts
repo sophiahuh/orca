@@ -1,13 +1,13 @@
 /**
  * Uploads (Phase 4 plan, decisions 7, 10 and 13). Two steps, each a route:
  *
- * 1. `startUpload` (POST /api/materials): checks what the browser says about the file (PDF, at most
+ * 1. `startUpload` (POST /api/materials): checks what the browser says about the file (PDF or .pptx, at most
  *    25 MB), recognises a file already in the course by its SHA-256, and otherwise records the
  *    material (status `uploaded`) and hands back a signed upload URL for
  *    `<owner>/<material id>/<safe name>` in the private `materials` bucket.
  * 2. `processUpload` (POST /api/materials/:id/process): once the file is in Storage, the server
  *    takes it from there (never from the browser), hashes it, recognises a duplicate again (the
- *    browser's hash is only a shortcut), reads it with pdf.js into sanitised `material_pages`, drops
+ *    browser's hash is only a shortcut), reads it (pdf.js for a PDF, the slide XML for a .pptx) into sanitised `material_pages`, drops
  *    and counts hidden text, and marks the material `ready`. A file that can't be read is marked
  *    `failed` with why.
  *
@@ -18,7 +18,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { MATERIAL_TYPES, type Material, type MaterialType } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
-import { type HiddenText, type ReadPage, UnreadablePdfError, readPdf } from "@/lib/material/read-pdf";
+import { UNSUPPORTED_UPLOAD, UPLOAD_MIMES, type UploadKind, uploadKind } from "@/lib/material/kind";
+import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readPdf } from "@/lib/material/read-pdf";
+import { readPptx } from "@/lib/material/read-pptx";
+import { looksLikeZip } from "@/lib/material/unzip";
 import { isOwnPath, safeName } from "@/lib/material/paths";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
@@ -78,7 +81,8 @@ async function sameFile(db: OrcaSupabase, ownerId: string, courseId: string, has
 }
 
 export async function startUpload(db: OrcaSupabase, ownerId: string, body: UploadRequest): Promise<Outcome> {
-  if (body.mime !== LIMITS.uploadMime && !/\.pdf$/i.test(body.filename)) return reply(415, { error: "Only PDFs can be uploaded for now." });
+  const kind = uploadKind(body.filename, body.mime);
+  if (!kind) return reply(415, { error: UNSUPPORTED_UPLOAD });
   if (body.size > LIMITS.uploadBytes) return reply(413, { error: `This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.` });
   if (!(await ownsCourse(db, ownerId, body.courseId))) return reply(404, { error: "No such course." });
   const known = await sameFile(db, ownerId, body.courseId, body.hash);
@@ -99,7 +103,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
       reflect: body.reflect,
       storage_path: path,
       size_bytes: body.size,
-      mime: LIMITS.uploadMime,
+      mime: UPLOAD_MIMES[kind],
       status: "uploaded",
     })
     .select()
@@ -174,9 +178,12 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
       await discard(db, ownerId, id, path);
       return reply(200, known);
     }
-    let read: Awaited<ReturnType<typeof readPdf>>;
+    // The stored bytes decide how it's read, not the name or type the browser gave.
+    const kind: UploadKind | null = looksLikePdf(bytes) ? "pdf" : looksLikeZip(bytes) ? "pptx" : null;
+    let read: { pages: ReadPage[]; hidden: HiddenText };
     try {
-      read = await readPdf(bytes);
+      if (!kind) throw new UnreadablePdfError(UNSUPPORTED_UPLOAD, 415);
+      read = kind === "pdf" ? await readPdf(bytes) : await readPptx(bytes);
     } catch (e) {
       if (!(e instanceof UnreadablePdfError)) throw e;
       await setFailed(e.message);
@@ -191,7 +198,7 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     // to block the file, and the unique index settles a race between two uploads of the same file.
     const done = await db
       .from("materials")
-      .update({ status: "ready", reading_since: null, content_hash: hash, size_bytes: bytes.byteLength, mime: LIMITS.uploadMime, hidden_text: read.hidden as unknown as Json })
+      .update({ status: "ready", reading_since: null, content_hash: hash, size_bytes: bytes.byteLength, mime: UPLOAD_MIMES[kind], hidden_text: read.hidden as unknown as Json })
       .eq("owner_id", ownerId)
       .eq("id", id)
       .select()
