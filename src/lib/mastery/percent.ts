@@ -28,14 +28,14 @@ export function masteryPercent(state: ObjectiveState | undefined): number {
   return Math.round(progress * cap);
 }
 
-/** "back in review tomorrow" / "due today" / "in 3 days", from the next spaced check; a learning objective comes back in the next quiz. */
+/** "back in review tomorrow" / "in 3 days", from the next spaced check; anything not mastered, or due now, waits for the next quick review (never the same day). */
 export function reviewPhrase(state: ObjectiveState | undefined, now: Date, dayKey: (iso: string) => string): string {
   if (!state || state.status === "unseen") return "comes up in your next quiz";
-  if (state.status === "mixed-up") return "comes back in your next quiz to untangle it";
-  if (!state.dueAt) return "comes back in your next quiz";
+  if (state.status === "mixed-up") return "comes back in your next quick review to untangle it";
+  if (!state.dueAt || state.status !== "mastered") return "comes back in your next quick review";
   const today = dayKey(now.toISOString());
   const due = dayKey(state.dueAt);
-  if (due <= today) return "due for review today";
+  if (due <= today) return "comes back in your next quick review";
   const days = Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86_400_000);
   if (days === 1) return "back in review tomorrow";
   return `back in review in ${days} days`;

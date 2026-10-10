@@ -132,15 +132,6 @@ export function assembleQuickReview(candidates: readonly SessionCandidate[], ctx
   return { items: items.map(toItem), budgetSeconds: ctx.budgetSeconds, plannedSeconds: time };
 }
 
-/** A re-quiz after a poor session: a quick review of only those objectives. */
-export function assembleRequiz(candidates: readonly SessionCandidate[], objectiveIds: readonly string[], ctx: SessionContext): AssembledSession {
-  const wanted = new Set(objectiveIds);
-  return assembleQuickReview(
-    candidates.filter((c) => wanted.has(c.objectiveId)),
-    ctx,
-  );
-}
-
 /** questionId → ISO time of the latest answer to it. */
 export function lastSeenOf(events: readonly EvidenceEvent[]): Map<string, string> {
   const out = new Map<string, string>();

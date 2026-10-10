@@ -4,7 +4,6 @@ import {
   type SessionCandidate,
   type SessionQuestion,
   assembleQuickReview,
-  assembleRequiz,
   durationSeconds,
   questionSeconds,
 } from "../../src/lib/mastery/session.ts";
@@ -88,11 +87,6 @@ test("at least one mechanism question: the last pick makes room for one", () => 
   assert.ok(s.plannedSeconds <= 120);
   const none = assembleQuickReview([cand("a", "learning", [mc("a1"), mc("a2")])], ctx(120));
   assert.deepEqual(ids(none), ["a1", "a2"], "no mechanism question anywhere: nothing to swap in");
-});
-
-test("a re-quiz only asks the weak objectives", () => {
-  const s = assembleRequiz([cand("a", "learning", [mc("a1")]), cand("b", "learning", [mc("b1")])], ["b"], ctx(600));
-  assert.deepEqual(ids(s), ["b1"]);
 });
 
 test("candidates keep priority order and leave out objectives with no questions; last seen is the latest answer", async () => {

@@ -9,7 +9,6 @@ import { reasonsOf } from "@/lib/mastery/priority";
 import {
   type AssembledSession,
   assembleQuickReview,
-  assembleRequiz,
   durationSeconds,
   lastSeenOf,
   sessionCandidates,
@@ -23,7 +22,7 @@ import { DeepReviewSetup } from "@/components/quiz/DeepReviewSetup";
 import { PreparingDive } from "@/components/quiz/PreparingDive";
 import { isFinished, useRun } from "@/hooks/useRun";
 
-const KINDS = ["quick", "deep", "requiz"] as const;
+const KINDS = ["quick", "deep"] as const;
 type Kind = (typeof KINDS)[number];
 
 export default function SessionPage({ params, searchParams }: PageProps<"/session/[slug]">) {
@@ -53,7 +52,7 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
 function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind: Kind; topicId?: string; minutes?: number }) {
   const [round, setRound] = useState(0);
   if (kind === "deep") return <DeepReview key={round} course={course} topicId={topicId} startMinutes={minutes} onAgain={() => setRound((r) => r + 1)} />;
-  return <ScheduledSession course={course} kind={kind} />;
+  return <QuickReview course={course} />;
 }
 
 /** What every session draws on, read from the store once at mount so the session doesn't change under the student. */
@@ -91,7 +90,7 @@ function useSessionSources(course: Course) {
   return sources;
 }
 
-function ScheduledSession({ course, kind }: { course: Course; kind: "quick" | "requiz" }) {
+function QuickReview({ course }: { course: Course }) {
   const router = useRouter();
   const { configs } = useOrca();
   const { agenda, ctx, toItems, candidates } = useSessionSources(course);
@@ -99,22 +98,17 @@ function ScheduledSession({ course, kind }: { course: Course; kind: "quick" | "r
 
   const [items] = useState(() => {
     const budgetSeconds = durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).quick.duration);
-    if (kind === "quick") return toItems(assembleQuickReview(candidates(agenda.dueToday), { ...ctx, budgetSeconds }));
-    const ids = agenda.study.filter((s) => s.requiz === "today").map((s) => s.objectiveId);
-    return toItems(assembleRequiz(candidates(agenda.ranked), ids, { ...ctx, budgetSeconds }));
+    return toItems(assembleQuickReview(candidates(agenda.dueToday), { ...ctx, budgetSeconds }));
   });
 
   if (items.length === 0) {
-    const tomorrow = kind === "requiz" && agenda.study.some((s) => s.requiz === "tomorrow");
-    const message =
-      kind === "quick"
-        ? `Nothing to review in ${course.name} right now.`
-        : tomorrow
-          ? "Your re-quiz opens tomorrow. Same-day retries only measure short-term memory."
-          : "No re-quiz due.";
+    // What was practiced or missed today waits for a later day: same-day retries only measure short-term memory.
+    const message = agenda.heldForNext.length
+      ? `Nothing to review in ${course.name} right now. What you practiced today comes back in your next quick review.`
+      : `Nothing to review in ${course.name} right now.`;
     return <NothingToDo course={course} message={message} onBack={() => router.push(backHref)} />;
   }
-  return <QuizRunner course={course} items={items} mode={kind} title={course.name} backHref={backHref} />;
+  return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} />;
 }
 
 /**

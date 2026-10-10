@@ -1,8 +1,9 @@
 /**
  * What's due for one course (docs/MASTERY-PLAN.md §3): objectives ranked by priority, whether the
- * quick and deep reviews are due on the course's cadence, and the review to-dos and next-day
- * re-quizzes a poor session leaves behind. Derived from evidence, finished sessions and the clock;
- * nothing here is stored.
+ * quick and deep reviews are due on the course's cadence, and when the next quick review is. Missed
+ * questions have no review of their own: their objectives drop back to learning and wait for the
+ * course's next quick review, never the same day (anything practiced today waits until a later day).
+ * Derived from evidence, finished sessions and the clock; nothing here is stored.
  */
 import type { QuizResult, ReviewConfig } from "../data.ts";
 import type { CourseMastery } from "./course-mastery.ts";
@@ -11,12 +12,6 @@ import { type Priority, objectivePriority, openConfusion } from "./priority.ts";
 import type { AnswerEvent, ObjectiveStatus } from "./types.ts";
 
 export const AGENDA_RULES = {
-  /** A finished session with at least this many answered questions... */
-  poorMinAnswers: 3,
-  /** ...and a correct share under this is poor. */
-  poorShare: 0.6,
-  /** Missing one objective this many times in a session makes it weak, whatever the score. */
-  weakMisses: 2,
   /** "1 wk before exam": reviews are due from this many days before an exam. */
   examWindowDays: 7,
 } as const;
@@ -31,20 +26,6 @@ export interface RankedObjective {
   priority: Priority;
 }
 
-/** After a poor session: re-read where the objective is taught, then a re-quiz from the next day. */
-export interface StudyItem {
-  objectiveId: string;
-  topicId: string;
-  /** The poor session. */
-  sessionId: string;
-  /** Local day of the poor session. */
-  day: string;
-  /** Questions on this objective missed in that session. */
-  missedQuestionIds: string[];
-  /** When its re-quiz can be taken: the day after the session. */
-  requiz: "today" | "tomorrow";
-}
-
 export interface DeepReviewDue {
   due: boolean;
   /** Local day it is (or was) due; null when there's nothing to deep review yet. */
@@ -57,16 +38,19 @@ export interface DeepReviewDue {
 
 export interface CourseAgenda {
   courseId: string;
-  /** Every objective with questions, highest priority first (deep review and re-quizzes draw from it). */
+  /** Every objective with questions, highest priority first (deep review draws from it). */
   ranked: RankedObjective[];
-  /** Fading, mixed-up, learning and unseen objectives with weight > 0, highest priority first. */
+  /** Fading, mixed-up, learning and unseen objectives with weight > 0 not practiced today, highest priority first. */
   dueToday: RankedObjective[];
+  /** Objectives that would be due but were practiced today (e.g. missed in today's quiz): they wait for the next quick review. */
+  heldForNext: RankedObjective[];
   /** Mastered objectives whose check comes due tomorrow. */
   dueTomorrow: RankedObjective[];
   /** Today's quick review hasn't been done yet, by the course's cadence, and something is due. */
   quickReviewDue: boolean;
+  /** The next quick-review day on the course's cadence after today; null when none is coming (exam cadence, no exam ahead). */
+  nextQuickDay: string | null;
   deepReview: DeepReviewDue;
-  study: StudyItem[];
 }
 
 export interface AgendaInput {
@@ -124,7 +108,10 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   }
   const byPriority = (a: RankedObjective, b: RankedObjective) => b.priority.score - a.priority.score || a.objectiveId.localeCompare(b.objectiveId);
   ranked.sort(byPriority);
-  const dueToday = ranked.filter((r) => DUE_TODAY.includes(r.status) && weights.get(r.objectiveId)! > 0).sort(byPriority);
+  const practicedToday = new Set(answers.filter((e) => dayKey(e.at) === today).map((e) => e.objectiveId));
+  const due = ranked.filter((r) => DUE_TODAY.includes(r.status) && weights.get(r.objectiveId)! > 0);
+  const dueToday = due.filter((r) => !practicedToday.has(r.objectiveId));
+  const heldForNext = due.filter((r) => practicedToday.has(r.objectiveId));
   const dueTomorrow = ranked
     .filter((r) => {
       const dueAt = mastery.objectives.get(r.objectiveId)!.dueAt;
@@ -143,6 +130,21 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
         ? !quickDays.some((d) => d > addDays(today, -CADENCE_DAYS.Weekly))
         : inExamWindow(today) && !quickDays.includes(today);
   const quickReviewDue = dueToday.length > 0 && quickCadenceDue;
+  let nextQuickDay: string | null = null;
+  if (config.quick.cadence === "Daily") nextQuickDay = tomorrow;
+  else if (config.quick.cadence === "Weekly") {
+    const last = [...quickDays].sort().at(-1);
+    const afterLast = last ? addDays(last, CADENCE_DAYS.Weekly) : tomorrow;
+    nextQuickDay = afterLast > tomorrow ? afterLast : tomorrow;
+  } else {
+    for (let d = tomorrow; d <= addDays(tomorrow, 366); d = addDays(d, 1)) {
+      if (inExamWindow(d)) {
+        nextQuickDay = d;
+        break;
+      }
+      if (!input.examDays.some((e) => e >= d)) break;
+    }
+  }
 
   /* Deep review cadence: one cadence after the last finished one (or the course's first answer); stays due if missed */
   const candidates = ranked.filter((r) => r.status !== "unseen" && r.status !== "retired").length;
@@ -162,51 +164,5 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   }
   const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, tomorrow: dueDay === tomorrow, candidates };
 
-  return { courseId, ranked, dueToday, dueTomorrow, quickReviewDue, deepReview, study: studyItems(answers, results, mastery, today, dayKey) };
-}
-
-/** Poor finished sessions → one study item per weak objective, until it's answered in a later session on a later day. */
-function studyItems(
-  answers: readonly AnswerEvent[],
-  results: readonly QuizResult[],
-  mastery: AgendaInput["mastery"],
-  today: string,
-  dayKey: (iso: string) => string,
-): StudyItem[] {
-  const R = AGENDA_RULES;
-  const bySession = new Map<string, AnswerEvent[]>();
-  for (const e of answers) (bySession.get(e.sessionId) ?? bySession.set(e.sessionId, []).get(e.sessionId)!).push(e);
-  const finished = new Map<string, string>();
-  for (const r of results) if (!finished.has(r.sessionId) || r.finishedAt > finished.get(r.sessionId)!) finished.set(r.sessionId, r.finishedAt);
-
-  // The latest poor session per objective wins.
-  const latest = new Map<string, StudyItem>();
-  for (const [sessionId, finishedAt] of [...finished].sort((a, b) => a[1].localeCompare(b[1]))) {
-    const events = bySession.get(sessionId) ?? [];
-    // Score on first attempts: "review what I missed" retries in the same session don't dilute it.
-    const firstOf = new Map<string, AnswerEvent>();
-    for (const e of events) if (!firstOf.has(e.questionId)) firstOf.set(e.questionId, e);
-    const first = [...firstOf.values()];
-    const misses = new Map<string, AnswerEvent[]>();
-    for (const e of events) if (e.outcome === "incorrect") (misses.get(e.objectiveId) ?? misses.set(e.objectiveId, []).get(e.objectiveId)!).push(e);
-    const poorScore = first.length >= R.poorMinAnswers && first.filter((e) => e.outcome === "correct").length / first.length < R.poorShare;
-    const day = dayKey(finishedAt);
-    for (const [objectiveId, missed] of misses) {
-      if (!poorScore && missed.length < R.weakMisses) continue;
-      const topicId = [...mastery.topicObjectives].find(([, ids]) => ids.includes(objectiveId))?.[0];
-      if (!topicId) continue; // archived since
-      latest.set(objectiveId, {
-        objectiveId,
-        topicId,
-        sessionId,
-        day,
-        missedQuestionIds: [...new Set(missed.map((e) => e.questionId))],
-        requiz: today > day ? "today" : "tomorrow",
-      });
-    }
-  }
-
-  return [...latest.values()].filter(
-    (item) => !answers.some((e) => e.objectiveId === item.objectiveId && e.sessionId !== item.sessionId && dayKey(e.at) > item.day),
-  );
+  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewDue, nextQuickDay, deepReview };
 }

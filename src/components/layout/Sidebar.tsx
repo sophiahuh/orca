@@ -16,10 +16,7 @@ export function todoHref(card: TodoCard, course: Course): string {
   switch (card.kind) {
     case "quick":
     case "deep":
-    case "requiz":
       return `/session/${course.slug}?kind=${card.kind}`;
-    case "study":
-      return `/course/${course.slug}/study?objective=${encodeURIComponent(card.ref ?? "")}`;
     case "checks":
       return `/course/${course.slug}`;
   }

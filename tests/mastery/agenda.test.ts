@@ -100,46 +100,25 @@ test("deep review before an exam: due from a week before until one is done", () 
   assert.equal(agenda(evidence, "2026-10-14T09:00:00Z", { config }).deepReview.dueDay, null, "no exam, no deep review");
 });
 
-test("a poor session (≥3 answers, under 60%) leaves a study item per missed objective, re-quiz from the next day", () => {
+test("missed (or practiced) today waits for the next quick review, never the same day", () => {
   const evidence = [ans("a1", "2026-10-05T10:00:00Z", "incorrect"), ans("b1", "2026-10-05T10:01:00Z", "incorrect"), ans("c1", "2026-10-05T10:02:00Z")];
-  const results = [finished("s1", "2026-10-05T10:03:00Z")];
-  const same = agenda(evidence, "2026-10-05T12:00:00Z", { results });
-  assert.deepEqual(
-    same.study.map((s) => [s.objectiveId, s.missedQuestionIds, s.requiz, s.day]),
-    [["a", ["a1"], "tomorrow", "2026-10-05"], ["b", ["b1"], "tomorrow", "2026-10-05"]],
-  );
-  assert.deepEqual(agenda(evidence, "2026-10-06T08:00:00Z", { results }).study.map((s) => s.requiz), ["today", "today"]);
+  const today = agenda(evidence, "2026-10-05T12:00:00Z");
+  assert.deepEqual(today.dueToday.map((r) => r.objectiveId), []);
+  assert.deepEqual(today.heldForNext.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
+  assert.equal(today.quickReviewDue, false);
+  assert.equal(today.nextQuickDay, "2026-10-06");
+  const tomorrow = agenda(evidence, "2026-10-06T08:00:00Z");
+  assert.deepEqual(tomorrow.dueToday.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
+  assert.equal(tomorrow.quickReviewDue, true);
 });
 
-test("an unfinished session, or a good one, leaves nothing; two misses on one objective do", () => {
-  const evidence = [ans("a1", "2026-10-05T10:00:00Z", "incorrect"), ans("b1", "2026-10-05T10:01:00Z", "incorrect"), ans("c1", "2026-10-05T10:02:00Z")];
-  assert.deepEqual(agenda(evidence, "2026-10-05T12:00:00Z").study, []);
-  const good = [ans("a1", "2026-10-05T10:00:00Z", "incorrect"), ans("a2", "2026-10-05T10:01:00Z"), ans("b1", "2026-10-05T10:02:00Z"), ans("c1", "2026-10-05T10:03:00Z")];
-  assert.deepEqual(agenda(good, "2026-10-05T12:00:00Z", { results: [finished("s1", "2026-10-05T10:04:00Z")] }).study, []);
-  const twice = [...good.slice(1), ans("a3", "2026-10-05T10:05:00Z", "incorrect"), ans("a4", "2026-10-05T10:06:00Z", "incorrect"), ans("b2", "2026-10-05T10:07:00Z")];
-  assert.deepEqual(agenda(twice, "2026-10-05T12:00:00Z", { results: [finished("s1", "2026-10-05T10:08:00Z")] }).study.map((s) => s.objectiveId), ["a"]);
-});
-
-test("too few answers isn't a poor session; retries in the same session don't dilute the score", () => {
-  const two = [ans("a1", "2026-10-05T10:00:00Z", "incorrect"), ans("b1", "2026-10-05T10:01:00Z", "incorrect")];
-  assert.deepEqual(agenda(two, "2026-10-05T12:00:00Z", { results: [finished("s1", "2026-10-05T10:02:00Z")] }).study, []);
-  const retried = [
-    ans("a1", "2026-10-05T10:00:00Z", "incorrect"),
-    ans("b1", "2026-10-05T10:01:00Z", "incorrect"),
-    ans("c1", "2026-10-05T10:02:00Z"),
-    ans("a1", "2026-10-05T10:03:00Z"),
-    ans("b1", "2026-10-05T10:04:00Z"),
-  ];
-  assert.equal(agenda(retried, "2026-10-05T12:00:00Z", { results: [finished("s1", "2026-10-05T10:05:00Z")] }).study.length, 2);
-});
-
-test("a study item clears when the objective is answered in a later session on a later day", () => {
-  const poor = [ans("a1", "2026-10-05T10:00:00Z", "incorrect"), ans("b1", "2026-10-05T10:01:00Z", "incorrect"), ans("c1", "2026-10-05T10:02:00Z", "incorrect")];
-  const results = [finished("s1", "2026-10-05T10:03:00Z")];
-  const sameDay = [...poor, ans("a2", "2026-10-05T15:00:00Z", "correct", "s2")];
-  assert.ok(agenda(sameDay, "2026-10-05T16:00:00Z", { results }).study.some((s) => s.objectiveId === "a"), "same-day retry doesn't count");
-  const nextDay = [...poor, ans("a2", "2026-10-06T09:00:00Z", "incorrect", "s3")];
-  assert.deepEqual(agenda(nextDay, "2026-10-06T10:00:00Z", { results }).study.map((s) => s.objectiveId), ["b", "c"]);
+test("the next quick review follows the cadence: weekly after the last one, exam windows only before an exam", () => {
+  const weekly: ReviewConfig = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "Weekly" } };
+  assert.equal(agenda([], "2026-10-05T12:00:00Z", { config: weekly, results: [finished("q", "2026-10-03T10:00:00Z")] }).nextQuickDay, "2026-10-10");
+  assert.equal(agenda([], "2026-10-05T12:00:00Z", { config: weekly }).nextQuickDay, "2026-10-06");
+  const exam: ReviewConfig = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "1 wk before exam" } };
+  assert.equal(agenda([], "2026-10-05T12:00:00Z", { config: exam, examDays: ["2026-10-20"] }).nextQuickDay, "2026-10-13");
+  assert.equal(agenda([], "2026-10-05T12:00:00Z", { config: exam }).nextQuickDay, null);
 });
 
 test("a missing weight is a bug", () => {

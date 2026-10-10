@@ -24,6 +24,6 @@ test("the review phrase reads the next due day in the student's day", () => {
   assert.equal(reviewPhrase(undefined, now, dayKey), "comes up in your next quiz");
   assert.equal(reviewPhrase({ ...base, status: "mastered", dueAt: "2026-10-07T03:00:00Z" }, now, dayKey), "back in review tomorrow");
   assert.equal(reviewPhrase({ ...base, status: "mastered", dueAt: "2026-10-09T03:00:00Z" }, now, dayKey), "back in review in 3 days");
-  assert.equal(reviewPhrase({ ...base, status: "fading", dueAt: "2026-10-05T03:00:00Z" }, now, dayKey), "due for review today");
-  assert.equal(reviewPhrase({ ...base, status: "mixed-up" }, now, dayKey), "comes back in your next quiz to untangle it");
+  assert.equal(reviewPhrase({ ...base, status: "fading", dueAt: "2026-10-05T03:00:00Z" }, now, dayKey), "comes back in your next quick review");
+  assert.equal(reviewPhrase({ ...base, status: "mixed-up" }, now, dayKey), "comes back in your next quick review to untangle it");
 });

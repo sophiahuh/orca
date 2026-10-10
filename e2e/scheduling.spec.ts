@@ -83,7 +83,7 @@ test.describe("scheduling", () => {
     await expect(page.locator('[data-todo="quick"]')).toHaveCount(0);
   });
 
-  test("a poor session leaves review to-dos with where to re-read, and a re-quiz for the next day", async ({ page, student }) => {
+  test("questions missed today wait for the next quick review: no same-day review or re-quiz", async ({ page, student }) => {
     await noModel(page);
     await seedState(student, FIXTURE_STATE);
     await page.goto(`/session/${COURSE}?kind=quick`);
@@ -91,26 +91,14 @@ test.describe("scheduling", () => {
     await expect(page.getByText("You answered 0 of 6 correctly.")).toBeVisible();
 
     await page.goto("/");
-    await expect(page.locator('[data-todo="study"]')).toHaveCount(3);
-    const requiz = page.locator('[data-todo="requiz"]');
-    await expect(requiz).toContainText("Re-quiz · 3 objectives");
-    await expect(page.getByRole("heading", { name: "Due tomorrow" }).locator("..")).toContainText("Re-quiz");
-
-    await page.locator('[data-todo="study"]').filter({ hasText: "Simplify an expression" }).click();
-    await expect(page.locator('[data-part="where-taught"]')).toContainText("L01_Fixture.pdf, slides 1–5");
-    const missed = page.locator('[data-part="missed"]');
-    await expect(missed).toContainText("Simplify x + xy.");
-    await expect(missed).toContainText("Simplify a + a'c.");
-    await expect(missed).toContainText("Fixture question.");
-    await expect(page.getByText("Your re-quiz opens tomorrow.")).toBeVisible();
-
-    await page.goto(`/session/${COURSE}?kind=requiz`);
-    await expect(page.getByText("Your re-quiz opens tomorrow.")).toBeVisible();
+    await expect(page.locator('[data-todo="quick"]')).toHaveCount(0);
+    await page.goto(`/session/${COURSE}?kind=quick`);
+    await expect(page.getByText("What you practiced today comes back in your next quick review.")).toBeVisible();
   });
 
-  test("the re-quiz opens the next day and clears the to-dos", async ({ page, student }) => {
+  test("yesterday's misses are in today's quick review", async ({ page, student }) => {
     await noModel(page);
-    // Yesterday's poor quick review.
+    // Yesterday's poor topic quiz (no quick review yesterday, so today's is on the daily cadence).
     const yesterday = Date.now() - 86_400_000;
     const miss = (questionId: string, topicId: string, objectiveId: string, i: number): AnswerEvent => ({
       kind: "answer",
@@ -123,31 +111,20 @@ test.describe("scheduling", () => {
       tier: "retrieval",
       outcome: "incorrect",
       grader: "exact",
-      source: "quick-review",
+      source: "quiz",
       sessionId: "poor",
     });
-    const evidence = [
-      miss(F.ba1, F.booleanAlgebra, F.simplify, 1),
-      miss(F.tc1, F.twosComplement, F.convert, 2),
-      miss(F.tc4, F.twosComplement, F.signExtend, 3),
-      miss(F.ba2, F.booleanAlgebra, F.simplify, 4),
-      miss(F.tc2, F.twosComplement, F.convert, 5),
-      miss(F.tc3, F.twosComplement, F.convert, 6),
-    ];
-    const results = [{ courseId: F.course, topicId: null, mode: "quick" as const, sessionId: "poor", correct: 0, total: 3, seconds: 60, finishedAt: new Date(yesterday + 60_000).toISOString() }];
+    const evidence = [miss(F.ba1, F.booleanAlgebra, F.simplify, 1), miss(F.tc1, F.twosComplement, F.convert, 2), miss(F.tc4, F.twosComplement, F.signExtend, 3)];
+    const results = [{ courseId: F.course, topicId: F.booleanAlgebra, mode: "topic" as const, sessionId: "poor", correct: 0, total: 3, seconds: 60, finishedAt: new Date(yesterday + 60_000).toISOString() }];
     await seedState(student, { ...FIXTURE_STATE, evidence, results });
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Due today" }).locator("..").locator('[data-todo="requiz"]')).toContainText("Re-quiz · 3 objectives");
-    await page.locator('[data-todo="requiz"]').click();
-    await expect(page).toHaveURL(/kind=requiz/);
+    await expect(page.getByRole("heading", { name: "Due today" }).locator("..").locator('[data-todo="quick"]')).toBeVisible();
+    await page.locator('[data-todo="quick"]').click();
+    await expect(page).toHaveURL(/kind=quick/);
     await answerAll(page, true);
-    await expect(page.getByText("You answered 6 of 6 correctly.")).toBeVisible();
-    // The finished session is saved just after the end card shows; wait for it rather than racing it.
-    await expect.poll(async () => (await stored(page, student)).results.map((r) => r.mode)).toEqual(["quick", "requiz"]);
-
-    await page.goto("/");
-    await expect(page.locator('[data-todo="study"]')).toHaveCount(0);
-    await expect(page.locator('[data-todo="requiz"]')).toHaveCount(0);
+    await expect.poll(async () => (await stored(page, student)).evidence.filter((e) => (e as AnswerEvent).source === "quick-review").map((e) => (e as AnswerEvent).objectiveId)).toEqual(
+      expect.arrayContaining([F.simplify, F.convert, F.signExtend]),
+    );
   });
 
   test("deep review comes due a week after the first answer, writes harder questions when it starts, and stays due until done", async ({ page, student }) => {
