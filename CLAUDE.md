@@ -281,7 +281,7 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
 - `src/lib/material/read-pdf.ts`, `src/lib/uploads.ts` — PDFs to Storage, read on the server into `material_pages`.
-- `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, NavBar: on a course page its
+- `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, LoadingScreen: the shared full-screen wait, NavBar: on a course page its
   gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
   (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`
   (TopicGraph), `auth/`, `brand/`; `src/lib/motion.ts` holds every animation preset.
