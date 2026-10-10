@@ -9,7 +9,7 @@ import { OrcaLogo } from "@/components/brand/OrcaLogo";
 import { Wave } from "@/components/brand/Decor";
 import { ZoomControls } from "@/components/ui/ZoomControls";
 import { useFitScale } from "@/hooks/useFitScale";
-import { ISLAND_LAYOUT, islandMapSize, islandSpot } from "@/lib/course/islands";
+import { ISLAND_LAYOUT, islandMapSize, placeIslands } from "@/lib/course/islands";
 import { stagger } from "@/lib/motion";
 import { useMasteryByCourse } from "@/lib/store";
 import { LabelPill } from "./LabelPill";
@@ -23,17 +23,19 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 760, y: 760, w: 70 },
 ];
 
-/** How far the map zooms: out to see a long list of courses, in a little past life size. */
-const MIN_SCALE = 0.45;
+/** How far the map zooms: far enough out to see every island, in a little past life size. */
+const MIN_SCALE = 0.15;
 const MAX_SCALE = 1.4;
+/** Fitted, the map never draws bigger than this (a few islands shouldn't fill the screen). */
+const FIT_MAX = 1.1;
 const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
 type View = { scale: number; x: number; y: number };
 
 /**
- * The island map. Islands sit on a grid in course order (`src/lib/course/islands.ts`), so they never
- * overlap; the map grows a row at a time. It opens fitted to show every island (no smaller than
- * MIN_SCALE); drag or scroll to move around, and zoom with − + or fit it again. Clicking an island
+ * The island map. Islands are scattered a minimum distance apart (`src/lib/course/islands.ts`); the
+ * sea widens as courses are added. It opens zoomed to show every island; drag or scroll to move
+ * around, and zoom with − + or fit it again. Clicking an island
  * or its name opens its path.
  */
 export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCount: (courseId: string) => number }) {
@@ -44,13 +46,13 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
     if (!m) throw new Error(`No mastery computed for course ${courseId}`);
     return m.island;
   };
-  const size = islandMapSize(courses.length);
+  const spots = placeIslands(courses.map((c) => c.id));
+  const size = islandMapSize(spots);
   const { ref, width, height } = useFitScale(size.w, size.h, "contain");
 
-  // Fitted: everything visible and centred, unless that would be too small; then the top of the map
-  // at its smallest, centred across, and the rest reached by moving around.
-  const fitScale = clampScale(Math.min(width / size.w, height / size.h));
-  const fit: View = { scale: fitScale, x: (width - size.w * fitScale) / 2, y: Math.max(0, (height - size.h * fitScale) / 2) };
+  // Fitted: every island visible, centred.
+  const fitScale = clampScale(Math.min(FIT_MAX, width / size.w, height / size.h));
+  const fit: View = { scale: fitScale, x: (width - size.w * fitScale) / 2, y: (height - size.h * fitScale) / 2 };
   // A moved or zoomed view holds until the map changes size (a course added) or "Fit" is pressed.
   const sizeKey = `${size.w}x${size.h}`;
   const [manual, setManual] = useState<{ key: string; view: View } | null>(null);
@@ -77,7 +79,7 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
   };
   const endDrag = () => (drag.current = null);
 
-  const orca = { x: ISLAND_LAYOUT.firstCentreX + ISLAND_LAYOUT.columnStep / 2 - 55, y: ISLAND_LAYOUT.top + 80 };
+  const orca = ISLAND_LAYOUT.orca;
 
   return (
     <div
@@ -102,7 +104,7 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
         ))}
 
         {courses.map((c, i) => {
-          const spot = islandSpot(i);
+          const spot = spots[i];
           return (
             <div key={c.id} className="absolute" style={{ left: spot.x, top: spot.y, width: ISLAND_W, height: ISLAND_H }} data-part="island-spot">
               <motion.button

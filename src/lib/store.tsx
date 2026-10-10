@@ -62,7 +62,7 @@ import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
 import { laidOut } from "./course/layout";
-import { islandSpot } from "./course/islands";
+import { placeIslands } from "./course/islands";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
 import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
@@ -461,14 +461,15 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     (name) => {
       const s = stateRef.current;
       const n = s.courses.length;
+      const newId = crypto.randomUUID();
       const course: Course = {
-        id: crypto.randomUUID(),
+        id: newId,
         slug: freeSlug(name, s.courses.map((c) => c.slug)),
         name,
         short: shortName(name),
         variant: VARIANT_CYCLE[n % VARIANT_CYCLE.length],
-        // Its spot on the courses map (the map lays islands out by course order; this keeps the row in step).
-        pos: islandSpot(n),
+        // Its spot on the courses map (the map places islands from the course ids; this records the same spot).
+        pos: placeIslands([...s.courses.map((c) => c.id), newId])[n],
         topics: [],
       };
       const id = course.id;

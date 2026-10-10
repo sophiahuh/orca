@@ -1,26 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ISLAND, ISLAND_LAYOUT, islandMapSize, islandSpot } from "../../src/lib/course/islands.ts";
+import { ISLAND_LAYOUT, islandFootprint, islandMapSize, placeIslands } from "../../src/lib/course/islands.ts";
 
-/** An island with its widest name pill, centred under it. */
-const footprint = (i: number) => {
-  const s = islandSpot(i);
-  const centre = s.x + ISLAND.w / 2;
-  const left = Math.min(s.x, centre - ISLAND_LAYOUT.pillMax / 2);
-  return { left, right: Math.max(s.x + ISLAND.w, centre + ISLAND_LAYOUT.pillMax / 2), top: s.y, bottom: s.y + ISLAND_LAYOUT.cellH };
+const ids = (n: number) => Array.from({ length: n }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`);
+const apart = (a: ReturnType<typeof islandFootprint>, b: ReturnType<typeof islandFootprint>) => {
+  const g = ISLAND_LAYOUT.gap;
+  return a.right + g <= b.left || b.right + g <= a.left || a.bottom + g <= b.top || b.bottom + g <= a.top;
 };
-const overlap = (a: ReturnType<typeof footprint>, b: ReturnType<typeof footprint>) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
-test("no two islands (with their widest pills) overlap, for as many courses as there are", () => {
-  for (let i = 0; i < 40; i++) for (let j = 0; j < i; j++) assert.equal(overlap(footprint(i), footprint(j)), false, `${i} and ${j}`);
+test("islands (with their widest pills) keep the minimum gap, however many there are", () => {
+  const spots = placeIslands(ids(40)).map(islandFootprint);
+  for (let i = 0; i < spots.length; i++) {
+    assert.ok(spots[i].left >= ISLAND_LAYOUT.margin && spots[i].top >= ISLAND_LAYOUT.margin, `island ${i} inside the margin`);
+    for (let j = 0; j < i; j++) assert.ok(apart(spots[i], spots[j]), `${i} and ${j}`);
+  }
 });
 
-test("every island and pill fits the map's width, and the map grows a row at a time", () => {
-  for (let i = 0; i < 20; i++) {
-    const f = footprint(i);
-    assert.ok(f.left >= 0 && f.right <= ISLAND_LAYOUT.minW, `island ${i} spans ${f.left}–${f.right}`);
-  }
-  assert.deepEqual(islandMapSize(0), { w: 900, h: 834 });
-  assert.equal(islandMapSize(6).h, 834, "three rows fit the design frame");
-  assert.ok(islandMapSize(8).h > 834 && islandMapSize(8).h >= islandSpot(7).y + ISLAND.h, "a fourth row makes it taller");
+test("placement is stable: same ids, same spots, and adding a course doesn't move the others", () => {
+  const five = placeIslands(ids(5));
+  assert.deepEqual(placeIslands(ids(5)), five);
+  assert.deepEqual(placeIslands(ids(6)).slice(0, 5), five);
+});
+
+test("the map holds every island and is at least the design frame", () => {
+  assert.deepEqual(islandMapSize([]), { w: 900, h: 834 });
+  const spots = placeIslands(ids(12));
+  const size = islandMapSize(spots);
+  for (const f of spots.map(islandFootprint)) assert.ok(f.right <= size.w && f.bottom <= size.h);
 });
