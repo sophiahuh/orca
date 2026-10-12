@@ -28,9 +28,17 @@ was Advanced Logic Design (ALD, Columbia ELEN; `docs/samples/ald/`); the owner n
 own courses (Data Structures, Fundamentals of Computer Systems) on the hosted project.
 
 **Where things stand.**
-- **Work happens on `phase-4`** (pushed to `origin/phase-4`; Vercel builds the deploy at
-  https://orca-ocean.vercel.app from it). `backend-implementation` holds Phases 1–4 as merged on
-  2026-10-06 and is behind `phase-4`; `main` is the pre-Phase-1 prototype. No PRs are open.
+- **Branches (keep this straight).** `phase-4` is the shared working branch for everyone (the
+  owner, Amanda, agents); everything lands there first, pushed fast-forward only (never force-move
+  it: it carries other people's commits). `backend-implementation` is the **production branch**:
+  Vercel (project `orca`, https://orca-lake-omega.vercel.app) builds every push to it, so a push
+  there is a deploy and is the owner's call. Merges go one way, `phase-4` → `backend-implementation`
+  (merge commit, no rebase of either branch), after the merge gate below. Vercel refuses to build a
+  commit whose author email isn't on the owner's GitHub account, so commits that will reach
+  `backend-implementation` are authored as `Sophia Huh <sophiahuh@gmail.com>` (agents: pass
+  `-c user.name=… -c user.email=…` to `git commit`; a merge commit by another author blocks the
+  deploy until an empty commit by the owner follows). `main` is the pre-Phase-1 prototype. No PRs
+  are open; `deploy-candidate` (if it still exists) was a staging copy of the merged tree.
 - Phases 1–4 are built (mastery core, uploads build the course, scheduling and sessions, Supabase
   with auth, RLS, Storage, server jobs, cost guard, injection defences, CI). See
   `docs/BACKEND-ROADMAP.md` and the Phase 4 plan's status notes for what each contains.
@@ -201,7 +209,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   missing (routes answer 503); `rows.ts` maps rows to the mastery types (pure); `browser.ts` is
   the browser client; `cookieClient()` is for server actions. Auth (Task 4): `src/proxy.ts`
   (session refresh, signed-out redirect, CSP with a nonce; `src/lib/csp.ts`, `src/lib/auth/` are
-  pure), actions in `src/app/auth/actions.ts`, screens `/sign-in`, `/sign-up`, `/forgot-password`,
+  pure), actions in `src/app/auth/actions.ts` (sign-up and an unconfirmed log-in offer to resend
+  the confirmation email: `resendConfirmation`, a minute between sends), screens `/sign-in`, `/sign-up`, `/forgot-password`,
   `/reset-password`, callback `/auth/callback`, Account card in Settings, and the root layout shows
   "isn't connected" without the env vars. `react/no-danger` is an error. e2e specs import `test`
   from `e2e/fixture.ts`, which signs in a throwaway student; Playwright reads the Supabase URL and
@@ -293,7 +302,12 @@ All 11 Figma screens are built. Where things live:
 - `e2e/` — Playwright specs, one per area; `fixture.ts` signs in a throwaway student. Tests find
   things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - `docs/samples/ald/` — real ALD decks for trying uploads; `docs/OBJECTIVES-ALD.md` the benchmark.
-- Deploy: Vercel (https://orca-ocean.vercel.app) builds from `phase-4`.
+- Deploy: Vercel (https://orca-lake-omega.vercel.app) builds `backend-implementation` (Production);
+  pushes to other branches get Preview deploys at most. Production env vars (Vercel → Settings →
+  Environments → Production): the Supabase three, `SITE_URL`, `ORCA_JOBS=inline`, and the model
+  key (`OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) with `ORCA_MODEL` if not the default; without a
+  key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
+  commit by the owner pushed to `backend-implementation`, or Redeploy on the deployment's page).
 
 ## What to build next
 
