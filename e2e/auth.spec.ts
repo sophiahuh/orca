@@ -108,6 +108,68 @@ test.describe("sign up", () => {
   });
 });
 
+/** How many emails Mailpit holds for this address. */
+async function emailCount(email: string): Promise<number> {
+  const list = (await (await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`)).json()) as { messages_count: number };
+  return list.messages_count;
+}
+
+test.describe("resend the confirmation email", () => {
+  test("the sign-up notice offers it, after the minute Supabase needs between two emails", async ({ page }) => {
+    const email = `auth-${crypto.randomUUID()}@example.test`;
+    await page.goto("/sign-up");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign up" }).click();
+    await expect(page.getByRole("status")).toContainText("Check your email");
+    await emailedLink(email);
+
+    // One just went out, so the offer starts with its wait and counts down.
+    const resend = page.locator("[data-part=resend-confirmation]");
+    await expect(resend).toContainText("Didn't get the email?");
+    const waiting = resend.getByRole("button", { name: /resend it in \d+ s/ });
+    await expect(waiting).toBeDisabled();
+    const first = Number(/\d+/.exec((await waiting.textContent())!)![0]);
+    await expect.poll(async () => Number(/\d+/.exec((await waiting.textContent())!)![0])).toBeLessThan(first);
+    expect(await emailCount(email)).toBe(1);
+
+    const { data: users } = await admin().auth.admin.listUsers({ perPage: 1000 });
+    const user = users.users.find((u) => u.email === email);
+    if (user) created.push(user.id);
+  });
+
+  test("logging in before confirming offers it too; a confirmed or unknown address gets the same words and no email", async ({ page }) => {
+    const email = `auth-${crypto.randomUUID()}@example.test`;
+    const { data, error } = await admin().auth.admin.createUser({ email, password: PASSWORD, email_confirm: false });
+    if (error || !data.user) throw new Error(error?.message);
+    created.push(data.user.id);
+    await clearInbox(email);
+
+    await signInVia(page, email, PASSWORD);
+    await expect(page.locator("form [role=alert]")).toHaveText("Confirm your email first: open the link we sent you.");
+    // No email yet for this account, so the offer is open: one click sends the confirmation link.
+    const resend = page.locator("[data-part=resend-confirmation]");
+    await resend.getByRole("button", { name: "resend it", exact: true }).click();
+    await expect(resend.getByRole("status")).toHaveText("If that address is waiting to be confirmed, we sent a new link.");
+    expect(await emailedLink(email)).toContain("type=signup");
+    await expect.poll(() => emailCount(email)).toBe(1);
+    // Then the wait, so a second click can't be refused by the server for coming too soon.
+    await expect(resend.getByRole("button", { name: /resend it in \d+ s/ })).toBeDisabled();
+
+    // Confirmed from that link, the account signs in and the offer is gone.
+    await page.goto(await emailedLink(email));
+    await page.goto("/settings");
+    await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
+
+    // A wrong password never reveals whether the address is confirmed, so no offer either.
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/sign-in/);
+    await signInVia(page, email, "not-the-password");
+    await expect(page.locator("form [role=alert]")).toHaveText("Invalid email or password.");
+    await expect(resend).toHaveCount(0);
+  });
+});
+
 test("a wrong password gets the same generic error as an unknown email", async ({ page }) => {
   const email = await confirmedStudent();
   await signInVia(page, email, "not-the-password");

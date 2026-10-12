@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useActionState, useState } from "react";
-import { type AuthState, requestReset, signIn, signUp, updatePassword } from "@/app/auth/actions";
+import { type ReactNode, useActionState, useEffect, useState } from "react";
+import { type AuthState, requestReset, resendConfirmation, signIn, signUp, updatePassword } from "@/app/auth/actions";
 import { useAvatarPreview } from "@/components/brand/avatar-preview";
 import { AvatarPicker } from "@/components/auth/AvatarPicker";
 import { Button } from "@/components/ui/Button";
@@ -58,16 +58,82 @@ function Field({ label, name, type = "text", autoComplete, placeholder, hint, tr
 
 function Form({ action, submit, children, actions, hideOnNotice, prepare }: { action: (s: AuthState, d: FormData) => Promise<AuthState>; submit: string; children: ReactNode; actions?: ReactNode; hideOnNotice?: boolean; prepare?: (data: FormData) => void }) {
   const [state, run, pending] = useActionState(action, undefined);
-  if (hideOnNotice && state?.notice) return <p role="status" className="rounded-[20px] border-2 border-alice-deep bg-parchment px-[22px] py-[18px] text-[17px] font-semibold text-prussian lip-4 lip-alice">{state.notice}</p>;
+  // The resend offer is its own form, so it sits after this one (forms don't nest).
+  const resend = state?.resend ? <ResendLink email={state.resend.email} sent={state.resend.sent} /> : null;
+  if (hideOnNotice && state?.notice)
+    return (
+      <div className="flex flex-col gap-[16px]">
+        <p role="status" className="rounded-[20px] border-2 border-alice-deep bg-parchment px-[22px] py-[18px] text-[17px] font-semibold text-prussian lip-4 lip-alice">
+          {state.notice}
+        </p>
+        {resend}
+      </div>
+    );
+  return (
+    <div className="flex flex-col gap-[16px]">
+      <form
+        action={(data) => {
+          prepare?.(data);
+          run(data);
+        }}
+        className="flex flex-col gap-[24px]"
+      >
+        <div className="flex flex-col gap-[20px]">{children}</div>
+        {state?.error && (
+          <p role="alert" className="text-[15px] font-semibold text-prussian">
+            {state.error}
+          </p>
+        )}
+        {state?.notice && (
+          <p role="status" className="text-[15px] font-semibold text-wisteria-deep">
+            {state.notice}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-[14px]">
+          <Button type="submit" disabled={pending}>
+            {pending ? "One moment…" : submit}
+          </Button>
+          {actions}
+        </div>
+      </form>
+      {resend}
+    </div>
+  );
+}
+
+/** Seconds between confirmation emails: Supabase refuses a second one sooner than this (its default interval). */
+const RESEND_COOLDOWN_S = 60;
+
+/**
+ * "Didn't get the email?" under a sign-up notice or an unconfirmed log-in: sends the confirmation
+ * link again, then waits a minute before offering once more (right after sign-up the wait is
+ * already running, since one just went out). The address comes from the form that was just
+ * submitted, so nothing is typed twice.
+ */
+function ResendLink({ email, sent }: { email: string; sent: boolean }) {
+  const [state, run, pending] = useActionState(resendConfirmation, undefined);
+  const [left, setLeft] = useState(sent ? RESEND_COOLDOWN_S : 0);
+  useEffect(() => {
+    if (left <= 0) return;
+    const t = setTimeout(() => setLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left]);
   return (
     <form
       action={(data) => {
-        prepare?.(data);
+        setLeft(RESEND_COOLDOWN_S);
         run(data);
       }}
-      className="flex flex-col gap-[24px]"
+      data-part="resend-confirmation"
+      className="flex flex-col gap-[8px]"
     >
-      <div className="flex flex-col gap-[20px]">{children}</div>
+      <input type="hidden" name="email" value={email} readOnly />
+      <p className="flex flex-wrap items-center gap-x-[6px] text-[15px] text-wisteria-deep">
+        <span>Didn&apos;t get the email? Check your spam folder, or</span>
+        <button type="submit" disabled={pending || left > 0} className="font-semibold underline underline-offset-2 disabled:no-underline disabled:opacity-70">
+          {pending ? "sending…" : left > 0 ? `resend it in ${left} s` : "resend it"}
+        </button>
+      </p>
       {state?.error && (
         <p role="alert" className="text-[15px] font-semibold text-prussian">
           {state.error}
@@ -78,12 +144,6 @@ function Form({ action, submit, children, actions, hideOnNotice, prepare }: { ac
           {state.notice}
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-[14px]">
-        <Button type="submit" disabled={pending}>
-          {pending ? "One moment…" : submit}
-        </Button>
-        {actions}
-      </div>
     </form>
   );
 }

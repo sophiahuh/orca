@@ -9,8 +9,12 @@ import { passwordProblem, validEmail } from "@/lib/auth/validate";
 import { SupabaseNotConfiguredError } from "@/lib/supabase/env";
 import { cookieClient } from "@/lib/supabase/server";
 
-/** What a form shows after submitting: an error, or a notice (the next step, e.g. "check your email"). */
-export type AuthState = { error?: string; notice?: string } | undefined;
+/**
+ * What a form shows after submitting: an error, or a notice (the next step, e.g. "check your email").
+ * `resend` is an address still waiting for its confirmation email: the form then offers to send it
+ * again (`sent`: one went out just now, so the offer starts with its wait).
+ */
+export type AuthState = { error?: string; notice?: string; resend?: { email: string; sent: boolean } } | undefined;
 
 const text = (data: FormData, key: string) => (typeof data.get(key) === "string" ? (data.get(key) as string) : "");
 
@@ -51,7 +55,7 @@ export async function signIn(_: AuthState, data: FormData): Promise<AuthState> {
     const { error } = await client.auth.signInWithPassword({ email, password });
     if (!error) return undefined;
     // "Email not confirmed" is only revealed to someone who knows the password.
-    if (error.code === "email_not_confirmed") return { error: "Confirm your email first: open the link we sent you." };
+    if (error.code === "email_not_confirmed") return { error: "Confirm your email first: open the link we sent you.", resend: { email, sent: false } };
     return { error: "Invalid email or password." };
   });
   if (result) return result;
@@ -80,7 +84,23 @@ export async function signUp(_: AuthState, data: FormData): Promise<AuthState> {
     // The same answer whether or not the address already has an account.
     if (error && error.status !== undefined && error.status >= 500) return { error: "Couldn't create the account. Try again in a moment." };
     if (error && error.code !== "user_already_exists") return { error: "Couldn't create the account. Check the details and try again." };
-    return { notice: "Check your email: we sent a link to confirm your account." };
+    return { notice: "Check your email: we sent a link to confirm your account.", resend: { email, sent: true } };
+  });
+}
+
+/**
+ * Sends the confirmation email again (the sign-up notice and an unconfirmed log-in offer it). The
+ * answer is the same whether or not the address has an unconfirmed account, so the form can't be
+ * used to find out who has signed up; Supabase itself sends nothing to a confirmed or unknown address.
+ */
+export async function resendConfirmation(_: AuthState, data: FormData): Promise<AuthState> {
+  const email = text(data, "email").trim();
+  if (!validEmail(email)) return { error: "Enter a valid email address." };
+  return withClient(async (client) => {
+    const { error } = await client.auth.resend({ type: "signup", email, options: { emailRedirectTo: `${await origin()}/auth/callback` } });
+    if (error?.code === "over_email_send_rate_limit") return { error: "We sent one a moment ago. Wait a minute, then try again." };
+    if (error && error.status !== undefined && error.status >= 500) return { error: "Couldn't send the email. Try again in a moment." };
+    return { notice: "If that address is waiting to be confirmed, we sent a new link." };
   });
 }
 
