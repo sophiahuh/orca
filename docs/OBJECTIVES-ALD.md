@@ -136,14 +136,20 @@ weights (RTL labs 21%, HW 10%, exams 40%, FIR-filter project 25%).
 
 ## What this changes in the app
 
-1. Each question carries an `objective` id; the question bank is organised by objective, not slide.
-2. The quiz for a topic draws across its objectives (at least one question per objective) instead
-   of the first N in the bank, and a topic counts as *done* when every objective has been
-   answered correctly at least once, not after one quiz.
+1. Each question carries an `objectiveId`. Phase 1 tagged the 69 built-in questions with 40 of the
+   objectives below; that built-in ALD course has since been removed from the app (it's in git
+   history at 89e042b). ALD now comes from uploading these decks, which is also how extraction
+   gets scored against this list (roadmap Phase 2, "Evaluation").
+2. A topic is *done* when every objective in it is mastered (3 different questions answered
+   correctly over at least 2 days, last two correct; `docs/MASTERY-PLAN.md` §2.4), not after one
+   quiz. Only 7 of the 40 tagged objectives have 3 or more questions today, so most ALD topics
+   can't be finished until generation adds questions (decided; see `docs/TO-DISCUSS.md`).
 3. Drills are code: a generator produces fresh operands and the expected answer; a checker compares
-   typed answers exactly (bit strings, integers, Boolean expressions by truth table).
-4. The extraction prompt asks the model for objectives first, then questions per objective, so
-   uploads from other courses get the same structure.
+   typed answers exactly (bit strings, integers, Boolean expressions by truth table). Phase 6.
+4. Uploads create objectives: extraction proposes them against the course's existing list,
+   reconciliation matches duplicates, and the student reviews topics (`docs/BACKEND-ROADMAP.md`
+   Phase 2). Uploads from other courses get the same structure.
+5. Session composition (spread across objectives, preferring unseen questions) is Phase 3.
 
 ## Where your input matters most
 

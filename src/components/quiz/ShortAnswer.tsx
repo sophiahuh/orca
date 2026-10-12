@@ -19,17 +19,30 @@ export interface ShortAnswerProps {
   result: GradeResult | null;
   /** null = a model is available; otherwise the reason it isn't. */
   noModel: string | null;
+  /** The server refused to grade the submitted answer (grading turned off): show the key and the self-report at once. */
+  selfMarkNow?: boolean;
+  /** A parent may control the response when its Check action lives outside this component. */
+  value?: string;
+  onValueChange?: (value: string) => void;
+  /** Hide the local Check button when the quiz footer supplies it. */
+  hideCheck?: boolean;
   onSubmit: (response: string) => void;
   onSelfReport: (correct: boolean) => void;
 }
 
-export function ShortAnswer({ question, grading, result, noModel, onSubmit, onSelfReport }: ShortAnswerProps) {
-  const [value, setValue] = useState("");
+export function ShortAnswer({ question, grading, result, noModel, selfMarkNow = false, value: controlledValue, onValueChange, hideCheck = false, onSubmit, onSelfReport }: ShortAnswerProps) {
+  const [localValue, setLocalValue] = useState("");
+  const value = controlledValue ?? localValue;
+  const setValue = (next: string) => {
+    setLocalValue(next);
+    onValueChange?.(next);
+  };
   const exact = Boolean(question.exact?.length);
   const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
   const answered = result !== null;
   const needsSelfReport = !exact && noModel !== null && !answered;
-  const [submittedForSelfReport, setSubmitted] = useState(false);
+  const [submittedLocally, setSubmitted] = useState(false);
+  const submittedForSelfReport = submittedLocally || (selfMarkNow && needsSelfReport);
 
   useEffect(() => {
     ref.current?.focus();
@@ -90,12 +103,11 @@ export function ShortAnswer({ question, grading, result, noModel, onSubmit, onSe
         />
       )}
 
-      {!answered && !submittedForSelfReport && (
+      {!hideCheck && !answered && !submittedForSelfReport && (
         <div className="flex items-center gap-[12px]">
           <Button size="sm" onClick={submit} disabled={!value.trim() || grading}>
             {grading ? "Checking…" : "Check"}
           </Button>
-          {!exact && noModel === null && <span className="text-[13px] font-medium text-wisteria-deep">Graded against the key, not by vibes.</span>}
         </div>
       )}
 

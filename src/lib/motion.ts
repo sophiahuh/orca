@@ -81,7 +81,8 @@ export const swimOrca = {
 /** Halo pulse behind the current path node. */
 export const pulseHalo = {
   scale: [1, 1.12, 1],
-  opacity: [0.55, 0.3, 0.55],
+  // Near-solid alice so the halo reads on the ocean.
+  opacity: [0.95, 0.7, 0.95],
   transition: { duration: 2.4, repeat: Infinity, ease: "easeInOut" as const },
 };
 
@@ -99,12 +100,6 @@ export const overlayFade: Variants = {
   exit: { opacity: 0, transition: { duration: 0.2 } },
 };
 
-/** One of the three "Orca is typing" dots; `i` staggers them. */
-export const typingDot = (i: number) => ({
-  y: [0, -5, 0],
-  transition: { duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" as const },
-});
-
 /* ── Trail draw-on ───────────────────────────────────────────────────── */
 /** Solid paths: animate pathLength. (Overrides stroke-dasharray, so not for dotted trails.) */
 export const drawTrail: Variants = {
@@ -117,3 +112,9 @@ export const revealDown = (full: number): Variants => ({
   hidden: { height: 0 },
   show: { height: full, transition: { duration: 1.4, ease: easeOrca } },
 });
+
+/** A loading spinner's turn (pass as `animate`). */
+export const spin = {
+  rotate: 360,
+  transition: { duration: 0.9, ease: "linear" as const, repeat: Infinity },
+};

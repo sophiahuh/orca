@@ -16,9 +16,40 @@
   --color-alice: #e1ecfa;
   --color-alice-deep: #b4c8e6;
 
+  /* The sea behind full screens (owner's pick, 2026-10-06); cards and chips stay alice. */
+  --color-ocean: #9cc3e7;
+
+  /* Concept Atlas edges (Figma: E1 · Concept graph v4): has a kind, alternative to, related. "Used in" is wisteria-deep. */
+  --color-link-kind: #c2418f;
+  --color-link-alt: #4f9e93;
+  --color-link-related: #8a94a6;
+
   --color-parchment: #fcf7f4;
   --color-parchment-deep: #e3d9d2;
   --color-orca-shadow: #d9d0cb;
+
+  /* Orca Ocean Light variables (Figma: Header & Nav Assets): the top bar's surfaces. Dark values
+     are defined below under [data-theme="dark"]; nothing switches to them yet. */
+  --color-page: #f4f8fc;
+  --color-card: #ffffff;
+  --color-line: #d5e3f0;
+  --color-ink: #10233a;
+  --color-muted: #667a8f;
+
+  /* State hues (Figma: Concept Atlas · Design spec, section 2): the only reds, ambers and greens in
+     the app, used on quiz feedback and mastery states, always with a glyph or text beside them. */
+  --color-good: #3d9a68;
+  --color-good-tint: #d7efdf;
+  --color-good-deep: #2b7a50;
+  --color-good-text: #1f6b43;
+  --color-warn: #e3a21a;
+  --color-warn-tint: #fbebc7;
+  --color-warn-deep: #b37d0b;
+  --color-warn-text: #8a5c00;
+  --color-bad: #e0604e;
+  --color-bad-tint: #fadbd5;
+  --color-bad-deep: #b8443a;
+  --color-bad-text: #a63a30;
 
   --font-sans: var(--font-gabarito), ui-sans-serif, system-ui, sans-serif;
 
@@ -46,6 +77,8 @@
 @utility lip-periwinkle { --lip: var(--color-periwinkle-deep); }
 @utility lip-ink { --lip: var(--color-ink-deep); }
 @utility lip-parchment { --lip: var(--color-parchment-deep); }
+@utility lip-good { --lip: var(--color-good-deep); }
+@utility lip-bad { --lip: var(--color-bad-deep); }
 
 /* ── Press: every lipped control sinks into its shadow on click. */
 @utility pressable {
@@ -76,7 +109,30 @@
 
 :root {
   color-scheme: light;
+  /* Figma: Header/Top Bar is 88 px; the compact bar for phones is 72 px. Full-height screens are
+     the viewport minus this. */
+  --topbar-h: 88px;
 }
+@media (max-width: 639px) {
+  :root {
+    --topbar-h: 72px;
+  }
+}
+
+/* Orca Ocean Dark (Figma variables). Opt-in by attribute; there is no toggle yet. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-page: #081d33;
+  --color-card: #0e2a46;
+  --color-line: #234967;
+  --color-ink: #f3f7fb;
+  --color-muted: #9fb3c8;
+}
+
+/* Full-height screens below the top bar. */
+@utility h-screen-below-bar { height: calc(100vh - var(--topbar-h)); }
+@utility min-h-screen-below-bar { min-height: calc(100vh - var(--topbar-h)); }
+@utility max-h-screen-below-bar { max-height: calc(100vh - var(--topbar-h)); }
 
 html,
 body {

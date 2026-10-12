@@ -1,47 +1,57 @@
 "use client";
 
 import { motion } from "motion/react";
+import { usePathname } from "next/navigation";
 import { DueCard } from "@/components/ui/DueCard";
-import { useOrca } from "@/lib/store";
+import { useOrca, useTodos } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
-import type { DueItem } from "@/lib/data";
+import type { Course } from "@/lib/data";
+import type { TodoCard } from "@/lib/mastery/todo";
 import { NavBar } from "./NavBar";
 
 export const SIDEBAR_W = 340;
 
-function Section({ title, items, hrefFor, labelFor }: {
-  title: string;
-  items: DueItem[];
-  hrefFor: (d: DueItem) => string;
-  labelFor: (d: DueItem) => string;
-}) {
+/** Where a to-do card leads. */
+export function todoHref(card: TodoCard, course: Course): string {
+  switch (card.kind) {
+    case "quick":
+    case "deep":
+      return `/session/${course.slug}?kind=${card.kind}`;
+    case "checks":
+      return `/course/${course.slug}`;
+  }
+}
+
+function Section({ title, items, hydrated, courses }: { title: string; hydrated: boolean; items: TodoCard[]; courses: Map<string, Course> }) {
   return (
     <motion.section variants={stagger()} initial="hidden" animate="show" className="flex flex-col gap-[12px]">
       <motion.h2 variants={fadeUp} className="text-[22px] font-bold text-prussian">
         {title}
       </motion.h2>
-      {items.length === 0 ? (
-        <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep">
-          Nothing due. Nice.
-        </motion.p>
-      ) : (
-        items.map((d) => <DueCard key={d.id} course={labelFor(d)} title={d.title} href={hrefFor(d)} />)
-      )}
+      {items.length === 0
+        ? hydrated && (
+            <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep">
+              Nothing due. Nice.
+            </motion.p>
+          )
+        : items.map((d) => {
+            const course = courses.get(d.courseId);
+            if (!course) throw new Error(`To-do for unknown course ${d.courseId}`);
+            return <DueCard key={d.id} kind={d.kind} course={course.name} title={d.title} detail={d.detail} href={todoHref(d, course)} />;
+          })}
     </motion.section>
   );
 }
 
 /** 340px right rail: Due today / Due tomorrow + bottom nav. */
 export function Sidebar() {
-  const { due, courses } = useOrca();
+  const { courses, hydrated } = useOrca();
+  const todos = useTodos();
+  const pathname = usePathname();
   const byId = new Map(courses.map((c) => [c.id, c]));
-  const hrefFor = (d: DueItem) => {
-    const c = byId.get(d.courseId);
-    if (!c) return "/home";
-    const topic = c.topics.find((t) => t.id === d.topicId);
-    return topic && topic.status !== "locked" ? `/quiz/${c.slug}/${topic.id}` : `/course/${c.slug}`;
-  };
-  const labelFor = (d: DueItem) => byId.get(d.courseId)?.short ?? "";
+  const slug = /^\/course\/([^/?#]+)/.exec(pathname)?.[1];
+  const course = slug ? courses.find((item) => item.slug === slug) : undefined;
+  const visibleTodos = course ? todos.filter((todo) => todo.courseId === course.id) : todos;
 
   return (
     <aside
@@ -49,8 +59,8 @@ export function Sidebar() {
       style={{ width: SIDEBAR_W }}
     >
       <div className="flex flex-col gap-[28px] overflow-y-auto">
-        <Section title="Due today" items={due.filter((d) => d.when === "today")} hrefFor={hrefFor} labelFor={labelFor} />
-        <Section title="Due tomorrow" items={due.filter((d) => d.when === "tomorrow")} hrefFor={hrefFor} labelFor={labelFor} />
+        <Section title="Due today" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "today")} courses={byId} />
+        <Section title="Due tomorrow" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "tomorrow")} courses={byId} />
       </div>
       <NavBar className="pt-[20px]" />
     </aside>

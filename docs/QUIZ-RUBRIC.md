@@ -18,6 +18,17 @@ file, and the checker pass (planned) grades each generated question against it.
    - Not a question: "What is a max-heap?"
    - Retrieval: "Draw [4, 12, 8, 21, 14, 9, 17] as a complete tree. Max-heap, min-heap or neither?"
    - Mechanism: "Why is insert_last on a dynamic array Θ(1) amortised when a single call can be Θ(n)?"
+0a. **Match the course, and test the idea, not arithmetic.** Read what kind of thinking the
+   material teaches. A conceptual or systems course gets scenarios to reason about (predict the
+   effect of a change, diagnose a symptom, choose between designs, explain a trade-off); procedures
+   are traced only where the material teaches one. Never ask a question whose only work is plugging
+   given numbers into a stated formula or doing the multiplication. Ask what the formula means
+   instead (which term dominates, what happens when one input doubles, which change helps). At most
+   one calculation per objective, none for a conceptual objective. (Added 2026-10-10 after a
+   Networks for AI upload produced dozens of "X GB at Y TB/s is how many ms?" questions.)
+   - Not a question: "Reading 16 GB at 3.2 TB/s takes how long?"
+   - Right: "A batch-one decode step spends 5 ms reading HBM and 0.05 ms on math. Which upgrade
+     helps most, and why?"
 0b. **Prefer typed answers over multiple choice.** If the answer has an exact form (bits, a number,
    a short expression) the student types it and code checks it. If it's a one-sentence "why", a
    rubric grades it: required ideas, acceptable phrasings, known misconceptions; never the
@@ -50,6 +61,9 @@ file, and the checker pass (planned) grades each generated question against it.
 
 6. **Every claim traces to a slide.** The anchor is the slide the answer comes from, quoted or
    closely paraphrased. If the slide is only a picture, cite it and attach it as the figure.
+   The one exception is a question for an *inferred* objective (one drawn from general knowledge
+   of the subject, not the uploaded material): it has no anchor, and its wording must not claim
+   the course covered it ("In lecture…", "As the slides show…").
 7. **Don't paraphrase the slide's sentence as the prompt.** Apply the idea instead, so reading the
    slide isn't enough; understanding it is.
 

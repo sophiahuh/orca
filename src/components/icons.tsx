@@ -36,15 +36,6 @@ export function IconCheck({ size = 32, ...props }: IconProps) {
   );
 }
 
-export function IconLock({ size = 32, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 32 32" {...base(size, props)} strokeWidth={4}>
-      <rect x="6.65" y="14.63" width="18.62" height="13.3" rx="4" />
-      <path d="M10.64 14.63v-4a5.32 5.32 0 0 1 10.64 0v4" />
-    </svg>
-  );
-}
-
 export function IconBack({ size = 26, ...props }: IconProps) {
   return (
     <svg viewBox="0 0 26 26" {...base(size, props)} strokeWidth={3.25}>
@@ -77,26 +68,10 @@ export function IconPlus({ size = 20, ...props }: IconProps) {
   );
 }
 
-export function IconUp({ size = 23, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 23 23" {...base(size, props)} strokeWidth={2.88}>
-      <path d="M5.76 14.4 11.52 8.64l5.76 5.76" />
-    </svg>
-  );
-}
-
 export function IconDown({ size = 18, ...props }: IconProps) {
   return (
     <svg viewBox="0 0 18 18" {...base(size, props)} strokeWidth={2.25}>
       <path d="M4.5 6.75 9 11.25l4.5-4.5" />
-    </svg>
-  );
-}
-
-export function IconSend({ size = 23, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 23 23" {...base(size, props)} strokeWidth={2.88}>
-      <path d="M11.52 18.24V4.8M17.28 10.56 11.52 4.8l-5.76 5.76" />
     </svg>
   );
 }
@@ -136,10 +111,23 @@ export function IconGear({ size = 26, ...props }: IconProps) {
   );
 }
 
-export function IconChat({ size = 26, ...props }: IconProps) {
+/** Figma: Icon/Settings (Header & Nav Assets; 24 px grid, 2.2 px round stroke). */
+export function IconSettings({ size = 24, ...props }: IconProps) {
   return (
-    <svg viewBox="0 0 26 26" {...base(size, props)} strokeWidth={2.71}>
-      <path d="M4.33 6.5a3.25 3.25 0 0 1 3.25-3.25h10.84A3.25 3.25 0 0 1 21.67 6.5v8.67a3.25 3.25 0 0 1-3.25 3.25H13l-5.42 4.33v-4.33a3.25 3.25 0 0 1-3.25-3.25V6.5Z" />
+    <svg viewBox="0 0 24 24" {...base(size, props)} strokeWidth={2.2}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+/** Figma: Icon/Log out (Header & Nav Assets). */
+export function IconLogOut({ size = 24, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" {...base(size, props)} strokeWidth={2.2}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
     </svg>
   );
 }

@@ -1,0 +1,118 @@
+name: CI
+
+# Two jobs. `checks` is the quick proof (types, lint, unit tests, build). `stack` is the whole local
+# proof on a GitHub runner: it starts the Supabase CLI's Docker stack and runs the pgTAP suite, the
+# isolation and evidence checks over HTTP, and the Playwright suite against the fake Anthropic API.
+# No real model is ever reached: nothing here has a key, the step "No real model key" refuses one,
+# and Playwright starts the fake API itself (playwright.config.ts) with jobs run inline.
+on:
+  push:
+    branches: [main, backend-implementation, "phase-*"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck, lint, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx next typegen
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  stack:
+    name: Database, isolation, evidence and browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: "true"
+      ORCA_JOBS: inline
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: No real model key
+        # Tests must only ever reach the fake Messages API (e2e/fake-anthropic.ts). A real key in
+        # the runner's environment would let a test spend money, so the job stops here if one is set.
+        run: |
+          if [ -n "${ANTHROPIC_API_KEY:-}" ] && [ "$ANTHROPIC_API_KEY" != "e2e-fake-key" ]; then
+            echo "::error::ANTHROPIC_API_KEY is set in CI. Tests must never reach a real model; remove it from the workflow's environment."
+            exit 1
+          fi
+          if [ -n "${ANTHROPIC_BASE_URL:-}" ] && ! echo "$ANTHROPIC_BASE_URL" | grep -Eq '^http://(127\.0\.0\.1|localhost)(:|/|$)'; then
+            echo "::error::ANTHROPIC_BASE_URL points off this machine ($ANTHROPIC_BASE_URL)."
+            exit 1
+          fi
+          if [ -n "${OPENAI_API_KEY:-}" ]; then
+            echo "::error::OPENAI_API_KEY is set in CI. Tests must never reach a real model; remove it from the workflow's environment."
+            exit 1
+          fi
+          echo "No model key in the environment."
+
+      - name: Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+      - name: Install Chromium's system packages
+        run: npx playwright install-deps chromium
+
+      - name: Start Supabase
+        # The CLI (a devDependency) starts the stack in Docker, which GitHub's Ubuntu runners have.
+        # Studio and the image proxy aren't needed by any check and are the largest images.
+        run: npx supabase start -x studio,imgproxy
+
+      - name: pgTAP (npm run test:db)
+        run: npm run test:db
+      - name: Isolation over HTTP (npm run check:isolation)
+        run: npm run check:isolation
+      - name: Evidence over HTTP (npm run check:evidence)
+        run: npm run check:evidence
+      - name: Browser tests (npm run test:e2e)
+        run: npm run test:e2e
+
+      - name: Collect Supabase logs
+        if: failure()
+        run: |
+          mkdir -p supabase-logs
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^supabase_'); do
+            docker logs "$c" > "supabase-logs/$c.log" 2>&1 || true
+          done
+          npx supabase status > supabase-logs/status.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: supabase-logs
+          path: supabase-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop Supabase
+        if: always()
+        run: npx supabase stop --no-backup || true

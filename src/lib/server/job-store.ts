@@ -1,0 +1,127 @@
+/**
+ * `JobStore` (src/lib/jobs/jobs.ts) on Supabase, for one student. Uses the service-role client, so
+ * every query names the owner: the owner is the user a route verified when it started the job,
+ * carried in the job's payload, never anything the browser sent.
+ */
+import type { Material, MaterialPages, QuizQuestion } from "@/lib/data";
+import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
+import { LIMITS } from "@/lib/limits";
+import { checkBudget } from "@/lib/server/usage";
+import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
+import type { Json } from "@/lib/supabase/database.types";
+import type { OrcaSupabase } from "@/lib/supabase/server";
+
+/** PostgREST returns at most 1,000 rows per request, so long lists are read in pages. */
+const PAGE = 1000;
+
+async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, what: string): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1);
+    if (error) throw new Error(`Couldn't read ${what}: ${error.message}`);
+    out.push(...(data ?? []));
+    if (!data || data.length < PAGE) return out;
+  }
+}
+
+function check(what: string, result: { error: { message: string } | null }) {
+  if (result.error) throw new Error(`Couldn't ${what}: ${result.error.message}`);
+}
+
+export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
+  return {
+    async run(runId) {
+      const { data, error } = await db.from("pipeline_runs").select().eq("owner_id", ownerId).eq("id", runId).maybeSingle();
+      if (error) throw new Error(`Couldn't read the run: ${error.message}`);
+      return data ? runFromRow(data) : null;
+    },
+
+    async claim(runId, progress) {
+      const { data, error } = await db
+        .from("pipeline_runs")
+        // started_at is when the job took the run: dead-run detection measures from it (src/lib/jobs/start.ts).
+        .update({ status: "running", started_at: new Date().toISOString(), progress: progress as unknown as Json })
+        .eq("owner_id", ownerId)
+        .eq("id", runId)
+        .in("status", ["queued", "waiting"])
+        .select("id");
+      // Another of the student's runs is running (the one-running-per-student index): leave this one queued.
+      if (error?.code === "23505") return false;
+      if (error) throw new Error(`Couldn't start the run: ${error.message}`);
+      return data.length > 0;
+    },
+
+    budget(pages) {
+      return checkBudget(db, ownerId, pages);
+    },
+
+    async wait(runId, verdict) {
+      const progress: WaitingProgress = { stage: "waiting", reason: verdict.reason, message: verdict.message };
+      check("hold the run", await db.from("pipeline_runs").update({ status: "waiting", progress: progress as unknown as Json }).eq("owner_id", ownerId).eq("id", runId).eq("status", "running"));
+    },
+
+    async progress(runId, progress) {
+      check("record the run's progress", await db.from("pipeline_runs").update({ progress: progress as unknown as Json }).eq("owner_id", ownerId).eq("id", runId).eq("status", "running"));
+    },
+
+    async fail(runId, error) {
+      // Only a run still in flight: a run whose save landed (done) stays done even if the reply was lost.
+      check("record why the run failed", await db.from("pipeline_runs").update({ status: "failed", error, progress: null }).eq("owner_id", ownerId).eq("id", runId).in("status", ["queued", "waiting", "running"]));
+    },
+
+    async course(courseId): Promise<LoadedCourse | null> {
+      const { data: course, error } = await db.from("courses").select("id, name, short").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+      if (error) throw new Error(`Couldn't read the course: ${error.message}`);
+      if (!course) return null;
+      const [topics, objectives, relations, questions] = await Promise.all([
+        readAll((a, b) => db.from("topics").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the topics"),
+        readAll((a, b) => db.from("objectives").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the objectives"),
+        readAll((a, b) => db.from("relations").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the relations"),
+        readAll((a, b) => db.from("questions").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the questions"),
+      ]);
+      const bank: Record<string, QuizQuestion[]> = {};
+      for (const q of questions) (bank[q.topic_id] ??= []).push(questionFromRow(q));
+      const structure = {
+        topics: topics.map(topicFromRow),
+        objectives: Object.fromEntries(objectives.map((o) => [o.id, objectiveFromRow(o)])),
+        bank,
+        relations: relations.map(relationFromRow),
+      };
+      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure };
+    },
+
+    async materials(courseId): Promise<Material[]> {
+      const rows = await readAll((a, b) => db.from("materials").select().eq("owner_id", ownerId).eq("course_id", courseId).eq("status", "ready").order("created_at").range(a, b), "the materials");
+      return rows.map(materialFromRow);
+    },
+
+    async pages(materialIds) {
+      const out: Record<string, MaterialPages> = {};
+      // One request per material: a file has at most LIMITS.pagesPerFile pages, under the row cap.
+      await Promise.all(
+        materialIds.map(async (id) => {
+          const { data, error } = await db.from("material_pages").select("n, text").eq("owner_id", ownerId).eq("material_id", id).order("n").limit(LIMITS.pagesPerFile);
+          if (error) throw new Error(`Couldn't read the material's pages: ${error.message}`);
+          if (data.length) out[id] = data;
+        }),
+      );
+      return out;
+    },
+
+    async answered(courseId) {
+      const rows = await readAll(
+        (a, b) => db.from("evidence_events").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "answer").order("at").order("id").range(a, b),
+        "the answers",
+      );
+      return new Set(rows.flatMap((r) => (r.question_id ? [r.question_id] : [])));
+    },
+
+    async save(courseId, rows) {
+      // save_structure takes the owner from the course row; check it's this student's first.
+      const { data, error } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+      if (error) throw new Error(`Couldn't read the course: ${error.message}`);
+      if (!data) throw new Error("the course isn't this student's");
+      check("save the course", await db.rpc("save_structure", { course: courseId, rows: rows as unknown as Json }));
+    },
+  };
+}

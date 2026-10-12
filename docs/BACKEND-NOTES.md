@@ -1,5 +1,15 @@
 # Backend notes: what to reuse from the earlier prototype
 
+> **Status 2026-10-04.** A reference map of the ai-native-learning-platform repo, written before
+> the backend decisions in `docs/BACKEND-ROADMAP.md`. Where they differ, the roadmap wins. In
+> particular: the tutor chat and its assistance ladder are **not** ported (Orca has no in-app
+> chat); Orca's unit of mastery is the objective, with concepts only as tags; the "Port now" list
+> under Priorities is replaced by the roadmap's phases; and the platform's rule that every
+> extracted row needs a source anchor gets an exception for inferred objectives. Two platform bugs
+> to avoid when porting: quiz generation doesn't filter out archived concepts
+> (`trigger/generate-lightweight-quiz.ts`), and the daily session includes proposed concepts that
+> the due list leaves out.
+
 Source: Amanda Chiang's `ai-native-learning-platform` (Next 16 + Supabase + OpenAI + Trigger.dev).
 It has very little product UX but a deep backend. These notes distil what is worth porting into
 Orca and how it maps onto `src/lib/data.ts`. File paths below are in that repo.

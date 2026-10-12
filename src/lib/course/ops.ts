@@ -1,0 +1,185 @@
+/**
+ * Review operations on one course's structure. Pure: each takes the structure and returns a new
+ * one. Nothing is deleted: rejecting archives, merging points the loser at the survivor, and
+ * both can be undone (except a topic merge, which moves questions).
+ */
+import type { Objective, QuizQuestion, Topic } from "../data.ts";
+
+export interface CourseStructure {
+  topics: Topic[];
+  objectives: Record<string, Objective>;
+  /** topicId → questions. */
+  bank: Record<string, QuizQuestion[]>;
+}
+
+function topicOf(s: CourseStructure, id: string): Topic {
+  const t = s.topics.find((x) => x.id === id);
+  if (!t) throw new Error(`No topic ${id}`);
+  return t;
+}
+
+function objectiveOf(s: CourseStructure, id: string): Objective {
+  const o = s.objectives[id];
+  if (!o) throw new Error(`No objective ${id}`);
+  return o;
+}
+
+function withTopic(s: CourseStructure, id: string, patch: (t: Topic) => Topic): CourseStructure {
+  topicOf(s, id);
+  return { ...s, topics: s.topics.map((t) => (t.id === id ? patch(t) : t)) };
+}
+
+function withObjectives(s: CourseStructure, ids: string[], patch: (o: Objective) => Objective): CourseStructure {
+  const objectives = { ...s.objectives };
+  for (const id of ids) objectives[id] = patch(objectiveOf(s, id));
+  return { ...s, objectives };
+}
+
+/** A copy of `o` without `keys`. */
+function without<T extends object, K extends keyof T>(o: T, ...keys: K[]): Omit<T, K> {
+  const copy = { ...o };
+  for (const k of keys) delete copy[k];
+  return copy;
+}
+
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+function addAliases(existing: string[], names: string[], own: string): string[] {
+  const out = [...existing];
+  for (const n of names) if (!sameName(n, own) && !out.some((a) => sameName(a, n))) out.push(n);
+  return out;
+}
+
+/** Objectives that live in a topic (by their own topicId, merged or not). */
+function objectiveIdsIn(s: CourseStructure, topicId: string) {
+  return Object.values(s.objectives).filter((o) => o.topicId === topicId).map((o) => o.id);
+}
+
+/** `id` and every objective whose merge chain ends at it. */
+function mergedFamily(s: CourseStructure, id: string): Set<string> {
+  const family = new Set([id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const o of Object.values(s.objectives)) {
+      if (o.mergedInto && family.has(o.mergedInto) && !family.has(o.id)) {
+        family.add(o.id);
+        grew = true;
+      }
+    }
+  }
+  return family;
+}
+
+/** Move the questions of `family` from one topic's bank to another's. */
+function moveQuestions(s: CourseStructure, family: Set<string>, fromTopic: string, toTopic: string): CourseStructure {
+  if (fromTopic === toTopic) return s;
+  const from = s.bank[fromTopic] ?? [];
+  const moving = from.filter((q) => q.objectiveId && family.has(q.objectiveId));
+  if (!moving.length) return s;
+  return {
+    ...s,
+    bank: { ...s.bank, [fromTopic]: from.filter((q) => !moving.includes(q)), [toTopic]: [...(s.bank[toTopic] ?? []), ...moving] },
+  };
+}
+
+/** Confirm a topic. Its proposed objectives are confirmed too, except ones reconciliation was unsure about. */
+export function confirmTopic(s: CourseStructure, topicId: string): CourseStructure {
+  const next = withTopic(s, topicId, (t) => ({ ...t, review: "confirmed" }));
+  const ids = objectiveIdsIn(next, topicId).filter((id) => next.objectives[id].review === "proposed" && !next.objectives[id].uncertain);
+  return withObjectives(next, ids, (o) => ({ ...o, review: "confirmed" }));
+}
+
+/** Reject a topic: it and its live objectives are archived. Restoring the topic brings those back. */
+export function rejectTopic(s: CourseStructure, topicId: string): CourseStructure {
+  const next = withTopic(s, topicId, (t) => ({ ...t, review: "archived" }));
+  const ids = objectiveIdsIn(next, topicId).filter((id) => next.objectives[id].review !== "archived");
+  return withObjectives(next, ids, (o) => ({ ...o, review: "archived", archivedWithTopic: true }));
+}
+
+/** Undo a topic rejection. Objectives rejected on their own stay rejected. */
+export function restoreTopic(s: CourseStructure, topicId: string): CourseStructure {
+  if (topicOf(s, topicId).mergedInto) throw new Error(`Topic ${topicId} was merged; a topic merge can't be undone`);
+  const next = withTopic(s, topicId, (t) => ({ ...t, review: "proposed" }));
+  const ids = objectiveIdsIn(next, topicId).filter((id) => next.objectives[id].archivedWithTopic);
+  return withObjectives(next, ids, (o) => ({ ...without(o, "archivedWithTopic"), review: "proposed" }));
+}
+
+/** Rename a topic; the old name becomes an alias so later uploads still match it. */
+export function renameTopic(s: CourseStructure, topicId: string, name: string): CourseStructure {
+  const clean = name.trim();
+  if (!clean) throw new Error("A topic needs a name");
+  return withTopic(s, topicId, (t) => (sameName(t.name, clean) ? { ...t, name: clean } : { ...t, name: clean, aliases: addAliases(t.aliases, [t.name], clean) }));
+}
+
+/**
+ * Merge one topic into another: the survivor takes the loser's names, objectives and questions;
+ * the loser is archived with `mergedInto` set.
+ */
+export function mergeTopics(s: CourseStructure, loserId: string, survivorId: string): CourseStructure {
+  if (loserId === survivorId) throw new Error("Can't merge a topic into itself");
+  const loser = topicOf(s, loserId);
+  const survivor = topicOf(s, survivorId);
+  if (survivor.review === "archived") throw new Error(`Topic ${survivorId} is archived`);
+  let next = withTopic(s, survivorId, (t) => ({ ...t, aliases: addAliases(t.aliases, [loser.name, ...loser.aliases], t.name) }));
+  next = withTopic(next, loserId, (t) => ({ ...t, review: "archived", mergedInto: survivorId }));
+  next = withObjectives(next, objectiveIdsIn(next, loserId), (o) => ({ ...o, topicId: survivorId }));
+  const bank = { ...next.bank, [survivorId]: [...(next.bank[survivorId] ?? []), ...(next.bank[loserId] ?? [])], [loserId]: [] };
+  return { ...next, bank };
+}
+
+export function confirmObjective(s: CourseStructure, id: string): CourseStructure {
+  return withObjectives(s, [id], (o) => ({ ...without(o, "uncertain"), review: "confirmed" }));
+}
+
+/** Reject an objective: archived, kept so later uploads don't propose it again. */
+export function rejectObjective(s: CourseStructure, id: string): CourseStructure {
+  return withObjectives(s, [id], (o) => ({ ...without(o, "archivedWithTopic"), review: "archived" }));
+}
+
+/** Undo a rejection or a merge. The student chose to keep it, so it comes back confirmed. */
+export function restoreObjective(s: CourseStructure, id: string): CourseStructure {
+  const o = objectiveOf(s, id);
+  let next = s;
+  if (o.mergedInto) {
+    const own = [o.name, ...o.aliases];
+    const survivor = objectiveOf(next, o.mergedInto);
+    next = withObjectives(next, [survivor.id], (x) => ({ ...x, aliases: x.aliases.filter((a) => !own.some((n) => sameName(n, a))) }));
+    next = moveQuestions(next, mergedFamily(next, id), survivor.topicId, o.topicId);
+  }
+  if (topicOf(next, o.topicId).review === "archived") throw new Error(`Restore topic ${o.topicId} first`);
+  return withObjectives(next, [id], (x) => ({ ...without(x, "mergedInto", "archivedWithTopic", "uncertain"), review: "confirmed" }));
+}
+
+/**
+ * Merge one objective into another. The loser points at the survivor, so its questions and past
+ * answers count for the survivor; its names become the survivor's aliases. Across topics, the
+ * loser's questions move to the survivor's topic (and move back if the merge is undone).
+ */
+export function mergeObjectives(s: CourseStructure, loserId: string, survivorId: string): CourseStructure {
+  if (loserId === survivorId) throw new Error("Can't merge an objective into itself");
+  const loser = objectiveOf(s, loserId);
+  const survivor = objectiveOf(s, survivorId);
+  if (survivor.review === "archived") throw new Error(`Objective ${survivorId} is archived`);
+  if (mergedFamily(s, loserId).has(survivorId)) throw new Error("That merge would make a cycle");
+  let next = withObjectives(s, [survivorId], (o) => ({ ...o, aliases: addAliases(o.aliases, [loser.name, ...loser.aliases], o.name) }));
+  next = moveQuestions(next, mergedFamily(next, loserId), loser.topicId, survivor.topicId);
+  return withObjectives(next, [loserId], (o) => ({ ...without(o, "uncertain"), review: "archived", mergedInto: survivorId }));
+}
+
+/** Answer reconciliation's "uncertain": the same as its candidate (merge) or a separate objective. */
+export function resolveUncertain(s: CourseStructure, id: string, verdict: "same" | "separate"): CourseStructure {
+  const o = objectiveOf(s, id);
+  if (!o.uncertain) throw new Error(`Objective ${id} has no open duplicate question`);
+  if (verdict === "same") return mergeObjectives(s, id, o.uncertain.candidateId);
+  const confirmed = topicOf(s, o.topicId).review === "confirmed";
+  return withObjectives(s, [id], (x) => ({ ...without(x, "uncertain"), review: confirmed ? "confirmed" : x.review }));
+}
+
+/** Answer reconciliation's "uncertain" for a topic: the same as its candidate (merge into it) or a separate topic. */
+export function resolveUncertainTopic(s: CourseStructure, id: string, verdict: "same" | "separate"): CourseStructure {
+  const t = topicOf(s, id);
+  if (!t.uncertain) throw new Error(`Topic ${id} has no open duplicate question`);
+  if (verdict === "same") return mergeTopics(withTopic(s, id, (x) => without(x, "uncertain")), id, t.uncertain.candidateId);
+  return withTopic(s, id, (x) => without(x, "uncertain"));
+}

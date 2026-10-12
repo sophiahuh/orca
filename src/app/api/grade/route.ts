@@ -1,49 +1,38 @@
-import { type LlmConfig, PROVIDERS, llmReady } from "@/lib/llm";
-import { LlmError, completeJson } from "@/lib/llm-server";
-import { GRADE_SYSTEM, GradeSchema, gradePrompt, parseGradeLoose } from "@/lib/grading";
-import type { AnswerRubric } from "@/lib/data";
+import { z } from "zod";
+import { ANSWER_MAX_CHARS } from "@/lib/grading";
+import { gradeAnswer } from "@/lib/server/grade";
+import { forStudent, reply } from "@/lib/server/student";
 
-/** POST { llm?, question, rubric, response } → GradeResult. Short free-text answers only. */
+/**
+ * POST { questionId, response } → GradeResult, for a signed-in student's own prose question, graded
+ * with Orca's key against the rubric stored with the question (`src/lib/server/grade.ts`).
+ * 401 signed out; 400 if the body carries a question, rubric or model of its own (the request
+ * decides nothing about how it's graded), or isn't an id and an answer; 404 not the student's
+ * question; 503 when the server has no model key (the quiz then lets the student self-mark); 429 past
+ * the rate limit (retry-after) or a daily budget; 403 { graded: "self" } when model grading is turned
+ * off for the student (repeat flagged answers). Integration (decision 13 and 10) lives in grade.ts.
+ */
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
-interface Body {
-  llm?: Partial<LlmConfig> | null;
-  question?: string;
-  rubric?: AnswerRubric;
-  response?: string;
-}
+const Body = z.object({ questionId: z.uuid(), response: z.string().min(1).max(ANSWER_MAX_CHARS * 5) }).strict();
+const NOT_YOURS_TO_SEND = ["question", "rubric", "llm", "model", "apiKey", "provider"];
 
 export async function POST(request: Request) {
-  let body: Body;
-  try {
-    body = (await request.json()) as Body;
-  } catch {
-    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-  const { question, rubric } = body;
-  const response = typeof body.response === "string" ? body.response.trim().slice(0, 2000) : "";
-  if (!question || !rubric || !Array.isArray(rubric.requiredIdeas) || !response) {
-    return Response.json({ error: "Send question, rubric and a response." }, { status: 400 });
-  }
-  const raw = body.llm;
-  const student: LlmConfig | null =
-    raw && typeof raw.provider === "string" && raw.provider in PROVIDERS
-      ? { provider: raw.provider, model: String(raw.model ?? "").trim(), apiKey: String(raw.apiKey ?? "").trim(), baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : undefined }
-      : null;
-  const serverKey = process.env.ANTHROPIC_API_KEY;
-  const config: LlmConfig | null = llmReady(student) ? student : serverKey ? { provider: "anthropic", model: "claude-opus-5-5", apiKey: serverKey } : null;
-  if (!config) return Response.json({ error: "No model available to grade this answer." }, { status: 400 });
-
-  try {
-    const safeRubric: AnswerRubric = {
-      requiredIdeas: rubric.requiredIdeas.filter((s) => typeof s === "string"),
-      acceptableAlternatives: Array.isArray(rubric.acceptableAlternatives) ? rubric.acceptableAlternatives.filter((s) => typeof s === "string") : [],
-      knownMisconceptions: Array.isArray(rubric.knownMisconceptions) ? rubric.knownMisconceptions.filter((m) => m && typeof m.description === "string") : [],
-    };
-    const result = await completeJson(config, GRADE_SYSTEM, gradePrompt(String(question), safeRubric, response), GradeSchema, parseGradeLoose, { effort: "low", maxTokens: 1024 });
-    return Response.json(result);
-  } catch (error) {
-    if (error instanceof LlmError) return Response.json({ error: error.message }, { status: error.status });
-    return Response.json({ error: "Grading failed." }, { status: 500 });
-  }
+  return forStudent(request, async (student, db) => {
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return reply(400, { error: "Send the question id and your answer as JSON." });
+    }
+    if (raw && typeof raw === "object" && NOT_YOURS_TO_SEND.some((k) => k in raw)) {
+      return reply(400, { error: "The grader takes a question id and your answer only; the question, its rubric and the model come from Orca." });
+    }
+    const parsed = Body.safeParse(raw);
+    if (!parsed.success) return reply(400, { error: "Send { questionId, response }: a question id and an answer." });
+    const out = await gradeAnswer(db, student.id, parsed.data.questionId, parsed.data.response);
+    const retryAfter = "retryAfterSeconds" in out.body ? out.body.retryAfterSeconds : undefined;
+    return retryAfter ? Response.json(out.body, { status: out.status, headers: { "cache-control": "no-store", "retry-after": String(retryAfter) } }) : reply(out.status, out.body);
+  });
 }

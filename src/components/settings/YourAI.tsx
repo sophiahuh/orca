@@ -18,7 +18,7 @@ const field =
 
 /**
  * Settings → "Your AI": connect the model the student already pays for.
- * The key is kept in this browser only and sent with each chat request.
+ * The key is kept in this browser only and sent with each extraction or grading request.
  */
 export function YourAI() {
   const { llm, setLlm } = useOrca();

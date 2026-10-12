@@ -5,6 +5,8 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Generated text is only ever rendered as React text (Phase 4, decision 13).
+  { rules: { "react/no-danger": "error" } },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
@@ -12,6 +14,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent worktrees and Trigger.dev build output are other checkouts, not this one.
+    ".claude/**",
+    ".trigger/**",
   ]),
 ]);
 

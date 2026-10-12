@@ -33,7 +33,7 @@ export function Chip({ selected = false, tone = "soft", size = "md", className, 
   );
 }
 
-/** Small context pill, e.g. the "ALD" badge top-right of Chat / Add Material. */
+/** Small context pill, e.g. the "ALD" badge top-right of Add Material. */
 export function ContextPill({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <span

@@ -5,7 +5,7 @@ import { IconBack } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 /** Round back button that links to `href` (default: the knowledge map). */
-export function BackButton({ href = "/home", size = 52, className }: { href?: string; size?: number; className?: string }) {
+export function BackButton({ href = "/", size = 52, className }: { href?: string; size?: number; className?: string }) {
   return (
     <Link
       href={href}

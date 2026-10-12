@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
-import { pathCanvasHeight, trailFromPoints } from "@/lib/data";
+import { pathCanvasHeight, trailFromPoints, trailTopics } from "@/lib/data";
 import { Wave } from "@/components/brand/Decor";
-import { PathNode } from "@/components/ui/PathNode";
+import type { TopicProgress } from "@/lib/mastery/progress";
+import { type NodeVisual, PathNode } from "@/components/ui/PathNode";
 import { useFitScale } from "@/hooks/useFitScale";
 import { revealDown } from "@/lib/motion";
 
@@ -17,18 +19,59 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 640, y: 150, w: 60 },
 ];
 
-function statusLine(t: Topic) {
-  if (t.status === "done") return "Complete";
-  if (t.status === "locked") return "Locked";
-  return `${t.lessonsDone} of ${t.lessons} lessons`;
+function statusLine(p: TopicProgress, needing: number) {
+  if (p.total === 0) return "No questions yet";
+  const gap = needing > 0 ? ` · ${needing} ${needing === 1 ? "needs" : "need"} more questions` : "";
+  if (p.status === "done") return `Complete${gap}`;
+  if (p.status === "not-started") return `${p.total} ${p.total === 1 ? "objective" : "objectives"}${gap}`;
+  return `${p.mastered} of ${p.total} objectives mastered${gap}`;
 }
 
 /** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
-export function KnowledgePath({ course, onStart }: { course: Course; onStart: (topic: Topic) => void }) {
-  const PATH_H = pathCanvasHeight(course.topics.length);
+export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
+  course: Course;
+  progress: ReadonlyMap<string, TopicProgress>;
+  needingQuestions: ReadonlyMap<string, number>;
+  onStart: (topic: Topic) => void;
+}) {
+  const progressOf = (t: Topic) => {
+    const p = progress.get(t.id);
+    if (!p) throw new Error(`No progress computed for topic ${t.id}`);
+    return p;
+  };
+  const needingOf = (t: Topic) => {
+    const n = needingQuestions.get(t.id);
+    if (n === undefined) throw new Error(`No question-gap count computed for topic ${t.id}`);
+    return n;
+  };
+  const topics = trailTopics(course);
+  // START goes to the first topic in progress, else the first not started; none when everything is done.
+  const firstInProgress = topics.findIndex((t) => progressOf(t).status === "in-progress");
+  const current = firstInProgress >= 0 ? firstInProgress : topics.findIndex((t) => progressOf(t).status === "not-started");
+  const currentTopic = current >= 0 ? topics[current] : null;
+  const currentTopicId = currentTopic?.id;
+  const currentTopicY = currentTopic?.pos.y;
+  const visualOf = (t: Topic, i: number): NodeVisual => {
+    const status = progressOf(t).status;
+    if (status === "done") return "done";
+    if (i === current) return "current";
+    return status === "in-progress" ? "in-progress" : "upcoming";
+  };
+  const PATH_H = pathCanvasHeight(topics.length);
   // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
   const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
-  const d = course.trail ?? trailFromPoints(course.topics.map((t) => t.pos));
+  const d = course.trail ?? trailFromPoints(topics.map((t) => t.pos));
+
+  // Opening a course should put the pulsing START/play node in view, even when a long path has
+  // already scrolled far past it. Coordinates inside the fixed canvas need the same fit scale.
+  useEffect(() => {
+    const container = ref.current;
+    if (!container || currentTopicY === undefined) return;
+    const top = Math.max(0, currentTopicY * scale - container.clientHeight / 2);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const frame = requestAnimationFrame(() => container.scrollTo({ top, behavior: reduced ? "auto" : "smooth" }));
+    return () => cancelAnimationFrame(frame);
+  }, [course.id, currentTopicId, currentTopicY, ref, scale]);
 
   return (
     <div ref={ref} className="absolute inset-0 overflow-y-auto overflow-x-hidden">
@@ -56,16 +99,16 @@ export function KnowledgePath({ course, onStart }: { course: Course; onStart: (t
           />
         </svg>
 
-        {course.topics.map((t, i) => (
+        {topics.map((t, i) => (
           <PathNode
             key={t.id}
             index={i}
-            status={t.status}
+            visual={visualOf(t, i)}
             x={t.pos.x}
             y={t.pos.y}
             name={t.name}
-            sub={statusLine(t)}
-            onClick={t.status === "locked" ? undefined : () => onStart(t)}
+            sub={statusLine(progressOf(t), needingOf(t))}
+            onClick={() => onStart(t)}
           />
         ))}
       </div>

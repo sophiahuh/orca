@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "motion/react";
 import type { CalendarEvent } from "@/lib/data";
 import { toISODate } from "@/lib/data";
@@ -9,8 +10,16 @@ import { popIn, stagger } from "@/lib/motion";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** 6×7 grid of day cells for the month containing `cursor`. */
+/** Entries a day shows before "+n more". */
+const SHOWN = 2;
+
+/**
+ * 6×7 grid of day cells for the month containing `cursor`. "+n more" expands that whole week's row
+ * to fit every entry; "Show less" folds it again.
+ */
 export function MonthGrid({ cursor, events, today }: { cursor: Date; events: CalendarEvent[]; today: string }) {
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
+  const toggleWeek = (week: number) => setExpanded((s) => (s.has(week) ? new Set([...s].filter((w) => w !== week)) : new Set([...s, week])));
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const start = new Date(first);
   start.setDate(first.getDate() - first.getDay());
@@ -34,7 +43,9 @@ export function MonthGrid({ cursor, events, today }: { cursor: Date; events: Cal
         ))}
       </div>
       <motion.div key={toISODate(first)} variants={stagger(0.02, 0.012)} initial="hidden" animate="show" className="grid grid-cols-7 gap-[12px]">
-        {days.map((d) => {
+        {days.map((d, i) => {
+          const week = Math.floor(i / 7);
+          const open = expanded.has(week);
           const iso = toISODate(d);
           const inMonth = d.getMonth() === cursor.getMonth();
           const isToday = iso === today;
@@ -45,7 +56,8 @@ export function MonthGrid({ cursor, events, today }: { cursor: Date; events: Cal
               variants={popIn}
               data-today={isToday || undefined}
               className={cn(
-                "flex h-[104px] flex-col gap-[4px] rounded-[18px] border-2 p-[8px]",
+                "flex flex-col gap-[4px] rounded-[18px] border-2 p-[8px]",
+                open ? "min-h-[104px]" : "h-[104px]",
                 inMonth ? "border-alice-deep bg-parchment lip-3 lip-alice" : "border-transparent bg-alice-deep/35",
               )}
             >
@@ -57,13 +69,17 @@ export function MonthGrid({ cursor, events, today }: { cursor: Date; events: Cal
               >
                 {d.getDate()}
               </span>
-              <div className="flex min-h-0 flex-col gap-[4px] overflow-hidden">
-                {evs.slice(0, 2).map((e) => (
-                  <Tag key={e.id} kind={e.kind} title={e.title}>
+              <div className={cn("flex min-h-0 flex-col gap-[4px]", !open && "overflow-hidden")}>
+                {(open ? evs : evs.slice(0, SHOWN)).map((e) => (
+                  <Tag key={e.id} kind={e.kind} title={e.title} data-part="event">
                     {e.title}
                   </Tag>
                 ))}
-                {evs.length > 2 && <span className="text-[11px] font-semibold text-wisteria-deep">+{evs.length - 2} more</span>}
+                {evs.length > SHOWN && (
+                  <button type="button" onClick={() => toggleWeek(week)} aria-expanded={open} data-part="more" className="self-start text-[11px] font-semibold text-wisteria-deep hover:underline">
+                    {open ? "Show less" : `+${evs.length - SHOWN} more`}
+                  </button>
+                )}
               </div>
             </motion.div>
           );
