@@ -64,8 +64,11 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
-  // Slides 3 and 4 are pictures with only a slide number: they're read from their images first.
-  expect(await fakeCalls()).toEqual(["transcribe", "extract", "link", "generate", "generate"]);
+  // Slides 3 and 4 are pictures with only a slide number: they're read from their images first; then
+  // the 27 typed slides with a figure get it described (4 a call). The log can start with calls from
+  // the previous test's job still finishing in the background, so this run's are compared from its first.
+  const calls = await fakeCalls();
+  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", ...Array(7).fill("describe"), "extract", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];

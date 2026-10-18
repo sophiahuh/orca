@@ -10,6 +10,7 @@
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
  * - deep: the same for a deep review, "<objective name>: deep case <i>?", tier application;
  * - transcribe: each page named in the prompt as "Handwritten page <n>: x + xy = x by absorption.";
+ * - describe: each slide named in the prompt gets "A figure on slide <n>.";
  * - link: the scenario's `links`, by topic name (default: none), each with a reason;
  * - reflect: the scenario's `reflect` matches, by objective name.
  *
@@ -47,6 +48,7 @@ const STEPS: Array<[string, string]> = [
   ["You match a student's reflection", "reflect"],
   ["You grade one short student answer", "grade"],
   ["You transcribe pages of a college student's", "transcribe"],
+  ["You describe the figures on slides of college course material", "describe"],
 ];
 
 let scenario: Scenario = {};
@@ -77,6 +79,10 @@ function answer(step: string, prompt: string): unknown {
       return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
     case "reconcile":
       return { decision: "new", matchId: null, reasoning: "The fake API keeps them separate." };
+    case "describe": {
+      const slides = (/slides ([\d, ]+), in that order/.exec(prompt)?.[1] ?? "").split(",").map((p) => Number(p.trim())).filter(Boolean);
+      return { pages: slides.map((n) => ({ n, figures: `A figure on slide ${n}.` })) };
+    }
     case "transcribe": {
       // The prompt names the pages its images are, in order.
       const pages = (/pages ([\d, ]+), in that order/.exec(prompt)?.[1] ?? "").split(",").map((p) => Number(p.trim())).filter(Boolean);
