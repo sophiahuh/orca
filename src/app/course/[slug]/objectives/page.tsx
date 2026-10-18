@@ -48,7 +48,7 @@ export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/obj
     <Screen bg="ocean" className="overflow-y-auto">
       <header className="relative flex justify-center px-[100px] pt-[28px] text-center">
         <div className="absolute left-[28px] top-[28px]">
-          <BackButton />
+          <BackButton href={`/course/${course.slug}`} />
         </div>
         <div className="flex flex-col items-center gap-[4px]">
           <h1 className="text-[40px] font-bold leading-none text-prussian">{course.short} objectives</h1>

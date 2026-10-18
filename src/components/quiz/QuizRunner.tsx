@@ -24,6 +24,7 @@ import { ShortAnswer } from "@/components/quiz/ShortAnswer";
 import { type GradeResult, gradeExact } from "@/lib/grading";
 import { useServerStatus } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
+import { goBack } from "@/lib/nav-history";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { Pill } from "@/components/review/parts";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -304,10 +305,10 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         skipped={skipped}
         seconds={seconds}
         streak={streak}
-        onContinue={() => router.push(backHref)}
+        onContinue={() => goBack(router, backHref)}
         onReview={missed.length ? () => restart(missed) : undefined}
         again={again}
-        onClose={() => router.push(backHref)}
+        onClose={() => goBack(router, backHref)}
       />
     );
   }
@@ -333,7 +334,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     <Screen bg="parchment" className="h-screen-below-bar max-h-screen-below-bar">
       <ResultBanner outcome={checked ? banner.outcome : null} line={banner.line} nonce={banner.nonce} />
       <header className="flex shrink-0 items-center gap-[24px] px-[40px] pt-[28px]">
-        <RoundButton size={48} label="Exit quiz" onClick={() => router.push(backHref)}>
+        <RoundButton size={48} label="Exit quiz" onClick={() => goBack(router, backHref)}>
           <IconClose size={20} />
         </RoundButton>
         <div className="max-w-[880px] flex-1">
