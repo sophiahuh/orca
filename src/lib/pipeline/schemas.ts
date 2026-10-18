@@ -239,6 +239,31 @@ export const TranscribeOutput = z.object({
 });
 export type TranscribeOutput = z.infer<typeof TranscribeOutput>;
 
+/* ── Describe: the figures on typed slides, from their images (the slide's text stays as it is) ── */
+
+export const DescribeInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200) }),
+  /** Each slide's number, its text (to say what's already there) and its rendered image. */
+  pages: z
+    .array(z.object({ n: z.number().int().min(1), text: z.string().max(6000), image: z.string().min(1).max(7_000_000) }))
+    .min(1)
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type DescribeInput = z.infer<typeof DescribeInput>;
+
+export const DescribeOutput = z.object({
+  pages: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).describe("The slide's number, as given"),
+        figures: z.string().max(2000).describe("What the slide's figures show that its text doesn't say; empty when it has only decoration"),
+      }),
+    )
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type DescribeOutput = z.infer<typeof DescribeOutput>;
+
 /** Every step: its input and output schemas. */
 export const STEPS = {
   extract: { input: ExtractInput, output: ExtractOutput },
@@ -248,6 +273,7 @@ export const STEPS = {
   link: { input: LinkInput, output: LinkOutput },
   reflect: { input: ReflectInput, output: ReflectOutput },
   transcribe: { input: TranscribeInput, output: TranscribeOutput },
+  describe: { input: DescribeInput, output: DescribeOutput },
 } as const;
 export type StepName = keyof typeof STEPS;
 export type StepInput<S extends StepName> = z.infer<(typeof STEPS)[S]["input"]>;
