@@ -225,7 +225,13 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   answer, 90 s one sentence), spread across objectives, unseen first, at least one mechanism
   question. An objective with no unseen questions reuses its oldest-seen one, says so, and queues
   a top-up.
-- **Top-up** after each session for objectives below 3 unseen questions.
+- **Top-up** after each session for objectives below 3 unseen questions. *Changed 2026-10-18
+  (owner):* questions follow practice instead of a stock. An upload writes 2 per objective (one that
+  does the skill, one "why or how" where there is one), so it finishes sooner and objectives never
+  studied cost nothing more; after a session, objectives still being learned (not mastered or
+  retired) get 2 more once they have fewer than 2 unseen (`TOP_UP_RULES`). Dive In still writes its
+  own. No wait screen for a top-up in progress: a quick review leaves out what was practised today
+  and dives write their own questions, so a session can't run into an unfinished top-up.
 - **Deep review** due per course from its configured cadence (next due one cadence after the last
   completed one; stays due if missed), with its question mix weighted by the material sliders.
   At its start the student picks how many minutes (the Settings length is the suggestion) and
