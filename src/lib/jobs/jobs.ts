@@ -14,7 +14,7 @@ import type { Course, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
-import { transcribePages } from "../pipeline/transcribe.ts";
+import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
 import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
 import { DEEP_RULES, deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
@@ -45,8 +45,8 @@ export interface JobStore {
   materials(courseId: string): Promise<Material[]>;
   /** Stored pages per material; a material with none is left out. */
   pages(materialIds: readonly string[]): Promise<Record<string, MaterialPages>>;
-  /** Store pages read from their images (their text, source `vision`). */
-  savePages(materialId: string, pages: ReadonlyArray<{ n: number; text: string }>): Promise<void>;
+  /** Store pages read from their images: transcribed (`vision`) or with their figures described (`figure`). */
+  savePages(materialId: string, pages: ReadonlyArray<{ n: number; text: string }>, source: "vision" | "figure"): Promise<void>;
   /** Every question the student has answered in the course. */
   answered(courseId: string): Promise<Set<string>>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
@@ -131,21 +131,28 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
     const loaded = await store.course(run.courseId);
     if (!loaded) throw new Error("the course is gone");
     let kept: Array<{ n: number; reason: string }> = [];
-    // Handwritten or scanned pages are read from their images first, and the clean text is stored
-    // (top-ups and dives read it too). A page that can't be read keeps the file's own text.
-    const marked = pages.filter((p) => p.source === "needs-vision").length;
-    if (marked && deps.renderPage) {
-      progress.write({ stage: "transcribing", pages: marked });
+    // Pages read from their images first, and the new text stored (top-ups and dives read it too):
+    // handwritten or scanned pages written out, then typed slides' figures described. A page that
+    // can't be read keeps the file's own text.
+    const course = { name: loaded.course.name, short: loaded.course.short };
+    const passes = [
+      { marked: "needs-vision", done: "vision", run: transcribePages },
+      { marked: "needs-figure", done: "figure", run: describeFigures },
+    ] as const;
+    for (const pass of passes) {
+      const count = pages.filter((p) => p.source === pass.marked).length;
+      if (!count || !deps.renderPage) continue;
+      progress.write(pass.done === "vision" ? { stage: "transcribing", pages: count } : { stage: "figures-reading", slides: count });
       const render = deps.renderPage;
-      const out = await transcribePages({ course: { name: loaded.course.name, short: loaded.course.short }, material, pages }, { call: deps.call, render: (n) => render(material, n) });
-      kept = out.kept;
+      const out = await pass.run({ course, material, pages }, { call: deps.call, render: (n) => render(material, n) });
+      kept = [...kept, ...out.kept];
       if (out.read.length) {
-        await store.savePages(material.id, out.read);
+        await store.savePages(material.id, out.read, pass.done);
         const read = new Map(out.read.map((p) => [p.n, p.text]));
-        pages = pages.map((p) => (read.has(p.n) ? { n: p.n, text: read.get(p.n)!, source: "vision" as const } : p));
+        pages = pages.map((p) => (read.has(p.n) ? { n: p.n, text: read.get(p.n)!, source: pass.done } : p));
       }
-      progress.write({ stage: "mapping" });
     }
+    if (kept.length || pages.some((p) => p.source === "vision" || p.source === "figure")) progress.write({ stage: "mapping" });
     const before = loaded.structure;
     const plan = await runUpload(
       {

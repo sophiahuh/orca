@@ -108,9 +108,9 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       return out;
     },
 
-    async savePages(materialId, pages) {
+    async savePages(materialId, pages, source) {
       for (const p of pages) {
-        const { error } = await db.from("material_pages").update({ text: p.text, source: "vision" }).eq("owner_id", ownerId).eq("material_id", materialId).eq("n", p.n);
+        const { error } = await db.from("material_pages").update({ text: p.text, source }).eq("owner_id", ownerId).eq("material_id", materialId).eq("n", p.n);
         if (error) throw new Error(`Couldn't store page ${p.n}'s text: ${error.message}`);
       }
     },

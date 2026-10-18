@@ -10,6 +10,8 @@ export function progressMessage(p: { stage: string; [k: string]: unknown } | nul
   switch (x?.stage) {
     case "transcribing":
       return `Reading ${x.pages} handwritten or scanned page${x.pages === 1 ? "" : "s"}…`;
+    case "figures-reading":
+      return `Describing the figures on ${x.slides} slide${x.slides === 1 ? "" : "s"}…`;
     case "mapping":
       return "Mapping the material onto the course…";
     case "matching":

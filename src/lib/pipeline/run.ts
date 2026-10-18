@@ -18,6 +18,7 @@ export type CallStep = <S extends StepName>(step: S, input: StepInput<S>) => Pro
 
 export type Progress =
   | { stage: "transcribing"; pages: number }
+  | { stage: "figures-reading"; slides: number }
   | { stage: "mapping" }
   | { stage: "matching"; candidates: number }
   | { stage: "writing"; objectives: number }
