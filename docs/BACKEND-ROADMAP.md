@@ -146,6 +146,12 @@ For each upload:
    upload job; the clean text replaces the page's). Plan: `docs/superpowers/plans/2026-10-18-handwritten-notes.md`.
    Typed slides that draw a figure (detected from pdf.js's drawing operations, no model) keep their
    exact text and get the `describe` step's description of the figure appended ("[Figures: …]").
+   *Question feedback (owner, 2026-10-18):* thumbs up / down on each question (`question_feedback`,
+   one per student per question, an optional reason on a down). A thumbs-down question is never asked
+   again for that student and counts as used for top-ups and dives (so it's replaced); a thumbs down
+   before answering skips it (nothing recorded) and the session brings in another for the same
+   objective. Ratings never touch evidence or mastery. Owner-only under RLS; Orca reads across
+   students with the secret key (SQL in docs/SETUP-HOSTED.md §7). Plan: `docs/superpowers/plans/2026-10-18-question-feedback.md`.
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.

@@ -169,6 +169,35 @@ group by owner_id having count(*) >= 3;
 -- delete from public.security_events where owner_id = '<uuid>' and kind = 'student_answer';
 ```
 
+### Question feedback (thumbs up / down, added 2026-10-18)
+
+Every student's ratings, across the platform (secret key). Use them to find weak question types and
+to build a test set for the prompts (the worst-rated questions with their reasons).
+
+```sql
+-- Ratings by question type and tier: how often each is thumbed down, and why.
+select q.kind, q.tier, q.deep,
+       count(*) filter (where f.rating = 'up') as up,
+       count(*) filter (where f.rating = 'down') as down,
+       round(100.0 * count(*) filter (where f.rating = 'down') / count(*), 1) as pct_down
+from public.question_feedback f join public.questions q on q.id = f.question_id
+group by q.kind, q.tier, q.deep order by pct_down desc;
+
+-- Reasons given for a thumbs down.
+select reason, count(*) from public.question_feedback where rating = 'down' group by reason order by count(*) desc;
+
+-- By the kind of material the question was written from.
+select m.type as material_type, count(*) filter (where f.rating = 'down') as down, count(*) as rated
+from public.question_feedback f join public.questions q on q.id = f.question_id
+left join public.materials m on m.id = q.material_id
+group by m.type order by down desc;
+
+-- The latest thumbs-down questions, for reading (and for a prompt test set).
+select f.created_at, f.reason, q.kind, q.prompt, q.explanation, q.exact
+from public.question_feedback f join public.questions q on q.id = f.question_id
+where f.rating = 'down' order by f.created_at desc limit 50;
+```
+
 ## Order
 
 1. Anthropic key into the cloud environment (unblocks the extraction baseline now).
