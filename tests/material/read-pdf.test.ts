@@ -102,7 +102,8 @@ test("a slide renders on the server as a JPEG figure", async () => {
   assert.ok(src.length > 5000);
   await assert.rejects(renderSlide(bytes, 9999), /no slide 9999/);
   // Kept whole for reading (handwritten pages): the sentences aren't painted over, so the image differs.
-  const whole = await renderSlide(bytes, 12, { keepText: true, maxWidth: 1600 });
+  // (Slide 5 has sentence-length text, which a figure paints over.)
+  const whole = await renderSlide(bytes, 5, { keepText: true });
   assert.match(whole, /^data:image\/jpeg;base64,/);
-  assert.notEqual(whole, await renderSlide(bytes, 12, { maxWidth: 1600 }));
+  assert.notEqual(whole, await renderSlide(bytes, 5));
 });
