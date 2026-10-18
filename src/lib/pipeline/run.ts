@@ -17,6 +17,7 @@ import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, 
 export type CallStep = <S extends StepName>(step: S, input: StepInput<S>) => Promise<StepOutput<S>>;
 
 export type Progress =
+  | { stage: "transcribing"; pages: number }
   | { stage: "mapping" }
   | { stage: "matching"; candidates: number }
   | { stage: "writing"; objectives: number }

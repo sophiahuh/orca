@@ -14,6 +14,7 @@ import type { Course, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
+import { transcribePages } from "../pipeline/transcribe.ts";
 import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
 import { DEEP_RULES, deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
@@ -44,6 +45,8 @@ export interface JobStore {
   materials(courseId: string): Promise<Material[]>;
   /** Stored pages per material; a material with none is left out. */
   pages(materialIds: readonly string[]): Promise<Record<string, MaterialPages>>;
+  /** Store pages read from their images (their text, source `vision`). */
+  savePages(materialId: string, pages: ReadonlyArray<{ n: number; text: string }>): Promise<void>;
   /** Every question the student has answered in the course. */
   answered(courseId: string): Promise<Set<string>>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
@@ -56,6 +59,8 @@ export interface JobDeps {
   newId: () => string;
   /** Render one slide of a material as an image for a figure question; null when it can't be. */
   renderFigure?: (material: Material, slide: number) => Promise<string | null>;
+  /** Render one page of a material whole, for reading a handwritten or scanned page; null when it can't be. */
+  renderPage?: (material: Material, page: number) => Promise<string | null>;
 }
 
 export type JobOutcome =
@@ -119,12 +124,28 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
     if (run.materialId !== job.materialId) throw new Error(`run ${run.id} is for another material`);
     const material = (await store.materials(run.courseId)).find((m) => m.id === job.materialId);
     if (!material) throw new Error("the material isn't in the course any more, or hasn't been read");
-    const pages = (await store.pages([material.id]))[material.id];
+    let pages = (await store.pages([material.id]))[material.id];
     if (!pages?.length) throw new Error("Orca found no text in this file to build from");
     const held = await heldByBudget(store, run.id, pages.length);
     if (held) return held;
     const loaded = await store.course(run.courseId);
     if (!loaded) throw new Error("the course is gone");
+    let kept: Array<{ n: number; reason: string }> = [];
+    // Handwritten or scanned pages are read from their images first, and the clean text is stored
+    // (top-ups and dives read it too). A page that can't be read keeps the file's own text.
+    const marked = pages.filter((p) => p.source === "needs-vision").length;
+    if (marked && deps.renderPage) {
+      progress.write({ stage: "transcribing", pages: marked });
+      const render = deps.renderPage;
+      const out = await transcribePages({ course: { name: loaded.course.name, short: loaded.course.short }, material, pages }, { call: deps.call, render: (n) => render(material, n) });
+      kept = out.kept;
+      if (out.read.length) {
+        await store.savePages(material.id, out.read);
+        const read = new Map(out.read.map((p) => [p.n, p.text]));
+        pages = pages.map((p) => (read.has(p.n) ? { n: p.n, text: read.get(p.n)!, source: "vision" as const } : p));
+      }
+      progress.write({ stage: "mapping" });
+    }
     const before = loaded.structure;
     const plan = await runUpload(
       {
@@ -146,6 +167,8 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         onProgress: progress.write,
       },
     );
+    // Pages that couldn't be read from their images are listed with what was left out.
+    for (const k of kept) plan.run.dropped.push({ prompt: `Page ${k.n}`, reason: `kept the file's own text: ${k.reason}` });
     const merged = applyUploadPlan(before, plan);
     const after: StructureState = { ...merged, topics: laidOut(merged.topics) };
     await progress.flushed();

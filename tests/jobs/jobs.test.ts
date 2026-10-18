@@ -32,6 +32,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
   const saves: StructureRows[] = [];
   const progress: Progress[] = [];
   const budgetAsked: number[] = [];
+  const savedPages: Array<{ n: number; text: string }> = [];
   const store: JobStore = {
     run: async (id) => (id === run.id ? { ...run } : null),
     claim: async (id, p) => {
@@ -58,6 +59,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
     course: async (id) => (id === "c" ? { course: { id: "c", name: "Logic", short: "LOG", topics: structure.topics }, structure } : null),
     materials: async () => [material],
     pages: async (ids) => Object.fromEntries(ids.flatMap((id) => (init.pages?.[id] ? [[id, init.pages[id]]] : []))),
+    savePages: async (_id, read) => void savedPages.push(...read),
     answered: async () => new Set(init.answered ?? []),
     save: async (_course, rows) => {
       saves.push(rows);
@@ -65,7 +67,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
       if (init.lostReply) throw new Error("fetch failed");
     },
   };
-  return { store, saves, progress, budgetAsked, state: run };
+  return { store, saves, progress, budgetAsked, savedPages, state: run };
 }
 
 /** A model that maps one topic and objective, writes `per` exact questions per objective and solves them right. */
@@ -122,6 +124,38 @@ test("processMaterial builds the structure from the stored pages and saves it wi
   assert.equal(rows.objectives!.length, 1);
   assert.equal(rows.questions!.length, 2);
   assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "matching", "writing"]);
+});
+
+test("handwritten pages are read from their images first: the text is stored, extraction reads it, and an unrenderable page keeps its own", async () => {
+  const handwritten: Record<string, MaterialPages> = {
+    m1: [
+      { n: 1, text: "iisel cell & think", source: "needs-vision" },
+      { n: 2, text: "Typed page about absorption.", source: "text" },
+      { n: 3, text: "", source: "needs-vision" },
+    ],
+  };
+  const mem = memoryStore({ run: queued(), pages: handwritten });
+  const honest = honestModel();
+  const sent: Array<StepInput<"transcribe">> = [];
+  let extracted: StepInput<"extract"> | null = null;
+  const call = (async (step: string, input: unknown) => {
+    if (step === "transcribe") {
+      const t = input as StepInput<"transcribe">;
+      sent.push(t);
+      return { pages: t.pages.map((p) => ({ n: p.n, text: `A DRAM cell stores one bit (page ${p.n}).` })) };
+    }
+    if (step === "extract") extracted = input as StepInput<"extract">;
+    return honest.call(step as never, input as never);
+  }) as CallStep;
+  const render = async (_m: unknown, page: number) => (page === 3 ? null : `data:image/jpeg;base64,PAGE${page}`);
+  const out = await processMaterial({ store: mem.store, call, newId, renderPage: render }, { runId: "run1", materialId: "m1" });
+  assert.equal(out.status, "done");
+  assert.deepEqual(sent.map((t) => t.pages.map((p) => [p.n, p.image])), [[[1, "PAGE1"]]], "only marked pages that could be drawn, without the data: prefix");
+  assert.deepEqual(mem.savedPages, [{ n: 1, text: "A DRAM cell stores one bit (page 1)." }]);
+  assert.deepEqual(extracted!.pages.map((p) => p.text), ["A DRAM cell stores one bit (page 1).", "Typed page about absorption.", ""]);
+  assert.deepEqual(mem.progress.map((p) => p.stage).slice(0, 2), ["transcribing", "mapping"]);
+  const dropped = mem.saves[0].runs![0].dropped as Array<{ prompt: string; reason: string }>;
+  assert.ok(dropped.some((d) => d.prompt === "Page 3" && /kept the file's own text: the page couldn't be drawn/.test(d.reason)));
 });
 
 test("a failed job records why, and saves nothing", async () => {
