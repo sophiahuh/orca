@@ -15,7 +15,7 @@ import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { ExamsModal } from "@/components/config/ExamsModal";
 import { fadeUp, stagger } from "@/lib/motion";
-import { DEFAULT_CONFIG, trailTopics } from "@/lib/data";
+import { COURSE_NAME_MAX, DEFAULT_CONFIG, trailTopics } from "@/lib/data";
 import { pendingReview } from "@/lib/course/review";
 import Link from "next/link";
 
@@ -80,7 +80,9 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
             aria-label="Course name"
             spellCheck={false}
             onBlur={(e) => {
-              const name = e.currentTarget.textContent?.trim() ?? "";
+              // At most COURSE_NAME_MAX characters: a longer name is cut there, and the heading shows what was kept.
+              const name = (e.currentTarget.textContent?.trim() ?? "").slice(0, COURSE_NAME_MAX).trim();
+              e.currentTarget.textContent = name || course.name;
               if (name && name !== course.name) renameCourse(course.id, name);
               else e.currentTarget.textContent = course.name;
             }}

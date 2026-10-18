@@ -354,11 +354,13 @@ export function slugify(name: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-/** A course's short label (calendar, chips): initials for three words or more, or for a long name; else the name. */
+/** Longest a course's name may be (the database enforces the same). */
+export const COURSE_NAME_MAX = 50;
+
 export function shortName(name: string) {
   const words = name.trim().split(/\s+/);
-  if (words.length >= 3 || (words.length === 2 && name.trim().length > 16)) return words.map((w) => w[0]?.toUpperCase() ?? "").join("");
-  return name.trim();
+  if (words.length >= 3) return words.map((w) => w[0]?.toUpperCase() ?? "").join("");
+  return name;
 }
 
 /** Smooth cubic trail through topic centres (used when a course has no hand-tuned trail). */
