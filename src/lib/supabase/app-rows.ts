@@ -492,7 +492,7 @@ export function loadedState(d: MyData): LoadedState {
     results: d.sessions.map(sessionFromRow),
     events: d.calendar.map(calendarFromRow),
     exams: d.exams.map(examFromRow),
-    feedback: Object.fromEntries((d.question_feedback ?? []).map((r) => [r.question_id, { courseId: r.course_id, rating: r.rating as QuestionRating["rating"], reason: (r.reason as FeedbackReason | null) ?? null }])),
+    feedback: Object.fromEntries((d.question_feedback ?? []).map((r) => [r.question_id, { courseId: r.course_id, rating: r.rating as QuestionRating["rating"], reason: (r.reason as FeedbackReason | null) ?? null, note: r.note ?? null }])),
     evidence: d.evidence.map(eventFromRow),
     snapshots: d.snapshots,
   };

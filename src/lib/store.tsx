@@ -156,7 +156,7 @@ interface OrcaActions {
   updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[] }) => void;
   removeExam: (id: string) => void;
   /** Thumbs up or down on a question (a later one replaces it); null clears it. */
-  rateQuestion: (courseId: string, questionId: string, rating: QuestionRating["rating"] | null, reason?: FeedbackReason | null) => void;
+  rateQuestion: (courseId: string, questionId: string, rating: QuestionRating["rating"] | null, reason?: FeedbackReason | null, note?: string | null) => void;
   clearWeightOverride: (courseId: string) => void;
   /** Account defaults, inherited by courses without an override. */
   setDefaults: (config: ReviewConfig, weights: Weights) => void;
@@ -581,10 +581,11 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const rateQuestion = useCallback<OrcaActions["rateQuestion"]>(
-    (courseId, questionId, rating, reason = null) => {
+    (courseId, questionId, rating, reason = null, note = null) => {
+      const down = rating === "down";
       setState((s) => {
         const feedback = { ...s.feedback };
-        if (rating) feedback[questionId] = { courseId, rating, reason: rating === "down" ? reason : null };
+        if (rating) feedback[questionId] = { courseId, rating, reason: down ? reason : null, note: down ? note : null };
         else delete feedback[questionId];
         return { ...s, feedback };
       });
@@ -594,7 +595,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         must(
           await db
             .from("question_feedback")
-            .upsert({ question_id: questionId, course_id: courseId, rating, reason: rating === "down" ? reason : null, updated_at: new Date().toISOString() }, { onConflict: "owner_id,question_id" }),
+            .upsert({ question_id: questionId, course_id: courseId, rating, reason: down ? reason : null, note: down ? note : null, updated_at: new Date().toISOString() }, { onConflict: "owner_id,question_id" }),
         );
       });
     },

@@ -246,9 +246,9 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
    * objective comes next when the stock has one.
    */
   const skipBad = useCallback(
-    (reason: FeedbackReason | null) => {
+    (reason: FeedbackReason | null, note: string | null) => {
       if (!item) return;
-      rateQuestion(course.id, item.question.id, "down", reason);
+      rateQuestion(course.id, item.question.id, "down", reason, note);
       const replacement = !subset && replacementFor ? replacementFor(item, new Set(allItems.map((i) => i.question.id))) : null;
       if (replacement) setAllItems((xs) => [...xs.slice(0, index + 1), replacement, ...xs.slice(index + 1)]);
       setSkipped((n) => n + 1);
@@ -448,7 +448,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
                 />
               )}
             </AnimatePresence>
-            {checked && <RateAnswered rating={feedback[q.id]} onRate={(rating, reason) => rateQuestion(course.id, q.id, rating, reason ?? null)} />}
+            {checked && <RateAnswered key={q.id} rating={feedback[q.id]} onRate={(rating, reason, note) => rateQuestion(course.id, q.id, rating, reason ?? null, note ?? null)} />}
           </motion.div>
         </AnimatePresence>
       </div>

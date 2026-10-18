@@ -186,6 +186,8 @@ export interface QuestionRating {
   courseId: string;
   rating: "up" | "down";
   reason: FeedbackReason | null;
+  /** What was wrong, in the student's words (a thumbs down only; question writing reads it). */
+  note: string | null;
 }
 
 /* ── Course structure from uploads ─────────────────────────────────────── */
