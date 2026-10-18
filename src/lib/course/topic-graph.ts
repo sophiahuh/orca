@@ -69,6 +69,8 @@ export interface GraphEdge {
   from: string;
   to: string;
   type: RelationType;
+  /** Why the link is there (shown on hover); null for a link made before reasons were kept. */
+  reason: string | null;
   /** SVG path, from the edge of one node to the edge of the other. */
   d: string;
   /** Where its label sits: most of the way along, near the arrow, so a topic's edges' labels spread out. */
@@ -100,7 +102,7 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
 
   /* Edges between live topics, through merges, once each ("alternative-to" in either direction is one). */
   const seen = new Set<string>();
-  const links: Array<{ id: string; from: string; to: string; type: RelationType }> = [];
+  const links: Array<{ id: string; from: string; to: string; type: RelationType; reason: string | null }> = [];
   for (const r of relations) {
     if (r.review === "archived") continue;
     const from = survivingTopic(r.from, byId)?.id;
@@ -109,7 +111,7 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
     const key = r.type === "alternative-to" ? `${[from, to].sort().join("|")}|${r.type}` : `${from}|${to}|${r.type}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    links.push({ id: r.id, from, to, type: r.type });
+    links.push({ id: r.id, from, to, type: r.type, reason: r.reason });
   }
 
   /*

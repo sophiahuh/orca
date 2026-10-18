@@ -11,7 +11,7 @@ const SLUG = FIXTURE_STATE.courses[0].slug;
 test("the atlas draws topics and their links, foundations on top; hovering explains a topic and clicking opens it", async ({ page, student }) => {
   await seedState(student, {
     ...FIXTURE_STATE,
-    relations: { [F.course]: [{ id: crypto.randomUUID(), from: F.booleanAlgebra, to: F.twosComplement, type: "used-in", anchor: null, review: "proposed", materialId: F.material }] },
+    relations: { [F.course]: [{ id: crypto.randomUUID(), from: F.booleanAlgebra, to: F.twosComplement, type: "used-in", anchor: null, review: "proposed", materialId: F.material, reason: "Two's complement negation is a Boolean operation on bits." }] },
   });
   await page.goto(`/course/${SLUG}/atlas`);
   await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 1 connection");
@@ -78,6 +78,10 @@ test("Find connections links the course's topics with the link step and draws th
   await expect(page.locator("[data-part=edge][data-type=related]")).toHaveCount(1);
   await expect(page.locator("[data-part=atlas-summary]")).toHaveText("2 topics · 1 connection");
   expect(await fakeCalls()).toEqual(["link"]);
+  // Hovering the link shows why it's there.
+  // force: a link between topics in one row is a flat line (a zero-height box), though its 16 px stroke takes the pointer.
+  await page.locator("[data-part=edge-hit]").hover({ force: true });
+  await expect(page.locator("[data-part=edge-reason]")).toContainText("Boolean Algebra is part of how Two's Complement works.");
   // Asking again finds nothing new: the link it already has isn't added twice.
   await page.locator("[data-part=find-connections]").click();
   await expect(page.locator("[data-part=find-connections-result]")).toHaveText("No new connections found.");

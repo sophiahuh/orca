@@ -68,6 +68,9 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
   const [view, setView] = useState<View>(full);
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [hover, setHover] = useState<string | null>(null);
+  // A hovered link: which one, and where the pointer is in the map's box (its reason shows there).
+  const [edgeHover, setEdgeHover] = useState<{ id: string; x: number; y: number; w: number; h: number } | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const panDrag = useRef<{ x: number; y: number; view: View } | null>(null);
   const nodeDrag = useRef<{ id: string; x: number; y: number; startX: number; startY: number; view: View; moved: boolean } | null>(null);
   const ignoreClick = useRef(false);
@@ -116,7 +119,9 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
   }, [edges, hover, nodesById]);
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (e.target !== e.currentTarget) return;
+    // The map pans from empty space or from a link (its wide invisible hit line), never from a topic.
+    if (e.target !== e.currentTarget && (e.target as Element).getAttribute("data-part") !== "edge-hit") return;
+    setEdgeHover(null);
     panDrag.current = { x: e.clientX, y: e.clientY, view };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -164,8 +169,16 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
     onOpen(id);
   };
 
+  const pointAt = (id: string, e: React.PointerEvent) => {
+    if (panDrag.current || nodeDrag.current) return;
+    const box = boxRef.current?.getBoundingClientRect();
+    if (box) setEdgeHover({ id, x: e.clientX - box.left, y: e.clientY - box.top, w: box.width, h: box.height });
+  };
+  const hoveredEdge = edgeHover ? edges.find((e) => e.id === edgeHover.id) : undefined;
+  const nameOf = (id: string) => nodesById.get(id)?.topic.name ?? "";
+
   return (
-    <div className="absolute inset-0" data-part="topic-graph">
+    <div ref={boxRef} className="absolute inset-0" data-part="topic-graph">
       <svg
         ref={svgRef}
         className="h-full w-full cursor-grab touch-none select-none active:cursor-grabbing"
@@ -208,6 +221,23 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
           );
         })}
 
+        {/* Wide invisible lines over each link, under the topics, so a link can be hovered for its reason. */}
+        {edges.map((e) => (
+          <path
+            key={`hit-${e.id}`}
+            data-part="edge-hit"
+            data-edge={e.id}
+            d={e.d}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={16}
+            pointerEvents="stroke"
+            onPointerEnter={(ev) => pointAt(e.id, ev)}
+            onPointerMove={(ev) => pointAt(e.id, ev)}
+            onPointerLeave={() => setEdgeHover((h) => (h?.id === e.id ? null : h))}
+          />
+        ))}
+
         <motion.g variants={stagger(0.05, 0.03)} initial="hidden" animate="show">
           {nodes.map((n) => (
             <TopicNode key={n.topic.id} node={n} active={hover === n.topic.id} dim={neighbours !== null && !neighbours.has(n.topic.id)} onHover={setHover} onOpen={openNode} onDragStart={startNodeDrag} />
@@ -239,6 +269,21 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
             but over everything else. Copies of the nodes, so the real ones don't re-animate. */}
         {hover && nodes.filter((n) => neighbours?.has(n.topic.id)).map((n) => <use key={`front-${n.topic.id}`} href={`#topic-art-${n.topic.id}`} pointerEvents="none" aria-hidden data-part="topic-front" />)}
 
+        {/* A hovered link is drawn again, a little heavier, over everything. */}
+        {hoveredEdge && (
+          <path
+            data-part="edge-hovered"
+            d={hoveredEdge.d}
+            fill="none"
+            stroke={EDGE[hoveredEdge.type].stroke}
+            strokeWidth={EDGE[hoveredEdge.type].width + 1.5}
+            strokeDasharray={EDGE[hoveredEdge.type].dash}
+            strokeLinecap="round"
+            markerEnd={EDGE[hoveredEdge.type].marker}
+            pointerEvents="none"
+          />
+        )}
+
         {/* Hover: the lit edges' kinds as pills (related edges stay unlabelled). */}
         {edgeLabels.map((e) => {
           const label = RELATION_LABEL[e.type];
@@ -254,6 +299,25 @@ export function TopicGraph({ graph, onOpen }: { graph: Graph; onOpen: (topicId: 
         })}
 
       </svg>
+
+      {hoveredEdge && edgeHover && (
+        <div
+          role="tooltip"
+          data-part="edge-reason"
+          className="pointer-events-none absolute z-10 w-[280px] rounded-[14px] border-2 border-alice-deep bg-parchment px-[14px] py-[10px] text-prussian shadow-sm"
+          style={{
+            left: Math.max(8, Math.min(edgeHover.x + 14, edgeHover.w - 296)),
+            top: Math.max(8, Math.min(edgeHover.y + 14, edgeHover.h - 140)),
+          }}
+        >
+          <p className="text-[12px] font-bold" style={{ color: EDGE[hoveredEdge.type].stroke }}>
+            {nameOf(hoveredEdge.from)} · {RELATION_LABEL[hoveredEdge.type]} · {nameOf(hoveredEdge.to)}
+          </p>
+          <p className="mt-[4px] text-[14px] leading-snug">
+            {hoveredEdge.reason ?? "No reason recorded: this link was made before links kept one. Find connections explains it."}
+          </p>
+        </div>
+      )}
 
       <div className="absolute bottom-[20px] right-[20px]">
         <ZoomControls onZoomOut={() => zoom(1.25)} onZoomIn={() => zoom(0.8)} onFit={() => setView(full)} />
