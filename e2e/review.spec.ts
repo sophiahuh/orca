@@ -49,13 +49,15 @@ test.beforeEach(async ({ student }, info) => {
   if (!info.title.startsWith("the course's uploads")) await seedState(student, STATE);
 });
 
-test("the course page always has Uploads and Review, with counts when there's something in them", async ({ page }) => {
+test("the course page always has Uploads; its badge counts what's waiting for review, and it opens on the Review tab then", async ({ page }) => {
   await page.goto(`/course/${SLUG}`);
-  await expect(page.locator("[data-part=uploads-link]")).toHaveText("Uploads");
-  await expect(page.getByRole("link", { name: "Review, 4 to review" })).toHaveText("Review4");
-  await page.getByRole("link", { name: "Review, 4 to review" }).click();
+  const uploads = page.getByRole("link", { name: "Uploads, 4 to review" });
+  await expect(uploads).toHaveText("Uploads4");
+  await uploads.click();
   await expect(page).toHaveURL(/\/review\?tab=review$/);
   await expect(page.locator("[data-part=duplicate]")).toHaveCount(2);
+  // Somewhere to add a file from here.
+  await expect(page.locator("[data-part=add-material]")).toHaveAttribute("href", `/add-material?course=${SLUG}`);
 });
 
 test("the course's uploads: the button counts the one building, and the Uploads tab lists every upload, newest first", async ({ page, student }) => {
@@ -77,8 +79,8 @@ test("the course's uploads: the button counts the one building, and the Uploads 
   });
   await seedState(student, { ...STATE, runs: [run("done", 60), run("failed", 30, { error: "The model didn't answer." }), run("running", 1, { progress: { stage: "writing" } })] });
   await page.goto(`/course/${SLUG}`);
-  const button = page.getByRole("link", { name: "Uploads, 1 building" });
-  await expect(button).toHaveText("Uploads1");
+  const button = page.getByRole("link", { name: "Uploads, 1 building, 4 to review" });
+  await expect(button).toHaveText("Uploads5");
   await button.click();
   await expect(page).toHaveURL(/\/review\?tab=uploads$/);
   const cards = page.locator("[data-part=upload-card]");

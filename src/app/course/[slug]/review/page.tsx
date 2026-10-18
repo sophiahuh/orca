@@ -9,6 +9,7 @@ import { courseUploads, pendingReview, uploadsInProgress } from "@/lib/course/re
 import { isFinished, useRun } from "@/hooks/useRun";
 import { ReviewTabs, type ReviewTab } from "@/components/review/ReviewTabs";
 import { UploadCard } from "@/components/review/UploadCard";
+import { IconUpload } from "@/components/icons";
 import { confirmTopic, rejectObjective, rejectTopic, renameTopic, resolveUncertain, resolveUncertainTopic } from "@/lib/course/ops";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
@@ -89,8 +90,16 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
           </motion.div>
         )}
 
-        <motion.div variants={fadeUp}>
+        <motion.div variants={fadeUp} className="flex items-center justify-between gap-[12px]">
           <ReviewTabs slug={course.slug} current={tab} runId={runId} uploads={uploadsInProgress(runs, course.id)} toReview={pending.count} />
+          <Link
+            href={`/add-material?course=${course.slug}`}
+            className="pressable flex items-center gap-[8px] rounded-pill bg-wisteria px-[16px] py-[9px] text-[14px] font-bold text-parchment lip-3 lip-wisteria"
+            data-part="add-material"
+          >
+            <IconUpload size={16} />
+            Add material
+          </Link>
         </motion.div>
 
         {tab === "uploads" ? (

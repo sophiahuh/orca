@@ -116,9 +116,8 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
               .map((u) => (
                 <FollowRun key={u.id} runId={u.id} />
               ))}
-            {/* Always there: the course's uploads and what they need reviewed, each with a count when there's something in it. */}
-            <CountLink href={`/course/${course.slug}/review?tab=uploads`} label="Uploads" count={uploading} countLabel="building" part="uploads-link" />
-            <CountLink href={`/course/${course.slug}/review?tab=review`} label="Review" count={toReview} countLabel="to review" part="review-link" />
+            {/* Always there: the course's uploads (the page's Review tab holds what they need reviewed). The badge counts both. */}
+            <CountLink href={`/course/${course.slug}/review${uploading > 0 || toReview === 0 ? "?tab=uploads" : "?tab=review"}`} label="Uploads" count={uploading + toReview} countLabel={countLabel(uploading, toReview)} part="uploads-link" />
           </motion.nav>
         </div>
       </motion.header>
@@ -161,7 +160,7 @@ function CountLink({ href, label, count, countLabel, part }: { href: string; lab
   return (
     <Link
       href={href}
-      aria-label={count > 0 ? `${label}, ${count} ${countLabel}` : label}
+      aria-label={count > 0 ? `${label}, ${countLabel}` : label}
       className="pressable flex items-center gap-[6px] rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice"
       data-part={part}
     >
@@ -169,4 +168,9 @@ function CountLink({ href, label, count, countLabel, part }: { href: string; lab
       {count > 0 && <span className="flex h-[20px] min-w-[20px] items-center justify-center rounded-pill bg-wisteria px-[6px] text-[11px] font-bold text-parchment">{count}</span>}
     </Link>
   );
+}
+
+/** What the Uploads badge counts, for screen readers: "1 building, 3 to review". */
+function countLabel(uploading: number, toReview: number): string {
+  return [uploading > 0 && `${uploading} building`, toReview > 0 && `${toReview} to review`].filter(Boolean).join(", ");
 }
