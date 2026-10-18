@@ -58,7 +58,7 @@ function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind:
 
 /** What every session draws on, read from the store once at mount so the session doesn't change under the student. */
 function useSessionSources(course: Course) {
-  const { questionBank, objectives } = useOrca();
+  const { questionBank, objectives, feedback } = useOrca();
   const dayKey = useDayKey();
   const agenda = useAgenda()[course.id];
   const mastery = useMasteryByCourse()[course.id];
@@ -67,13 +67,16 @@ function useSessionSources(course: Course) {
     const catalogue = objectives[course.id] ?? {};
     const byId = new Map<string, QuizQuestion>();
     const byObjective = new Map<string, QuizQuestion[]>();
+    const placeOf = new Map<string, { objectiveId: string; topicId: string }>();
     for (const t of trailTopics(course)) {
       for (const q of questionBank[course.id]?.[t.id] ?? []) {
         const o = liveObjectiveOf(q, t.id, catalogue);
-        // Deep-review questions are written for, and asked in, deep reviews only.
-        if (!o || q.deep) continue;
+        // Deep-review questions are written for, and asked in, deep reviews only; a question the
+        // student gave a thumbs down is never asked again.
+        if (!o || q.deep || feedback[q.id]?.rating === "down") continue;
         byId.set(q.id, q);
         byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
+        placeOf.set(q.id, { objectiveId: o.id, topicId: t.id });
       }
     }
     const ctx = { lastSeen: lastSeenOf(mastery.events), now: new Date(), dayKey };
@@ -86,7 +89,17 @@ function useSessionSources(course: Course) {
         const notes = [...(why ? [why] : []), ...(i.seenBefore ? ["Seen before: no new questions left for this one yet"] : [])];
         return { question, topicId: i.topicId, notes };
       });
-    return { agenda, ctx, toItems, candidates: (ranked: typeof agenda.ranked) => sessionCandidates(ranked, mastery.objectives, byObjective) };
+    // In place of a thumbs-down question: another for the same objective, unseen first, else the one
+    // seen longest ago; none when the objective has no other question (the top-up writes more).
+    const replacementFor = (item: RunnerItem, exclude: ReadonlySet<string>): RunnerItem | null => {
+      const place = placeOf.get(item.question.id);
+      if (!place) return null;
+      const others = (byObjective.get(place.objectiveId) ?? []).filter((q) => !exclude.has(q.id));
+      const pick = others.find((q) => !ctx.lastSeen.has(q.id)) ?? [...others].sort((a, b) => (ctx.lastSeen.get(a.id) ?? "").localeCompare(ctx.lastSeen.get(b.id) ?? ""))[0];
+      if (!pick) return null;
+      return { question: pick, topicId: placeOf.get(pick.id)!.topicId, notes: ["In place of the question you flagged"] };
+    };
+    return { agenda, ctx, toItems, replacementFor, candidates: (ranked: typeof agenda.ranked) => sessionCandidates(ranked, mastery.objectives, byObjective) };
   });
   return sources;
 }
@@ -94,7 +107,7 @@ function useSessionSources(course: Course) {
 function QuickReview({ course }: { course: Course }) {
   const router = useRouter();
   const { configs } = useOrca();
-  const { agenda, ctx, toItems, candidates } = useSessionSources(course);
+  const { agenda, ctx, toItems, candidates, replacementFor } = useSessionSources(course);
   const backHref = `/course/${course.slug}`;
 
   const [items] = useState(() => {
@@ -109,7 +122,7 @@ function QuickReview({ course }: { course: Course }) {
       : `Nothing to review in ${course.name} right now.`;
     return <NothingToDo course={course} message={message} onBack={() => goBack(router, backHref)} />;
   }
-  return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} />;
+  return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} replacementFor={replacementFor} />;
 }
 
 /**

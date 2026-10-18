@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import type { Course, QuizQuestion, SessionMode } from "@/lib/data";
+import type { Course, FeedbackReason, QuizQuestion, SessionMode } from "@/lib/data";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { EvidenceSource, Grader, Outcome } from "@/lib/mastery/types";
 import { useDayKey, useMasteryByCourse, useOrca, useStreak, useTodos } from "@/lib/store";
@@ -25,6 +25,7 @@ import { type GradeResult, gradeExact } from "@/lib/grading";
 import { useServerStatus } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
 import { goBack } from "@/lib/nav-history";
+import { RateAnswered, RateUnanswered } from "./RateQuestion";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { Pill } from "@/components/review/parts";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -49,6 +50,8 @@ export interface QuizRunnerProps {
   backHref: string;
   /** An end-card button that starts another session of the same kind (deep review). */
   again?: { label: string; onStart: () => void };
+  /** Another question for the same objective, not one of `exclude`, to ask in place of a thumbs-down one; null when there's none. */
+  replacementFor?: (item: RunnerItem, exclude: ReadonlySet<string>) => RunnerItem | null;
 }
 
 /**
@@ -56,10 +59,10 @@ export interface QuizRunnerProps {
  * answer, records one evidence event per graded answer, records the finished session, then tops up
  * the stock for the objectives it asked about.
  */
-export function QuizRunner({ course, items: allItems, mode, title, backHref, again }: QuizRunnerProps) {
+export function QuizRunner({ course, items: firstItems, mode, title, backHref, again, replacementFor }: QuizRunnerProps) {
   const router = useRouter();
   const streak = useStreak();
-  const { recordQuiz, recordEvidence, objectives } = useOrca();
+  const { recordQuiz, recordEvidence, objectives, feedback, rateQuestion } = useOrca();
   const masteryByCourse = useMasteryByCourse();
   const todos = useTodos();
   const dayKey = useDayKey();
@@ -68,6 +71,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const serverModel = serverStatus === undefined ? undefined : serverStatus.serverModel;
   const topUp = useTopUp(serverModel);
   const catalogue = objectives[course.id];
+  // Every item, plus replacements for thumbs-down questions as they come in.
+  const [allItems, setAllItems] = useState<RunnerItem[]>(firstItems);
   // null = every item; a list = the "review misses" subset.
   const [subset, setSubset] = useState<RunnerItem[] | null>(null);
   const items = subset ?? allItems;
@@ -233,6 +238,33 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
       }
     },
     [q, checked, grading, settle],
+  );
+
+  /**
+   * A thumbs down before answering: the rating is saved, the question is skipped without being
+   * offered again in "review missed" (nothing is recorded), and another question for the same
+   * objective comes next when the stock has one.
+   */
+  const skipBad = useCallback(
+    (reason: FeedbackReason | null, note: string | null) => {
+      if (!item) return;
+      rateQuestion(course.id, item.question.id, "down", reason, note);
+      const replacement = !subset && replacementFor ? replacementFor(item, new Set(allItems.map((i) => i.question.id))) : null;
+      if (replacement) setAllItems((xs) => [...xs.slice(0, index + 1), replacement, ...xs.slice(index + 1)]);
+      setSkipped((n) => n + 1);
+      if (index + 1 >= total + (replacement ? 1 : 0)) {
+        setFinished(true);
+        window.scrollTo(0, 0);
+        return;
+      }
+      setIndex((i) => i + 1);
+      setSelected(null);
+      setChecked(false);
+      setGrade(null);
+      setDeepResponse("");
+      bodyRef.current?.scrollTo({ top: 0 });
+    },
+    [item, subset, replacementFor, allItems, index, total, rateQuestion, course.id],
   );
 
   const advance = useCallback(() => {
@@ -416,6 +448,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
                 />
               )}
             </AnimatePresence>
+            {checked && <RateAnswered key={q.id} rating={feedback[q.id]} onRate={(rating, reason, note) => rateQuestion(course.id, q.id, rating, reason ?? null, note ?? null)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -426,9 +459,12 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
             {correct} correct so far · <span className="text-periwinkle-deep">Enter to continue</span>
           </span>
         ) : (
-          <Button variant="ghost" size="sm" onClick={advance}>
-            Skip
-          </Button>
+          <div className="flex items-center gap-[12px]">
+            <Button variant="ghost" size="sm" onClick={advance}>
+              Skip
+            </Button>
+            <RateUnanswered key={q.id} onDown={skipBad} />
+          </div>
         )}
         {checked ? (
           <Button size="sm" onClick={advance}>

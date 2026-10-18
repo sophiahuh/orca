@@ -10,7 +10,7 @@
  * or records why it failed (failed). The browser follows the row through Realtime. Pages come from
  * `material_pages` only: the stored file is never read again here.
  */
-import type { Course, Material, MaterialPages, PipelineRun } from "../data.ts";
+import type { Course, FlaggedQuestion, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
@@ -47,8 +47,10 @@ export interface JobStore {
   pages(materialIds: readonly string[]): Promise<Record<string, MaterialPages>>;
   /** Store pages read from their images: transcribed (`vision`) or with their figures described (`figure`). */
   savePages(materialId: string, pages: ReadonlyArray<{ n: number; text: string }>, source: "vision" | "figure"): Promise<void>;
-  /** Every question the student has answered in the course. */
+  /** Every question the student has answered in the course, or given a thumbs down (used either way). */
   answered(courseId: string): Promise<Set<string>>;
+  /** The course's thumbs-down questions, newest first, cleaned for question writing. */
+  flagged(courseId: string): Promise<FlaggedQuestion[]>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
   save(courseId: string, rows: StructureRows): Promise<void>;
 }
@@ -163,6 +165,7 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         material,
         pages,
         ...(material.hiddenText ? { hiddenText: material.hiddenText } : {}),
+        flagged: await store.flagged(run.courseId),
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -214,6 +217,7 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
         materialPages,
         objectiveIds,
         answered,
+        flagged: await store.flagged(run.courseId),
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -257,7 +261,7 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
       const materials = await store.materials(run.courseId);
       const materialPages = await store.pages(materials.map((m) => m.id));
       plan = await runDeepReview(
-        { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite },
+        { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite, flagged: await store.flagged(run.courseId) },
         { call: deps.call, newId: deps.newId },
       );
     }

@@ -4,7 +4,7 @@
  * them like an upload's. Also the targets for a deep review's questions (`deepTargets`). Model
  * calls are injected; nothing here touches the store.
  */
-import type { Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../data.ts";
+import type { FlaggedQuestion, Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../data.ts";
 import { locatorPages } from "../course/study.ts";
 import { DEEP_RULES } from "../deep-review.ts";
 import { type RunDeps, type WriteTarget, writeQuestions } from "./run.ts";
@@ -30,6 +30,8 @@ export interface TopUpInput {
   objectiveIds: readonly string[];
   /** Every question the student has answered. */
   answered: ReadonlySet<string>;
+  /** The course's thumbs-down questions (cleaned, newest first), for question writing. */
+  flagged?: readonly FlaggedQuestion[];
   runId: string;
   model: string;
   /** ISO time. */
@@ -149,7 +151,7 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
     attached.push(...targets.map((t) => t.objective.id));
     let written: Awaited<ReturnType<typeof writeQuestions>>;
     try {
-      written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank }, deps);
+      written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank, ...(input.flagged ? { flagged: input.flagged } : {}) }, deps);
     } catch (e) {
       for (const t of targets) skipped.push({ objectiveId: t.objective.id, reason: `couldn't write questions: ${e instanceof Error ? e.message : String(e)}` });
       continue;
@@ -181,7 +183,7 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
 
 /* ── Deep review: harder questions written when it starts ─────────────── */
 
-export interface DeepInput extends Pick<TopUpInput, "course" | "objectives" | "bank" | "materials" | "materialPages"> {
+export interface DeepInput extends Pick<TopUpInput, "course" | "objectives" | "bank" | "materials" | "materialPages" | "flagged"> {
   /** The objectives to cover, most urgent first. */
   objectiveIds: readonly string[];
   /** Questions to write in all. */
@@ -226,7 +228,7 @@ export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call"
   const dropped: PipelineRun["dropped"] = [];
   const written = await Promise.all(
     [...byMaterial.values()].map(({ material, targets, pages }) =>
-      writeQuestions({ course: input.course, material, pages: input.materialPages[material.id].filter((p) => pages.has(p.n)), topics, targets, bank: input.bank, deep: true }, deps),
+      writeQuestions({ course: input.course, material, pages: input.materialPages[material.id].filter((p) => pages.has(p.n)), topics, targets, bank: input.bank, deep: true, ...(input.flagged ? { flagged: input.flagged } : {}) }, deps),
     ),
   );
   for (const w of written) {
