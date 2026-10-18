@@ -24,6 +24,7 @@ import { ShortAnswer } from "@/components/quiz/ShortAnswer";
 import { type GradeResult, gradeExact } from "@/lib/grading";
 import { useServerStatus } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
+import { goBack } from "@/lib/nav-history";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { Pill } from "@/components/review/parts";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -114,17 +115,20 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
   }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz]);
 
-  // Then top up the stock for the objectives this run asked about (waits for the server-model check).
+  // Then write more questions for the objectives this run asked about that the student is still
+  // working on (waits for the server-model check); a mastered one gets none until it fades.
   const { start: startTopUp } = topUp;
   useEffect(() => {
     if (!finished) return;
+    const states = masteryByCourse[course.id]?.objectives;
     const ids = allItems.flatMap((i) => {
       const o = liveObjectiveOf(i.question, i.topicId, catalogue ?? {});
-      return o ? [o.id] : [];
+      const status = o ? states?.get(o.id)?.status : undefined;
+      return o && status !== "mastered" && status !== "retired" ? [o.id] : [];
     });
     // The session id was set when the result was recorded (the effect above).
-    if (sessionId.current) startTopUp(course.id, sessionId.current, ids);
-  }, [finished, allItems, catalogue, course.id, startTopUp]);
+    if (sessionId.current && ids.length) startTopUp(course.id, sessionId.current, ids);
+  }, [finished, allItems, catalogue, course.id, startTopUp, masteryByCourse]);
 
   const item = items[index];
   const q = item?.question;
@@ -301,10 +305,10 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         skipped={skipped}
         seconds={seconds}
         streak={streak}
-        onContinue={() => router.push(backHref)}
+        onContinue={() => goBack(router, backHref)}
         onReview={missed.length ? () => restart(missed) : undefined}
         again={again}
-        onClose={() => router.push(backHref)}
+        onClose={() => goBack(router, backHref)}
       />
     );
   }
@@ -330,7 +334,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     <Screen bg="parchment" className="h-screen-below-bar max-h-screen-below-bar">
       <ResultBanner outcome={checked ? banner.outcome : null} line={banner.line} nonce={banner.nonce} />
       <header className="flex shrink-0 items-center gap-[24px] px-[40px] pt-[28px]">
-        <RoundButton size={48} label="Exit quiz" onClick={() => router.push(backHref)}>
+        <RoundButton size={48} label="Exit quiz" onClick={() => goBack(router, backHref)}>
           <IconClose size={20} />
         </RoundButton>
         <div className="max-w-[880px] flex-1">

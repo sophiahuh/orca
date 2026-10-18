@@ -55,6 +55,7 @@ export const ExtractOutput = z.object({
         to: z.string().max(60).describe("Topic localId or existing topic id"),
         type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
         anchor: Anchor.nullable(),
+        reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
       }),
     )
     .max(60),
@@ -121,8 +122,9 @@ export type DeepOutput = z.infer<typeof DeepOutput>;
 
 const Page = z.object({ n: z.number().int().min(1), text: z.string().max(6000) });
 const Named = z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()), description: z.string().optional(), rejected: z.boolean() });
-const Course = z.object({ name: z.string().max(120), short: z.string().max(20) });
-const MaterialType = z.enum(["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
+// The short label is display text (often the whole name for courses made before initials), not a ref.
+const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
+const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
 
 export const ExtractInput = z.object({
   course: Course,
@@ -167,8 +169,8 @@ export const LinkInput = z.object({
   course: Course,
   /** Each topic by a short ref ("t1"…), with its summary; `isNew` marks this upload's topics. */
   topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2).max(200),
-  /** Links the course already has, by ref (not to be repeated). */
-  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })).max(1000),
+  /** Links the course already has, by ref (not to be repeated, except those that need a reason). */
+  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string(), needsReason: z.boolean().optional() })).max(1000),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
 
@@ -179,6 +181,7 @@ export const LinkOutput = z.object({
         from: z.string().max(20).describe("A topic ref"),
         to: z.string().max(20).describe("A topic ref"),
         type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
+        reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
       }),
     )
     .max(120),
@@ -208,6 +211,59 @@ export const ReflectOutput = z.object({
 });
 export type ReflectOutput = z.infer<typeof ReflectOutput>;
 
+/* ── Transcribe: handwritten or scanned pages, read from their images ── */
+
+/** At most this many pages go in one transcribe call (each a page image). */
+export const TRANSCRIBE_PAGES_PER_CALL = 4;
+
+export const TranscribeInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200) }),
+  /** Each page's number and its rendered image (base64 JPEG, no data: prefix; about 5 MB at most). */
+  pages: z
+    .array(z.object({ n: z.number().int().min(1), image: z.string().min(1).max(7_000_000) }))
+    .min(1)
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type TranscribeInput = z.infer<typeof TranscribeInput>;
+
+export const TranscribeOutput = z.object({
+  pages: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).describe("The page's number, as given"),
+        text: z.string().max(6000).describe("Everything on the page written out as text; empty when the page is blank"),
+      }),
+    )
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type TranscribeOutput = z.infer<typeof TranscribeOutput>;
+
+/* ── Describe: the figures on typed slides, from their images (the slide's text stays as it is) ── */
+
+export const DescribeInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200) }),
+  /** Each slide's number, its text (to say what's already there) and its rendered image. */
+  pages: z
+    .array(z.object({ n: z.number().int().min(1), text: z.string().max(6000), image: z.string().min(1).max(7_000_000) }))
+    .min(1)
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type DescribeInput = z.infer<typeof DescribeInput>;
+
+export const DescribeOutput = z.object({
+  pages: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).describe("The slide's number, as given"),
+        figures: z.string().max(2000).describe("What the slide's figures show that its text doesn't say; empty when it has only decoration"),
+      }),
+    )
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type DescribeOutput = z.infer<typeof DescribeOutput>;
+
 /** Every step: its input and output schemas. */
 export const STEPS = {
   extract: { input: ExtractInput, output: ExtractOutput },
@@ -216,6 +272,8 @@ export const STEPS = {
   deep: { input: GenerateInput, output: DeepOutput },
   link: { input: LinkInput, output: LinkOutput },
   reflect: { input: ReflectInput, output: ReflectOutput },
+  transcribe: { input: TranscribeInput, output: TranscribeOutput },
+  describe: { input: DescribeInput, output: DescribeOutput },
 } as const;
 export type StepName = keyof typeof STEPS;
 export type StepInput<S extends StepName> = z.infer<(typeof STEPS)[S]["input"]>;

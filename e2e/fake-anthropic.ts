@@ -9,7 +9,9 @@
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
  * - deep: the same for a deep review, "<objective name>: deep case <i>?", tier application;
- * - link: the scenario's `links`, by topic name (default: none);
+ * - transcribe: each page named in the prompt as "Handwritten page <n>: x + xy = x by absorption.";
+ * - describe: each slide named in the prompt gets "A figure on slide <n>.";
+ * - link: the scenario's `links`, by topic name (default: none), each with a reason;
  * - reflect: the scenario's `reflect` matches, by objective name.
  *
  * Control (tests run one at a time): POST /__scenario { extract?, perObjective?, fail?, reflect?,
@@ -30,7 +32,7 @@ export interface Scenario {
   fail?: { step: string; status?: number; message?: string; type?: "spend-limit" | "rate-limit" };
   reflect?: { matches: Array<{ name: string; sure: boolean; reasoning: string }> };
   /** What the link step finds, by topic name. */
-  links?: Array<{ from: string; to: string; type: string }>;
+  links?: Array<{ from: string; to: string; type: string; reason?: string }>;
   /** What the grade step answers (default: correct). */
   grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string };
   /** Wait this long before answering each call (to watch progress). */
@@ -45,6 +47,8 @@ const STEPS: Array<[string, string]> = [
   ["You connect the topics of one college course", "link"],
   ["You match a student's reflection", "reflect"],
   ["You grade one short student answer", "grade"],
+  ["You transcribe pages of a college student's", "transcribe"],
+  ["You describe the figures on slides of college course material", "describe"],
 ];
 
 let scenario: Scenario = {};
@@ -75,6 +79,15 @@ function answer(step: string, prompt: string): unknown {
       return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
     case "reconcile":
       return { decision: "new", matchId: null, reasoning: "The fake API keeps them separate." };
+    case "describe": {
+      const slides = (/slides ([\d, ]+), in that order/.exec(prompt)?.[1] ?? "").split(",").map((p) => Number(p.trim())).filter(Boolean);
+      return { pages: slides.map((n) => ({ n, figures: `A figure on slide ${n}.` })) };
+    }
+    case "transcribe": {
+      // The prompt names the pages its images are, in order.
+      const pages = (/pages ([\d, ]+), in that order/.exec(prompt)?.[1] ?? "").split(",").map((p) => Number(p.trim())).filter(Boolean);
+      return { pages: pages.map((n) => ({ n, text: `Handwritten page ${n}: x + xy = x by absorption.` })) };
+    }
     case "generate":
     case "deep": {
       const deep = step === "deep";
@@ -103,7 +116,7 @@ function answer(step: string, prompt: string): unknown {
     case "link": {
       const [topics] = blocks(prompt, "generated_question") as Array<Array<{ ref: string; name: string }>>;
       const ref = new Map((topics ?? []).map((t) => [t.name, t.ref]));
-      return { links: (scenario.links ?? []).flatMap((l) => (ref.has(l.from) && ref.has(l.to) ? [{ from: ref.get(l.from), to: ref.get(l.to), type: l.type }] : [])) };
+      return { links: (scenario.links ?? []).flatMap((l) => (ref.has(l.from) && ref.has(l.to) ? [{ from: ref.get(l.from), to: ref.get(l.to), type: l.type, reason: l.reason ?? `${l.from} is part of how ${l.to} works.` }] : [])) };
     }
     case "reflect": {
       const [objectives] = blocks(prompt, "generated_question") as Array<Array<{ id: string; name: string }>>;

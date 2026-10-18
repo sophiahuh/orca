@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { MotionConfig } from "motion/react";
 import { usePathname } from "next/navigation";
 import { AvatarPreviewProvider } from "@/components/brand/avatar-preview";
@@ -8,6 +9,13 @@ import { TopBar } from "@/components/layout/TopBar";
 import { LoadFailed, SaveStatus } from "@/components/store/SaveStatus";
 import { isPublicPath } from "@/lib/auth/paths";
 import { OrcaProvider, useOrca } from "@/lib/store";
+import { useNavHistory } from "@/lib/nav-history";
+
+/** Records the pages visited, for the back buttons (search params need a Suspense boundary). */
+function NavHistory() {
+  useNavHistory();
+  return null;
+}
 
 /**
  * The app once the student's data is in, or why it couldn't be loaded. While their courses load
@@ -33,6 +41,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <MotionConfig reducedMotion="user">
       <OrcaProvider>
         <AvatarPreviewProvider>
+          <Suspense fallback={null}>
+            <NavHistory />
+          </Suspense>
           <TopBar />
           <Loaded>{children}</Loaded>
         </AvatarPreviewProvider>

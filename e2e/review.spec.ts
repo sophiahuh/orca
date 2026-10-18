@@ -1,5 +1,5 @@
 import type { Topic } from "../src/lib/data";
-import { type SeedState, expect, test, fixtureMaterial, ids, laidOut, objective, seedState, short, stored } from "./fixture";
+import { type SeedState, admin, expect, test, fixtureMaterial, ids, laidOut, objective, seedState, short, stored } from "./fixture";
 
 /** A course as an upload left it: one confirmed topic, two new ones (one maybe a duplicate), an uncertain objective. */
 const SLUG = "logic";
@@ -44,13 +44,68 @@ const STATE: SeedState = {
   },
 };
 
-test.beforeEach(async ({ student }) => seedState(student, STATE));
+// The uploads test seeds its own state (with runs).
+test.beforeEach(async ({ student }, info) => {
+  if (!info.title.startsWith("the course's uploads")) await seedState(student, STATE);
+});
 
-test("the course page says how much is waiting for review", async ({ page }) => {
+test("the course page always has Uploads; its badge counts what's waiting for review, and it opens on the Review tab then", async ({ page }) => {
   await page.goto(`/course/${SLUG}`);
-  await expect(page.getByRole("link", { name: "4 to review" })).toBeVisible();
-  await page.getByRole("link", { name: "4 to review" }).click();
-  await expect(page).toHaveURL(/\/review$/);
+  const uploads = page.getByRole("link", { name: "Uploads, 4 to review" });
+  await expect(uploads).toHaveText("Uploads4");
+  await uploads.click();
+  await expect(page).toHaveURL(/\/review\?tab=review$/);
+  await expect(page.locator("[data-part=duplicate]")).toHaveCount(2);
+  // Somewhere to add a file from here.
+  await expect(page.locator("[data-part=add-material]")).toHaveAttribute("href", `/add-material?course=${SLUG}`);
+});
+
+test("the course's uploads: the button counts the one building, and the Uploads tab lists every upload, newest first", async ({ page, student }) => {
+  const material = STATE.materials![0];
+  const run = (status: "done" | "running" | "failed", minutesAgo: number, extra: object = {}) => ({
+    id: crypto.randomUUID(),
+    kind: "upload" as const,
+    courseId: ID,
+    materialId: material.id,
+    at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    model: "claude-opus-5-5",
+    status,
+    topicsCreated: [],
+    objectivesCreated: [],
+    objectivesAttached: [],
+    questionsAdded: status === "done" ? 6 : 0,
+    dropped: [],
+    ...extra,
+  });
+  await seedState(student, { ...STATE, runs: [run("done", 60), run("failed", 30, { error: "The model didn't answer." }), run("running", 1, { progress: { stage: "writing" } })] });
+  await page.goto(`/course/${SLUG}`);
+  const button = page.getByRole("link", { name: "Uploads, 1 building, 4 to review" });
+  await expect(button).toHaveText("Uploads5");
+  await button.click();
+  await expect(page).toHaveURL(/\/review\?tab=uploads$/);
+  const cards = page.locator("[data-part=upload-card]");
+  await expect(cards).toHaveCount(3);
+  await expect(cards.locator("[data-part=upload-status]")).toHaveText(["Building", "Failed", "Added"]);
+  await expect(cards.nth(1)).toContainText("The model didn't answer.");
+  await expect(cards.nth(2)).toContainText("6 questions added.");
+  await page.locator("[data-tab=review]").click();
+  await expect(page.locator("[data-part=duplicate]")).toHaveCount(2);
+});
+
+test("the course's uploads: one still running past its 40-minute limit is marked failed by the server when the page sees it", async ({ page, student }) => {
+  const runId = crypto.randomUUID();
+  await seedState(student, {
+    ...STATE,
+    runs: [{ id: runId, kind: "upload", courseId: ID, materialId: STATE.materials![0].id, at: new Date(Date.now() - 45 * 60_000).toISOString(), model: "claude-opus-5-5", status: "running", topicsCreated: [], objectivesCreated: [], objectivesAttached: [], questionsAdded: 0, dropped: [] }],
+  });
+  // Its job claimed it 45 minutes ago and died (as when the dev server restarts mid-upload).
+  const { error } = await admin().from("pipeline_runs").update({ started_at: new Date(Date.now() - 45 * 60_000).toISOString() }).eq("id", runId);
+  expect(error).toBeNull();
+  await page.goto(`/course/${SLUG}/review?tab=uploads`);
+  const card = page.locator("[data-part=upload-card]");
+  await expect(card.locator("[data-part=upload-status]")).toHaveText("Failed", { timeout: 15_000 });
+  await expect(card).toContainText("Orca's job stopped without finishing. Upload the file again to retry.");
+  expect((await stored(page, student)).runs.map((r) => r.status)).toEqual(["failed"]);
 });
 
 test("settling duplicates and confirming a topic", async ({ page, student }) => {

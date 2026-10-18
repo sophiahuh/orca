@@ -6,15 +6,14 @@
  */
 import type { Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../data.ts";
 import { locatorPages } from "../course/study.ts";
-import { QUESTIONS_PER_OBJECTIVE } from "./questions.ts";
 import { DEEP_RULES } from "../deep-review.ts";
 import { type RunDeps, type WriteTarget, writeQuestions } from "./run.ts";
 
 export const TOP_UP_RULES = {
-  /** Top up when an objective has fewer unseen questions than this... */
-  minUnseen: 3,
-  /** ...back up to this many unseen. */
-  stock: QUESTIONS_PER_OBJECTIVE,
+  /** Top up an objective the student is still working on (the session sends only those) when it has fewer unseen questions than this... */
+  minUnseen: 2,
+  /** ...by writing this many more (owner, 2026-10-18: questions follow practice instead of a stock of 6). */
+  add: 2,
   /** Pages either side of an anchored page sent along for context. */
   neighbours: 1,
   /** With no anchored pages, the whole material is sent only if it is at most this long. */
@@ -127,7 +126,7 @@ export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">)
     const source = found.material.id;
     const pages = found.pages;
     const list = byMaterial.get(source) ?? [];
-    list.push({ objective: o, existing, need: TOP_UP_RULES.stock - unseen });
+    list.push({ objective: o, existing, need: TOP_UP_RULES.add });
     byMaterial.set(source, list);
     const set = pageSets.get(source) ?? new Set<number>();
     for (const p of pages) set.add(p.n);

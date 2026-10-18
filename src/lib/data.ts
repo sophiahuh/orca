@@ -118,6 +118,7 @@ export type MaterialType =
   | "Practice exam"
   | "Homework"
   | "Lecture"
+  | "Handwritten notes"
   | "Other";
 
 export interface Material {
@@ -163,7 +164,12 @@ export interface QuizResult {
 }
 
 /** An upload's text, one entry per page or slide, kept so questions can be topped up later. */
-export type MaterialPages = Array<{ n: number; text: string }>;
+/**
+ * A material's pages; `source` says where a page's text comes from: its text layer (default),
+ * `needs-vision` until a handwritten or scanned page is read from its image (`vision` after), or
+ * `needs-figure` until a typed slide's figure is described and appended (`figure` after).
+ */
+export type MaterialPages = Array<{ n: number; text: string; source?: "text" | "needs-vision" | "vision" | "needs-figure" | "figure" }>;
 
 /* ── Course structure from uploads ─────────────────────────────────────── */
 
@@ -225,6 +231,8 @@ export interface Relation {
   review: Review;
   /** The upload it came from; null when "Find connections" linked the whole course. */
   materialId: string | null;
+  /** One sentence on why the link is there (shown on the Atlas); null for links made before reasons were kept. */
+  reason: string | null;
 }
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */
@@ -247,6 +255,8 @@ export interface PipelineRun {
   questionIds?: string[];
   /** Where its job is (runs are written by the server's jobs): queued → running → done | failed. */
   status: RunStatus;
+  /** When its job claimed it (ISO); a run still running long after this has died (`DEAD_RUN_MS`). Read only. */
+  startedAt?: string;
   /** While running: the stage it's at (`Progress` in pipeline/run.ts). */
   progress?: { stage: string; [k: string]: unknown } | null;
   /** Why it failed, for the student. */
@@ -328,7 +338,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   lectures: 25,
 };
 
-export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
 
 /* ── Dates ────────────────────────────────────────────────────────────── */
 export function toISODate(d: Date) {
@@ -351,6 +361,9 @@ export function slugify(name: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+
+/** Longest a course's name may be (the database enforces the same). */
+export const COURSE_NAME_MAX = 50;
 
 export function shortName(name: string) {
   const words = name.trim().split(/\s+/);

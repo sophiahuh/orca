@@ -103,8 +103,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 ### Phase 3 scheduling numbers (provisional)
 - **Set (Phase 3):** priority coefficients are 1 for overdue, weight, gap and open confusion and
   2 for a mix-up (MASTERY-PLAN §2.6); (the poor-session rule went with the re-quiz on 2026-10-10:
-  misses now wait for the next quick review); top-up when an objective has < 3 unseen questions,
-  back to 6, writing from only the pages the objective is anchored to plus one either side (its
+  misses now wait for the next quick review); top-up (changed 2026-10-18: an upload writes 2 per objective,
+  and an objective still being learned gets 2 more after a session once it has < 2 unseen), writing from only the pages the objective is anchored to plus one either side (its
   topic's range when it has no anchors; the whole file only up to 60 pages) (`TOP_UP_RULES`); question time 30 s choice, 45 s exact answer, 90 s one sentence.
 - **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Weekly` =
   due until one is finished in the last 7 days; `1 wk before exam` = daily within 7 days of an
@@ -240,7 +240,15 @@ plots, charts and SmartArt are never sent to the model, so what a slide shows on
 questions. For PDFs, a question can still point at a slide ("In the figure, …") and show it as an
 image, but the writer picks the slide from its text without seeing the figure. For .pptx decks, slides
 can't be rendered at all, so those figure questions are dropped ("couldn't be rendered").
-This is a real gap for courses that teach through graphs or visualisations. Options: send images of
+*Partly addressed 2026-10-18:* handwritten notes, scans and picture-only slides (a PDF page with no
+text to speak of) are now read from their images by the server's model (the `transcribe` step), so
+their diagrams are described in words; typed slides that draw a figure keep their exact text and get
+a description of the figure appended (the `describe` step; about 70% of ALD's slides, roughly 30–40
+cents a deck). Not covered: .pptx decks (no renderer; export as PDF when the visuals matter), and
+figures the detection misses (small images under 100 px, or simple drawings under 25 paths).
+Assumed, decide or accept: the notes-app list (`NOTES_APPS` in `read-pdf.ts`), "no text" meaning
+under 4 characters, and the cost (about 1–2 cents a page on the current model, counted in the
+upload's metering). This is a real gap for courses that teach through graphs or visualisations. Options: send images of
 figure-heavy pages to the model during extraction and writing (costs more per upload); render .pptx
 slides by converting to PDF on a worker with LibreOffice (a Trigger.dev task; layout isn't always
 faithful); or ask students to upload decks as PDFs (File → Save as PDF) when the visuals matter.

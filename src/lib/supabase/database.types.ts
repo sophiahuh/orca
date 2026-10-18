@@ -107,13 +107,13 @@ isOneToOne: false
                   ]
                 },"material_pages": {
                   Row: {
-                    "material_id": string,"n": number,"owner_id": string,"text": string
+                    "material_id": string,"n": number,"owner_id": string,"source": string,"text": string
                   }
                   Insert: {
-                    "material_id": string,"n": number,"owner_id"?: string,"text": string
+                    "material_id": string,"n": number,"owner_id"?: string,"source"?: string,"text": string
                   }
                   Update: {
-                    "material_id"?: string,"n"?: number,"owner_id"?: string,"text"?: string
+                    "material_id"?: string,"n"?: number,"owner_id"?: string,"source"?: string,"text"?: string
                   }
                   Relationships: [
                     {
@@ -126,13 +126,13 @@ isOneToOne: false
                   ]
                 },"materials": {
                   Row: {
-                    "assigned": string | null,"content_hash": string | null,"course_id": string,"created_at": string,"due": string | null,"error": string | null,"filename": string,"hidden_text": Json | null,"id": string,"mime": string | null,"owner_id": string,"reading_since": string | null,"reflect": boolean,"reflection": Json | null,"size_bytes": number | null,"status": string,"storage_path": string | null,"type": string
+                    "assigned": string | null,"content_hash": string | null,"course_id": string,"created_at": string,"due": string | null,"error": string | null,"filename": string,"handwritten": boolean,"hidden_text": Json | null,"id": string,"mime": string | null,"owner_id": string,"reading_since": string | null,"reflect": boolean,"reflection": Json | null,"size_bytes": number | null,"status": string,"storage_path": string | null,"type": string
                   }
                   Insert: {
-                    "assigned"?: string | null,"content_hash"?: string | null,"course_id": string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename": string,"hidden_text"?: Json | null,"id": string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type": string
+                    "assigned"?: string | null,"content_hash"?: string | null,"course_id": string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename": string,"handwritten"?: boolean,"hidden_text"?: Json | null,"id": string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type": string
                   }
                   Update: {
-                    "assigned"?: string | null,"content_hash"?: string | null,"course_id"?: string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename"?: string,"hidden_text"?: Json | null,"id"?: string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type"?: string
+                    "assigned"?: string | null,"content_hash"?: string | null,"course_id"?: string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename"?: string,"handwritten"?: boolean,"hidden_text"?: Json | null,"id"?: string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type"?: string
                   }
                   Relationships: [
                     {
@@ -314,13 +314,13 @@ isOneToOne: false
                   ]
                 },"relations": {
                   Row: {
-                    "anchor": Json | null,"course_id": string,"created_at": string,"from_topic": string,"id": string,"material_id": string | null,"owner_id": string,"review": string,"to_topic": string,"type": string
+                    "anchor": Json | null,"course_id": string,"created_at": string,"from_topic": string,"id": string,"material_id": string | null,"owner_id": string,"reason": string | null,"review": string,"to_topic": string,"type": string
                   }
                   Insert: {
-                    "anchor"?: Json | null,"course_id": string,"created_at"?: string,"from_topic": string,"id": string,"material_id"?: string | null,"owner_id"?: string,"review": string,"to_topic": string,"type": string
+                    "anchor"?: Json | null,"course_id": string,"created_at"?: string,"from_topic": string,"id": string,"material_id"?: string | null,"owner_id"?: string,"reason"?: string | null,"review": string,"to_topic": string,"type": string
                   }
                   Update: {
-                    "anchor"?: Json | null,"course_id"?: string,"created_at"?: string,"from_topic"?: string,"id"?: string,"material_id"?: string | null,"owner_id"?: string,"review"?: string,"to_topic"?: string,"type"?: string
+                    "anchor"?: Json | null,"course_id"?: string,"created_at"?: string,"from_topic"?: string,"id"?: string,"material_id"?: string | null,"owner_id"?: string,"reason"?: string | null,"review"?: string,"to_topic"?: string,"type"?: string
                   }
                   Relationships: [
                     {

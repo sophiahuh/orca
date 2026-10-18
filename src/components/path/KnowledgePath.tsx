@@ -21,7 +21,7 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
 
 function statusLine(p: TopicProgress, needing: number) {
   if (p.total === 0) return "No questions yet";
-  const gap = needing > 0 ? ` · ${needing} ${needing === 1 ? "needs" : "need"} more questions` : "";
+  const gap = needing > 0 ? ` · ${needing} without questions` : "";
   if (p.status === "done") return `Complete${gap}`;
   if (p.status === "not-started") return `${p.total} ${p.total === 1 ? "objective" : "objectives"}${gap}`;
   return `${p.mastered} of ${p.total} objectives mastered${gap}`;

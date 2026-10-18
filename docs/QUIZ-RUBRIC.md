@@ -34,6 +34,11 @@ file, and the checker pass (planned) grades each generated question against it.
    rubric grades it: required ideas, acceptable phrasings, known misconceptions; never the
    grader's own opinion. Multiple choice only when choosing between plausible alternatives *is*
    the skill.
+   An exact answer must have one short form a student writes the same way (a number, bits, an
+   expression, a named term), with every natural variant listed. A judgement among a few fixed
+   choices ("valid" or "invalid", yes or no, which of two) is multiple choice or true/false, not a
+   typed answer: a student who writes "is valid" for "valid" is right, and the checker drops such
+   lead-in words, but it can't read every phrasing. (Added 2026-10-18.)
 
 ## Level
 

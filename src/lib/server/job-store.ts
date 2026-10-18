@@ -100,12 +100,19 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       // One request per material: a file has at most LIMITS.pagesPerFile pages, under the row cap.
       await Promise.all(
         materialIds.map(async (id) => {
-          const { data, error } = await db.from("material_pages").select("n, text").eq("owner_id", ownerId).eq("material_id", id).order("n").limit(LIMITS.pagesPerFile);
+          const { data, error } = await db.from("material_pages").select("n, text, source").eq("owner_id", ownerId).eq("material_id", id).order("n").limit(LIMITS.pagesPerFile);
           if (error) throw new Error(`Couldn't read the material's pages: ${error.message}`);
-          if (data.length) out[id] = data;
+          if (data.length) out[id] = data.map((p) => ({ n: p.n, text: p.text, source: p.source as NonNullable<MaterialPages[number]["source"]> }));
         }),
       );
       return out;
+    },
+
+    async savePages(materialId, pages, source) {
+      for (const p of pages) {
+        const { error } = await db.from("material_pages").update({ text: p.text, source }).eq("owner_id", ownerId).eq("material_id", materialId).eq("n", p.n);
+        if (error) throw new Error(`Couldn't store page ${p.n}'s text: ${error.message}`);
+      }
     },
 
     async answered(courseId) {

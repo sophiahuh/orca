@@ -23,6 +23,7 @@ export const WEIGHT_RULES = {
 export function sliderFor(type: MaterialType): WeightKey | null {
   switch (type) {
     case "Lecture":
+    case "Handwritten notes":
     case "Syllabus":
       return "lectures";
     case "Homework":

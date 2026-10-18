@@ -39,7 +39,7 @@ test("rolls evidence up into objectives, topics and an island level", () => {
   assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a"]);
   assert.deepEqual(m.topicObjectives.get("t3"), []);
   assert.equal(m.objectivesNeedingQuestions.get("t1"), 0, "t1/a has 3 questions");
-  assert.equal(m.objectivesNeedingQuestions.get("t2"), 1, "t2/b has only 1 question");
+  assert.equal(m.objectivesNeedingQuestions.get("t2"), 0, "t2/b has 1 question: few, but it can be practised");
   assert.equal(m.objectivesNeedingQuestions.get("t3"), 0);
   assert.equal(m.island, "growing");
 });

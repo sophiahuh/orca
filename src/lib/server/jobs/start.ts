@@ -86,9 +86,18 @@ export function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch 
   return core.resumeNext(deps(db, "now"), ownerId);
 }
 
-/** Every student with a run that isn't running yet (queued or waiting), for the scheduled sweep (trigger mode). */
+/**
+ * Check the student's runs from a route (POST /api/runs/check): a run past its job's limit
+ * (`DEAD_RUN_MS`, judged by the server's clock) is marked failed, and their next queued or resumable
+ * job starts after the response.
+ */
+export function checkRuns(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+  return core.resumeNext(deps(db, "after-response"), ownerId);
+}
+
+/** Every student with a live run (queued, waiting or running: a running one may have died), for the scheduled sweeps. */
 export async function ownersWithPendingRuns(db: OrcaSupabase): Promise<string[]> {
-  const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting"]);
+  const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting", "running"]);
   if (error) throw new Error(`Couldn't read the pending runs: ${error.message}`);
   return [...new Set(data.map((r) => r.owner_id))];
 }

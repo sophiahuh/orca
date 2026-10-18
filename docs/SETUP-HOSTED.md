@@ -83,8 +83,23 @@ work):
 | `TRIGGER_SECRET_KEY` | `tr_prod_…` | mark sensitive |
 | `SITE_URL` | the production address | emailed links come back to it; production refuses to send links without it |
 | `ORCA_DAILY_BUDGET_USD` | e.g. `25` | the service-wide daily ceiling on estimated model spend; unset means none |
+| `CRON_SECRET` | a long random string (`openssl rand -hex 32`) | mark sensitive; turns on the dead-run sweep below |
 
 The full list with explanations is `.env.example`.
+
+**Dead-run sweep (optional, added 2026-10-17).** A run still "running" 40 minutes after its job
+claimed it (an upload's 30-minute limit plus 10) has died, e.g. the server restarted. Pages that
+follow a run already ask the server to mark it failed (`POST /api/runs/check`); this sweep catches
+the ones nobody is looking at. With `CRON_SECRET` set, register the cron in a `vercel.json` at the
+repo root:
+
+```json
+{ "crons": [{ "path": "/api/cron/runs", "schedule": "*/15 * * * *" }] }
+```
+
+Every 15 minutes needs a Pro plan; Hobby allows one run a day (e.g. `"0 9 * * *"`), and Vercel
+refuses a deploy with a more frequent schedule on Hobby, so it isn't committed until the plan is
+known.
 
 GitHub auto-deploy isn't linked yet (CLAUDE.md, Deploy).
 

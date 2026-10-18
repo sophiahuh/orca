@@ -115,7 +115,7 @@ export function stepCaller(ctx: ModelCtx, options: StepCallerOptions = {}): Call
       if (!verdict.ok) throw new StepError(step, verdict.message, 429);
     }
     try {
-      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ctx, onUsage: meter(ctx, db) });
+      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ...(built.images ? { images: built.images } : {}), ctx, onUsage: meter(ctx, db) });
     } catch (error) {
       if (error instanceof LlmError) throw new StepError(step, error.message, error.status);
       throw new StepError(step, `The ${step} step failed: ${error instanceof Error ? error.message : String(error)}`, 502);

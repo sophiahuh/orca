@@ -7,6 +7,7 @@
  */
 import type { Relation, RelationType, Topic } from "../data.ts";
 import type { ObjectiveState } from "../mastery/types.ts";
+import { KIND_RANK, pairKey } from "./links.ts";
 import { survivingTopic, topicUses } from "./weights.ts";
 
 /** How well a topic is held: every objective mastered, some fading or mixed up, under way, or nothing answered yet. */
@@ -69,6 +70,8 @@ export interface GraphEdge {
   from: string;
   to: string;
   type: RelationType;
+  /** Why the link is there (shown on hover); null for a link made before reasons were kept. */
+  reason: string | null;
   /** SVG path, from the edge of one node to the edge of the other. */
   d: string;
   /** Where its label sits: most of the way along, near the arrow, so a topic's edges' labels spread out. */
@@ -98,23 +101,30 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
   const byId = new Map(topics.map((t) => [t.id, t]));
   const liveIds = new Set(live.map((t) => t.id));
 
-  /* Edges between live topics, through merges, once each ("alternative-to" in either direction is one). */
-  const seen = new Set<string>();
-  const links: Array<{ id: string; from: string; to: string; type: RelationType }> = [];
+  /* Edges between live topics, through merges: one per pair of topics, the most specific kind (older data can hold two). */
+  const byPair = new Map<string, { id: string; from: string; to: string; type: RelationType; reason: string | null }>();
   for (const r of relations) {
     if (r.review === "archived") continue;
     const from = survivingTopic(r.from, byId)?.id;
     const to = survivingTopic(r.to, byId)?.id;
     if (!from || !to || from === to || !liveIds.has(from) || !liveIds.has(to)) continue;
-    const key = r.type === "alternative-to" ? `${[from, to].sort().join("|")}|${r.type}` : `${from}|${to}|${r.type}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    links.push({ id: r.id, from, to, type: r.type });
+    const key = pairKey(from, to);
+    const held = byPair.get(key);
+    if (held && KIND_RANK[held.type] <= KIND_RANK[r.type]) continue;
+    byPair.set(key, { id: r.id, from, to, type: r.type, reason: r.reason });
   }
+  const links = [...byPair.values()];
 
-  /* Rows: the longest chain of downward edges above each topic (bounded, so a cycle can't run away). */
+  /*
+   * Rows: the longest chain of downward edges above each topic. Links can form a cycle (A used in B,
+   * B in C, C in A); the edge that closes one, found by a depth-first walk in trail order, is still
+   * drawn but doesn't place rows, so every row is filled and the chain ends.
+   */
   const row = new Map(live.map((t) => [t.id, 0]));
-  const down = links.filter((l) => DOWNWARD.has(l.type));
+  const down = acyclic(
+    live.map((t) => t.id),
+    links.filter((l) => DOWNWARD.has(l.type)),
+  );
   for (let pass = 0; pass < live.length; pass++) {
     let changed = false;
     for (const l of down) {
@@ -145,7 +155,7 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
     rows[r].forEach((id, i) => placeIn.set(id, (i + 0.5) / rows[r].length));
   }
 
-  const widest = Math.max(1, ...rows.map((ids) => ids?.length ?? 0));
+  const widest = Math.max(1, ...Array.from(rows, (ids) => ids?.length ?? 0));
   const width = Math.max(GRAPH.minWidth, widest * GRAPH.slot + 2 * GRAPH.side);
   const height = GRAPH.top + Math.max(0, rows.length - 1) * GRAPH.rowGap + GRAPH.bottom;
   const uses = topicUses(topics, relations);
@@ -168,6 +178,25 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
   const at = new Map(nodes.map((n) => [n.topic.id, n]));
   const edges: GraphEdge[] = links.map((l) => ({ ...l, ...edgePath(at.get(l.from)!, at.get(l.to)!) }));
   return { nodes, edges, width, height };
+}
+
+/** The links without the ones that close a cycle (back edges of a depth-first walk from each topic in order). */
+function acyclic<L extends { from: string; to: string }>(order: readonly string[], links: readonly L[]): L[] {
+  const out = new Map<string, L[]>();
+  for (const l of links) (out.get(l.from) ?? out.set(l.from, []).get(l.from)!).push(l);
+  const state = new Map<string, "open" | "done">();
+  const back = new Set<L>();
+  const walk = (id: string) => {
+    state.set(id, "open");
+    for (const l of out.get(id) ?? []) {
+      const s = state.get(l.to);
+      if (s === "open") back.add(l);
+      else if (!s) walk(l.to);
+    }
+    state.set(id, "done");
+  };
+  for (const id of order) if (!state.has(id)) walk(id);
+  return links.filter((l) => !back.has(l));
 }
 
 /** Room left at an arrow's end for its head, plus a gap before the topic it points at. */

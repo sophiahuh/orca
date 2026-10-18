@@ -27,6 +27,8 @@ export interface UploadMeta {
   assigned: string | null;
   due: string | null;
   reflect: boolean;
+  /** The file is handwritten notes (a PDF): the server reads every page from its image. */
+  handwritten?: boolean;
 }
 
 /** What happens to an upload's questions (`Generation` in src/lib/server/jobs/start.ts). */

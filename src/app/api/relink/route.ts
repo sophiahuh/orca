@@ -35,9 +35,9 @@ export async function POST(request: Request) {
     if (!loaded) return reply(404, { error: "No such course." });
     const before = loaded.structure;
     const live = before.topics.filter((t) => t.review !== "archived" && !t.mergedInto);
-    let links;
+    let linked;
     try {
-      links = await linkTopics(
+      linked = await linkTopics(
         { course: loaded.course, topics: before.topics, newIds: new Set(live.map((t) => t.id)), existing: before.relations, materialId: null },
         { call, newId: () => crypto.randomUUID() },
       );
@@ -45,7 +45,10 @@ export async function POST(request: Request) {
       if (e instanceof StepError) return reply(e.status >= 500 ? 502 : e.status, { error: e.message });
       throw e;
     }
-    if (links.length) await store.save(parsed.data.courseId, structureRows(before, { ...before, relations: [...before.relations, ...links] }, []));
-    return reply(200, { added: links.length });
+    // New links, and reasons for the course's old links that had none.
+    const reasons = new Map(linked.explained.map((e) => [e.id, e.reason]));
+    const relations = [...before.relations.map((r) => (reasons.has(r.id) ? { ...r, reason: reasons.get(r.id)! } : r)), ...linked.links];
+    if (linked.links.length || reasons.size) await store.save(parsed.data.courseId, structureRows(before, { ...before, relations }, []));
+    return reply(200, { added: linked.links.length, explained: reasons.size });
   });
 }

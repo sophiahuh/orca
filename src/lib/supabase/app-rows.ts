@@ -139,7 +139,7 @@ export function objectiveFromRow(r: Row<"objectives">): Objective {
 }
 
 export function relationToRow(r: Relation): StructureRow<"relations"> {
-  return { id: r.id, from_topic: r.from, to_topic: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId };
+  return { id: r.id, from_topic: r.from, to_topic: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId, reason: r.reason };
 }
 
 export function relationFromRow(r: Row<"relations">): Relation {
@@ -151,6 +151,7 @@ export function relationFromRow(r: Row<"relations">): Relation {
     anchor: r.anchor as unknown as Relation["anchor"],
     review: r.review as Relation["review"],
     materialId: r.material_id,
+    reason: r.reason,
   };
 }
 
@@ -230,6 +231,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     model: r.model,
     ...(r.deep_minutes !== null ? { deepMinutes: r.deep_minutes } : {}),
     status: r.status as PipelineRun["status"],
+    ...(r.started_at !== null ? { startedAt: new Date(r.started_at).toISOString() } : {}),
     ...(r.progress !== null ? { progress: r.progress as unknown as NonNullable<PipelineRun["progress"]> } : {}),
     ...(r.error !== null ? { error: r.error } : {}),
     topicsCreated: r.topics_created,
@@ -325,6 +327,7 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     content_hash: null,
     size_bytes: null,
     mime: null,
+    handwritten: false,
     status: "ready",
     error: null,
     hidden_text: null,

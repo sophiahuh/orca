@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const requestSchema = z.object({
-  courseId: z.uuid(), type: z.enum(["Syllabus", "Lecture", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]),
+  courseId: z.uuid(), type: z.enum(["Syllabus", "Lecture", "Handwritten notes", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]),
   assigned: date, due: date, text: z.string().trim().max(180_000).optional(), url: z.string().trim().max(2048).optional(),
 }).refine((value) => Boolean(value.text || value.url), { message: "Paste a chat transcript or enter a public AI chat link." });
 

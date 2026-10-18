@@ -69,13 +69,15 @@ test.describe("a fresh browser", () => {
 test.describe("a course with uploaded questions", () => {
   test.beforeEach(async ({ student }) => seedFixtureCourse(student));
 
-  test("the trail has nothing locked, START on the first topic, and objective counts with question gaps", async ({ page }) => {
+  test("the trail has nothing locked, START on the first topic, and objective counts (a gap only for objectives with no questions)", async ({ page }) => {
     await page.goto("/course/logic-e2e");
     await expect(page.locator('[data-part="start"]')).toHaveCount(1);
     await expect(page.locator("[data-visual]").first()).toHaveAttribute("data-visual", "current");
     await expect(page.locator('[data-visual="current"]')).toContainText("Boolean Algebra");
-    await expect(page.locator('[data-visual="current"]')).toContainText("1 objective · 1 needs more questions");
-    await expect(page.locator('[data-visual="upcoming"]')).toContainText("2 objectives · 1 needs more questions");
+    // Every objective here has at least one question: few is normal (more are written as the student practises).
+    await expect(page.locator('[data-visual="current"]')).toContainText("1 objective");
+    await expect(page.locator('[data-visual="upcoming"]')).toContainText("2 objectives");
+    await expect(page.locator("[data-visual]").filter({ hasText: "without questions" })).toHaveCount(0);
     await expect(page.locator('[data-visual="upcoming"] button').first()).toBeVisible();
     await expect(page.locator("[data-visual] button:disabled")).toHaveCount(0);
   });

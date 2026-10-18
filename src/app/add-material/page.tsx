@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
 import { Select } from "@/components/ui/Select";
+import { uploadKind } from "@/lib/material/kind";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -117,6 +118,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const filename = aiChatUrl || (aiChatText.trim() ? "AI chat transcript" : websiteUrl || chosenName || "Choose a PDF or .pptx…");
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
+  // Only a PDF can be read as page images (a .pptx has no renderer here).
+  const isPdf = file ? uploadKind(file.name, file.type) === "pdf" : false;
 
   const onFile = (f: File) => {
     setChosenName(f.name);
@@ -126,20 +129,22 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     setAiChatUrl("");
     setAiChatText("");
     const problem = uploadProblem(f);
-    setPhase(problem ? { kind: "error", message: `${problem} It will still be added to the course, without its file.` } : { kind: "idle" });
+    // A file Orca can't take (too big, empty, a kind it can't read) is refused: nothing is added.
+    setPhase(problem ? { kind: "error", message: `${problem} Choose another file.` } : { kind: "idle" });
   };
 
   const submit = async () => {
     if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
-    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0 };
-    const leave = () => router.push(due ? "/calendar" : `/course/${course.slug}`);
+    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf };
+    // The form is done with: it gives way to where the student goes next, so Back from there skips it.
+    const leave = () => router.replace(due ? "/calendar" : `/course/${course.slug}`);
     if (aiChatUrl.trim() || aiChatText.trim()) {
       try {
         setPhase({ kind: "sending", stage: "reading" });
         const outcome = await importAIChat({ ...(aiChatUrl.trim() ? { url: aiChatUrl.trim() } : {}), ...(aiChatText.trim() ? { text: aiChatText.trim() } : {}) }, meta);
         addMaterial(outcome.material, { saved: true });
-        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.push(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
+        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
         else leave();
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The AI chat import failed." }); }
       return;
@@ -149,19 +154,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         setPhase({ kind: "sending", stage: "reading" });
         const outcome = await importWebsite(websiteUrl.trim(), meta);
         addMaterial(outcome.material, { saved: true });
-        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.push(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
+        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
         else leave();
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The website import failed." }); }
       return;
     }
-    if (!file) return;
-    if (unreadable) {
-      const id = crypto.randomUUID();
-      addMaterial({ id, filename: file.name, ...meta });
-      if (reflection) recordReflection(id, reflection, []);
-      leave();
-      return;
-    }
+    if (!file || unreadable) return;
     try {
       const outcome = await uploadMaterial(
         file,
@@ -190,7 +188,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         const message =
           g.state === "queued" ? "Orca will build topics and questions from it after your other job finishes." : g.state === "waiting" ? "Orca will build topics and questions from it when today's limit resets." : "Orca is building topics and questions from it.";
         if (!matchProblem) setPhase({ kind: "working", message });
-        go(() => router.push(`/course/${course.slug}/review?run=${g.runId}`));
+        go(() => router.replace(`/course/${course.slug}/review?run=${g.runId}`));
         return;
       }
       if (outcome.kind === "duplicate") {
@@ -200,7 +198,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       }
       if (g.state === "built") {
         // Read again after its questions were built (a repeated request): show what was built.
-        go(() => router.push(`/course/${course.slug}/review?run=${g.runId}`));
+        go(() => router.replace(`/course/${course.slug}/review?run=${g.runId}`));
         return;
       }
       setPhase({
@@ -239,7 +237,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   return (
     <Screen bg="ocean" className="overflow-y-auto">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
-        <BackButton />
+        <BackButton href={`/course/${course.slug}`} />
         <h1 className="text-[44px] font-bold leading-none text-prussian">Add material</h1>
         {courses.length > 1 ? (
           <Select
@@ -365,6 +363,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <DateField label="Due date" value={due} onChange={setDue} noneLabel="No due date" />
           </motion.section>
 
+
           {type === "Homework" && (
             <motion.label variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[8px]">
               <span className="text-[17px] font-bold text-prussian">Reflection</span>
@@ -382,7 +381,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button full onClick={submit} disabled={busy || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
+            <Button full onClick={submit} disabled={busy || Boolean(file && unreadable) || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
               {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
             </Button>
 
@@ -456,7 +455,7 @@ function ResumeUpload({ materialId, course, onAnother }: { materialId: string; c
   return (
     <Screen bg="ocean">
       <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
-        <BackButton />
+        <BackButton href={`/course/${course.slug}`} />
         <h1 className="text-[44px] font-bold leading-none text-prussian">Add material</h1>
         <ContextPill className="ml-[8px]">{course.name}</ContextPill>
       </header>

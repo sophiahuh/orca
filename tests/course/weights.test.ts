@@ -33,7 +33,7 @@ test("material types map onto the Settings sliders; Other is neutral", () => {
 });
 
 test("by default every material type is worth the same", () => {
-  for (const type of ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
+  for (const type of ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
     close(placeValue(type, DEFAULT_WEIGHTS), 1);
   }
 });
@@ -78,7 +78,7 @@ test("inferred objectives sit at 1.0 unless emphasised", () => {
 test("an objective counts the topics its topic is used in, through merges, leaving out archived topics and other link kinds", () => {
   const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
   const topics = [topic("t"), topic("u"), topic("v"), topic("old", { review: "archived", mergedInto: "v" }), topic("gone", { review: "archived" })];
-  const rel = (from: string, to: string, type: Relation["type"] = "used-in"): Relation => ({ id: `${from}-${to}-${type}`, from, to, type, anchor: null, review: "confirmed", materialId: "m" });
+  const rel = (from: string, to: string, type: Relation["type"] = "used-in"): Relation => ({ id: `${from}-${to}-${type}`, from, to, type, anchor: null, review: "confirmed", materialId: "m", reason: null });
   const relations = [rel("t", "u"), rel("t", "old"), rel("t", "v"), rel("t", "gone"), rel("t", "u", "related"), rel("u", "t", "has-a-kind")];
   // t is used in u and v (old was merged into v, so it's the same topic; gone was rejected).
   assert.deepEqual([...topicUses(topics, relations).get("t")!].sort(), ["u", "v"]);

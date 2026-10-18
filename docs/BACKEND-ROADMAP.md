@@ -130,6 +130,25 @@ For each upload:
    checks every pair involving a new topic, since extraction alone missed obvious links. "Find
    connections" on the Atlas (`POST /api/relink`) runs the link step over the whole course. A
    topic's node grows with the topics it's used in (`topicUses`), and so do its objectives' weights.
+   *Stricter links (owner, 2026-10-17):* both calls share `LINK_RULES` in `prompts.ts`: be precise,
+   not thorough; "used-in" means a prerequisite (not motivation or a choice it informs); "related"
+   only when one topic fixes or works around a limitation of the other, or the subject deliberately
+   contrasts them ("commonly confused" is a student's state, not the material's, so it isn't a
+   link). Every link carries one specific sentence, `relations.reason`, shown when the student
+   hovers the link on the Atlas; a link without one is dropped. "used-in" and "has-a-kind" never
+   form a loop: a link that would close one is dropped with why in the run (`closesLoop`,
+   `src/lib/course/links.ts`), not relabelled; the Atlas layout still copes with a loop in older
+   data. No cap on links per topic: a cap would drop true links and make the map lie. "Find
+   connections" also gives old links (made before reasons) their reason when the model returns them.
+   *Handwritten and scanned pages (owner, 2026-10-18):* a PDF page whose text layer is a notes app's
+   rough recognition, or missing, is read from its image by the server's model (`transcribe` step:
+   pages rendered whole by our own pdf.js + @napi-rs/canvas renderer, 4 a call, at the start of the
+   upload job; the clean text replaces the page's). Plan: `docs/superpowers/plans/2026-10-18-handwritten-notes.md`.
+   Typed slides that draw a figure (detected from pdf.js's drawing operations, no model) keep their
+   exact text and get the `describe` step's description of the figure appended ("[Figures: …]").
+   Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
+   related): a pair the course already links is skipped, a more specific kind replaces one made
+   earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
@@ -212,7 +231,13 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   answer, 90 s one sentence), spread across objectives, unseen first, at least one mechanism
   question. An objective with no unseen questions reuses its oldest-seen one, says so, and queues
   a top-up.
-- **Top-up** after each session for objectives below 3 unseen questions.
+- **Top-up** after each session for objectives below 3 unseen questions. *Changed 2026-10-18
+  (owner):* questions follow practice instead of a stock. An upload writes 2 per objective (one that
+  does the skill, one "why or how" where there is one), so it finishes sooner and objectives never
+  studied cost nothing more; after a session, objectives still being learned (not mastered or
+  retired) get 2 more once they have fewer than 2 unseen (`TOP_UP_RULES`). Dive In still writes its
+  own. No wait screen for a top-up in progress: a quick review leaves out what was practised today
+  and dives write their own questions, so a session can't run into an unfinished top-up.
 - **Deep review** due per course from its configured cadence (next due one cadence after the last
   completed one; stays due if missed), with its question mix weighted by the material sliders.
   At its start the student picks how many minutes (the Settings length is the suggestion) and

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { LIMITS } from "../../src/lib/limits.ts";
-import { UnreadablePdfError, readPdf } from "../../src/lib/material/read-pdf.ts";
+import { type ReadPage, UnreadablePdfError, markFigures, readPdf } from "../../src/lib/material/read-pdf.ts";
 import { renderSlide } from "../../src/lib/material/render-slide.ts";
 import { isHidden, visibleItems } from "../../src/lib/untrusted/hidden-text.ts";
 import { lines, makePdf } from "../fixtures/pdf.ts";
@@ -101,4 +101,59 @@ test("a slide renders on the server as a JPEG figure", async () => {
   assert.match(src, /^data:image\/jpeg;base64,/);
   assert.ok(src.length > 5000);
   await assert.rejects(renderSlide(bytes, 9999), /no slide 9999/);
+  // Kept whole for reading (handwritten pages): the sentences aren't painted over, so the image differs.
+  // (Slide 5 has sentence-length text, which a figure paints over.)
+  const whole = await renderSlide(bytes, 5, { keepText: true });
+  assert.match(whole, /^data:image\/jpeg;base64,/);
+  assert.notEqual(whole, await renderSlide(bytes, 5));
+});
+
+/** A one-page PDF with `text` on it (Helvetica), made by `producer`. */
+function tinyPdf(text: string, producer: string): Uint8Array {
+  const content = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Producer (${producer}) >>`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new TextEncoder().encode(pdf);
+}
+
+test("pages are marked to be read from their images: a notes app's PDF, the student's say-so, or almost no text", async () => {
+  const typed = "Two's complement negates a number by inverting its bits and adding one.";
+  assert.equal((await readPdf(tinyPdf(typed, "LaTeX"))).pages[0].source, undefined, "typed text is read as text");
+  assert.equal((await readPdf(tinyPdf(typed, "GoodNotes 6"))).pages[0].source, "needs-vision", "a notes app's text layer is its own rough recognition");
+  assert.equal((await readPdf(tinyPdf(typed, "LaTeX"), { handwritten: true })).pages[0].source, "needs-vision");
+  assert.equal((await readPdf(tinyPdf("", "Scanner"))).pages[0].source, "needs-vision", "a scan or a drawing: no text to speak of");
+  assert.equal((await readPdf(tinyPdf("Sign extension", "LaTeX"))).pages[0].source, undefined, "a short title slide is still text");
+});
+
+test("typed slides that draw a figure are marked to have it described; template artwork doesn't count", async () => {
+  const read = await readPdf(new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf")));
+  const source = (n: number) => read.pages.find((p) => p.n === n)?.source;
+  assert.equal(source(1), undefined, "the title slide: text only");
+  assert.equal(source(5), "needs-figure", "58 drawn paths: a circuit");
+  assert.equal(source(6), "needs-figure", "a big image");
+  assert.equal(source(3), "needs-vision", "a picture with only a slide number is read whole instead");
+  const pages: ReadPage[] = [1, 2, 3, 4].map((n) => ({ n, text: "Some text" }));
+  const logo = { id: "logo", w: 400, h: 400 };
+  markFigures(pages, new Map([
+    [1, { images: [logo], paths: 3 }],
+    [2, { images: [logo], paths: 3 }],
+    [3, { images: [logo, { id: "plot", w: 600, h: 300 }], paths: 3 }],
+    [4, { images: [logo, { id: "icon", w: 40, h: 40 }], paths: 30 }],
+  ]));
+  assert.deepEqual(pages.map((p) => p.source), [undefined, undefined, "needs-figure", "needs-figure"]);
 });

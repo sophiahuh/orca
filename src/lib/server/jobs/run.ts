@@ -7,7 +7,7 @@
  */
 import { deepReview, type JobOutcome, processMaterial, topUp } from "@/lib/jobs/jobs";
 import type { DeepReviewJob, MaterialJob, TopUpJob } from "@/lib/jobs/start";
-import { figureRenderer } from "@/lib/server/figures";
+import { figureRenderer, pageRenderer } from "@/lib/server/figures";
 import { supabaseJobStore } from "@/lib/server/job-store";
 import { stepCaller } from "@/lib/server/model";
 import { adminClient } from "@/lib/supabase/server";
@@ -42,7 +42,7 @@ export function runMaterialJob(job: MaterialJob): Promise<JobOutcome> {
   return guarded(job.ownerId, job.runId, async (store, db) => {
     const call = stepCaller({ ownerId: job.ownerId, kind: "upload", runId: job.runId }, { guard: "none" });
     if (!call) throw new Error("the server has no model key");
-    return processMaterial({ store, call, newId: () => crypto.randomUUID(), renderFigure: figureRenderer(db, job.ownerId) }, job);
+    return processMaterial({ store, call, newId: () => crypto.randomUUID(), renderFigure: figureRenderer(db, job.ownerId), renderPage: pageRenderer(db, job.ownerId) }, job);
   });
 }
 

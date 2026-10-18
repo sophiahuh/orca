@@ -21,6 +21,7 @@ import { QuizRunner, type RunnerItem } from "@/components/quiz/QuizRunner";
 import { DeepReviewSetup } from "@/components/quiz/DeepReviewSetup";
 import { PreparingDive } from "@/components/quiz/PreparingDive";
 import { isFinished, useRun } from "@/hooks/useRun";
+import { goBack } from "@/lib/nav-history";
 
 const KINDS = ["quick", "deep"] as const;
 type Kind = (typeof KINDS)[number];
@@ -106,7 +107,7 @@ function QuickReview({ course }: { course: Course }) {
     const message = agenda.heldForNext.length
       ? `Nothing to review in ${course.name} right now. What you practiced today comes back in your next quick review.`
       : `Nothing to review in ${course.name} right now.`;
-    return <NothingToDo course={course} message={message} onBack={() => router.push(backHref)} />;
+    return <NothingToDo course={course} message={message} onBack={() => goBack(router, backHref)} />;
   }
   return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} />;
 }
@@ -173,7 +174,7 @@ function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course
   });
 
   if (objectiveIds.length === 0) {
-    return <NothingToDo course={course} message={topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet: answer some questions first."} onBack={() => router.push(backHref)} />;
+    return <NothingToDo course={course} message={topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet: answer some questions first."} onBack={() => goBack(router, backHref)} />;
   }
   if (items) {
     return <QuizRunner course={course} items={items} mode="deep" title={topicName ?? course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} />;

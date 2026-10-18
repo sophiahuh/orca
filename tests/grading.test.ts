@@ -6,6 +6,16 @@ test("normaliseExact ignores case, spacing, middle dots and a trailing period", 
   assert.equal(normaliseExact(" X1 · X2' . "), "x1x2'");
 });
 
+test("gradeExact ignores lead-in words like \"is\" or \"the answer is\", never a negation", () => {
+  assert.equal(gradeExact("is valid", ["valid"]).outcome, "correct");
+  assert.equal(gradeExact("It's valid.", ["valid"]).outcome, "correct");
+  assert.equal(gradeExact("the answer is 1010", ["1010"]).outcome, "correct");
+  assert.equal(gradeExact("= 5", ["5"]).outcome, "correct");
+  assert.equal(gradeExact("not valid", ["valid"]).outcome, "incorrect");
+  assert.equal(gradeExact("invalid", ["valid"]).outcome, "incorrect");
+  assert.equal(gradeExact("a", ["a"]).outcome, "correct", "an answer that is itself a lead-in word is kept");
+});
+
 test("gradeExact accepts an equivalent spelling and rejects a different answer", () => {
   assert.equal(gradeExact("1010", ["1010"]).outcome, "correct");
   const wrong = gradeExact("1011", ["1010"]);

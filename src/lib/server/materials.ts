@@ -2,9 +2,9 @@
  * Uploads (Phase 4 plan, decisions 7, 10 and 13). Two steps, each a route:
  *
  * 1. `startUpload` (POST /api/materials): checks what the browser says about the file (PDF or .pptx, at most
- *    25 MB), recognises a file already in the course by its SHA-256, and otherwise records the
+ *    30 MB), recognises a file already in the course by its SHA-256, and otherwise records the
  *    material (status `uploaded`) and hands back a signed upload URL for
- *    `<owner>/<material id>/<safe name>` in the private `materials` bucket.
+ *    `<owner>/<material id>` in the private `materials` bucket.
  * 2. `processUpload` (POST /api/materials/:id/process): once the file is in Storage, the server
  *    takes it from there (never from the browser), hashes it, recognises a duplicate again (the
  *    browser's hash is only a shortcut), reads it (pdf.js for a PDF, the slide XML for a .pptx) into sanitised `material_pages`, drops
@@ -22,7 +22,7 @@ import { UNSUPPORTED_UPLOAD, UPLOAD_MIMES, type UploadKind, uploadKind } from "@
 import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readPdf } from "@/lib/material/read-pdf";
 import { readPptx } from "@/lib/material/read-pptx";
 import { looksLikeZip } from "@/lib/material/unzip";
-import { isOwnPath, safeName } from "@/lib/material/paths";
+import { isOwnPath, uploadPath } from "@/lib/material/paths";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -56,6 +56,8 @@ export const UploadRequest = z.object({
   assigned: isoDate.nullable(),
   due: isoDate.nullable(),
   reflect: z.boolean(),
+  /** The student says the file is handwritten notes: every page is read from its image. */
+  handwritten: z.boolean().default(false),
 });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 
@@ -89,7 +91,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
   if (known) return reply(200, known);
 
   const id = crypto.randomUUID();
-  const path = `${ownerId}/${id}/${safeName(body.filename)}`;
+  const path = uploadPath(ownerId, id);
   const { data: row, error } = await db
     .from("materials")
     .insert({
@@ -101,6 +103,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
       assigned: body.assigned,
       due: body.due,
       reflect: body.reflect,
+      handwritten: body.handwritten,
       storage_path: path,
       size_bytes: body.size,
       mime: UPLOAD_MIMES[kind],
@@ -183,14 +186,14 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     let read: { pages: ReadPage[]; hidden: HiddenText };
     try {
       if (!kind) throw new UnreadablePdfError(UNSUPPORTED_UPLOAD, 415);
-      read = kind === "pdf" ? await readPdf(bytes) : await readPptx(bytes);
+      read = kind === "pdf" ? await readPdf(bytes, { handwritten: m.handwritten }) : await readPptx(bytes);
     } catch (e) {
       if (!(e instanceof UnreadablePdfError)) throw e;
       await setFailed(e.message);
       return reply(e.status, { error: e.message });
     }
     if (read.pages.length) {
-      const rows = read.pages.map((p) => ({ owner_id: ownerId, material_id: id, n: p.n, text: p.text }));
+      const rows = read.pages.map((p) => ({ owner_id: ownerId, material_id: id, n: p.n, text: p.text, source: p.source ?? "text" }));
       const inserted = await db.from("material_pages").upsert(rows, { onConflict: "material_id,n" });
       if (inserted.error) throw fail("store the pages", inserted.error);
     }

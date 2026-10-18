@@ -67,7 +67,13 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
 - **Hosted migrations:** pushed up to `20261006100000`. Still to push (the owner runs
   `npx supabase db push`; the agent's auto mode blocks it): `20261010090000_pptx_uploads` (until
-  then the hosted bucket refuses .pptx uploads). Check with `npx supabase migration list --linked`
+  then the hosted bucket refuses .pptx uploads), `20261017090000_relation_reasons` (until then
+  every upload and "Find connections" fails to save links on the hosted project) and
+  `20261017100000_upload_paths_course_names` (until then every new upload is refused: files are
+  stored at `<owner>/<material id>` now; course names are capped at 50 characters) and
+  `20261018090000_handwritten_pages`, `20261018100000_figure_pages` and
+  `20261018110000_handwritten_type_30mb` (until then every PDF upload fails to store its pages, and
+  the "Handwritten notes" type and files over 25 MB are refused). Check with `npx supabase migration list --linked`
   (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
@@ -95,6 +101,9 @@ them silently; list what you assumed.
   the e2e web server can't start: either ask them to stop it, or temporarily add
   `distDir: process.env.SCRATCH_DIST ?? ".next"` to `next.config.ts` and run with
   `SCRATCH_DIST=.next-e2e` (Next also edits `tsconfig.json` then); revert both before committing.
+  **Changing `next.config.ts` restarts the owner's running dev server, which kills any inline job
+  (upload, dive) it's running** (2026-10-17: a real upload died this way). Before that trick, check
+  the hosted project has no queued or running `pipeline_runs`, or ask the owner.
 - Cloud containers: Playwright's Chromium build doesn't match; run e2e with
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
@@ -170,11 +179,14 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   the material (coverage, material type, explicit emphasis); code computes the weight, and an
   objective gains weight for each topic its topic is used in. The material-type sliders (account
   defaults in Settings, a course's override in its popup) feed it.
-- **Topic links.** Relations connect topics: used-in, has-a-kind, alternative-to, related. They are
-  the Concept Atlas's edges and feed the weights.
+- **Topic links.** Relations connect topics: used-in (a prerequisite), has-a-kind, alternative-to,
+  related (one works around the other's limitation, or a deliberate contrast). Each carries a one-
+  sentence reason shown on hover in the Atlas; used-in/has-a-kind never form a loop. They are the
+  Concept Atlas's edges and feed the weights.
 - **Practice.** Missed questions have no review of their own: the objective joins the course's
-  quick-review queue and isn't due again the same day. Quick reviews draw from a per-objective stock written ahead (at upload,
-  topped up after each session), assembled instantly and sized to the course's time budget.
+  quick-review queue and isn't due again the same day. Quick reviews draw from questions written
+  ahead: 2 per objective at upload, then 2 more after a session for an objective still being learned
+  once it's under 2 unseen; assembled instantly and sized to the course's time budget.
   **Dive in** (deep review) writes harder questions when it starts, for the whole course or one
   topic, at the length the student picks; its cadence is the course's setting.
 - **Exams.** Each course's exams (date, optional topics) are their own table; they show on the
@@ -230,7 +242,9 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `my_data`).
   Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
-  service-wide daily ceiling; unset = none), `TRIGGER_*`.
+  service-wide daily ceiling; unset = none), `TRIGGER_*`, `CRON_SECRET` (the dead-run sweep,
+  `GET /api/cron/runs`; pages following a run also ask `POST /api/runs/check` once it's past its
+  40-minute limit).
 - The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
   (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
   `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
@@ -291,7 +305,11 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
 - `src/lib/material/read-pdf.ts`, `read-pptx.ts` (+ `unzip.ts`, `kind.ts`), `src/lib/uploads.ts` — PDFs and .pptx decks to
   Storage, read on the server into `material_pages` (a .pptx: one page per slide, its text, tables and speaker notes; no
-  pictures, and no slide figures; see `docs/TO-DISCUSS.md`).
+  pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
+  switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
+  `transcribe` step at the start of the upload job; typed slides that draw a figure (an image 100 px+ or 25+ paths,
+  template artwork ignored) are marked `needs-figure` and the `describe` step appends "[Figures: …]" to their text
+  (`src/lib/pipeline/transcribe.ts`; plan in `docs/superpowers/plans/2026-10-18-handwritten-notes.md`).
 - `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, LoadingScreen: the shared full-screen wait, NavBar: on a course page its
   gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
   (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`

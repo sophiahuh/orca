@@ -1,16 +1,17 @@
-/** Where an upload lives in the `materials` bucket: "<owner>/<material id>/<safe name>". Pure. */
+/** Where an upload lives in the `materials` bucket: "<owner>/<material id>" (before 2026-10-17, "<owner>/<material id>/<safe name>"). Pure. */
 
-/** The file's name as stored: anything but letters, digits, dot, dash and underscore becomes "_". */
-export function safeName(filename: string): string {
-  const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
-  return /[a-zA-Z0-9]/.test(safe) ? safe : "file.pdf";
+/** The path a new upload is stored at. */
+export function uploadPath(ownerId: string, materialId: string): string {
+  return `${ownerId}/${materialId}`;
 }
 
 /**
- * Whether a stored path is exactly the shape `startUpload` makes for this student and material.
- * The path is read with the secret key, so it's checked here as well as by the database.
+ * Whether a stored path is exactly a shape the server makes for this student and material: today's
+ * "<owner>/<material id>", or the older one with a safe file name after it. The path is read with the
+ * secret key, so it's checked here as well as by the database.
  */
 export function isOwnPath(path: string, ownerId: string, materialId: string): boolean {
+  if (path === uploadPath(ownerId, materialId)) return true;
   const prefix = `${ownerId}/${materialId}/`;
   if (!path.startsWith(prefix)) return false;
   const name = path.slice(prefix.length);
