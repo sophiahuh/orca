@@ -238,7 +238,9 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `my_data`).
   Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
-  service-wide daily ceiling; unset = none), `TRIGGER_*`.
+  service-wide daily ceiling; unset = none), `TRIGGER_*`, `CRON_SECRET` (the dead-run sweep,
+  `GET /api/cron/runs`; pages following a run also ask `POST /api/runs/check` once it's past its
+  40-minute limit).
 - The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
   (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
   `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
