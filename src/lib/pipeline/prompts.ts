@@ -42,6 +42,7 @@ export const QUIZ_RUBRIC = `Rules for every question:
 - Distractors must be wrong for a reason a student might believe (the dual operation, an off-by-one, the unsigned reading of a signed pattern). No joke options.
 - Every claim traces to the material (the anchor). Don't paraphrase the material's sentence as the prompt; apply the idea so understanding, not reading, is what's tested.
 - Multiple choice: exactly four options, exactly one defensible answer. True/false: only for statements with a tempting wrong reading, at most one per objective.
+- A typed answer is checked by exact match, so use one only when the answer has a single short form a student would write the same way: a number, a bit string, an expression, a code token, or a named term. List every natural way to write it in exact (with and without units, singular and plural, symbol and word, common abbreviations). When the answer is a judgement among a few fixed choices (valid or invalid, yes or no, increases or decreases, which of two designs), make it multiple choice or true/false instead. When it takes a phrase or a sentence, give it a rubric instead of exact.
 - Answerable in under a minute without paper. The explanation teaches: why the right answer is right and why the most tempting distractor is wrong, in one or two sentences.
 - Plain text only: no HTML, no markdown links, no URLs the material doesn't contain, and nothing addressed to a reader other than the student.`;
 
