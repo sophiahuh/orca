@@ -56,6 +56,16 @@ test("a call sends a strict schema and caches only the material, and its tokens 
   assert.deepEqual(usages, [{ u: { inputTokens: 2_000, outputTokens: 300, cacheWriteTokens: 2_000, cacheReadTokens: 6_000 }, model: "gpt-6.1-sol-2026-04-30" }]);
 });
 
+test("images go between the material and the question, as data URLs at high detail", async () => {
+  const api = fakeFetch([reply('{"ok":true,"note":null}')]);
+  await completeJson(config, "sys", "read these", Out, parse, { images: [{ mediaType: "image/jpeg", data: "AAAA" }], fetch: api.fetch });
+  const body = api.calls[0].body as { input: Array<{ content: Array<Record<string, unknown>> }> };
+  assert.deepEqual(body.input[0].content, [
+    { type: "input_image", image_url: "data:image/jpeg;base64,AAAA", detail: "high" },
+    { type: "input_text", text: "read these" },
+  ]);
+});
+
 test("a quota refusal is the spend limit: reported as the budget used up, never retried", async () => {
   const api = fakeFetch([{ status: 429, body: { error: { message: "You exceeded your current quota", type: "insufficient_quota", code: "insufficient_quota" } } }, reply('{"ok":true,"note":null}')]);
   await assert.rejects(completeJson(config, "sys", "hi", Out, parse, { fetch: api.fetch, retryBackoffMs: 1 }), (e: unknown) => e instanceof LlmError && e.status === 429 && e.spendLimit && e.message === SPEND_LIMIT_MESSAGE);

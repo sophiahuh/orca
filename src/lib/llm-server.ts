@@ -209,6 +209,8 @@ export async function completeJson<T>(
     maxTokens?: number;
     /** Long text sent before `prompt` and cached (e.g. the material shared by every call of one upload). */
     context?: string | null;
+    /** Images sent between the context and `prompt` (base64, no data: prefix), e.g. handwritten pages to read. */
+    images?: ReadonlyArray<{ mediaType: "image/jpeg" | "image/png"; data: string }>;
     /** Who the call is for and why (`ModelCtx`); every call made with Orca's key passes it. */
     ctx?: ModelCtx;
     /** Called with every reply's token counts (also a refused or cut-off reply: those are paid for). The server meters here. */
@@ -240,6 +242,7 @@ export async function completeJson<T>(
                   role: "user",
                   content: [
                     ...(opts.context ? [{ type: "text" as const, text: opts.context, cache_control: { type: "ephemeral" as const } }] : []),
+                    ...(opts.images ?? []).map((img) => ({ type: "image" as const, source: { type: "base64" as const, media_type: img.mediaType, data: img.data } })),
                     { type: "text" as const, text: prompt },
                   ],
                 },
@@ -304,6 +307,7 @@ export async function completeJson<T>(
           role: "user",
           content: [
             ...(opts.context ? [{ type: "input_text", text: opts.context, ...(explicitCache ? { prompt_cache_breakpoint: { mode: "explicit" } } : {}) }] : []),
+            ...(opts.images ?? []).map((img) => ({ type: "input_image", image_url: `data:${img.mediaType};base64,${img.data}`, detail: "high" })),
             { type: "input_text", text: prompt },
           ],
         },
