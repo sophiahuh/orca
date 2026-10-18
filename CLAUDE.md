@@ -71,8 +71,9 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   every upload and "Find connections" fails to save links on the hosted project) and
   `20261017100000_upload_paths_course_names` (until then every new upload is refused: files are
   stored at `<owner>/<material id>` now; course names are capped at 50 characters) and
-  `20261018090000_handwritten_pages` and `20261018100000_figure_pages` (until then every PDF upload
-  fails to store its pages). Check with `npx supabase migration list --linked`
+  `20261018090000_handwritten_pages`, `20261018100000_figure_pages` and
+  `20261018110000_handwritten_type_30mb` (until then every PDF upload fails to store its pages, and
+  the "Handwritten notes" type and files over 25 MB are refused). Check with `npx supabase migration list --linked`
   (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
