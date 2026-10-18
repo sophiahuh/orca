@@ -67,8 +67,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
 - **Hosted migrations:** pushed up to `20261006100000`. Still to push (the owner runs
   `npx supabase db push`; the agent's auto mode blocks it): `20261010090000_pptx_uploads` (until
-  then the hosted bucket refuses .pptx uploads) and `20261017090000_relation_reasons` (until then
-  every upload and "Find connections" fails to save links on the hosted project). Check with `npx supabase migration list --linked`
+  then the hosted bucket refuses .pptx uploads), `20261017090000_relation_reasons` (until then
+  every upload and "Find connections" fails to save links on the hosted project) and
+  `20261017100000_upload_paths_course_names` (until then every new upload is refused: files are
+  stored at `<owner>/<material id>` now; course names are capped at 50 characters). Check with `npx supabase migration list --linked`
   (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
