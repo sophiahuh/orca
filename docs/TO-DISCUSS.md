@@ -242,7 +242,10 @@ image, but the writer picks the slide from its text without seeing the figure. F
 can't be rendered at all, so those figure questions are dropped ("couldn't be rendered").
 *Partly addressed 2026-10-18:* handwritten notes, scans and picture-only slides (a PDF page with no
 text to speak of) are now read from their images by the server's model (the `transcribe` step), so
-their diagrams are described in words. Typed slides with a figure among their text still aren't.
+their diagrams are described in words; typed slides that draw a figure keep their exact text and get
+a description of the figure appended (the `describe` step; about 70% of ALD's slides, roughly 30–40
+cents a deck). Not covered: .pptx decks (no renderer; export as PDF when the visuals matter), and
+figures the detection misses (small images under 100 px, or simple drawings under 25 paths).
 Assumed, decide or accept: the notes-app list (`NOTES_APPS` in `read-pdf.ts`), "no text" meaning
 under 4 characters, and the cost (about 1–2 cents a page on the current model, counted in the
 upload's metering). This is a real gap for courses that teach through graphs or visualisations. Options: send images of

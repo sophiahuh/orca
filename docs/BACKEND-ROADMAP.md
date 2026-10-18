@@ -144,6 +144,8 @@ For each upload:
    rough recognition, or missing, is read from its image by the server's model (`transcribe` step:
    pages rendered whole by our own pdf.js + @napi-rs/canvas renderer, 4 a call, at the start of the
    upload job; the clean text replaces the page's). Plan: `docs/superpowers/plans/2026-10-18-handwritten-notes.md`.
+   Typed slides that draw a figure (detected from pdf.js's drawing operations, no model) keep their
+   exact text and get the `describe` step's description of the figure appended ("[Figures: …]").
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
