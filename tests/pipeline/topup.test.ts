@@ -43,23 +43,24 @@ const base = (over: Partial<TopUpInput> = {}): TopUpInput => ({
   materials: [material("L1")],
   materialPages: { L1: [{ n: 2, text: "Two's complement: invert and add one." }] },
   objectiveIds: ["a", "b"],
-  answered: new Set(["a1", "a2"]),
+  // a has one unseen question left (under 2), b has three.
+  answered: new Set(["a1", "a2", "a3"]),
   runId: "top1",
   model: "test-model",
   now: "2026-10-05T12:00:00Z",
   ...over,
 });
 
-test("only objectives under 3 unseen questions are topped up, back to 6 unseen", () => {
+test("only objectives under 2 unseen questions are topped up, with 2 more", () => {
   const { byMaterial, skipped } = topUpTargets(base());
   assert.deepEqual(skipped, []);
-  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need, t.existing.length]), [["a", 4, 4]]);
+  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need, t.existing.length]), [["a", 2, 4]]);
 });
 
 test("merged objectives top up their survivor; archived ones never", () => {
   const objectives = { a: objective("a"), old: objective("old", { mergedInto: "a", review: "archived" }), b: objective("b", { review: "archived" }) };
   const { byMaterial } = topUpTargets(base({ objectives, objectiveIds: ["old", "b"], bank: { t: [q("x1", "old")] }, answered: new Set() }));
-  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need]), [["a", 5]]);
+  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need]), [["a", 2]]);
 });
 
 test("the material that covers it most is used; without kept text the student is told why", () => {
@@ -95,22 +96,22 @@ test("runTopUp writes questions, drops duplicates, and records a top-up run", as
     calls.push(step);
     if (step === "generate") {
       const g = input as StepInput<"generate">;
-      assert.equal(g.objectives[0].need, 4);
+      assert.equal(g.objectives[0].need, 2);
       assert.ok(g.objectives[0].existingPrompts.includes("Question a1?"));
       assert.equal(g.pages[0].text, "Two's complement: invert and add one.");
-      return { questions: [generated("a", "Negate 0101 in 4 bits.", "1011"), generated("a", "Question a1?", "1"), generated("a", "Negate 0001.", "1111")] };
+      return { questions: [generated("a", "Negate 0101 in 4 bits.", "1011"), generated("a", "Question a1?", "1")] };
     }
     throw new Error(`unexpected ${step}`);
   }) as CallStep;
   let n = 0;
   const plan = await runTopUp(base(), { call, newId: () => `new${++n}` });
-  assert.deepEqual(plan.questions.t.map((x) => x.prompt), ["Negate 0101 in 4 bits.", "Negate 0001."]);
+  assert.deepEqual(plan.questions.t.map((x) => x.prompt), ["Negate 0101 in 4 bits."]);
   assert.equal(plan.questions.t[0].materialId, "L1");
   assert.equal(plan.run.kind, "top-up");
   assert.equal(plan.run.id, "top1");
   assert.equal(plan.run.materialId, "L1");
   assert.equal(plan.run.status, "done");
-  assert.equal(plan.run.questionsAdded, 2);
+  assert.equal(plan.run.questionsAdded, 1);
   assert.deepEqual(plan.run.objectivesAttached, ["a"]);
   assert.deepEqual(plan.run.dropped.map((d) => d.reason), ["the course already has this question"]);
   assert.deepEqual(calls, ["generate"]);

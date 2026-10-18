@@ -1,7 +1,7 @@
 /** Everything learner-facing about one course, derived in one pass. */
 import { attribution } from "./attribution.ts";
 import type { QuestionRef } from "./catalogue.ts";
-import { EMPTY_ACCUMULATOR, MASTERY_RULES, type ObjectiveAccumulator, computeObjectiveState, stateAt } from "./objective-state.ts";
+import { EMPTY_ACCUMULATOR, type ObjectiveAccumulator, computeObjectiveState, stateAt } from "./objective-state.ts";
 import { type IslandLevel, type TopicProgress, islandLevel, topicProgress } from "./progress.ts";
 import type { EvidenceEvent, ObjectiveInfo, ObjectiveState } from "./types.ts";
 
@@ -10,10 +10,7 @@ export interface CourseMastery {
   /** topicId → its objective ids, in first-seen order. */
   topicObjectives: Map<string, string[]>;
   topics: Map<string, TopicProgress>;
-  /**
-   * topicId → how many of its objectives have fewer questions than the mastery bar needs
-   * (3 different questions), so they can't be mastered until more questions exist.
-   */
+  /** topicId → how many of its objectives have no questions at all (they can't be practised until some are written). */
   objectivesNeedingQuestions: Map<string, number>;
   island: IslandLevel;
   /** This course's evidence, each event filed under the objective it counts for now (merges and re-sorting followed). */
@@ -66,7 +63,9 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
     const ids = list.map((o) => o.id);
     topicObjectives.set(topicId, ids);
     topics.set(topicId, topicProgress(ids, objectives));
-    objectivesNeedingQuestions.set(topicId, list.filter((o) => o.questionIds.length < MASTERY_RULES.requiredCredit).length);
+    // Objectives with no questions can't be practised at all (fewer than the mastery bar is normal:
+    // an upload writes two and more follow as the student practises).
+    objectivesNeedingQuestions.set(topicId, list.filter((o) => o.questionIds.length === 0).length);
   }
   return { objectives, topicObjectives, topics, objectivesNeedingQuestions, island: islandLevel([...objectives.values()]), events };
 }

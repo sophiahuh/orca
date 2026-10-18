@@ -114,17 +114,20 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
   }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz]);
 
-  // Then top up the stock for the objectives this run asked about (waits for the server-model check).
+  // Then write more questions for the objectives this run asked about that the student is still
+  // working on (waits for the server-model check); a mastered one gets none until it fades.
   const { start: startTopUp } = topUp;
   useEffect(() => {
     if (!finished) return;
+    const states = masteryByCourse[course.id]?.objectives;
     const ids = allItems.flatMap((i) => {
       const o = liveObjectiveOf(i.question, i.topicId, catalogue ?? {});
-      return o ? [o.id] : [];
+      const status = o ? states?.get(o.id)?.status : undefined;
+      return o && status !== "mastered" && status !== "retired" ? [o.id] : [];
     });
     // The session id was set when the result was recorded (the effect above).
-    if (sessionId.current) startTopUp(course.id, sessionId.current, ids);
-  }, [finished, allItems, catalogue, course.id, startTopUp]);
+    if (sessionId.current && ids.length) startTopUp(course.id, sessionId.current, ids);
+  }, [finished, allItems, catalogue, course.id, startTopUp, masteryByCourse]);
 
   const item = items[index];
   const q = item?.question;

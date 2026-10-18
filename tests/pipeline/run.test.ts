@@ -133,7 +133,7 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.deepEqual([...new Set(model.calls.map((c) => c.step))], ["extract", "link", "generate"], "no second model call checks the questions");
   assert.equal(model.calls.filter((c) => c.step === "reconcile").length, 0, "nothing existing to compare against");
   const generateInputs = model.calls.filter((c) => c.step === "generate").map((c) => c.input as StepInput<"generate">);
-  assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 6)));
+  assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 2)), "an upload writes 2 per objective");
 });
 
 test("a later upload reuses existing items, records aliases and signals, skips rejected ones and flags uncertain ones", async () => {
@@ -147,7 +147,7 @@ test("a later upload reuses existing items, records aliases and signals, skips r
     O2: obj("O2", "Use don't-cares", { review: "archived" }),
     O3: obj("O3", "Place minterms using Gray code order"),
   };
-  const bank: Record<string, QuizQuestion[]> = { T1: [1, 2, 3, 4, 5].map((i) => ({ id: `q${i}`, objectiveId: "O1", prompt: `Old ${i}` }) as QuizQuestion) };
+  const bank: Record<string, QuizQuestion[]> = { T1: [1].map((i) => ({ id: `q${i}`, objectiveId: "O1", prompt: `Old ${i}` }) as QuizQuestion) };
   const model = fakeModel({
     extract: () => ({
       topics: [
@@ -187,8 +187,8 @@ test("a later upload reuses existing items, records aliases and signals, skips r
     ['Topic "Course Logistics"', 'Objective "Use don\'t-cares"', 'Objective "Know the grading policy"'],
   );
   const generate = model.calls.find((c) => c.step === "generate")!.input as StepInput<"generate">;
-  assert.equal(generate.objectives.find((o) => o.id === "O1")!.need, 1, "tops O1 up from 5 to 6");
-  assert.deepEqual(generate.objectives.find((o) => o.id === "O1")!.existingPrompts, ["Old 1", "Old 2", "Old 3", "Old 4", "Old 5"]);
+  assert.equal(generate.objectives.find((o) => o.id === "O1")!.need, 1, "tops O1 up from 1 to 2");
+  assert.deepEqual(generate.objectives.find((o) => o.id === "O1")!.existingPrompts, ["Old 1"]);
 });
 
 test("questions that duplicate the bank or break the rules are dropped with a reason; the rest are kept unchecked", async () => {
@@ -202,7 +202,8 @@ test("questions that duplicate the bank or break the rules are dropped with a re
     extract: () => lone,
     generate: (i) => {
       const id = i.objectives[0].id;
-      return { questions: [mc(id, "Which gate?", 1), short(id, "Old question", ["x"]), short(id, "No anchor?", ["x"], { anchor: null })] };
+      // A refused question doesn't count toward the 2 the objective needs; a duplicate does (it's dropped later).
+      return { questions: [short(id, "No anchor?", ["x"], { anchor: null }), mc(id, "Which gate?", 1), short(id, "Old question", ["x"])] };
     },
   });
   const plan = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: model.call, newId });

@@ -124,7 +124,7 @@ test("re-uploading the same deck is recognised by its content and adds nothing",
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
   await upload(page);
   await expect(page.getByText("Logic already has this file (L02_Combinational.pdf), so there's nothing new to add.")).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "extract")).toHaveLength(1);

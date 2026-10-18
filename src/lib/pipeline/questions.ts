@@ -14,5 +14,9 @@ export function promptKey(prompt: string) {
     .trim();
 }
 
-/** How many questions the pipeline stocks per objective. */
-export const QUESTIONS_PER_OBJECTIVE = 6;
+/**
+ * How many questions an upload writes per objective (owner, 2026-10-18; was 6): enough for a first
+ * attempt and a retry. More are written as the student practises (`TOP_UP_RULES` in topup.ts), so
+ * objectives never studied don't cost a stock of questions, and the upload finishes sooner.
+ */
+export const QUESTIONS_PER_OBJECTIVE = 2;
