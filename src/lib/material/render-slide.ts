@@ -1,15 +1,16 @@
 /**
- * Render one slide of a PDF as a JPEG data URL, on the server, for a question that needs its
- * figure (pdf.js in Node draws on its own canvas, `@napi-rs/canvas`). Sentence-length text is painted
+ * Render one slide of a PDF as a JPEG data URL, on the server (pdf.js in Node draws on its own
+ * canvas, `@napi-rs/canvas`). For a question's figure (the default), sentence-length text is painted
  * over so the figure doesn't hand the student the answer in its bullets; short labels (x1, cout)
- * stay so diagrams still read. Loads under plain Node.
+ * stay so diagrams still read. `keepText` draws the page as it is (for reading handwritten pages).
+ * Loads under plain Node.
  */
 import { LIMITS } from "../limits.ts";
 
 /** Text items at least this long are prose, painted over. */
 const PROSE_MIN_CHARS = 18;
 
-export async function renderSlide(bytes: Uint8Array, pageNumber: number, { maxWidth = 960, quality = 80 }: { maxWidth?: number; quality?: number } = {}): Promise<string> {
+export async function renderSlide(bytes: Uint8Array, pageNumber: number, { maxWidth = 960, quality = 80, keepText = false }: { maxWidth?: number; quality?: number; keepText?: boolean } = {}): Promise<string> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = pdfjs.getDocument({ data: bytes.slice(), verbosity: pdfjs.VerbosityLevel.ERRORS });
   try {
@@ -23,7 +24,7 @@ export async function renderSlide(bytes: Uint8Array, pageNumber: number, { maxWi
       context: CanvasRenderingContext2D;
     };
     await page.render({ canvas: canvas as unknown as HTMLCanvasElement, canvasContext: context, viewport }).promise;
-    const content = await page.getTextContent();
+    const content = keepText ? { items: [] } : await page.getTextContent();
     context.fillStyle = "#ffffff";
     for (const item of content.items) {
       if (!("str" in item) || item.str.trim().length < PROSE_MIN_CHARS) continue;
