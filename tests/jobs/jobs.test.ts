@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../../src/lib/data.ts";
+import type { FlaggedQuestion, Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../../src/lib/data.ts";
 import { type JobStore, deepReview, processMaterial, topUp } from "../../src/lib/jobs/jobs.ts";
 import type { CallStep, Progress } from "../../src/lib/pipeline/run.ts";
 import type { StepInput } from "../../src/lib/pipeline/schemas.ts";
@@ -26,7 +26,7 @@ const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
 });
 
 /** An in-memory JobStore for one student: what the jobs saved, the progress they wrote, the run's state. */
-function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; lostReply?: boolean; budget?: BudgetVerdict }) {
+function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; lostReply?: boolean; budget?: BudgetVerdict }) {
   const run = { ...init.run };
   const structure: StructureState = init.structure ?? { topics: [], objectives: {}, bank: {}, relations: [] };
   const saves: StructureRows[] = [];
@@ -61,6 +61,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
     pages: async (ids) => Object.fromEntries(ids.flatMap((id) => (init.pages?.[id] ? [[id, init.pages[id]]] : []))),
     savePages: async (_id, read, source) => void savedPages.push(...read.map((p) => ({ ...p, source }))),
     answered: async () => new Set(init.answered ?? []),
+    flagged: async () => init.flagged ?? [],
     save: async (_course, rows) => {
       saves.push(rows);
       run.status = "done";

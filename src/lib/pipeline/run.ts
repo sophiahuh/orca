@@ -3,13 +3,14 @@
  * injected (`call`), so the orchestration is tested with fakes; the result is a plan that
  * `applyUploadPlan` merges into the course. Nothing here touches the store.
  */
-import type { Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
+import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
 import { type Named, exactMatch, normaliseName, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
 import { linkReason, linkTopics, liveDirectional } from "./link.ts";
+import { flaggedFor } from "./flagged.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
@@ -33,6 +34,8 @@ export interface RunInput {
   pages: Array<{ n: number; text: string }>;
   /** What hidden text the server dropped when it read the file; recorded on the run (decision 13). */
   hiddenText?: { items: number; pages: number[] };
+  /** The course's thumbs-down questions (cleaned, newest first), for question writing. */
+  flagged?: readonly FlaggedQuestion[];
   runId: string;
   model: string;
   /** ISO time of the run. */
@@ -436,6 +439,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       topics: new Map([...input.course.topics, ...newTopics].map((t) => [t.id, t])),
       targets,
       bank: input.bank,
+      ...(input.flagged ? { flagged: input.flagged } : {}),
     },
     deps,
   );
@@ -470,6 +474,8 @@ export interface WriteInput {
   bank: Readonly<Record<string, readonly QuizQuestion[]>>;
   /** Deep-review questions (the "deep" step: longer, harder short answers), marked `deep`. */
   deep?: boolean;
+  /** The course's thumbs-down questions (cleaned, newest first), so new ones avoid their problems. */
+  flagged?: readonly FlaggedQuestion[];
 }
 
 /**
@@ -505,6 +511,7 @@ export async function writeQuestions(
           pages: input.pages,
           topic: { name: topic.name, summary: topic.summary ?? "" },
           objectives: xs.map(({ o, existing, need }) => ({ id: o.id, name: o.name, description: o.description, origin: o.origin, need, existingPrompts: existing.map((q) => q.prompt).slice(0, 40) })),
+          ...(input.flagged?.length ? { flagged: flaggedFor(input.flagged, new Set(xs.map((x) => x.o.id))) } : {}),
         });
         const wanted = new Map(xs.map((x) => [x.o.id, x]));
         const kept: Array<{ topicId: string; q: QuizQuestion; figureSlide: number | null }> = [];

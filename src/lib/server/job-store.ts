@@ -7,6 +7,7 @@ import type { Material, MaterialPages, QuizQuestion } from "@/lib/data";
 import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
 import { checkBudget } from "@/lib/server/usage";
+import { flaggedForWriting } from "@/lib/pipeline/flagged";
 import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -125,6 +126,24 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       const { data: down, error } = await db.from("question_feedback").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("rating", "down");
       if (error) throw new Error(`Couldn't read the student's question ratings: ${error.message}`);
       return new Set([...rows.flatMap((r) => (r.question_id ? [r.question_id] : [])), ...down.map((r) => r.question_id)]);
+    },
+
+    async flagged(courseId) {
+      const { data, error } = await db
+        .from("question_feedback")
+        .select("reason, note, questions(prompt, objective_id)")
+        .eq("owner_id", ownerId)
+        .eq("course_id", courseId)
+        .eq("rating", "down")
+        .order("updated_at", { ascending: false })
+        .limit(30);
+      if (error) throw new Error(`Couldn't read the student's thumbs-down questions: ${error.message}`);
+      return flaggedForWriting(
+        data.flatMap((r) => {
+          const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+          return q ? [{ objectiveId: q.objective_id, prompt: q.prompt, reason: r.reason, note: r.note }] : [];
+        }),
+      );
     },
 
     async save(courseId, rows) {

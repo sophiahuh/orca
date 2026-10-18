@@ -142,6 +142,11 @@ export const ReconcileInput = z.object({
 });
 export type ReconcileInput = z.infer<typeof ReconcileInput>;
 
+/** Questions the student gave a thumbs down (and why), so new ones avoid the same problems. */
+const Flagged = z
+  .array(z.object({ objectiveId: z.string().nullable(), prompt: z.string().max(1200), reason: z.string().nullable(), note: z.string().max(300).nullable() }))
+  .max(12);
+
 export const GenerateInput = z.object({
   course: Course,
   material: z.object({ filename: z.string().max(200), type: MaterialType }),
@@ -160,6 +165,7 @@ export const GenerateInput = z.object({
     )
     .min(1)
     .max(12),
+  flagged: Flagged.optional(),
 });
 export type GenerateInput = z.infer<typeof GenerateInput>;
 

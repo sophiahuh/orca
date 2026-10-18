@@ -190,6 +190,15 @@ export interface QuestionRating {
   note: string | null;
 }
 
+/** A question the student gave a thumbs down, as question writing reads it (cleaned; see `flaggedForWriting`). */
+export interface FlaggedQuestion {
+  /** Its objective (null when it had none). */
+  objectiveId: string | null;
+  prompt: string;
+  reason: FeedbackReason | null;
+  note: string | null;
+}
+
 /* ── Course structure from uploads ─────────────────────────────────────── */
 
 /** A quote from course material: "slide 14" plus a short excerpt. */
