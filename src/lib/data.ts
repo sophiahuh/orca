@@ -171,6 +171,23 @@ export interface QuizResult {
  */
 export type MaterialPages = Array<{ n: number; text: string; source?: "text" | "needs-vision" | "vision" | "needs-figure" | "figure" }>;
 
+/** Why a student gave a question a thumbs down (optional). */
+export type FeedbackReason = "wrong-answer" | "unclear" | "too-easy" | "too-hard" | "not-my-course";
+export const FEEDBACK_REASONS: Record<FeedbackReason, string> = {
+  "wrong-answer": "Wrong answer",
+  unclear: "Unclear",
+  "too-easy": "Too easy",
+  "too-hard": "Too hard",
+  "not-my-course": "Not from my course",
+};
+
+/** A student's thumbs up or down on one question; a thumbs-down question isn't asked again. */
+export interface QuestionRating {
+  courseId: string;
+  rating: "up" | "down";
+  reason: FeedbackReason | null;
+}
+
 /* ── Course structure from uploads ─────────────────────────────────────── */
 
 /** A quote from course material: "slide 14" plus a short excerpt. */

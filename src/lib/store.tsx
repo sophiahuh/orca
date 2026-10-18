@@ -34,6 +34,8 @@ import { usePathname } from "next/navigation";
 import {
   type CalendarEvent,
   type Exam,
+  type FeedbackReason,
+  type QuestionRating,
   type Course,
   type IslandVariant,
   type Material,
@@ -76,6 +78,8 @@ interface OrcaState {
   events: CalendarEvent[];
   /** Each course's exams (their dates and the topics they cover). */
   exams: Exam[];
+  /** questionId → the student's thumbs up or down; a thumbs-down question isn't asked again. */
+  feedback: Record<string, QuestionRating>;
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
@@ -118,6 +122,7 @@ const initialState: OrcaState = {
   courses: [],
   events: [],
   exams: [],
+  feedback: {},
   materials: [],
   configs: {},
   weights: {},
@@ -150,6 +155,8 @@ interface OrcaActions {
   addExam: (courseId: string, title: string, date: string, topicIds: string[]) => void;
   updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[] }) => void;
   removeExam: (id: string) => void;
+  /** Thumbs up or down on a question (a later one replaces it); null clears it. */
+  rateQuestion: (courseId: string, questionId: string, rating: QuestionRating["rating"] | null, reason?: FeedbackReason | null) => void;
   clearWeightOverride: (courseId: string) => void;
   /** Account defaults, inherited by courses without an override. */
   setDefaults: (config: ReviewConfig, weights: Weights) => void;
@@ -573,6 +580,27 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  const rateQuestion = useCallback<OrcaActions["rateQuestion"]>(
+    (courseId, questionId, rating, reason = null) => {
+      setState((s) => {
+        const feedback = { ...s.feedback };
+        if (rating) feedback[questionId] = { courseId, rating, reason: rating === "down" ? reason : null };
+        else delete feedback[questionId];
+        return { ...s, feedback };
+      });
+      save(async () => {
+        const db = browserSupabase();
+        if (!rating) return void must(await db.from("question_feedback").delete().eq("question_id", questionId));
+        must(
+          await db
+            .from("question_feedback")
+            .upsert({ question_id: questionId, course_id: courseId, rating, reason: rating === "down" ? reason : null, updated_at: new Date().toISOString() }, { onConflict: "owner_id,question_id" }),
+        );
+      });
+    },
+    [save],
+  );
+
   const removeExam = useCallback<OrcaActions["removeExam"]>(
     (id) => {
       setState((s) => ({ ...s, exams: s.exams.filter((e) => e.id !== id) }));
@@ -818,6 +846,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       addExam,
       updateExam,
       removeExam,
+      rateQuestion,
       setDefaults,
       addMaterial,
       recordQuiz,
@@ -834,7 +863,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, rateQuestion, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

@@ -17,8 +17,10 @@ import type {
   IslandVariant,
   Material,
   Objective,
+  FeedbackReason,
   ObjectiveSignal,
   PipelineRun,
+  QuestionRating,
   QuizQuestion,
   QuizResult,
   Relation,
@@ -406,6 +408,8 @@ export interface MyData {
   sessions: Row<"session_results">[];
   calendar: Row<"calendar_events">[];
   exams: Row<"exams">[];
+  /** Older databases (before the feedback migration) don't send it. */
+  question_feedback?: Row<"question_feedback">[];
   evidence: EvidenceRow[];
   snapshots: SnapshotRow[];
 }
@@ -431,6 +435,8 @@ export interface LoadedState {
   results: QuizResult[];
   events: CalendarEvent[];
   exams: Exam[];
+  /** questionId → the student's rating of it. */
+  feedback: Record<string, QuestionRating>;
   evidence: EvidenceEvent[];
   snapshots: SnapshotRow[];
 }
@@ -486,6 +492,7 @@ export function loadedState(d: MyData): LoadedState {
     results: d.sessions.map(sessionFromRow),
     events: d.calendar.map(calendarFromRow),
     exams: d.exams.map(examFromRow),
+    feedback: Object.fromEntries((d.question_feedback ?? []).map((r) => [r.question_id, { courseId: r.course_id, rating: r.rating as QuestionRating["rating"], reason: (r.reason as FeedbackReason | null) ?? null }])),
     evidence: d.evidence.map(eventFromRow),
     snapshots: d.snapshots,
   };
