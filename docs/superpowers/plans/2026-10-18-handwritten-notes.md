@@ -35,3 +35,21 @@ visible). Metered and budgeted like every step; progress stage `transcribing`.
    transcribed pages.
 7. Fake model API answers `transcribe`; one e2e spec (upload with the box ticked).
 8. Docs: CLAUDE.md, BACKEND-ROADMAP, TO-DISCUSS (cost per page, the detection list).
+
+## Part 2: describe the figures on typed slides (2026-10-18)
+
+**Why.** A typed slide's text layer is exact, but its diagram, plot or circuit never reaches the
+model. Transcribing whole slides would replace exact text with a reading (errors) and cost about $1
+a deck, so instead: find the slides that draw a figure, send the image *with* the slide's text, ask
+for a description of the visuals only, and append it as "[Figures: …]". The text stays as it was.
+
+**Which slides.** From pdf.js's operator list, no model: an image of at least 100×100 px, or 25+
+path operations (text-only slides draw 3–5, the template). Images that appear on more than half
+the pages (template artwork, logos) don't count. ALD measured: L02 29/38 slides, L03 ~35/53.
+Pages read as images anyway (`needs-vision`) aren't described again. Figure detection stops once
+half the read budget is used, so a heavy file is never refused for it.
+
+**Tasks.** (1) migration: `material_pages.source` also `needs-figure` | `figure`; the reader marks
+figure pages; unit test. (2) a `describe` step (image + text in, figure description out); unit test.
+(3) the job describes marked pages after transcription, before extraction (shared batching with
+transcribe); unit test. (4) fake API + e2e expectations. (5) docs.
