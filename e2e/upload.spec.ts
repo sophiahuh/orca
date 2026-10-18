@@ -208,6 +208,16 @@ async function sendFile(api: APIRequestContext, student: Student, courseId: stri
   return { id: material.id, path: upload.path, processed: await api.post(`/api/materials/${material.id}/process`) };
 }
 
+test("a file Orca can't take is refused on the page: it says why and nothing can be added", async ({ page, student }) => {
+  await createCourse(page, "Logic");
+  await page.goto("/add-material");
+  await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
+  await expect(page.getByText("Choose another file.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add to course" })).toBeDisabled();
+  const { count } = await student.db.from("materials").select("id", { count: "exact", head: true });
+  expect(count).toBe(0);
+});
+
 test("oversize and non-PDF files are refused before anything is stored", async ({ page, student }) => {
   const courseId = await newCourse(student);
   const pdf = makePdf([lines("Hello")]);

@@ -129,7 +129,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     setAiChatUrl("");
     setAiChatText("");
     const problem = uploadProblem(f);
-    setPhase(problem ? { kind: "error", message: `${problem} It will still be added to the course, without its file.` } : { kind: "idle" });
+    // A file Orca can't take (too big, empty, a kind it can't read) is refused: nothing is added.
+    setPhase(problem ? { kind: "error", message: `${problem} Choose another file.` } : { kind: "idle" });
   };
 
   const submit = async () => {
@@ -158,14 +159,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The website import failed." }); }
       return;
     }
-    if (!file) return;
-    if (unreadable) {
-      const id = crypto.randomUUID();
-      addMaterial({ id, filename: file.name, ...meta });
-      if (reflection) recordReflection(id, reflection, []);
-      leave();
-      return;
-    }
+    if (!file || unreadable) return;
     try {
       const outcome = await uploadMaterial(
         file,
@@ -387,7 +381,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button full onClick={submit} disabled={busy || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
+            <Button full onClick={submit} disabled={busy || Boolean(file && unreadable) || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
               {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
             </Button>
 
