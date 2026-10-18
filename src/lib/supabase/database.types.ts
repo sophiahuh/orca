@@ -262,6 +262,31 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"question_feedback": {
+                  Row: {
+                    "course_id": string,"created_at": string,"owner_id": string,"question_id": string,"rating": string,"reason": string | null,"updated_at": string
+                  }
+                  Insert: {
+                    "course_id": string,"created_at"?: string,"owner_id"?: string,"question_id": string,"rating": string,"reason"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "course_id"?: string,"created_at"?: string,"owner_id"?: string,"question_id"?: string,"rating"?: string,"reason"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "question_feedback_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    },{
+      foreignKeyName: "question_feedback_question_id_owner_id_fkey"
+      columns: ["question_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "questions"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
                 },"questions": {
                   Row: {
                     "anchor": Json | null,"answer": number,"course_id": string,"created_at": string,"deep": boolean,"exact": (string)[] | null,"explanation": string,"figure": Json | null,"id": string,"kind": string,"material_id": string | null,"objective_id": string | null,"options": (string)[],"owner_id": string,"prompt": string,"rubric": Json | null,"sort_order": number,"table": Json | null,"tier": string | null,"topic_id": string,"topic_name": string
