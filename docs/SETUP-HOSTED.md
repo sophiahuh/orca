@@ -192,8 +192,8 @@ from public.question_feedback f join public.questions q on q.id = f.question_id
 left join public.materials m on m.id = q.material_id
 group by m.type order by down desc;
 
--- The latest thumbs-down questions, for reading (and for a prompt test set).
-select f.created_at, f.reason, q.kind, q.prompt, q.explanation, q.exact
+-- The latest thumbs-down questions with the students' notes, for reading (and for a prompt test set).
+select f.created_at, f.reason, f.note, q.kind, q.prompt, q.explanation, q.exact
 from public.question_feedback f join public.questions q on q.id = f.question_id
 where f.rating = 'down' order by f.created_at desc limit 50;
 ```
