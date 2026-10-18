@@ -1,5 +1,5 @@
 import type { Topic } from "../src/lib/data";
-import { type SeedState, expect, test, fixtureMaterial, ids, laidOut, objective, seedState, short, stored } from "./fixture";
+import { type SeedState, admin, expect, test, fixtureMaterial, ids, laidOut, objective, seedState, short, stored } from "./fixture";
 
 /** A course as an upload left it: one confirmed topic, two new ones (one maybe a duplicate), an uncertain objective. */
 const SLUG = "logic";
@@ -86,6 +86,22 @@ test("the course's uploads: the button counts the one building, and the Uploads 
   await expect(cards.nth(2)).toContainText("6 questions added.");
   await page.locator("[data-tab=review]").click();
   await expect(page.locator("[data-part=duplicate]")).toHaveCount(2);
+});
+
+test("the course's uploads: one still running past its 40-minute limit is marked failed by the server when the page sees it", async ({ page, student }) => {
+  const runId = crypto.randomUUID();
+  await seedState(student, {
+    ...STATE,
+    runs: [{ id: runId, kind: "upload", courseId: ID, materialId: STATE.materials![0].id, at: new Date(Date.now() - 45 * 60_000).toISOString(), model: "claude-opus-5-5", status: "running", topicsCreated: [], objectivesCreated: [], objectivesAttached: [], questionsAdded: 0, dropped: [] }],
+  });
+  // Its job claimed it 45 minutes ago and died (as when the dev server restarts mid-upload).
+  const { error } = await admin().from("pipeline_runs").update({ started_at: new Date(Date.now() - 45 * 60_000).toISOString() }).eq("id", runId);
+  expect(error).toBeNull();
+  await page.goto(`/course/${SLUG}/review?tab=uploads`);
+  const card = page.locator("[data-part=upload-card]");
+  await expect(card.locator("[data-part=upload-status]")).toHaveText("Failed", { timeout: 15_000 });
+  await expect(card).toContainText("Orca's job stopped without finishing. Upload the file again to retry.");
+  expect((await stored(page, student)).runs.map((r) => r.status)).toEqual(["failed"]);
 });
 
 test("settling duplicates and confirming a topic", async ({ page, student }) => {

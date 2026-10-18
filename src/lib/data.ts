@@ -249,6 +249,8 @@ export interface PipelineRun {
   questionIds?: string[];
   /** Where its job is (runs are written by the server's jobs): queued → running → done | failed. */
   status: RunStatus;
+  /** When its job claimed it (ISO); a run still running long after this has died (`DEAD_RUN_MS`). Read only. */
+  startedAt?: string;
   /** While running: the stage it's at (`Progress` in pipeline/run.ts). */
   progress?: { stage: string; [k: string]: unknown } | null;
   /** Why it failed, for the student. */

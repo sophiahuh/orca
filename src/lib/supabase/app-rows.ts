@@ -231,6 +231,7 @@ export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
     model: r.model,
     ...(r.deep_minutes !== null ? { deepMinutes: r.deep_minutes } : {}),
     status: r.status as PipelineRun["status"],
+    ...(r.started_at !== null ? { startedAt: new Date(r.started_at).toISOString() } : {}),
     ...(r.progress !== null ? { progress: r.progress as unknown as NonNullable<PipelineRun["progress"]> } : {}),
     ...(r.error !== null ? { error: r.error } : {}),
     topicsCreated: r.topics_created,
