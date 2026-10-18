@@ -2,7 +2,8 @@
  * Rules every topic link must meet before it's saved, whoever proposes it (extraction or the link
  * step). "used-in" and "has-a-kind" put one topic below another (a prerequisite, a parent kind), so
  * together they must never form a loop: a link that would close one is dropped, not relabelled
- * (owner, 2026-10-17). Pure.
+ * (owner, 2026-10-17). Two topics have at most one link: the kind that says the most wins (owner,
+ * 2026-10-17). Pure.
  */
 import type { RelationType } from "../data.ts";
 
@@ -27,6 +28,14 @@ export function closesLoop(kept: ReadonlyArray<{ from: string; to: string; type:
   }
   return false;
 }
+
+/** One key per pair of topics, either way round. */
+export function pairKey(a: string, b: string): string {
+  return [a, b].sort().join("|");
+}
+
+/** Which kind wins when two topics get more than one link: the most specific first. */
+export const KIND_RANK: Record<RelationType, number> = { "has-a-kind": 0, "used-in": 1, "alternative-to": 2, related: 3 };
 
 /** Why a looping link was dropped, for the run record. */
 export const LOOP_REASON = "would make a loop of prerequisites (each topic would have to come before the other)";

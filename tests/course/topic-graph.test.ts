@@ -105,3 +105,9 @@ test("long names wrap at spaces into at most three lines, and edges leave from u
   const start = Number(/^M\S+ (\S+)/.exec(g.edges[0].d)![1]);
   assert.ok(start >= labelBottom(a), "the edge starts below the wrapped name");
 });
+
+test("older data with two links between the same topics draws one: the most specific kind", () => {
+  const live = [topic("kv"), topic("attn")];
+  const g = topicGraph({ topics: live, live, relations: [rel("attn", "kv", "related"), rel("kv", "attn", "used-in")], strengthOf: () => "developing" });
+  assert.deepEqual(g.edges.map((e) => [e.from, e.to, e.type]), [["kv", "attn", "used-in"]]);
+});

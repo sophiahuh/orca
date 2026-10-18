@@ -9,8 +9,8 @@ import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
-import { linkKey, linkReason, linkTopics, liveDirectional } from "./link.ts";
-import { DIRECTIONAL, LOOP_REASON, closesLoop } from "../course/links.ts";
+import { linkReason, linkTopics, liveDirectional } from "./link.ts";
+import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
 
@@ -342,15 +342,15 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     const id = topicIdOf(ref);
     return id === null || id === "dropped" ? null : id;
   };
-  const seenRelations = new Set(input.relations.map((r) => linkKey(r.from, r.to, r.type)));
+  // One link per pair of topics: a pair the course links already is skipped; within this upload the most specific kind comes first.
+  const linkedPairs = new Set(input.relations.filter((r) => r.review !== "archived").map((r) => pairKey(r.from, r.to)));
   const relations: Relation[] = [];
   const directional = liveDirectional(input.relations, [...input.course.topics, ...newTopics]);
-  for (const r of extracted.relations) {
+  for (const r of [...extracted.relations].sort((a, b) => KIND_RANK[a.type] - KIND_RANK[b.type])) {
     const from = linkTopic(r.from);
     const to = linkTopic(r.to);
     if (!from || !to || from === to) continue;
-    const key = linkKey(from, to, r.type);
-    if (seenRelations.has(key)) continue;
+    if (linkedPairs.has(pairKey(from, to))) continue;
     const reason = linkReason(r.reason);
     if (!reason.ok) {
       refuse(`A ${r.type} relation`, reason.reason);
@@ -367,7 +367,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
         continue;
       }
     }
-    seenRelations.add(key);
+    linkedPairs.add(pairKey(from, to));
     if (DIRECTIONAL.has(r.type)) directional.push({ from, to, type: r.type });
     relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id, reason: reason.text });
   }
@@ -381,12 +381,14 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
           course: input.course,
           topics: [...input.course.topics, ...newTopics],
           newIds: new Set(newTopics.map((t) => t.id)),
-          existing: [...input.relations, ...relations],
+          existing: input.relations,
+          fromThisRun: relations,
           materialId: input.material.id,
         },
         { call, newId },
       );
-      relations.push(...linked.links);
+      const replaced = new Set(linked.replaced);
+      relations.splice(0, relations.length, ...relations.filter((r) => !replaced.has(r.id)), ...linked.links);
       dropped.push(...linked.dropped);
     } catch (e) {
       dropped.push({ prompt: "Links between topics", reason: `couldn't be found: ${errorText(e)}` });

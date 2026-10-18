@@ -27,7 +27,7 @@ export const LINK_RULES = `Link types, from → to. Be precise, not thorough: a 
 - has-a-kind: B is a named subtype or special case of A (e.g. "Flip-flops" has-a-kind "D flip-flops"; "Binary heaps" has-a-kind "Min-max heaps"). Not for a prerequisite or a competing method.
 - alternative-to: A and B are competing approaches to the same task; a student could reasonably choose one instead of the other for the same problem, whatever their tradeoffs or assumptions (e.g. "Merge sort", "Quicksort" and "Bubble sort" for comparison sorting; "Counting sort" and "Bucket sort" when their input-domain assumptions apply). Give each pair once, either way round. Not for a prerequisite, a subtype, or topics that merely appear in the same unit.
 - related: only when one topic fixes, extends or works around a limitation of the other (e.g. "Counting and bucket sort" related to "Comparison sorting lower bounds", because they bypass the comparison-model bound), or when the subject deliberately contrasts the two to teach something. Nothing else.
-used-in and has-a-kind links never form a loop (A before B before … before A): if B also helps explain A, neither is a prerequisite of the other; use related if it qualifies, otherwise don't link them. Don't link a topic to itself.`;
+used-in and has-a-kind links never form a loop (A before B before … before A): if B also helps explain A, neither is a prerequisite of the other; use related if it qualifies, otherwise don't link them. At most one link between any two topics: pick the kind that says the most. Don't link a topic to itself.`;
 
 /** Question-quality rules (mirrors docs/QUIZ-RUBRIC.md). */
 export const QUIZ_RUBRIC = `Rules for every question:

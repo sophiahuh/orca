@@ -47,3 +47,17 @@ test("an old link with no reason gets the one the model gives when it returns it
   assert.deepEqual(out.links, []);
   assert.deepEqual(out.explained, [{ id: "a-used-in-b", reason: "B's procedure applies A's rules at every step." }]);
 });
+
+test("two topics get one link: a pair the course already links is skipped; the most specific kind wins, even over this upload's own", async () => {
+  const topics = [topic("kv"), topic("attn"), topic("paged")];
+  const call = answering(topics, [
+    { from: "attn", to: "kv", type: "related", reason: "Attention variants exist to shrink the KV cache." },
+    { from: "kv", to: "attn", type: "used-in", reason: "Each variant changes a term of the KV-cache size formula." },
+    { from: "kv", to: "paged", type: "used-in", reason: "Paging allocates the KV cache in fixed blocks." },
+  ]);
+  const existing = [rel("paged", "kv", "related")];
+  const fromThisRun = [{ ...rel("attn", "kv", "related"), id: "extracted" }];
+  const out = await linkTopics({ course: { name: "C", short: "C" }, topics, newIds: new Set(["kv", "attn", "paged"]), existing, fromThisRun, materialId: "m" }, { call, newId });
+  assert.deepEqual(out.links.map((l) => [l.from, l.to, l.type]), [["kv", "attn", "used-in"]], "the course's paged–kv link holds its pair");
+  assert.deepEqual(out.replaced, ["extracted"], "the upload's own related link gives way to used-in");
+});

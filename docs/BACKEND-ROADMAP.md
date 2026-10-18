@@ -140,6 +140,9 @@ For each upload:
    `src/lib/course/links.ts`), not relabelled; the Atlas layout still copes with a loop in older
    data. No cap on links per topic: a cap would drop true links and make the map lie. "Find
    connections" also gives old links (made before reasons) their reason when the model returns them.
+   Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
+   related): a pair the course already links is skipped, a more specific kind replaces one made
+   earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge

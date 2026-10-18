@@ -7,6 +7,7 @@
  */
 import type { Relation, RelationType, Topic } from "../data.ts";
 import type { ObjectiveState } from "../mastery/types.ts";
+import { KIND_RANK, pairKey } from "./links.ts";
 import { survivingTopic, topicUses } from "./weights.ts";
 
 /** How well a topic is held: every objective mastered, some fading or mixed up, under way, or nothing answered yet. */
@@ -100,19 +101,19 @@ export function topicGraph({ topics, live, relations, strengthOf }: TopicGraphIn
   const byId = new Map(topics.map((t) => [t.id, t]));
   const liveIds = new Set(live.map((t) => t.id));
 
-  /* Edges between live topics, through merges, once each ("alternative-to" in either direction is one). */
-  const seen = new Set<string>();
-  const links: Array<{ id: string; from: string; to: string; type: RelationType; reason: string | null }> = [];
+  /* Edges between live topics, through merges: one per pair of topics, the most specific kind (older data can hold two). */
+  const byPair = new Map<string, { id: string; from: string; to: string; type: RelationType; reason: string | null }>();
   for (const r of relations) {
     if (r.review === "archived") continue;
     const from = survivingTopic(r.from, byId)?.id;
     const to = survivingTopic(r.to, byId)?.id;
     if (!from || !to || from === to || !liveIds.has(from) || !liveIds.has(to)) continue;
-    const key = r.type === "alternative-to" ? `${[from, to].sort().join("|")}|${r.type}` : `${from}|${to}|${r.type}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    links.push({ id: r.id, from, to, type: r.type, reason: r.reason });
+    const key = pairKey(from, to);
+    const held = byPair.get(key);
+    if (held && KIND_RANK[held.type] <= KIND_RANK[r.type]) continue;
+    byPair.set(key, { id: r.id, from, to, type: r.type, reason: r.reason });
   }
+  const links = [...byPair.values()];
 
   /*
    * Rows: the longest chain of downward edges above each topic. Links can form a cycle (A used in B,

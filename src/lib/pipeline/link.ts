@@ -4,12 +4,13 @@
  * The model sees short refs, not ids; links to unknown or archived topics, to the topic itself or
  * repeating one the course has are dropped. Every link comes with one sentence saying why it's
  * there; a link without a usable reason, or a directional one that would close a loop, is dropped
- * with why. Links the course already has without a reason (made before reasons were kept) get the
+ * with why. Two topics get at most one link: a pair the course already links is skipped, except that
+ * a more specific kind replaces a link made earlier in the same upload (`fromThisRun`). Links the course already has without a reason (made before reasons were kept) get the
  * reason the model gives when it returns them again. Model calls are injected; nothing here touches
  * the store.
  */
 import type { Relation, Topic } from "../data.ts";
-import { DIRECTIONAL, LOOP_REASON, closesLoop } from "../course/links.ts";
+import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { survivingTopic } from "../course/weights.ts";
 import { validateText } from "../untrusted/validate.ts";
 import type { CallStep } from "./run.ts";
@@ -20,8 +21,10 @@ export interface LinkTopicsInput {
   topics: readonly Topic[];
   /** Topics to link (to each other and to the rest): an upload's new ones, or all of them. */
   newIds: ReadonlySet<string>;
-  /** Links the course has (and any this upload already found). */
+  /** Links the course has. */
   existing: readonly Relation[];
+  /** Links this upload's extraction already found: a more specific link for the same pair replaces one. */
+  fromThisRun?: readonly Relation[];
   /** The upload the links come from; null when the whole course is linked on demand. */
   materialId: string | null;
 }
@@ -32,6 +35,8 @@ export interface LinkTopicsResult {
   explained: Array<{ id: string; reason: string }>;
   /** Links the model proposed that weren't kept, with why. */
   dropped: Array<{ prompt: string; reason: string }>;
+  /** Ids of `fromThisRun` links a more specific link replaced. */
+  replaced: string[];
 }
 
 /** One key per link: "alternative-to" is the same either way round. */
@@ -62,22 +67,28 @@ export function liveDirectional(relations: readonly Relation[], topics: readonly
 
 export async function linkTopics(input: LinkTopicsInput, deps: { call: CallStep; newId: () => string }): Promise<LinkTopicsResult> {
   const live = input.topics.filter((t) => t.review !== "archived" && !t.mergedInto);
-  const result: LinkTopicsResult = { links: [], explained: [], dropped: [] };
+  const result: LinkTopicsResult = { links: [], explained: [], dropped: [], replaced: [] };
   if (live.length < 2 || !live.some((t) => input.newIds.has(t.id))) return result;
   const refOf = new Map(live.map((t, i) => [t.id, `t${i + 1}`]));
   const idOf = new Map(live.map((t, i) => [`t${i + 1}`, t.id]));
   const nameOf = new Map(live.map((t) => [t.id, t.name]));
   const shown = (r: Relation) => refOf.has(r.from) && refOf.has(r.to);
-  const current = input.existing.filter((r) => r.review !== "archived" && shown(r));
+  const thisRun = input.fromThisRun ?? [];
+  const current = [...input.existing, ...thisRun].filter((r) => r.review !== "archived" && shown(r));
   const out = await deps.call("link", {
     course: { name: input.course.name, short: input.course.short },
     topics: live.map((t) => ({ ref: refOf.get(t.id)!, name: t.name, summary: t.summary ?? "", isNew: input.newIds.has(t.id) })),
     existing: current.map((r) => ({ from: refOf.get(r.from)!, to: refOf.get(r.to)!, type: r.type, ...(r.reason ? {} : { needsReason: true }) })),
   });
   const existingByKey = new Map(input.existing.map((r) => [linkKey(r.from, r.to, r.type), r]));
-  const seen = new Set(existingByKey.keys());
-  const kept = liveDirectional(input.existing, input.topics);
-  for (const l of out.links) {
+  // Who holds each pair: the course's links for good; this upload's own, until a more specific kind comes.
+  const pairs = new Map<string, { type: Relation["type"]; replaceable: Relation | null }>();
+  for (const r of input.existing) if (r.review !== "archived") pairs.set(pairKey(r.from, r.to), { type: r.type, replaceable: null });
+  for (const r of thisRun) if (!pairs.has(pairKey(r.from, r.to))) pairs.set(pairKey(r.from, r.to), { type: r.type, replaceable: r });
+  let kept = liveDirectional([...input.existing, ...thisRun], input.topics);
+  // The most specific kinds first, so when the model gives one pair two kinds, the better one wins.
+  const proposed = [...out.links].sort((a, b) => KIND_RANK[a.type] - KIND_RANK[b.type]);
+  for (const l of proposed) {
     const from = idOf.get(l.from);
     const to = idOf.get(l.to);
     if (!from || !to || from === to) continue;
@@ -89,16 +100,23 @@ export async function linkTopics(input: LinkTopicsInput, deps: { call: CallStep;
       if (!old.reason && reason.ok && !result.explained.some((e) => e.id === old.id)) result.explained.push({ id: old.id, reason: reason.text });
       continue;
     }
-    if (seen.has(key)) continue;
+    const holder = pairs.get(pairKey(from, to));
+    if (holder && !(holder.replaceable && KIND_RANK[l.type] < KIND_RANK[holder.type])) continue;
     if (!reason.ok) {
       result.dropped.push({ prompt: what, reason: reason.reason });
       continue;
     }
-    if (DIRECTIONAL.has(l.type) && closesLoop(kept, from, to)) {
+    const replacing = holder?.replaceable ?? null;
+    const others = replacing ? kept.filter((k) => !(k.from === replacing.from && k.to === replacing.to && k.type === replacing.type)) : kept;
+    if (DIRECTIONAL.has(l.type) && closesLoop(others, from, to)) {
       result.dropped.push({ prompt: what, reason: LOOP_REASON });
       continue;
     }
-    seen.add(key);
+    if (replacing) {
+      result.replaced.push(replacing.id);
+      kept = others;
+    }
+    pairs.set(pairKey(from, to), { type: l.type, replaceable: null });
     if (DIRECTIONAL.has(l.type)) kept.push({ from, to, type: l.type });
     result.links.push({ id: deps.newId(), from, to, type: l.type, anchor: null, review: "proposed", materialId: input.materialId, reason: reason.text });
   }

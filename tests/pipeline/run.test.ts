@@ -117,11 +117,8 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   const [t1, t2] = plan.newTopics.map((t) => t.id);
   assert.deepEqual(
     plan.relations.map((r) => [r.from, r.to, r.type]),
-    [
-      [t1, t2, "used-in"],
-      [t2, t1, "related"],
-    ],
-    "extraction's link (one to an unknown topic dropped), then the link step's new one (its repeat of extraction's dropped)",
+    [[t1, t2, "used-in"]],
+    "extraction's link (one to an unknown topic dropped); the link step's repeat and its related link on the same pair are skipped: one link per pair",
   );
   const linkInput = model.calls.find((c) => c.step === "link")!.input as StepInput<"link">;
   assert.deepEqual(linkInput.topics.map((t) => [t.ref, t.name, t.isNew]), [["t1", "Boolean Algebra", true], ["t2", "Karnaugh Maps", true]]);
