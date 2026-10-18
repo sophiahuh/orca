@@ -52,7 +52,6 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const pct = total ? done / total : 0;
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
   const uploading = uploadsInProgress(runs, course.id);
-  const reviewLabel = [uploading > 0 && `${uploading} uploading`, toReview > 0 && `${toReview} to review`].filter(Boolean).join(" · ");
   const agenda = agendas[course.id];
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
 
@@ -117,15 +116,9 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
               .map((u) => (
                 <FollowRun key={u.id} runId={u.id} />
               ))}
-            {reviewLabel && (
-              <Link
-                href={`/course/${course.slug}/review${uploading > 0 ? "?tab=uploads" : ""}`}
-                className="pressable rounded-pill bg-wisteria px-[12px] py-[6px] text-[13px] font-bold text-parchment lip-2 lip-wisteria"
-                data-part="uploads-review-link"
-              >
-                {reviewLabel}
-              </Link>
-            )}
+            {/* Always there: the course's uploads and what they need reviewed, each with a count when there's something in it. */}
+            <CountLink href={`/course/${course.slug}/review?tab=uploads`} label="Uploads" count={uploading} countLabel="building" part="uploads-link" />
+            <CountLink href={`/course/${course.slug}/review?tab=review`} label="Review" count={toReview} countLabel="to review" part="review-link" />
           </motion.nav>
         </div>
       </motion.header>
@@ -161,4 +154,19 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
 function FollowRun({ runId }: { runId: string }) {
   useRun(runId);
   return null;
+}
+
+/** A pill to one tab of the course's uploads and review page, with a count badge when something's in it. */
+function CountLink({ href, label, count, countLabel, part }: { href: string; label: string; count: number; countLabel: string; part: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label={count > 0 ? `${label}, ${count} ${countLabel}` : label}
+      className="pressable flex items-center gap-[6px] rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice"
+      data-part={part}
+    >
+      {label}
+      {count > 0 && <span className="flex h-[20px] min-w-[20px] items-center justify-center rounded-pill bg-wisteria px-[6px] text-[11px] font-bold text-parchment">{count}</span>}
+    </Link>
+  );
 }
