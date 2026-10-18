@@ -211,6 +211,34 @@ export const ReflectOutput = z.object({
 });
 export type ReflectOutput = z.infer<typeof ReflectOutput>;
 
+/* ── Transcribe: handwritten or scanned pages, read from their images ── */
+
+/** At most this many pages go in one transcribe call (each a page image). */
+export const TRANSCRIBE_PAGES_PER_CALL = 4;
+
+export const TranscribeInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200) }),
+  /** Each page's number and its rendered image (base64 JPEG, no data: prefix; about 5 MB at most). */
+  pages: z
+    .array(z.object({ n: z.number().int().min(1), image: z.string().min(1).max(7_000_000) }))
+    .min(1)
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type TranscribeInput = z.infer<typeof TranscribeInput>;
+
+export const TranscribeOutput = z.object({
+  pages: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).describe("The page's number, as given"),
+        text: z.string().max(6000).describe("Everything on the page written out as text; empty when the page is blank"),
+      }),
+    )
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type TranscribeOutput = z.infer<typeof TranscribeOutput>;
+
 /** Every step: its input and output schemas. */
 export const STEPS = {
   extract: { input: ExtractInput, output: ExtractOutput },
@@ -219,6 +247,7 @@ export const STEPS = {
   deep: { input: GenerateInput, output: DeepOutput },
   link: { input: LinkInput, output: LinkOutput },
   reflect: { input: ReflectInput, output: ReflectOutput },
+  transcribe: { input: TranscribeInput, output: TranscribeOutput },
 } as const;
 export type StepName = keyof typeof STEPS;
 export type StepInput<S extends StepName> = z.infer<(typeof STEPS)[S]["input"]>;

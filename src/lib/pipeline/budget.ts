@@ -8,4 +8,6 @@ export const STEP_BUDGET: Record<StepName, { effort: "low" | "medium" | "high"; 
   deep: { effort: "medium", maxTokens: 24000 },
   link: { effort: "medium", maxTokens: 6000 },
   reflect: { effort: "medium", maxTokens: 4000 },
+  // Up to 4 handwritten pages written out (about 1,500 tokens each at most) and some thought.
+  transcribe: { effort: "medium", maxTokens: 16000 },
 };
