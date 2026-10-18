@@ -20,9 +20,18 @@ import { likelyHeadings, pageText } from "./page-text.ts";
 export interface ReadPage {
   n: number;
   text: string;
-  /** `needs-vision`: the page is read from its image later (handwritten, from a notes app, or almost no text); its text is the file's own until then. */
-  source?: "text" | "needs-vision";
+  /**
+   * `needs-vision`: the page is read from its image later (handwritten, from a notes app, or almost no
+   * text); its text is the file's own until then. `needs-figure`: a typed page that draws a figure,
+   * whose description is added to its text later.
+   */
+  source?: "text" | "needs-vision" | "needs-figure";
 }
+
+/** A page draws a figure when it paints an image at least this big (each side, in image pixels)... */
+export const FIGURE_MIN_IMAGE_PX = 100;
+/** ...or this many path operations (a text-only slide's template draws about 3 to 5). */
+export const FIGURE_MIN_PATHS = 25;
 
 /** Apps whose PDFs are handwritten notes (their text layer, if any, is the app's own rough handwriting recognition). */
 export const NOTES_APPS = /goodnotes|notability|noteshelf|nebo|onenote|apple notes|samsung notes|xodo|flexcil|collanote|zoomnotes|zoom notes|penultimate|notein|squid/i;
@@ -171,6 +180,10 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
     // Made by a notes app: every page is handwriting, whatever text layer the app added.
     const info = ((await inTime(doc.getMetadata()).catch(() => null))?.info ?? {}) as { Producer?: unknown; Creator?: unknown };
     const fromNotesApp = NOTES_APPS.test(`${String(info.Producer ?? "")} ${String(info.Creator ?? "")}`);
+    // Figure detection (drawing operations, no model) gets at most half the read budget: past it,
+    // pages are left unmarked rather than the file refused.
+    const figuresUntil = Date.now() + (deadline - Date.now()) / 2;
+    const drawn = new Map<number, { images: Array<{ id: string; w: number; h: number }>; paths: number }>();
     const pages: ReadPage[] = [];
     const hidden: HiddenText = { items: 0, pages: [] };
     const truncated: number[] = [];
@@ -192,8 +205,10 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
       removed += clean.removed;
       if (clean.truncated) truncated.push(n);
       pages.push({ n, text: clean.text, ...(vision ? { source: "needs-vision" as const } : {}) });
+      if (!vision && Date.now() < figuresUntil) drawn.set(n, await inTime(drawingsOf(page, pdfjs.OPS)).catch(() => ({ images: [], paths: 0 })));
       page.cleanup();
     }
+    markFigures(pages, drawn);
     return { pages, hidden, removed, truncated, engine: parser ? "worker" : "main-thread" };
   } catch (e) {
     if (e instanceof WorkerDied && documentLoaded) throw new UnreadablePdfError(`Orca couldn't read this PDF (${e.message}).`);
@@ -203,5 +218,38 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
     // Stop the parser first: a destroy() message to a thread that's stuck would never be answered.
     if (parser) await parser.stop();
     await Promise.race([task.destroy(), new Promise((r) => setTimeout(r, 1000))]).catch(() => undefined);
+  }
+}
+
+/** The images a page paints (with their size in image pixels) and how many paths it draws, from pdf.js's operator list. */
+async function drawingsOf(page: { getOperatorList: () => Promise<{ fnArray: number[]; argsArray: unknown[][] }> }, OPS: Record<string, number>): Promise<{ images: Array<{ id: string; w: number; h: number }>; paths: number }> {
+  const list = await page.getOperatorList();
+  const imageOps = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject]);
+  const images: Array<{ id: string; w: number; h: number }> = [];
+  let paths = 0;
+  list.fnArray.forEach((fn, i) => {
+    if (fn === OPS.constructPath) paths++;
+    else if (imageOps.has(fn)) {
+      const [id, w, h] = (list.argsArray[i] ?? []) as [unknown, unknown, unknown];
+      images.push({ id: String(id), w: Number(w) || 0, h: Number(h) || 0 });
+    }
+  });
+  return { images, paths };
+}
+
+/**
+ * Mark typed pages that draw a figure (`needs-figure`): an image at least FIGURE_MIN_IMAGE_PX on
+ * each side, or FIGURE_MIN_PATHS paths. An image on more than half the pages is the template's
+ * artwork (a logo, a banner) and doesn't count.
+ */
+export function markFigures(pages: ReadPage[], drawn: ReadonlyMap<number, { images: ReadonlyArray<{ id: string; w: number; h: number }>; paths: number }>): void {
+  const seenOn = new Map<string, number>();
+  for (const d of drawn.values()) for (const id of new Set(d.images.map((im) => im.id))) seenOn.set(id, (seenOn.get(id) ?? 0) + 1);
+  const template = (id: string) => pages.length >= 4 && (seenOn.get(id) ?? 0) > pages.length / 2;
+  for (const p of pages) {
+    const d = drawn.get(p.n);
+    if (!d || p.source) continue;
+    const bigImage = d.images.some((im) => !template(im.id) && im.w >= FIGURE_MIN_IMAGE_PX && im.h >= FIGURE_MIN_IMAGE_PX);
+    if (bigImage || d.paths >= FIGURE_MIN_PATHS) p.source = "needs-figure";
   }
 }

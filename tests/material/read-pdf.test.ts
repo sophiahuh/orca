@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { LIMITS } from "../../src/lib/limits.ts";
-import { UnreadablePdfError, readPdf } from "../../src/lib/material/read-pdf.ts";
+import { type ReadPage, UnreadablePdfError, markFigures, readPdf } from "../../src/lib/material/read-pdf.ts";
 import { renderSlide } from "../../src/lib/material/render-slide.ts";
 import { isHidden, visibleItems } from "../../src/lib/untrusted/hidden-text.ts";
 import { lines, makePdf } from "../fixtures/pdf.ts";
@@ -138,4 +138,22 @@ test("pages are marked to be read from their images: a notes app's PDF, the stud
   assert.equal((await readPdf(tinyPdf(typed, "LaTeX"), { handwritten: true })).pages[0].source, "needs-vision");
   assert.equal((await readPdf(tinyPdf("", "Scanner"))).pages[0].source, "needs-vision", "a scan or a drawing: no text to speak of");
   assert.equal((await readPdf(tinyPdf("Sign extension", "LaTeX"))).pages[0].source, undefined, "a short title slide is still text");
+});
+
+test("typed slides that draw a figure are marked to have it described; template artwork doesn't count", async () => {
+  const read = await readPdf(new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf")));
+  const source = (n: number) => read.pages.find((p) => p.n === n)?.source;
+  assert.equal(source(1), undefined, "the title slide: text only");
+  assert.equal(source(5), "needs-figure", "58 drawn paths: a circuit");
+  assert.equal(source(6), "needs-figure", "a big image");
+  assert.equal(source(3), "needs-vision", "a picture with only a slide number is read whole instead");
+  const pages: ReadPage[] = [1, 2, 3, 4].map((n) => ({ n, text: "Some text" }));
+  const logo = { id: "logo", w: 400, h: 400 };
+  markFigures(pages, new Map([
+    [1, { images: [logo], paths: 3 }],
+    [2, { images: [logo], paths: 3 }],
+    [3, { images: [logo, { id: "plot", w: 600, h: 300 }], paths: 3 }],
+    [4, { images: [logo, { id: "icon", w: 40, h: 40 }], paths: 30 }],
+  ]));
+  assert.deepEqual(pages.map((p) => p.source), [undefined, undefined, "needs-figure", "needs-figure"]);
 });
