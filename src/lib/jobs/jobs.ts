@@ -47,7 +47,7 @@ export interface JobStore {
   pages(materialIds: readonly string[]): Promise<Record<string, MaterialPages>>;
   /** Store pages read from their images: transcribed (`vision`) or with their figures described (`figure`). */
   savePages(materialId: string, pages: ReadonlyArray<{ n: number; text: string }>, source: "vision" | "figure"): Promise<void>;
-  /** Every question the student has answered in the course. */
+  /** Every question the student has answered in the course, or given a thumbs down (used either way). */
   answered(courseId: string): Promise<Set<string>>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
   save(courseId: string, rows: StructureRows): Promise<void>;

@@ -58,7 +58,7 @@ function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind:
 
 /** What every session draws on, read from the store once at mount so the session doesn't change under the student. */
 function useSessionSources(course: Course) {
-  const { questionBank, objectives } = useOrca();
+  const { questionBank, objectives, feedback } = useOrca();
   const dayKey = useDayKey();
   const agenda = useAgenda()[course.id];
   const mastery = useMasteryByCourse()[course.id];
@@ -70,8 +70,9 @@ function useSessionSources(course: Course) {
     for (const t of trailTopics(course)) {
       for (const q of questionBank[course.id]?.[t.id] ?? []) {
         const o = liveObjectiveOf(q, t.id, catalogue);
-        // Deep-review questions are written for, and asked in, deep reviews only.
-        if (!o || q.deep) continue;
+        // Deep-review questions are written for, and asked in, deep reviews only; a question the
+        // student gave a thumbs down is never asked again.
+        if (!o || q.deep || feedback[q.id]?.rating === "down") continue;
         byId.set(q.id, q);
         byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
       }

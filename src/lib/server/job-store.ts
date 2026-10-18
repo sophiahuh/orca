@@ -120,7 +120,11 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
         (a, b) => db.from("evidence_events").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "answer").order("at").order("id").range(a, b),
         "the answers",
       );
-      return new Set(rows.flatMap((r) => (r.question_id ? [r.question_id] : [])));
+      // A question the student gave a thumbs down counts as used: it's never asked again, so the
+      // top-up writes a replacement and a dive doesn't reuse it.
+      const { data: down, error } = await db.from("question_feedback").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("rating", "down");
+      if (error) throw new Error(`Couldn't read the student's question ratings: ${error.message}`);
+      return new Set([...rows.flatMap((r) => (r.question_id ? [r.question_id] : [])), ...down.map((r) => r.question_id)]);
     },
 
     async save(courseId, rows) {
