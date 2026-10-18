@@ -163,7 +163,8 @@ export interface QuizResult {
 }
 
 /** An upload's text, one entry per page or slide, kept so questions can be topped up later. */
-export type MaterialPages = Array<{ n: number; text: string }>;
+/** A material's pages; `source` says where a page's text comes from (default its text layer; `needs-vision` until its image is read). */
+export type MaterialPages = Array<{ n: number; text: string; source?: "text" | "needs-vision" | "vision" }>;
 
 /* ── Course structure from uploads ─────────────────────────────────────── */
 

@@ -56,6 +56,8 @@ export const UploadRequest = z.object({
   assigned: isoDate.nullable(),
   due: isoDate.nullable(),
   reflect: z.boolean(),
+  /** The student says the file is handwritten notes: every page is read from its image. */
+  handwritten: z.boolean().default(false),
 });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 
@@ -101,6 +103,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
       assigned: body.assigned,
       due: body.due,
       reflect: body.reflect,
+      handwritten: body.handwritten,
       storage_path: path,
       size_bytes: body.size,
       mime: UPLOAD_MIMES[kind],
@@ -183,14 +186,14 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     let read: { pages: ReadPage[]; hidden: HiddenText };
     try {
       if (!kind) throw new UnreadablePdfError(UNSUPPORTED_UPLOAD, 415);
-      read = kind === "pdf" ? await readPdf(bytes) : await readPptx(bytes);
+      read = kind === "pdf" ? await readPdf(bytes, { handwritten: m.handwritten }) : await readPptx(bytes);
     } catch (e) {
       if (!(e instanceof UnreadablePdfError)) throw e;
       await setFailed(e.message);
       return reply(e.status, { error: e.message });
     }
     if (read.pages.length) {
-      const rows = read.pages.map((p) => ({ owner_id: ownerId, material_id: id, n: p.n, text: p.text }));
+      const rows = read.pages.map((p) => ({ owner_id: ownerId, material_id: id, n: p.n, text: p.text, source: p.source ?? "text" }));
       const inserted = await db.from("material_pages").upsert(rows, { onConflict: "material_id,n" });
       if (inserted.error) throw fail("store the pages", inserted.error);
     }

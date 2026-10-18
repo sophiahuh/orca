@@ -20,7 +20,15 @@ import { likelyHeadings, pageText } from "./page-text.ts";
 export interface ReadPage {
   n: number;
   text: string;
+  /** `needs-vision`: the page is read from its image later (handwritten, from a notes app, or almost no text); its text is the file's own until then. */
+  source?: "text" | "needs-vision";
 }
+
+/** Apps whose PDFs are handwritten notes (their text layer, if any, is the app's own rough handwriting recognition). */
+export const NOTES_APPS = /goodnotes|notability|noteshelf|nebo|onenote|apple notes|samsung notes|xodo|flexcil|collanote|zoomnotes|zoom notes|penultimate|notein|squid/i;
+
+/** A page with less text than this (after sanitising) has none to speak of (a scan, a drawing): read from its image. Short title slides stay text. */
+export const MIN_TEXT_CHARS = 4;
 
 /** What hidden text a file had: how many text items were dropped, and on which pages. */
 export interface HiddenText {
@@ -69,6 +77,8 @@ import("pdfjs-dist/legacy/build/pdf.worker.mjs").then((m) => m.WorkerMessageHand
 const WORKER_HEAP_MB = 1024;
 
 export interface ReadOptions {
+  /** The student said the file is handwritten notes: every page is read from its image. */
+  handwritten?: boolean;
   /** The overall budget; a file that takes longer is refused as unreadable, and its parser stopped. */
   timeoutMs?: number;
   /** Tests only: the worker's program (e.g. one that never answers), instead of pdf.js's. */
@@ -101,21 +111,21 @@ function startParser(source: string) {
   return { port: port1, down, stop };
 }
 
-export async function readPdf(bytes: Uint8Array, { timeoutMs = LIMITS.readMs, workerSource = PDF_WORKER_SOURCE }: ReadOptions = {}): Promise<ReadPdf> {
+export async function readPdf(bytes: Uint8Array, { timeoutMs = LIMITS.readMs, workerSource = PDF_WORKER_SOURCE, handwritten = false }: ReadOptions = {}): Promise<ReadPdf> {
   if (bytes.byteLength > LIMITS.uploadBytes) throw new UnreadablePdfError(`This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.`, 413);
   if (!looksLikePdf(bytes)) throw new UnreadablePdfError("This file isn't a PDF.", 415);
   const deadline = Date.now() + timeoutMs;
   try {
-    return await read(bytes, deadline, workerSource);
+    return await read(bytes, deadline, workerSource, handwritten);
   } catch (e) {
     // The worker thread itself couldn't start (not the file's fault): read here instead, with the
     // time left. A worker that died while parsing a loaded document is the file's fault (below).
-    if (e instanceof WorkerDied && e.beforeDocument) return read(bytes, deadline, null);
+    if (e instanceof WorkerDied && e.beforeDocument) return read(bytes, deadline, null, handwritten);
     throw e;
   }
 }
 
-async function read(bytes: Uint8Array, deadline: number, workerSource: string | null): Promise<ReadPdf> {
+async function read(bytes: Uint8Array, deadline: number, workerSource: string | null, handwritten: boolean): Promise<ReadPdf> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const parser = workerSource === null ? null : startParser(workerSource);
   const budget = Math.max(1, deadline - Date.now());
@@ -158,6 +168,9 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
     if (doc.numPages > LIMITS.pagesPerFile) {
       throw new UnreadablePdfError(`This PDF has ${doc.numPages} pages; Orca reads at most ${LIMITS.pagesPerFile} per file. Split it and upload the parts.`, 413);
     }
+    // Made by a notes app: every page is handwriting, whatever text layer the app added.
+    const info = ((await inTime(doc.getMetadata()).catch(() => null))?.info ?? {}) as { Producer?: unknown; Creator?: unknown };
+    const fromNotesApp = NOTES_APPS.test(`${String(info.Producer ?? "")} ${String(info.Creator ?? "")}`);
     const pages: ReadPage[] = [];
     const hidden: HiddenText = { items: 0, pages: [] };
     const truncated: number[] = [];
@@ -166,17 +179,19 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
       const page = await inTime(doc.getPage(n));
       const content = await inTime(page.getTextContent());
       const visible = visibleItems(content.items, page.view as unknown as PageBox);
-      if (visible.hidden) {
+      const text = pageText(visible.items);
+      const vision = handwritten || fromNotesApp || sanitize(text, LIMITS.pageChars).text.trim().length < MIN_TEXT_CHARS;
+      // A page read from its image is read as it looks: text hidden in its layer never reaches the model.
+      if (visible.hidden && !vision) {
         hidden.items += visible.hidden;
         hidden.pages.push(n);
       }
-      const text = pageText(visible.items);
       const headings = likelyHeadings(visible.items);
       const annotated = headings.length ? `[Likely section headings, inferred from comparatively large text: ${headings.join(" | ")}]\n${text}` : text;
       const clean = sanitize(annotated, LIMITS.pageChars);
       removed += clean.removed;
       if (clean.truncated) truncated.push(n);
-      pages.push({ n, text: clean.text });
+      pages.push({ n, text: clean.text, ...(vision ? { source: "needs-vision" as const } : {}) });
       page.cleanup();
     }
     return { pages, hidden, removed, truncated, engine: parser ? "worker" : "main-thread" };

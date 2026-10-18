@@ -85,7 +85,7 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.deepEqual(s.weights.c, { lectures: 25 }, "an override wins over the account default");
   assert.deepEqual(s.weightOverrides.c, { lectures: 25 });
 
-  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
+  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", handwritten: false, status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
   const withFiles = loadedState({ ...data, materials: [material, { ...material, id: "m2", status: "uploaded", hidden_text: null }, { ...material, id: "m3", status: "failed", error: "unreadable" }] });
   assert.deepEqual(withFiles.materials.map((m) => [m.id, m.hiddenText]), [["m", { items: 2, pages: [3] }]], "only read uploads are part of the course; the hidden-text record comes along");
 });

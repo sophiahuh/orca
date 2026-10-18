@@ -107,3 +107,35 @@ test("a slide renders on the server as a JPEG figure", async () => {
   assert.match(whole, /^data:image\/jpeg;base64,/);
   assert.notEqual(whole, await renderSlide(bytes, 5));
 });
+
+/** A one-page PDF with `text` on it (Helvetica), made by `producer`. */
+function tinyPdf(text: string, producer: string): Uint8Array {
+  const content = `BT /F1 12 Tf 72 720 Td (${text}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Producer (${producer}) >>`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objects.forEach((o, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new TextEncoder().encode(pdf);
+}
+
+test("pages are marked to be read from their images: a notes app's PDF, the student's say-so, or almost no text", async () => {
+  const typed = "Two's complement negates a number by inverting its bits and adding one.";
+  assert.equal((await readPdf(tinyPdf(typed, "LaTeX"))).pages[0].source, undefined, "typed text is read as text");
+  assert.equal((await readPdf(tinyPdf(typed, "GoodNotes 6"))).pages[0].source, "needs-vision", "a notes app's text layer is its own rough recognition");
+  assert.equal((await readPdf(tinyPdf(typed, "LaTeX"), { handwritten: true })).pages[0].source, "needs-vision");
+  assert.equal((await readPdf(tinyPdf("", "Scanner"))).pages[0].source, "needs-vision", "a scan or a drawing: no text to speak of");
+  assert.equal((await readPdf(tinyPdf("Sign extension", "LaTeX"))).pages[0].source, undefined, "a short title slide is still text");
+});

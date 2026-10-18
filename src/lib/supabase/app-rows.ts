@@ -327,6 +327,7 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     content_hash: null,
     size_bytes: null,
     mime: null,
+    handwritten: false,
     status: "ready",
     error: null,
     hidden_text: null,
