@@ -64,7 +64,8 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
-  expect(await fakeCalls()).toEqual(["extract", "link", "generate", "generate"]);
+  // Slides 3 and 4 are pictures with only a slide number: they're read from their images first.
+  expect(await fakeCalls()).toEqual(["transcribe", "extract", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -99,6 +100,23 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
   await page.goto(`/quiz/logic/${course.topics[0].id}`);
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
+});
+
+test("handwritten notes: every page is read from its image before the upload is built, and the clean text is stored", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await page.goto("/add-material");
+  await page.locator('input[type="file"]').setInputFiles(DECK);
+  await page.getByRole("switch", { name: "Handwritten notes" }).click();
+  await page.getByRole("button", { name: "Add to course" }).click();
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 90_000 });
+  const { data: pages, error } = await student.db.from("material_pages").select("n, text, source").order("n");
+  expect(error).toBeNull();
+  expect(pages!.length).toBeGreaterThan(1);
+  expect(pages!.every((p) => p.source === "vision" && p.text === `Handwritten page ${p.n}: x + xy = x by absorption.`)).toBe(true);
+  const calls = await fakeCalls();
+  expect(calls.filter((c) => c === "transcribe")).toHaveLength(Math.ceil(pages!.length / 4));
+  expect(calls.indexOf("transcribe")).toBeLessThan(calls.indexOf("extract"));
 });
 
 test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {

@@ -9,6 +9,7 @@
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
  * - deep: the same for a deep review, "<objective name>: deep case <i>?", tier application;
+ * - transcribe: each page named in the prompt as "Handwritten page <n>: x + xy = x by absorption.";
  * - link: the scenario's `links`, by topic name (default: none), each with a reason;
  * - reflect: the scenario's `reflect` matches, by objective name.
  *
@@ -45,6 +46,7 @@ const STEPS: Array<[string, string]> = [
   ["You connect the topics of one college course", "link"],
   ["You match a student's reflection", "reflect"],
   ["You grade one short student answer", "grade"],
+  ["You transcribe pages of a college student's", "transcribe"],
 ];
 
 let scenario: Scenario = {};
@@ -75,6 +77,11 @@ function answer(step: string, prompt: string): unknown {
       return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
     case "reconcile":
       return { decision: "new", matchId: null, reasoning: "The fake API keeps them separate." };
+    case "transcribe": {
+      // The prompt names the pages its images are, in order.
+      const pages = (/pages ([\d, ]+), in that order/.exec(prompt)?.[1] ?? "").split(",").map((p) => Number(p.trim())).filter(Boolean);
+      return { pages: pages.map((n) => ({ n, text: `Handwritten page ${n}: x + xy = x by absorption.` })) };
+    }
     case "generate":
     case "deep": {
       const deep = step === "deep";
