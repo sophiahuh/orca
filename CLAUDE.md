@@ -98,6 +98,9 @@ them silently; list what you assumed.
   the e2e web server can't start: either ask them to stop it, or temporarily add
   `distDir: process.env.SCRATCH_DIST ?? ".next"` to `next.config.ts` and run with
   `SCRATCH_DIST=.next-e2e` (Next also edits `tsconfig.json` then); revert both before committing.
+  **Changing `next.config.ts` restarts the owner's running dev server, which kills any inline job
+  (upload, dive) it's running** (2026-10-17: a real upload died this way). Before that trick, check
+  the hosted project has no queued or running `pipeline_runs`, or ask the owner.
 - Cloud containers: Playwright's Chromium build doesn't match; run e2e with
   `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
