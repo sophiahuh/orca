@@ -140,6 +140,10 @@ For each upload:
    `src/lib/course/links.ts`), not relabelled; the Atlas layout still copes with a loop in older
    data. No cap on links per topic: a cap would drop true links and make the map lie. "Find
    connections" also gives old links (made before reasons) their reason when the model returns them.
+   *Handwritten and scanned pages (owner, 2026-10-18):* a PDF page whose text layer is a notes app's
+   rough recognition, or missing, is read from its image by the server's model (`transcribe` step:
+   pages rendered whole by our own pdf.js + @napi-rs/canvas renderer, 4 a call, at the start of the
+   upload job; the clean text replaces the page's). Plan: `docs/superpowers/plans/2026-10-18-handwritten-notes.md`.
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.

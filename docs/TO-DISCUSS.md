@@ -240,7 +240,12 @@ plots, charts and SmartArt are never sent to the model, so what a slide shows on
 questions. For PDFs, a question can still point at a slide ("In the figure, …") and show it as an
 image, but the writer picks the slide from its text without seeing the figure. For .pptx decks, slides
 can't be rendered at all, so those figure questions are dropped ("couldn't be rendered").
-This is a real gap for courses that teach through graphs or visualisations. Options: send images of
+*Partly addressed 2026-10-18:* handwritten notes, scans and picture-only slides (a PDF page with no
+text to speak of) are now read from their images by the server's model (the `transcribe` step), so
+their diagrams are described in words. Typed slides with a figure among their text still aren't.
+Assumed, decide or accept: the notes-app list (`NOTES_APPS` in `read-pdf.ts`), "no text" meaning
+under 4 characters, and the cost (about 1–2 cents a page on the current model, counted in the
+upload's metering). This is a real gap for courses that teach through graphs or visualisations. Options: send images of
 figure-heavy pages to the model during extraction and writing (costs more per upload); render .pptx
 slides by converting to PDF on a worker with LibreOffice (a Trigger.dev task; layout isn't always
 faithful); or ask students to upload decks as PDFs (File → Save as PDF) when the visuals matter.

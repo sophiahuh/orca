@@ -70,7 +70,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   then the hosted bucket refuses .pptx uploads), `20261017090000_relation_reasons` (until then
   every upload and "Find connections" fails to save links on the hosted project) and
   `20261017100000_upload_paths_course_names` (until then every new upload is refused: files are
-  stored at `<owner>/<material id>` now; course names are capped at 50 characters). Check with `npx supabase migration list --linked`
+  stored at `<owner>/<material id>` now; course names are capped at 50 characters) and
+  `20261018090000_handwritten_pages` (until then every PDF upload fails to store its pages). Check with `npx supabase migration list --linked`
   (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
@@ -302,7 +303,10 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
 - `src/lib/material/read-pdf.ts`, `read-pptx.ts` (+ `unzip.ts`, `kind.ts`), `src/lib/uploads.ts` — PDFs and .pptx decks to
   Storage, read on the server into `material_pages` (a .pptx: one page per slide, its text, tables and speaker notes; no
-  pictures, and no slide figures; see `docs/TO-DISCUSS.md`).
+  pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
+  switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
+  `transcribe` step at the start of the upload job (`src/lib/pipeline/transcribe.ts`; plan in
+  `docs/superpowers/plans/2026-10-18-handwritten-notes.md`).
 - `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, LoadingScreen: the shared full-screen wait, NavBar: on a course page its
   gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
   (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`
