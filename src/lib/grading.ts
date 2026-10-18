@@ -41,9 +41,21 @@ export function normaliseExact(s: string) {
     .replace(/\.$/, "");
 }
 
+/**
+ * A typed answer's lead-in words, which say nothing ("is valid", "it's 1010", "the answer is x"):
+ * dropped before comparing. Only whole leading words, so a negation ("not valid") is never dropped.
+ */
+const LEAD_IN = /^(?:(?:the\s+answer\s+is|answer\s*:|it\s+is|it's|its|that\s+is|this\s+is|they\s+are|is|are|=|a|an|the)\s*)+/i;
+
+/** The answer without its lead-in words or a final period, then normalised. */
+function normaliseResponse(s: string): string {
+  const bare = s.trim().replace(/[.!]+$/, "").replace(LEAD_IN, "");
+  return normaliseExact(bare || s);
+}
+
 export function gradeExact(response: string, accepted: string[]): GradeResult {
-  const r = normaliseExact(response);
-  const ok = accepted.some((a) => normaliseExact(a) === r);
+  const r = normaliseResponse(response);
+  const ok = accepted.some((a) => normaliseExact(a) === r || normaliseResponse(a) === r);
   return ok
     ? { outcome: "correct", feedback: "Right." }
     : { outcome: "incorrect", feedback: `Not quite. Expected ${accepted[0]}.` };
