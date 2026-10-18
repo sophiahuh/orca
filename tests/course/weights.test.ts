@@ -33,7 +33,7 @@ test("material types map onto the Settings sliders; Other is neutral", () => {
 });
 
 test("by default every material type is worth the same", () => {
-  for (const type of ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
+  for (const type of ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
     close(placeValue(type, DEFAULT_WEIGHTS), 1);
   }
 });

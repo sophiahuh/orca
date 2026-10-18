@@ -2,7 +2,7 @@
  * Uploads (Phase 4 plan, decisions 7, 10 and 13). Two steps, each a route:
  *
  * 1. `startUpload` (POST /api/materials): checks what the browser says about the file (PDF or .pptx, at most
- *    25 MB), recognises a file already in the course by its SHA-256, and otherwise records the
+ *    30 MB), recognises a file already in the course by its SHA-256, and otherwise records the
  *    material (status `uploaded`) and hands back a signed upload URL for
  *    `<owner>/<material id>` in the private `materials` bucket.
  * 2. `processUpload` (POST /api/materials/:id/process): once the file is in Storage, the server

@@ -110,7 +110,7 @@ test("handwritten notes: every page is read from its image before the upload is 
   await createCourse(page, "Logic");
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
-  await page.getByRole("switch", { name: "Handwritten notes" }).click();
+  await page.getByRole("button", { name: "Handwritten notes", exact: true }).click();
   await page.getByRole("button", { name: "Add to course" }).click();
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 90_000 });
   const { data: pages, error } = await student.db.from("material_pages").select("n, text, source").order("n");
@@ -211,7 +211,7 @@ async function sendFile(api: APIRequestContext, student: Student, courseId: stri
 test("oversize and non-PDF files are refused before anything is stored", async ({ page, student }) => {
   const courseId = await newCourse(student);
   const pdf = makePdf([lines("Hello")]);
-  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 25 * 1024 * 1024 + 1 } });
+  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 30 * 1024 * 1024 + 1 } });
   expect(big.status()).toBe(413);
   const text = await page.request.post("/api/materials", { data: { ...details(courseId, pdf, "notes.txt"), mime: "text/plain" } });
   expect(text.status()).toBe(415);

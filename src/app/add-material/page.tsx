@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
 import { Select } from "@/components/ui/Select";
-import { Toggle } from "@/components/ui/Toggle";
 import { uploadKind } from "@/lib/material/kind";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
@@ -94,7 +93,6 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [assigned, setAssigned] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
   const [note, setNote] = useState("");
-  const [handwritten, setHandwritten] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!course) {
@@ -137,7 +135,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const submit = async () => {
     if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
-    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: handwritten && isPdf };
+    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf };
     // The form is done with: it gives way to where the student goes next, so Back from there skips it.
     const leave = () => router.replace(due ? "/calendar" : `/course/${course.slug}`);
     if (aiChatUrl.trim() || aiChatText.trim()) {
@@ -371,17 +369,6 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <DateField label="Due date" value={due} onChange={setDue} noneLabel="No due date" />
           </motion.section>
 
-          {isPdf && (
-            <motion.section variants={fadeUp} initial="hidden" animate="show" className="flex items-start gap-[14px]" data-part="handwritten">
-              <Toggle checked={handwritten} onChange={setHandwritten} label="Handwritten notes" />
-              <div className="flex flex-col gap-[4px]">
-                <span className="text-[17px] font-bold text-prussian">Handwritten notes</span>
-                <span className="text-[13px] font-medium text-wisteria-deep">
-                  Orca reads each page as an image: handwriting, diagrams and equations. For iPad notes and scans. (PDFs from notes apps like GoodNotes and Notability are recognised on their own.)
-                </span>
-              </div>
-            </motion.section>
-          )}
 
           {type === "Homework" && (
             <motion.label variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[8px]">

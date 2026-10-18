@@ -118,6 +118,7 @@ export type MaterialType =
   | "Practice exam"
   | "Homework"
   | "Lecture"
+  | "Handwritten notes"
   | "Other";
 
 export interface Material {
@@ -337,7 +338,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   lectures: 25,
 };
 
-export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
 
 /* ── Dates ────────────────────────────────────────────────────────────── */
 export function toISODate(d: Date) {

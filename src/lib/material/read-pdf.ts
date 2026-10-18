@@ -82,7 +82,7 @@ const { workerData } = require("node:worker_threads");
 import("pdfjs-dist/legacy/build/pdf.worker.mjs").then((m) => m.WorkerMessageHandler.initializeFromPort(workerData.port));
 `;
 
-/** The parser's memory, so one file can't take the process down with it (a 25 MB PDF needs far less). */
+/** The parser's memory, so one file can't take the process down with it (a 30 MB PDF needs far less). */
 const WORKER_HEAP_MB = 1024;
 
 export interface ReadOptions {

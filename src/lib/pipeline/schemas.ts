@@ -124,7 +124,7 @@ const Page = z.object({ n: z.number().int().min(1), text: z.string().max(6000) }
 const Named = z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()), description: z.string().optional(), rejected: z.boolean() });
 // The short label is display text (often the whole name for courses made before initials), not a ref.
 const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
-const MaterialType = z.enum(["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
+const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
 
 export const ExtractInput = z.object({
   course: Course,
