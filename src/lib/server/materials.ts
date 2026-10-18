@@ -4,7 +4,7 @@
  * 1. `startUpload` (POST /api/materials): checks what the browser says about the file (PDF or .pptx, at most
  *    25 MB), recognises a file already in the course by its SHA-256, and otherwise records the
  *    material (status `uploaded`) and hands back a signed upload URL for
- *    `<owner>/<material id>/<safe name>` in the private `materials` bucket.
+ *    `<owner>/<material id>` in the private `materials` bucket.
  * 2. `processUpload` (POST /api/materials/:id/process): once the file is in Storage, the server
  *    takes it from there (never from the browser), hashes it, recognises a duplicate again (the
  *    browser's hash is only a shortcut), reads it (pdf.js for a PDF, the slide XML for a .pptx) into sanitised `material_pages`, drops
@@ -22,7 +22,7 @@ import { UNSUPPORTED_UPLOAD, UPLOAD_MIMES, type UploadKind, uploadKind } from "@
 import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readPdf } from "@/lib/material/read-pdf";
 import { readPptx } from "@/lib/material/read-pptx";
 import { looksLikeZip } from "@/lib/material/unzip";
-import { isOwnPath, safeName } from "@/lib/material/paths";
+import { isOwnPath, uploadPath } from "@/lib/material/paths";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -89,7 +89,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
   if (known) return reply(200, known);
 
   const id = crypto.randomUUID();
-  const path = `${ownerId}/${id}/${safeName(body.filename)}`;
+  const path = uploadPath(ownerId, id);
   const { data: row, error } = await db
     .from("materials")
     .insert({

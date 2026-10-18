@@ -81,7 +81,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   const { data: row } = await student.db.from("materials").select("storage_path, content_hash, status, hidden_text").single();
   const bytes = await readFile(DECK);
   expect(row).toEqual({
-    storage_path: `${student.id}/${state.materials[0].id}/L02_Combinational.pdf`,
+    storage_path: `${student.id}/${state.materials[0].id}`,
     content_hash: createHash("sha256").update(bytes).digest("hex"),
     status: "ready",
     hidden_text: { items: 0, pages: [] },
