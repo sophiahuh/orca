@@ -48,8 +48,13 @@ migrations in `supabase/migrations/` are the source of truth.
    Tokens, `tr_pat_…`).
 4. **Environment variables for the tasks** (project → Environment Variables, for Prod and Dev):
    the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER` if set),
-   `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Tasks run on Trigger.dev's
-   machines, so they need their own copies.
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
+   (the names `src/lib/supabase/env.ts` reads), and `ORCA_DAILY_BUDGET_USD` (the jobs check it).
+   Tasks run on Trigger.dev's machines, so they need their own copies.
+5. **Deploy the tasks** (separate from Vercel; again whenever the job code changes): put
+   `TRIGGER_PROJECT_REF=proj_…` in `.env`, then `npx trigger.dev@latest login` and
+   `npx trigger.dev@latest deploy`. On Vercel set `TRIGGER_SECRET_KEY` (`tr_prod_…`) and
+   `ORCA_JOBS=trigger`, and redeploy.
 
 ## 3. Anthropic or OpenAI
 
