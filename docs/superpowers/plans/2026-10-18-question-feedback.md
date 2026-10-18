@@ -18,3 +18,15 @@ platform-wide for Orca's own tracking.
 3. Sessions and the top-up skip thumbs-down questions; unit tests.
 4. 👍/👎 (and reasons on 👎) on the answer's feedback card; e2e.
 5. Docs: SETUP-HOSTED §7 queries, BACKEND-ROADMAP decision, CLAUDE.md.
+
+## Part 2: a note on a thumbs down, used when writing questions (owner, 2026-10-18)
+
+A thumbs down opens a popup: the reasons and an optional note (up to 300 characters). Every
+question-writing call (upload, top-up, dive) gets the course's recent thumbs-down ratings (the
+question, its reason and note): those on the objectives being written for, plus a few from the rest
+of the course. Notes are student text: sanitised, screened (a strong hit drops the note, the reason
+stays) and sent as a labelled data block (`student_feedback`), never as instructions.
+
+Tasks: (1) `question_feedback.note` + pgTAP; (2) the popup and `rateQuestion(…, note)`; e2e;
+(3) the job store reads the course's thumbs-downs, `GenerateInput.flagged`, the prompts, unit tests;
+(4) docs.

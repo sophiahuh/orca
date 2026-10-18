@@ -2,7 +2,7 @@
 -- thumbs down, and the student's ratings come back with my_data().
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(7);
+select plan(9);
 
 \set A aaaaaaaa-0000-4000-8000-000000000001
 \set B bbbbbbbb-0000-4000-8000-000000000002
@@ -29,6 +29,8 @@ select throws_ok(format($$insert into public.question_feedback (question_id, cou
 select lives_ok(format($$update public.question_feedback set rating = 'up', reason = null where question_id = %L$$, :'q'), 'changing the rating');
 select throws_ok(format($$update public.question_feedback set reason = 'unclear' where question_id = %L$$, :'q'), '23514', null, 'a reason only goes with a thumbs down');
 select is((public.my_data() -> 'question_feedback' -> 0 ->> 'rating'), 'up', 'my_data returns the student''s ratings');
+select lives_ok(format($$update public.question_feedback set rating = 'down', reason = 'wrong-answer', note = 'The key says 1011 but it should be 1010.' where question_id = %L$$, :'q'), 'a thumbs down can carry a note');
+select throws_ok(format($$update public.question_feedback set rating = 'up', reason = null where question_id = %L$$, :'q'), '23514', null, 'a note only goes with a thumbs down');
 
 reset role;
 select pg_temp.act_as(:'B');

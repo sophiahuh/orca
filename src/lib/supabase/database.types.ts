@@ -264,13 +264,13 @@ isOneToOne: false
                   ]
                 },"question_feedback": {
                   Row: {
-                    "course_id": string,"created_at": string,"owner_id": string,"question_id": string,"rating": string,"reason": string | null,"updated_at": string
+                    "course_id": string,"created_at": string,"note": string | null,"owner_id": string,"question_id": string,"rating": string,"reason": string | null,"updated_at": string
                   }
                   Insert: {
-                    "course_id": string,"created_at"?: string,"owner_id"?: string,"question_id": string,"rating": string,"reason"?: string | null,"updated_at"?: string
+                    "course_id": string,"created_at"?: string,"note"?: string | null,"owner_id"?: string,"question_id": string,"rating": string,"reason"?: string | null,"updated_at"?: string
                   }
                   Update: {
-                    "course_id"?: string,"created_at"?: string,"owner_id"?: string,"question_id"?: string,"rating"?: string,"reason"?: string | null,"updated_at"?: string
+                    "course_id"?: string,"created_at"?: string,"note"?: string | null,"owner_id"?: string,"question_id"?: string,"rating"?: string,"reason"?: string | null,"updated_at"?: string
                   }
                   Relationships: [
                     {
