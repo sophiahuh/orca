@@ -52,6 +52,28 @@ test("a cycle of used-in links can't push rows past the number of topics", () =>
   assert.ok(g.nodes.every((n) => n.row < live.length));
 });
 
+test("a longer cycle (frameworks → prefill → cost → frameworks) still lays out: finite positions, no empty rows, every edge drawn", () => {
+  const live = ["fw", "prefill", "cost", "kv", "attn", "paged"].map((id) => topic(id));
+  const relations = [
+    rel("fw", "prefill", "used-in"),
+    rel("kv", "prefill", "used-in"),
+    rel("prefill", "cost", "used-in"),
+    rel("kv", "cost", "used-in"),
+    rel("cost", "fw", "used-in"),
+    rel("kv", "attn", "used-in"),
+    rel("kv", "paged", "used-in"),
+    rel("cost", "attn", "used-in"),
+    rel("attn", "paged", "related"),
+  ];
+  const g = topicGraph({ topics: live, live, relations, strengthOf: () => "developing" });
+  assert.ok(Number.isFinite(g.width) && Number.isFinite(g.height));
+  assert.ok(g.nodes.every((n) => Number.isFinite(n.x) && Number.isFinite(n.y)));
+  const rows = new Set(g.nodes.map((n) => n.row));
+  assert.deepEqual([...rows].sort(), [...Array(rows.size).keys()], "rows are 0..n with none empty");
+  assert.equal(g.edges.length, relations.length);
+  assert.ok(g.edges.every((e) => !e.d.includes("NaN")));
+});
+
 test("strength: nothing answered is unverified; fading or mixed up is fragile; every objective held is strong", () => {
   const state = (status: ObjectiveState["status"]) => ({ status }) as ObjectiveState;
   const states = new Map([
