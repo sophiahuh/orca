@@ -139,7 +139,7 @@ export function objectiveFromRow(r: Row<"objectives">): Objective {
 }
 
 export function relationToRow(r: Relation): StructureRow<"relations"> {
-  return { id: r.id, from_topic: r.from, to_topic: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId };
+  return { id: r.id, from_topic: r.from, to_topic: r.to, type: r.type, anchor: json(r.anchor), review: r.review, material_id: r.materialId, reason: r.reason };
 }
 
 export function relationFromRow(r: Row<"relations">): Relation {
@@ -151,6 +151,7 @@ export function relationFromRow(r: Row<"relations">): Relation {
     anchor: r.anchor as unknown as Relation["anchor"],
     review: r.review as Relation["review"],
     materialId: r.material_id,
+    reason: r.reason,
   };
 }
 

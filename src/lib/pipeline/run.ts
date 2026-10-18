@@ -9,7 +9,8 @@ import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
-import { linkKey, linkTopics } from "./link.ts";
+import { linkKey, linkReason, linkTopics, liveDirectional } from "./link.ts";
+import { DIRECTIONAL, LOOP_REASON, closesLoop } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
 
@@ -343,12 +344,22 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   };
   const seenRelations = new Set(input.relations.map((r) => linkKey(r.from, r.to, r.type)));
   const relations: Relation[] = [];
+  const directional = liveDirectional(input.relations, [...input.course.topics, ...newTopics]);
   for (const r of extracted.relations) {
     const from = linkTopic(r.from);
     const to = linkTopic(r.to);
     if (!from || !to || from === to) continue;
     const key = linkKey(from, to, r.type);
     if (seenRelations.has(key)) continue;
+    const reason = linkReason(r.reason);
+    if (!reason.ok) {
+      refuse(`A ${r.type} relation`, reason.reason);
+      continue;
+    }
+    if (DIRECTIONAL.has(r.type) && closesLoop(directional, from, to)) {
+      dropped.push({ prompt: `A ${r.type} relation`, reason: LOOP_REASON });
+      continue;
+    }
     if (r.anchor) {
       const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));
       if (!v.ok || !anchorExists(r.anchor.locator, facts)) {
@@ -357,25 +368,26 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       }
     }
     seenRelations.add(key);
-    relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id });
+    if (DIRECTIONAL.has(r.type)) directional.push({ from, to, type: r.type });
+    relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id, reason: reason.text });
   }
 
   /* 5. A focused pass for links (the link step): this upload's new topics against every topic. Extraction
      links only what the slides spell out; this one may use the subject. A failure costs only the links. */
   if (newTopics.length) {
     try {
-      relations.push(
-        ...(await linkTopics(
-          {
-            course: input.course,
-            topics: [...input.course.topics, ...newTopics],
-            newIds: new Set(newTopics.map((t) => t.id)),
-            existing: [...input.relations, ...relations],
-            materialId: input.material.id,
-          },
-          { call, newId },
-        )),
+      const linked = await linkTopics(
+        {
+          course: input.course,
+          topics: [...input.course.topics, ...newTopics],
+          newIds: new Set(newTopics.map((t) => t.id)),
+          existing: [...input.relations, ...relations],
+          materialId: input.material.id,
+        },
+        { call, newId },
       );
+      relations.push(...linked.links);
+      dropped.push(...linked.dropped);
     } catch (e) {
       dropped.push({ prompt: "Links between topics", reason: `couldn't be found: ${errorText(e)}` });
     }

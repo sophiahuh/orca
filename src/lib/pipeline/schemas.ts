@@ -55,6 +55,7 @@ export const ExtractOutput = z.object({
         to: z.string().max(60).describe("Topic localId or existing topic id"),
         type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
         anchor: Anchor.nullable(),
+        reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
       }),
     )
     .max(60),
@@ -167,8 +168,8 @@ export const LinkInput = z.object({
   course: Course,
   /** Each topic by a short ref ("t1"…), with its summary; `isNew` marks this upload's topics. */
   topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2).max(200),
-  /** Links the course already has, by ref (not to be repeated). */
-  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string() })).max(1000),
+  /** Links the course already has, by ref (not to be repeated, except those that need a reason). */
+  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string(), needsReason: z.boolean().optional() })).max(1000),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
 
@@ -179,6 +180,7 @@ export const LinkOutput = z.object({
         from: z.string().max(20).describe("A topic ref"),
         to: z.string().max(20).describe("A topic ref"),
         type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
+        reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
       }),
     )
     .max(120),

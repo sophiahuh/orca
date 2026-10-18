@@ -78,8 +78,8 @@ const lectureExtract: ExtractOutput = {
     { localId: "o3", existingId: null, topicRef: "t2", name: "Read binary numbers", description: "", aliases: [], origin: "inferred", places: [], emphasis: null },
   ],
   relations: [
-    { from: "t1", to: "t2", type: "used-in", anchor: null },
-    { from: "t2", to: "nope", type: "related", anchor: null },
+    { from: "t1", to: "t2", type: "used-in", anchor: null, reason: "K-maps group terms using Boolean algebra's absorption." },
+    { from: "t2", to: "nope", type: "related", anchor: null, reason: "Points at a topic that isn't there." },
   ],
   instructionsFound: [],
 };
@@ -87,7 +87,14 @@ const lectureExtract: ExtractOutput = {
 test("a first lecture creates proposed topics and objectives with signals, relations and questions", async () => {
   const model = fakeModel({
     extract: () => lectureExtract,
-    link: () => ({ links: [{ from: "t1", to: "t2", type: "used-in" }, { from: "t2", to: "t1", type: "related" }, { from: "t1", to: "t1", type: "related" }, { from: "t9", to: "t1", type: "related" }] }),
+    link: () => ({
+      links: [
+        { from: "t1", to: "t2", type: "used-in", reason: "K-maps group terms using Boolean algebra's absorption." },
+        { from: "t2", to: "t1", type: "related", reason: "K-maps find by picture what algebra finds by rules." },
+        { from: "t1", to: "t1", type: "related", reason: "Linked to itself, so dropped." },
+        { from: "t9", to: "t1", type: "related", reason: "From a topic that doesn't exist." },
+      ],
+    }),
     generate: (i) => ({
       questions: i.objectives.flatMap((o) =>
         o.name.startsWith("Simplify") ? [short(o.id, "Simplify x + xy.", ["x"])] : o.name.startsWith("Group") ? [mc(o.id, "Which group?", 2)] : [short(o.id, "What is 101 in decimal?", ["5"])],

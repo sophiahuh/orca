@@ -225,6 +225,8 @@ export interface Relation {
   review: Review;
   /** The upload it came from; null when "Find connections" linked the whole course. */
   materialId: string | null;
+  /** One sentence on why the link is there (shown on the Atlas); null for links made before reasons were kept. */
+  reason: string | null;
 }
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */

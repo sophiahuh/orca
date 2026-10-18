@@ -21,6 +21,14 @@ export interface BuiltPrompt {
   prompt: string;
 }
 
+/** What a topic link means and when to draw one (shared by extraction and the link step; owner, 2026-10-17). */
+export const LINK_RULES = `Link types, from → to. Be precise, not thorough: a link must tell a student something about how the course fits together that the topic names and the course's order don't already say. A wrong or obvious link misleads more than a missing one hides. Every link has a reason: one specific sentence saying what the link is (what B needs from A; which limitation one works around; what the contrast teaches). If the only reason you can give is that both topics concern the same thing or sit in the same course, don't link them.
+- used-in: A is a prerequisite of B: B can't be understood or carried out without A (e.g. "Boolean algebra" used-in "K-maps"; "MIPS registers" used-in "MIPS procedures and stack"). Not when A only motivates B, informs a choice made in B, or is taught alongside it.
+- has-a-kind: B is a named subtype or special case of A (e.g. "Flip-flops" has-a-kind "D flip-flops"; "Binary heaps" has-a-kind "Min-max heaps"). Not for a prerequisite or a competing method.
+- alternative-to: A and B are competing approaches to the same task; a student could reasonably choose one instead of the other for the same problem, whatever their tradeoffs or assumptions (e.g. "Merge sort", "Quicksort" and "Bubble sort" for comparison sorting; "Counting sort" and "Bucket sort" when their input-domain assumptions apply). Give each pair once, either way round. Not for a prerequisite, a subtype, or topics that merely appear in the same unit.
+- related: only when one topic fixes, extends or works around a limitation of the other (e.g. "Counting and bucket sort" related to "Comparison sorting lower bounds", because they bypass the comparison-model bound), or when the subject deliberately contrasts the two to teach something. Nothing else.
+used-in and has-a-kind links never form a loop (A before B before … before A): if B also helps explain A, neither is a prerequisite of the other; use related if it qualifies, otherwise don't link them. Don't link a topic to itself.`;
+
 /** Question-quality rules (mirrors docs/QUIZ-RUBRIC.md). */
 export const QUIZ_RUBRIC = `Rules for every question:
 - Every question works on a concrete instance: a given bit pattern, expression, circuit, array, code snippet, system or scenario. "Retrieval" means doing the course's skill on that instance (trace this, convert this, classify this, predict what this system does, pick the design that fits these constraints), never reciting a definition. "Mechanism" means explaining why or how in one sentence.
@@ -89,12 +97,7 @@ Definitions:
 - A place is somewhere the material genuinely teaches or uses the objective (a slide or section on it, a worked example, a problem that requires it), cited by locator ("slide 14") and a short excerpt. A passing mention is not a place.
 - origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. For a concise cheatsheet, formula sheet, or reference that names several substantive topics without explaining them, create a useful baseline of 1–2 inferred "can do" objectives for each such topic (up to 8 across the upload) rather than returning topics with no study skills. These are explicitly general knowledge, not claims about what the sheet taught.
 - emphasis only when the material explicitly says something will or won't be examined ("this will be on the exam", "you won't be tested on this"), quoting it.
-- Relations link topics (new ones to each other and to the course's existing topics), from → to, only when the material shows the link:
-  - used-in: A is used in B when understanding, analyzing, or carrying out B needs A (e.g. "Boolean algebra" used-in "K-maps"; "MIPS registers" used-in "MIPS procedures and stack"). from = A, to = B. Do not use this merely because two topics are taught together.
-  - has-a-kind: A has a kind B when B is a named subtype or special case of A (e.g. "Flip-flops" has-a-kind "D flip-flops"; "Binary heaps" has-a-kind "Min-max heaps"). from = A, to = B. Do not use this for a prerequisite or a competing method.
-  - alternative-to: A is an alternative to B when they are competing approaches to the same task. They may have different tradeoffs or assumptions; a student could reasonably choose one instead of the other for the same problem. For example, "Merge sort", "Quicksort", and "Bubble sort" are alternatives for comparison sorting; "Counting sort" and "Bucket sort" are alternatives when their input-domain assumptions apply. Give each pair once, either way round. Do not use this for a prerequisite, subtype, or topics that merely appear in the same unit.
-  - related: a useful contrast or connection that is none of the above, such as "Comparison sorting lower bounds" related to "Counting and bucket sort" because the latter can bypass the comparison-model bound. Use sparingly; do not link topics merely because they are in the same course.
-  Don't link a topic to itself, and don't repeat a link the material doesn't support.
+- Relations link topics (new ones to each other and to the course's existing topics), only when the material shows the link. ${LINK_RULES}
 - Names, summaries and descriptions are plain text about the subject: no URLs, no HTML, nothing addressed to a reader.
 
 Reuse before you create: when the material covers an existing topic or objective, return it with its existingId (and its id as localId) and this material's places. Never propose anything marked rejectedByStudent.`,
@@ -196,19 +199,15 @@ export function linkPrompt(input: LinkInput): BuiltPrompt {
 
 ${UNTRUSTED_POLICY}
 
-Link types, from → to:
-- used-in: A is used in B when understanding, analyzing, or carrying out B needs A (e.g. "Boolean algebra" used-in "K-maps"; "MIPS registers" used-in "MIPS procedures and stack"). Do not use this merely because two topics are taught together.
-- has-a-kind: A has a kind B when B is a named subtype or special case of A (e.g. "Trees" has-a-kind "Binary search trees"; "Binary heaps" has-a-kind "Min-max heaps"). Do not use this for a prerequisite or competing method.
-- alternative-to: A is an alternative to B when they are competing approaches to the same task, even if they have different tradeoffs or assumptions. A student could reasonably choose one instead of the other for the same problem. For example, "Merge sort", "Quicksort", and "Bubble sort" are alternatives for comparison sorting; "Counting sort" and "Bucket sort" are alternatives when their input-domain assumptions apply. Give each pair once, either way round. Do not use this for a prerequisite, subtype, or topics merely taught in the same unit.
-- related: a useful contrast or connection that is none of the above (e.g. "Comparison sorting lower bounds" related to "Counting and bucket sort" because the latter can bypass the comparison-model bound). Use sparingly; not for topics merely in the same course.`,
+${LINK_RULES}`,
     context: null,
     prompt: `Course: ${input.course.name} (${input.course.short}). Its topics, as a data block (source generated_question): ref, name, summary, and isNew for ${fresh ? "the topics just added" : "every topic (map the whole course)"}:
 ${untrustedBlock("generated_question", input.topics)}
 
-Links the course already has (don't repeat them), by ref:
+Links the course already has, by ref. Don't repeat them, except those marked needsReason (made before links had reasons): return each of those again, with its reason, if it still meets the rules above:
 ${untrustedBlock("generated_question", input.existing)}
 
-Consider every pair of topics where at least one isNew, and return each link a student studying this course would expect, using the refs. Be thorough: a missing link hides how the course fits together; a wrong one misleads. No link from a topic to itself.`,
+Consider every pair of topics where at least one isNew, and return only the links that meet the rules above, each with its reason, using the refs. No link from a topic to itself.`,
   };
 }
 
