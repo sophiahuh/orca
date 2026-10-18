@@ -67,7 +67,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
 - **Hosted migrations:** pushed up to `20261006100000`. Still to push (the owner runs
   `npx supabase db push`; the agent's auto mode blocks it): `20261010090000_pptx_uploads` (until
-  then the hosted bucket refuses .pptx uploads). Check with `npx supabase migration list --linked`
+  then the hosted bucket refuses .pptx uploads) and `20261017090000_relation_reasons` (until then
+  every upload and "Find connections" fails to save links on the hosted project). Check with `npx supabase migration list --linked`
   (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
@@ -170,8 +171,10 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   the material (coverage, material type, explicit emphasis); code computes the weight, and an
   objective gains weight for each topic its topic is used in. The material-type sliders (account
   defaults in Settings, a course's override in its popup) feed it.
-- **Topic links.** Relations connect topics: used-in, has-a-kind, alternative-to, related. They are
-  the Concept Atlas's edges and feed the weights.
+- **Topic links.** Relations connect topics: used-in (a prerequisite), has-a-kind, alternative-to,
+  related (one works around the other's limitation, or a deliberate contrast). Each carries a one-
+  sentence reason shown on hover in the Atlas; used-in/has-a-kind never form a loop. They are the
+  Concept Atlas's edges and feed the weights.
 - **Practice.** Missed questions have no review of their own: the objective joins the course's
   quick-review queue and isn't due again the same day. Quick reviews draw from a per-objective stock written ahead (at upload,
   topped up after each session), assembled instantly and sized to the course's time budget.

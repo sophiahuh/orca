@@ -130,6 +130,16 @@ For each upload:
    checks every pair involving a new topic, since extraction alone missed obvious links. "Find
    connections" on the Atlas (`POST /api/relink`) runs the link step over the whole course. A
    topic's node grows with the topics it's used in (`topicUses`), and so do its objectives' weights.
+   *Stricter links (owner, 2026-10-17):* both calls share `LINK_RULES` in `prompts.ts`: be precise,
+   not thorough; "used-in" means a prerequisite (not motivation or a choice it informs); "related"
+   only when one topic fixes or works around a limitation of the other, or the subject deliberately
+   contrasts them ("commonly confused" is a student's state, not the material's, so it isn't a
+   link). Every link carries one specific sentence, `relations.reason`, shown when the student
+   hovers the link on the Atlas; a link without one is dropped. "used-in" and "has-a-kind" never
+   form a loop: a link that would close one is dropped with why in the run (`closesLoop`,
+   `src/lib/course/links.ts`), not relabelled; the Atlas layout still copes with a loop in older
+   data. No cap on links per topic: a cap would drop true links and make the map lie. "Find
+   connections" also gives old links (made before reasons) their reason when the model returns them.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
