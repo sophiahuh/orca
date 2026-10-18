@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
 import { Select } from "@/components/ui/Select";
+import { Toggle } from "@/components/ui/Toggle";
+import { uploadKind } from "@/lib/material/kind";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -92,6 +94,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [assigned, setAssigned] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [handwritten, setHandwritten] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!course) {
@@ -117,6 +120,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const filename = aiChatUrl || (aiChatText.trim() ? "AI chat transcript" : websiteUrl || chosenName || "Choose a PDF or .pptx…");
   const busy = phase.kind === "sending" || phase.kind === "working";
   const unreadable = file ? uploadProblem(file) : null;
+  // Only a PDF can be read as page images (a .pptx has no renderer here).
+  const isPdf = file ? uploadKind(file.name, file.type) === "pdf" : false;
 
   const onFile = (f: File) => {
     setChosenName(f.name);
@@ -132,7 +137,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const submit = async () => {
     if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
-    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0 };
+    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: handwritten && isPdf };
     const leave = () => router.push(due ? "/calendar" : `/course/${course.slug}`);
     if (aiChatUrl.trim() || aiChatText.trim()) {
       try {
@@ -364,6 +369,18 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <h2 className="text-[17px] font-bold text-prussian">When is it due?</h2>
             <DateField label="Due date" value={due} onChange={setDue} noneLabel="No due date" />
           </motion.section>
+
+          {isPdf && (
+            <motion.section variants={fadeUp} initial="hidden" animate="show" className="flex items-start gap-[14px]" data-part="handwritten">
+              <Toggle checked={handwritten} onChange={setHandwritten} label="Handwritten notes" />
+              <div className="flex flex-col gap-[4px]">
+                <span className="text-[17px] font-bold text-prussian">Handwritten notes</span>
+                <span className="text-[13px] font-medium text-wisteria-deep">
+                  Orca reads each page as an image: handwriting, diagrams and equations. For iPad notes and scans. (PDFs from notes apps like GoodNotes and Notability are recognised on their own.)
+                </span>
+              </div>
+            </motion.section>
+          )}
 
           {type === "Homework" && (
             <motion.label variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[8px]">
