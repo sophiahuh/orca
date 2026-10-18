@@ -44,13 +44,48 @@ const STATE: SeedState = {
   },
 };
 
-test.beforeEach(async ({ student }) => seedState(student, STATE));
+// The uploads test seeds its own state (with runs).
+test.beforeEach(async ({ student }, info) => {
+  if (!info.title.startsWith("the course's uploads")) await seedState(student, STATE);
+});
 
 test("the course page says how much is waiting for review", async ({ page }) => {
   await page.goto(`/course/${SLUG}`);
   await expect(page.getByRole("link", { name: "4 to review" })).toBeVisible();
   await page.getByRole("link", { name: "4 to review" }).click();
   await expect(page).toHaveURL(/\/review$/);
+});
+
+test("the course's uploads: the button counts the one building, and the Uploads tab lists every upload, newest first", async ({ page, student }) => {
+  const material = STATE.materials![0];
+  const run = (status: "done" | "running" | "failed", minutesAgo: number, extra: object = {}) => ({
+    id: crypto.randomUUID(),
+    kind: "upload" as const,
+    courseId: ID,
+    materialId: material.id,
+    at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+    model: "claude-opus-5-5",
+    status,
+    topicsCreated: [],
+    objectivesCreated: [],
+    objectivesAttached: [],
+    questionsAdded: status === "done" ? 6 : 0,
+    dropped: [],
+    ...extra,
+  });
+  await seedState(student, { ...STATE, runs: [run("done", 60), run("failed", 30, { error: "The model didn't answer." }), run("running", 1, { progress: { stage: "writing" } })] });
+  await page.goto(`/course/${SLUG}`);
+  const button = page.locator("[data-part=uploads-review-link]");
+  await expect(button).toHaveText("1 uploading · 4 to review");
+  await button.click();
+  await expect(page).toHaveURL(/\/review\?tab=uploads$/);
+  const cards = page.locator("[data-part=upload-card]");
+  await expect(cards).toHaveCount(3);
+  await expect(cards.locator("[data-part=upload-status]")).toHaveText(["Building", "Failed", "Added"]);
+  await expect(cards.nth(1)).toContainText("The model didn't answer.");
+  await expect(cards.nth(2)).toContainText("6 questions added.");
+  await page.locator("[data-tab=review]").click();
+  await expect(page.locator("[data-part=duplicate]")).toHaveCount(2);
 });
 
 test("settling duplicates and confirming a topic", async ({ page, student }) => {

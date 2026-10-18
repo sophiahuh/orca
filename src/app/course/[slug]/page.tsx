@@ -16,7 +16,8 @@ import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { ExamsModal } from "@/components/config/ExamsModal";
 import { fadeUp, stagger } from "@/lib/motion";
 import { COURSE_NAME_MAX, DEFAULT_CONFIG, trailTopics } from "@/lib/data";
-import { pendingReview } from "@/lib/course/review";
+import { courseUploads, pendingReview, uploadsInProgress } from "@/lib/course/review";
+import { isFinished, useRun } from "@/hooks/useRun";
 import Link from "next/link";
 
 export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
@@ -27,7 +28,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const [editingExams, setEditingExams] = useState(false);
   const closeExams = useCallback(() => setEditingExams(false), []);
   const router = useRouter();
-  const { hydrated, objectives, renameCourse, configs } = useOrca();
+  const { hydrated, objectives, renameCourse, configs, runs } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -50,6 +51,8 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const done = topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
   const pct = total ? done / total : 0;
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
+  const uploading = uploadsInProgress(runs, course.id);
+  const reviewLabel = [uploading > 0 && `${uploading} uploading`, toReview > 0 && `${toReview} to review`].filter(Boolean).join(" · ");
   const agenda = agendas[course.id];
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
 
@@ -108,9 +111,19 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </motion.div>
           <motion.nav variants={fadeUp} aria-label="Course structure" className="mt-[4px] flex items-center gap-[10px]">
             <AtlasSwitch slug={course.slug} current="path" />
-            {toReview > 0 && (
-              <Link href={`/course/${course.slug}/review`} className="pressable rounded-pill bg-wisteria px-[12px] py-[6px] text-[13px] font-bold text-parchment lip-2 lip-wisteria">
-                {toReview} to review
+            {/* Building uploads are followed here too, so the count drops when one finishes. */}
+            {courseUploads(runs, course.id)
+              .filter((u) => !isFinished(u))
+              .map((u) => (
+                <FollowRun key={u.id} runId={u.id} />
+              ))}
+            {reviewLabel && (
+              <Link
+                href={`/course/${course.slug}/review${uploading > 0 ? "?tab=uploads" : ""}`}
+                className="pressable rounded-pill bg-wisteria px-[12px] py-[6px] text-[13px] font-bold text-parchment lip-2 lip-wisteria"
+                data-part="uploads-review-link"
+              >
+                {reviewLabel}
               </Link>
             )}
           </motion.nav>
@@ -142,4 +155,10 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
       />
     </AppShell>
   );
+}
+
+/** Follows one building upload (the store reloads when it finishes); draws nothing. */
+function FollowRun({ runId }: { runId: string }) {
+  useRun(runId);
+  return null;
 }
