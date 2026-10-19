@@ -6,7 +6,7 @@ import { forStudent, reply } from "@/lib/server/student";
 import { ownsCourse } from "@/lib/server/student";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const requestSchema = z.object({ courseId: z.uuid(), url: z.string().url().max(2048), type: z.enum(["Syllabus", "Lecture", "Other"]), assigned: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() });
 

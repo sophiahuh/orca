@@ -126,12 +126,15 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
           );
         })}
 
-        <div className="pointer-events-none absolute" style={{ left: orca.x, top: orca.y }}>
-          <OrcaLogo width={110} swim />
-        </div>
+        {/* With no islands, the page's empty state shows the orca above its message instead. */}
+        {courses.length > 0 && (
+          <div className="pointer-events-none absolute" style={{ left: orca.x, top: orca.y }}>
+            <OrcaLogo width={110} swim />
+          </div>
+        )}
       </motion.div>
 
-      <ZoomControls className="absolute bottom-5 right-5 flex gap-2" onZoomOut={() => zoom(0.8)} onZoomIn={() => zoom(1.25)} onFit={() => setManual(null)} />
+      {courses.length > 0 && <ZoomControls className="absolute bottom-5 right-5 flex gap-2" onZoomOut={() => zoom(0.8)} onZoomIn={() => zoom(1.25)} onFit={() => setManual(null)} />}
     </div>
   );
 }
