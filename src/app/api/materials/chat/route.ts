@@ -6,7 +6,7 @@ import { startUploadJob } from "@/lib/server/jobs/start";
 import { ownsCourse, forStudent, reply } from "@/lib/server/student";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const requestSchema = z.object({
