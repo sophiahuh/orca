@@ -18,3 +18,13 @@ test("a call's cost follows the published per-million prices, cache writes and r
   // A dated snapshot of a priced model (what a server-side fallback may answer with) is priced as that model.
   assert.equal(costUsd("claude-opus-5-5-20260301", u), costUsd("claude-opus-5-5", u));
 });
+
+test("OpenAI prices: cached reads and writes, dated snapshots, and the long-context rate past 272K input tokens", () => {
+  // GPT-6.1 Sol: $2 in, $10 out, $2.50 cache write, $0.10 cached input per million.
+  const u = { inputTokens: 100_000, outputTokens: 10_000, cacheWriteTokens: 40_000, cacheReadTokens: 100_000 };
+  assert.equal(costUsd("gpt-6.1-sol", u), 0.41);
+  assert.equal(costUsd("gpt-6.1-sol-2026-04-30", u), 0.41);
+  // 300K input: 2x input and cache rates, 1.5x output, for the whole request.
+  const long = { inputTokens: 200_000, outputTokens: 10_000, cacheWriteTokens: 0, cacheReadTokens: 100_000 };
+  assert.equal(costUsd("gpt-6.1-sol", long), 200_000 * 4e-6 + 10_000 * 15e-6 + 100_000 * 0.2e-6);
+});

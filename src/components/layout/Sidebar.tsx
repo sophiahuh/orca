@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { usePathname } from "next/navigation";
 import { DueCard } from "@/components/ui/DueCard";
 import { useOrca, useTodos } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -15,10 +16,7 @@ export function todoHref(card: TodoCard, course: Course): string {
   switch (card.kind) {
     case "quick":
     case "deep":
-    case "requiz":
       return `/session/${course.slug}?kind=${card.kind}`;
-    case "study":
-      return `/course/${course.slug}/study?objective=${encodeURIComponent(card.ref ?? "")}`;
     case "checks":
       return `/course/${course.slug}`;
   }
@@ -39,7 +37,7 @@ function Section({ title, items, hydrated, courses }: { title: string; hydrated:
         : items.map((d) => {
             const course = courses.get(d.courseId);
             if (!course) throw new Error(`To-do for unknown course ${d.courseId}`);
-            return <DueCard key={d.id} kind={d.kind} course={course.short} title={d.title} detail={d.detail} href={todoHref(d, course)} />;
+            return <DueCard key={d.id} kind={d.kind} course={course.name} title={d.title} detail={d.detail} href={todoHref(d, course)} />;
           })}
     </motion.section>
   );
@@ -49,7 +47,11 @@ function Section({ title, items, hydrated, courses }: { title: string; hydrated:
 export function Sidebar() {
   const { courses, hydrated } = useOrca();
   const todos = useTodos();
+  const pathname = usePathname();
   const byId = new Map(courses.map((c) => [c.id, c]));
+  const slug = /^\/course\/([^/?#]+)/.exec(pathname)?.[1];
+  const course = slug ? courses.find((item) => item.slug === slug) : undefined;
+  const visibleTodos = course ? todos.filter((todo) => todo.courseId === course.id) : todos;
 
   return (
     <aside
@@ -57,8 +59,8 @@ export function Sidebar() {
       style={{ width: SIDEBAR_W }}
     >
       <div className="flex flex-col gap-[28px] overflow-y-auto">
-        <Section title="Due today" hydrated={hydrated} items={todos.filter((d) => d.when === "today")} courses={byId} />
-        <Section title="Due tomorrow" hydrated={hydrated} items={todos.filter((d) => d.when === "tomorrow")} courses={byId} />
+        <Section title="Due today" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "today")} courses={byId} />
+        <Section title="Due tomorrow" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "tomorrow")} courses={byId} />
       </div>
       <NavBar className="pt-[20px]" />
     </aside>

@@ -91,6 +91,10 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - Whether to author another course's content, like ALD, for demos and evaluation.
 
 ### Question checks: batched or one at a time
+- **Decided (owner, 2026-10-06):** no model checks at all. Questions go into the stock as written,
+  with only the code validators. Risk to watch: a wrong answer key marks right answers wrong and
+  pulls that objective's mastery down; if students report it, bring back a check (or a "this
+  question is wrong" button that drops the question and the evidence it recorded).
 - **Phase 2:** the blind solve, ambiguity and rubric-agreement checks each run as one call per
   batch of up to 30 questions. The platform ran one call per question.
 - **Decide:** keep batching (fewer calls, faster uploads) unless the evaluation shows batched
@@ -98,9 +102,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### Phase 3 scheduling numbers (provisional)
 - **Set (Phase 3):** priority coefficients are 1 for overdue, weight, gap and open confusion and
-  2 for a mix-up (MASTERY-PLAN §2.6); a poor session is ≥ 3 answers under 60% correct, or two
-  misses on one objective (`AGENDA_RULES`); top-up when an objective has < 3 unseen questions,
-  back to 6, writing from only the pages the objective is anchored to plus one either side (its
+  2 for a mix-up (MASTERY-PLAN §2.6); (the poor-session rule went with the re-quiz on 2026-10-10:
+  misses now wait for the next quick review); top-up (changed 2026-10-18: an upload writes 2 per objective,
+  and an objective still being learned gets 2 more after a session once it has < 2 unseen), writing from only the pages the objective is anchored to plus one either side (its
   topic's range when it has no anchors; the whole file only up to 60 pages) (`TOP_UP_RULES`); question time 30 s choice, 45 s exact answer, 90 s one sentence.
 - **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Weekly` =
   due until one is finished in the last 7 days; `1 wk before exam` = daily within 7 days of an
@@ -186,6 +190,69 @@ Judgement calls the agents made to keep building; each is in code behind one con
 - **Prices** in `src/lib/pricing.ts` were copied from Anthropic's pricing page on 2026-10-06 (no
   `claude-api` skill existed in the session); change them there when they change.
 
+### Server model on OpenAI (2026-10-06): decide or accept
+- **What changed:** the server can run on OpenAI instead of Anthropic (`src/lib/model-config.ts`).
+  `ORCA_MODEL_PROVIDER` picks the provider; unset, `OPENAI_API_KEY` wins over `ANTHROPIC_API_KEY`
+  (Amanda's ask). This widens the 2026-10-05 decision "Orca's server key only" to either provider's key.
+- **Changed (owner, 2026-10-06, later):** the default is now `gpt-6.1-sol`: luna left out obvious
+  topic links and quality matters more than cost while the pipeline is tried out. `ORCA_MODEL=gpt-6-luna`
+  still runs the cheap one. What follows was the first decision.
+- **Decided for now (Amanda, 2026-10-06):** OpenAI's default model is `gpt-6-luna`, the cheap one
+  ($0.10 in / $0.50 out per million, 20× under `gpt-6.1-sol`), while the pipeline is tried out.
+  Watch whether it extracts and writes questions well enough: the blind solve and agreement checks
+  run on the same small model, so they may wave through wrong answers. Compare against
+  `ORCA_MODEL=gpt-6.1-sol` with `npm run score:extraction` before real students. Priced: `gpt-6-astra`, `gpt-6.1-sol`,
+  `gpt-6-luna` (Standard tier, read from developers.openai.com on 2026-10-06).
+- **Known gaps on OpenAI:** the prompts were written for Claude and are untested on either; a reply
+  cut off by the 10-minute timeout isn't metered (OpenAI calls aren't streamed, so no token counts
+  arrive); the browser tests only cover Anthropic (the fake API speaks the Messages API), the
+  OpenAI path is unit-tested against a fake `fetch`.
+
+### Assumed in the 2026-10-06 UI and backend changes: decide or accept
+- **Homework reflection on the upload page** applies only the objectives the model is *sure* of
+  (the old confirm step is gone); a failed match still saves the note and says why.
+- **Dive questions are reused:** a dive first asks the dive questions written earlier for its objectives
+  and never answered (in its usual order), and only writes the shortfall; with enough in stock it
+  makes no model call.
+- **Dive in, one topic:** covers every live objective of the topic, including ones never answered
+  (a course-wide dive covers only answered ones). A dive writes one question per 4 minutes, at most
+  20 (so at most 80 minutes) and 4 per objective (`src/lib/deep-review.ts`). Dives have no per-hour limit (owner, 2026-10-06; the daily budgets still apply); "Find connections" is limited to 10 an hour.
+- **A topic's play button** now opens the topic dive. The old topic quiz (`/quiz/[slug]/[topic]`,
+  the topic's quick-review questions) still exists but nothing on the course page links to it.
+- **Topic links from the link step** use the model's knowledge of the subject, not only the slides,
+  and carry no slide anchor. Links between two topics that both already existed are only proposed
+  by "Find connections", not by later uploads.
+- **Exams:** `exams.topic_ids` aren't foreign keys (topics merge and get archived; the app ignores
+  ids that aren't live). An uploaded past or practice exam with a due date still makes an "exam"
+  calendar entry, not an exams row; both count as exam days for the cadences. The "Exam review"
+  setting is stored but no session uses it yet.
+- **Course settings:** a course created before overrides existed kept its own copy of the
+  defaults; the migration made copies that still matched the defaults inherit again.
+- **Atlas strength:** "New" (nothing answered), "Developing", "Strong" (every objective mastered),
+  "Fragile" (something fading or mixed up). Confirming a topic doesn't change it.
+
+### Visuals and graphics in material aren't read (2026-10-10)
+
+Orca reads only the text of uploaded material: a PDF page's text (pdf.js) and a .pptx slide's text,
+tables and speaker notes (`src/lib/material/read-pptx.ts`, no model). Pictures, diagrams, graphs,
+plots, charts and SmartArt are never sent to the model, so what a slide shows only as a picture
+(a circuit, a tree, a plotted curve, a chart's numbers) is missing from extraction and from the
+questions. For PDFs, a question can still point at a slide ("In the figure, …") and show it as an
+image, but the writer picks the slide from its text without seeing the figure. For .pptx decks, slides
+can't be rendered at all, so those figure questions are dropped ("couldn't be rendered").
+*Partly addressed 2026-10-18:* handwritten notes, scans and picture-only slides (a PDF page with no
+text to speak of) are now read from their images by the server's model (the `transcribe` step), so
+their diagrams are described in words; typed slides that draw a figure keep their exact text and get
+a description of the figure appended (the `describe` step; about 70% of ALD's slides, roughly 30–40
+cents a deck). Not covered: .pptx decks (no renderer; export as PDF when the visuals matter), and
+figures the detection misses (small images under 100 px, or simple drawings under 25 paths).
+Assumed, decide or accept: the notes-app list (`NOTES_APPS` in `read-pdf.ts`), "no text" meaning
+under 4 characters, and the cost (about 1–2 cents a page on the current model, counted in the
+upload's metering). This is a real gap for courses that teach through graphs or visualisations. Options: send images of
+figure-heavy pages to the model during extraction and writing (costs more per upload); render .pptx
+slides by converting to PDF on a worker with LibreOffice (a Trigger.dev task; layout isn't always
+faithful); or ask students to upload decks as PDFs (File → Save as PDF) when the visuals matter.
+
 ## Watch
 
 ### Loading all of a student's data at sign-in (revisit)
@@ -243,7 +310,7 @@ Judgement calls the agents made to keep building; each is in code behind one con
 
 - 2026-10-04: quick review defaults to 10 minutes per course (adds a "10 min" option).
 - 2026-10-04: the mastery bar is the same for every objective; weights change priority (what
-  gets practised first), never what counts as mastered.
+  gets practiced first), never what counts as mastered.
 
 - 2026-10-04: material-type sliders feed objective weights and set deep review's question mix.
 - 2026-10-04: inferred objectives count toward the island; the per-course objective list (origin,

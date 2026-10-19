@@ -20,7 +20,11 @@ const PORT = 3100;
 const FAKE_MODEL = {
   ANTHROPIC_API_KEY: "e2e-fake-key",
   ANTHROPIC_BASE_URL: `http://127.0.0.1:${FAKE_MODEL_PORT}`,
+  // The fake speaks Anthropic's API only: OpenAI settings from `.env` must not win.
+  ORCA_MODEL_PROVIDER: "anthropic",
+  ORCA_MODEL: "",
   OPENAI_API_KEY: "",
+  OPENAI_BASE_URL: "",
   ORCA_JOBS: "inline",
   // Emailed links point here (src/lib/auth/site.ts); the local stack allows this address.
   SITE_URL: `http://localhost:${PORT}`,

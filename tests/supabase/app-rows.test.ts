@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Objective, QuizQuestion, Topic } from "../../src/lib/data.ts";
+import { DEFAULT_CONFIG } from "../../src/lib/data.ts";
 import {
   type MyData,
   type StructureState,
@@ -53,7 +54,7 @@ test("a row that disappears is refused: nothing is ever deleted", () => {
 
 test("loading groups rows by course and puts questions in stock order", () => {
   const data: MyData = {
-    profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, created_at: owned.created_at },
+    profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, default_review_config: null, default_weights: { lectures: 40 }, created_at: owned.created_at },
     courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, weights: { lectures: 25 }, created_at: owned.created_at }],
     materials: [],
     runs: [],
@@ -63,17 +64,28 @@ test("loading groups rows by course and puts questions in stock order", () => {
     questions: [{ ...questionToRow({ ...question, id: "q2" }, "t1", 1), ...owned }, { ...questionToRow(question, "t1", 0), ...owned }],
     sessions: [],
     calendar: [],
+    exams: [],
     evidence: [],
     snapshots: [],
   };
   const s = loadedState(data);
   assert.equal(s.timezone, "America/New_York");
+  assert.equal(s.defaultConfig, null);
+  assert.deepEqual(s.defaultWeights, { lectures: 40 });
   assert.deepEqual(s.courses[0].topics, [topic]);
   assert.deepEqual(s.questionBank.c.t1.map((q) => q.id), ["q1", "q2"]);
   assert.deepEqual(s.relations.c, []);
   assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], review_config: { quick: "daily" } }] }), "a malformed config is refused, not shown");
 
-  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
+  // A course's settings: its own override first, else the account default, else Orca's built-in one.
+  const inherit = loadedState({ ...data, courses: [{ ...data.courses[0], review_config: null, weights: null }] });
+  assert.deepEqual(inherit.weights.c, { lectures: 40 }, "no override: the account default");
+  assert.deepEqual(inherit.configs.c, DEFAULT_CONFIG, "no override and no account default: Orca's");
+  assert.equal(inherit.configOverrides.c, null);
+  assert.deepEqual(s.weights.c, { lectures: 25 }, "an override wins over the account default");
+  assert.deepEqual(s.weightOverrides.c, { lectures: 25 });
+
+  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", handwritten: false, status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
   const withFiles = loadedState({ ...data, materials: [material, { ...material, id: "m2", status: "uploaded", hidden_text: null }, { ...material, id: "m3", status: "failed", error: "unreadable" }] });
   assert.deepEqual(withFiles.materials.map((m) => [m.id, m.hiddenText]), [["m", { items: 2, pages: [3] }]], "only read uploads are part of the course; the hidden-text record comes along");
 });

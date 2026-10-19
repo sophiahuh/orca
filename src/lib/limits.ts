@@ -7,10 +7,8 @@
  */
 export const LIMITS = {
   /** Largest file a student can upload (the `materials` bucket enforces the same). */
-  uploadBytes: 25 * 1024 * 1024,
-  /** File types Orca can read. */
-  uploadMime: "application/pdf",
-  /** Most pages read from one file. */
+  uploadBytes: 30 * 1024 * 1024,
+  /** Most pages (or slides) read from one file. */
   pagesPerFile: 150,
   /** Most characters kept from one page after sanitising (a dense slide has a few thousand). */
   pageChars: 20_000,
@@ -37,6 +35,8 @@ export const LIMITS = {
     grade: { max: 60, windowSeconds: 60 },
     /** Asking for a top-up after a session (POST /api/top-up); each one is a run row and a job. */
     topUp: { max: 30, windowSeconds: 3600 },
+    /** "Find connections" on the Atlas (POST /api/relink): one model call over the course's topics. */
+    relink: { max: 10, windowSeconds: 3600 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */

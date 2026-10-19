@@ -3,7 +3,8 @@ import type { EventKind } from "@/lib/data";
 import { cn } from "@/lib/cn";
 
 /**
- * Figma: calendar event tags. Four kinds, each its own fill.
+ * Figma: calendar event tags. Homework, review and exam each have their own fill; "lab" isn't
+ * offered any more (legend removed) and keeps homework's look if an old entry has it.
  */
 export const TAG_LABELS: Record<EventKind, string> = {
   hw: "HW due",
@@ -13,7 +14,7 @@ export const TAG_LABELS: Record<EventKind, string> = {
 };
 
 const looks: Record<EventKind, string> = {
-  hw: "bg-periwinkle text-prussian",
+  hw: "bg-alice text-prussian ring-2 ring-inset ring-alice-deep",
   lab: "bg-alice text-prussian ring-2 ring-inset ring-alice-deep",
   rev: "bg-wisteria text-parchment",
   exam: "bg-prussian text-parchment",
@@ -28,11 +29,19 @@ export function Tag({ kind, size = "sm", className, children, ...rest }: TagProp
   return (
     <span
       className={cn(
-        "inline-flex max-w-full items-center truncate rounded-pill font-bold leading-none",
+        "inline-flex max-w-full items-center overflow-x-auto whitespace-nowrap rounded-pill font-bold leading-none [scrollbar-width:thin]",
         size === "sm" ? "px-[9px] py-[5px] text-[11px]" : "px-[14px] py-[8px] text-[13px]",
         looks[kind],
         className,
       )}
+      onDoubleClick={(event) => {
+        const selection = window.getSelection();
+        if (!selection) return;
+        const range = document.createRange();
+        range.selectNodeContents(event.currentTarget);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }}
       {...rest}
     >
       {children ?? TAG_LABELS[kind]}

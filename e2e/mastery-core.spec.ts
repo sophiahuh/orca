@@ -14,12 +14,13 @@ async function answerShort(page: Page, text: string) {
 
 test.describe("a fresh browser", () => {
   test("starts with no courses and nothing computed", async ({ page }) => {
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.getByText("No islands yet.")).toBeVisible();
     await expect(page.locator("[data-level]")).toHaveCount(0);
     await expect(page.getByText("0 day streak")).toBeVisible();
     await expect(page.getByText("Nothing due. Nice.")).toHaveCount(2);
-    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link")).toHaveCount(3);
+    // Calendar and Add material: Settings is in the top bar, and hidden from this nav on home (8970e4e).
+    await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link")).toHaveCount(2);
   });
 
   test("asks for a course before taking material", async ({ page }) => {
@@ -29,13 +30,19 @@ test.describe("a fresh browser", () => {
     await expect(page).toHaveURL(/\/new-course$/);
   });
 
+  test("the courses map is /, and old /home links land there", async ({ page }) => {
+    await page.goto("/home");
+    await expect(page).toHaveURL(/:\d+\/$/);
+    await expect(page.getByText("No islands yet.")).toBeVisible();
+  });
+
   test("has no in-app chat", async ({ page }) => {
     const response = await page.goto("/chat");
     expect(response?.status()).toBe(404);
   });
 
   test("onboarding shows all four island looks", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/welcome");
     for (const level of ["thriving", "growing", "sprouting", "uncharted"]) {
       await expect(page.locator(`[data-level="${level}"]`).first()).toBeVisible();
     }
@@ -51,7 +58,7 @@ test.describe("a fresh browser", () => {
     await page.goto("/new-course");
     await page.getByPlaceholder("Advanced Logic Design").fill("Test Course");
     await page.getByRole("button", { name: "Create Course" }).click();
-    await expect(page).toHaveURL(/\/home$/);
+    await expect(page).toHaveURL(/:\d+\/$/);
     await expect(page.locator("[data-level]")).toHaveCount(1);
     await expect(page.locator("[data-level]")).toHaveAttribute("data-level", "uncharted");
     await page.goto("/course/test-course");
@@ -62,13 +69,15 @@ test.describe("a fresh browser", () => {
 test.describe("a course with uploaded questions", () => {
   test.beforeEach(async ({ student }) => seedFixtureCourse(student));
 
-  test("the trail has nothing locked, START on the first topic, and objective counts with question gaps", async ({ page }) => {
+  test("the trail has nothing locked, START on the first topic, and objective counts (a gap only for objectives with no questions)", async ({ page }) => {
     await page.goto("/course/logic-e2e");
     await expect(page.locator('[data-part="start"]')).toHaveCount(1);
     await expect(page.locator("[data-visual]").first()).toHaveAttribute("data-visual", "current");
     await expect(page.locator('[data-visual="current"]')).toContainText("Boolean Algebra");
-    await expect(page.locator('[data-visual="current"]')).toContainText("1 objective · 1 needs more questions");
-    await expect(page.locator('[data-visual="upcoming"]')).toContainText("2 objectives · 1 needs more questions");
+    // Every objective here has at least one question: few is normal (more are written as the student practises).
+    await expect(page.locator('[data-visual="current"]')).toContainText("1 objective");
+    await expect(page.locator('[data-visual="upcoming"]')).toContainText("2 objectives");
+    await expect(page.locator("[data-visual]").filter({ hasText: "without questions" })).toHaveCount(0);
     await expect(page.locator('[data-visual="upcoming"] button').first()).toBeVisible();
     await expect(page.locator("[data-visual] button:disabled")).toHaveCount(0);
   });
@@ -88,7 +97,7 @@ test.describe("a course with uploaded questions", () => {
     ]);
     expect(new Set(evidence.map((e) => e.sessionId)).size, "one session per quiz visit").toBe(1);
 
-    await page.goto("/home");
+    await page.goto("/");
     await expect(page.getByText("1 day streak")).toBeVisible();
     await expect(page.locator("[data-level]")).toHaveAttribute("data-level", "sprouting");
 

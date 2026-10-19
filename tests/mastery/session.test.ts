@@ -3,13 +3,11 @@ import assert from "node:assert/strict";
 import {
   type SessionCandidate,
   type SessionQuestion,
-  assembleDeepReview,
   assembleQuickReview,
-  assembleRequiz,
   durationSeconds,
   questionSeconds,
 } from "../../src/lib/mastery/session.ts";
-import type { MaterialType, QuestionTier } from "../../src/lib/data.ts";
+import type { QuestionTier } from "../../src/lib/data.ts";
 
 const utcDay = (iso: string) => iso.slice(0, 10);
 const now = new Date("2026-10-05T09:00:00Z");
@@ -89,43 +87,6 @@ test("at least one mechanism question: the last pick makes room for one", () => 
   assert.ok(s.plannedSeconds <= 120);
   const none = assembleQuickReview([cand("a", "learning", [mc("a1"), mc("a2")])], ctx(120));
   assert.deepEqual(ids(none), ["a1", "a2"], "no mechanism question anywhere: nothing to swap in");
-});
-
-test("a re-quiz only asks the weak objectives", () => {
-  const s = assembleRequiz([cand("a", "learning", [mc("a1")]), cand("b", "learning", [mc("b1")])], ["b"], ctx(600));
-  assert.deepEqual(ids(s), ["b1"]);
-});
-
-test("deep review: answered objectives only, deeper tiers first", () => {
-  const s = assembleDeepReview(
-    [cand("a", "mastered", [mc("a1", "retrieval"), mc("a2", "application")]), cand("u", "unseen", [mc("u1", "application")]), cand("r", "retired", [mc("r1", "transfer")])],
-    { ...ctx(30), sliders: { lectures: 25 }, materialTypeOf: () => null },
-  );
-  assert.deepEqual(ids(s), ["a2"]);
-});
-
-test("deep review splits the budget by material sliders, and hands unused time on", () => {
-  const types: Record<string, MaterialType> = { lec: "Lecture", hw: "Homework", ex: "Past exam" };
-  const qs = (prefix: string, materialId: string, n: number) => Array.from({ length: n }, (_, i) => mc(`${prefix}${i}`, "application", materialId));
-  const candidates = [cand("a", "learning", [...qs("L", "lec", 6), ...qs("H", "hw", 6), ...qs("E", "ex", 6)])];
-  const sliders = { lectures: 25, homework: 25, practiceExams: 50, practiceProblems: 25 };
-  const s = assembleDeepReview(candidates, { ...ctx(240), sliders, materialTypeOf: (id) => types[id] ?? null });
-  const count = (p: string) => ids(s).filter((id) => id.startsWith(p)).length;
-  assert.deepEqual([count("L"), count("H"), count("E")], [2, 2, 4]);
-  const noExams = assembleDeepReview([cand("a", "learning", [...qs("L", "lec", 6), ...qs("H", "hw", 6)])], { ...ctx(240), sliders, materialTypeOf: (id) => types[id] ?? null });
-  assert.equal(noExams.items.length, 8, "the exam share goes to the types that have questions");
-});
-
-test("deep review covers every objective once, highest priority first, before going deeper on any", () => {
-  const deep = (o: string) => [mc(`${o}1`, "application"), mc(`${o}2`, "transfer"), mc(`${o}3`, "connection")];
-  const candidates = [cand("a", "fading", deep("a")), cand("b", "learning", deep("b")), cand("c", "mastered", deep("c"))];
-  const opts = { sliders: { lectures: 25 }, materialTypeOf: () => null };
-  const short = assembleDeepReview(candidates, { ...ctx(60), ...opts });
-  assert.deepEqual(short.items.map((i) => i.objectiveId), ["a", "b"], "a short session spends its time on the top objectives, one question each");
-  assert.deepEqual(short.coverage, { objectives: 3, covered: 2, coverAllSeconds: 90, stockSeconds: 270 });
-  const long = assembleDeepReview(candidates, { ...ctx(180), ...opts });
-  assert.deepEqual(long.items.map((i) => i.objectiveId), ["a", "b", "c", "a", "b", "c"]);
-  assert.equal(long.coverage.covered, 3);
 });
 
 test("candidates keep priority order and leave out objectives with no questions; last seen is the latest answer", async () => {

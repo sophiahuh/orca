@@ -5,15 +5,15 @@
  * there is one (one runs at a time, decision 10). The jobs check the budgets once at their start
  * (and go waiting), so the step caller doesn't guard each call here.
  */
-import { type JobOutcome, processMaterial, topUp } from "@/lib/jobs/jobs";
-import type { MaterialJob, TopUpJob } from "@/lib/jobs/start";
-import { figureRenderer } from "@/lib/server/figures";
+import { deepReview, type JobOutcome, processMaterial, topUp } from "@/lib/jobs/jobs";
+import type { DeepReviewJob, MaterialJob, TopUpJob } from "@/lib/jobs/start";
+import { figureRenderer, pageRenderer } from "@/lib/server/figures";
 import { supabaseJobStore } from "@/lib/server/job-store";
 import { stepCaller } from "@/lib/server/model";
 import { adminClient } from "@/lib/supabase/server";
 import { resumeNext } from "./start";
 
-export type { MaterialJob, TopUpJob } from "@/lib/jobs/start";
+export type { DeepReviewJob, MaterialJob, TopUpJob } from "@/lib/jobs/start";
 
 async function guarded(ownerId: string, runId: string, work: (store: ReturnType<typeof supabaseJobStore>, db: ReturnType<typeof adminClient>) => Promise<JobOutcome>): Promise<JobOutcome> {
   const db = adminClient();
@@ -42,7 +42,7 @@ export function runMaterialJob(job: MaterialJob): Promise<JobOutcome> {
   return guarded(job.ownerId, job.runId, async (store, db) => {
     const call = stepCaller({ ownerId: job.ownerId, kind: "upload", runId: job.runId }, { guard: "none" });
     if (!call) throw new Error("the server has no model key");
-    return processMaterial({ store, call, newId: () => crypto.randomUUID(), renderFigure: figureRenderer(db, job.ownerId) }, job);
+    return processMaterial({ store, call, newId: () => crypto.randomUUID(), renderFigure: figureRenderer(db, job.ownerId), renderPage: pageRenderer(db, job.ownerId) }, job);
   });
 }
 
@@ -51,5 +51,13 @@ export function runTopUpJob(job: TopUpJob): Promise<JobOutcome> {
     const call = stepCaller({ ownerId: job.ownerId, kind: "top-up", runId: job.runId }, { guard: "none" });
     if (!call) throw new Error("the server has no model key");
     return topUp({ store, call, newId: () => crypto.randomUUID() }, job);
+  });
+}
+
+export function runDeepReviewJob(job: DeepReviewJob): Promise<JobOutcome> {
+  return guarded(job.ownerId, job.runId, async (store) => {
+    const call = stepCaller({ ownerId: job.ownerId, kind: "deep-review", runId: job.runId }, { guard: "none" });
+    if (!call) throw new Error("the server has no model key");
+    return deepReview({ store, call, newId: () => crypto.randomUUID() }, job);
   });
 }

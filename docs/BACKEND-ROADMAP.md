@@ -43,7 +43,7 @@ Open questions live in `docs/TO-DISCUSS.md`.
 - **Mastery is a decision, not an average:** 3 credited answers on 3 different questions, on at
   least 2 days, last two correct, no open mix-up, and at least 2 of the credit from graded (not
   self-marked) answers. The bar is the same for every objective: weights
-  change priority (what gets practised first), never what counts as mastered. Spacing after that is **FSRS** (`ts-fsrs`,
+  change priority (what gets practiced first), never what counts as mastered. Spacing after that is **FSRS** (`ts-fsrs`,
   Anki's scheduler): fed every answer from the first, 90% target recall, intervals capped at 60
   days; retired at 60-day stability with 3 passed checks. Details: `docs/MASTERY-PLAN.md` §2.5.
 - **A check coming due means fading.** When a mastered objective's spaced check comes due (or is
@@ -122,15 +122,55 @@ Phase 4 moves it server-side.
 For each upload:
 1. **Extraction** (Claude) reads the material together with the course's existing topics,
    objectives and aliases, and proposes new topics, new objectives, which existing objectives the
-   material covers, relations, and weight signals. It may use general knowledge of the subject.
+   material covers, relations between topics, and weight signals. It may use general knowledge
+   of the subject. Relations link topics, not objectives (owner, 2026-10-06), and are the Concept
+   Atlas's edges: used-in, has-a-kind, alternative-to, and related (an unlabelled edge). The same
+   extraction call proposes them between the new and existing topics, and a focused link step
+   (`src/lib/pipeline/link.ts`: topic names and summaries only, general knowledge allowed) then
+   checks every pair involving a new topic, since extraction alone missed obvious links. "Find
+   connections" on the Atlas (`POST /api/relink`) runs the link step over the whole course. A
+   topic's node grows with the topics it's used in (`topicUses`), and so do its objectives' weights.
+   *Stricter links (owner, 2026-10-17):* both calls share `LINK_RULES` in `prompts.ts`: be precise,
+   not thorough; "used-in" means a prerequisite (not motivation or a choice it informs); "related"
+   only when one topic fixes or works around a limitation of the other, or the subject deliberately
+   contrasts them ("commonly confused" is a student's state, not the material's, so it isn't a
+   link). Every link carries one specific sentence, `relations.reason`, shown when the student
+   hovers the link on the Atlas; a link without one is dropped. "used-in" and "has-a-kind" never
+   form a loop: a link that would close one is dropped with why in the run (`closesLoop`,
+   `src/lib/course/links.ts`), not relabelled; the Atlas layout still copes with a loop in older
+   data. No cap on links per topic: a cap would drop true links and make the map lie. "Find
+   connections" also gives old links (made before reasons) their reason when the model returns them.
+   *Handwritten and scanned pages (owner, 2026-10-18):* a PDF page whose text layer is a notes app's
+   rough recognition, or missing, is read from its image by the server's model (`transcribe` step:
+   pages rendered whole by our own pdf.js + @napi-rs/canvas renderer, 4 a call, at the start of the
+   upload job; the clean text replaces the page's). Plan: `docs/superpowers/plans/2026-10-18-handwritten-notes.md`.
+   Typed slides that draw a figure (detected from pdf.js's drawing operations, no model) keep their
+   exact text and get the `describe` step's description of the figure appended ("[Figures: …]").
+   *Question feedback (owner, 2026-10-18):* thumbs up / down on each question (`question_feedback`,
+   one per student per question, an optional reason on a down). A thumbs-down question is never asked
+   again for that student and counts as used for top-ups and dives (so it's replaced); a thumbs down
+   before answering skips it (nothing recorded) and the session brings in another for the same
+   objective. Ratings never touch evidence or mastery. Owner-only under RLS; Orca reads across
+   students with the secret key (SQL in docs/SETUP-HOSTED.md §7). Plan: `docs/superpowers/plans/2026-10-18-question-feedback.md`.
+   A thumbs down opens a popup with the reasons and an optional note (300 characters). Every
+   question-writing call (upload, top-up, dive) gets the course's recent thumbs-downs (question,
+   reason, note) as a `student_feedback` data block: up to 6 on its own objectives, 4 from the rest
+   (`src/lib/pipeline/flagged.ts`); a note that screens as an instruction to an AI is dropped.
+   Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
+   related): a pair the course already links is skipped, a more specific kind replaces one made
+   earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
 2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
    the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
    keeps the losing name as an alias so it matches instantly next time.
 3. **Review:** the student confirms new topics; `uncertain` matches are highlighted. Nothing waits
-   on review to be practised (confirmation rule below).
-4. **Questions** are generated per objective (about 6), validated (port the platform's ambiguity
-   check and answer agreement) and stocked.
+   on review to be practiced (confirmation rule below).
+4. **Questions** are generated per objective (about 6) and stocked. They used to be checked by a
+   second model (blind solve, ambiguity, rubric agreement); the owner dropped those checks on
+   2026-10-06 for speed and cost. Code still refuses rule-breaking output (untrusted-text rules,
+   anchors to slides that don't exist, wrong objective, bad structure). Deep reviews write their own
+   harder questions when they start (`POST /api/deep-review`), marked `deep` and asked only there;
+   the material-type sliders no longer shape a deep review's mix.
 
 Rules:
 - **Every objective belongs to the course whose material was uploaded**, and records the upload
@@ -201,14 +241,23 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   answer, 90 s one sentence), spread across objectives, unseen first, at least one mechanism
   question. An objective with no unseen questions reuses its oldest-seen one, says so, and queues
   a top-up.
-- **Top-up** after each session for objectives below 3 unseen questions.
+- **Top-up** after each session for objectives below 3 unseen questions. *Changed 2026-10-18
+  (owner):* questions follow practice instead of a stock. An upload writes 2 per objective (one that
+  does the skill, one "why or how" where there is one), so it finishes sooner and objectives never
+  studied cost nothing more; after a session, objectives still being learned (not mastered or
+  retired) get 2 more once they have fewer than 2 unseen (`TOP_UP_RULES`). Dive In still writes its
+  own. No wait screen for a top-up in progress: a quick review leaves out what was practised today
+  and dives write their own questions, so a session can't run into an unfinished top-up.
 - **Deep review** due per course from its configured cadence (next due one cadence after the last
   completed one; stays due if missed), with its question mix weighted by the material sliders.
   At its start the student picks how many minutes (the Settings length is the suggestion) and
   sees what that covers; every objective gets one question, highest priority first, before any
   gets a second. The end card offers another deep review (decided 2026-10-05).
 - **Poor-quiz loop:** a Review to-do with the slide range and missed explanations, and a re-quiz
-  the next day.
+  the next day. *Removed 2026-10-10 (owner's decision):* missed objectives join the course's normal
+  quick-review queue instead, and anything practiced today waits until the next quick review (never
+  the same day). The study page and the `requiz` session are gone; old `requiz` evidence and results
+  still load.
 
 ### Phase 4 — Supabase (built locally; live checks pending)
 Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; Tasks 1–9
@@ -287,10 +336,18 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   thread so the read budget is real; emailed links from `SITE_URL`; token-hash links accepted by the
   callback. Dependencies: none added in Tasks 7b–9 (`worker_threads` and `Intl` are Node's).
 
+### Since Phase 4 (2026-10-06, owner's decisions)
+Exams have their own table (`exams`: course, title, date, optional `topic_ids`), edited from the
+course page and shown on the calendar; hand-added exam calendar entries moved into it. Dives (deep
+review) write their questions when they start, course-wide or for one topic. Course review settings
+and weights are overrides of account defaults kept on the profile (null inherits). Relations are
+between topics (see Uploads above). No new dependency or persistence layer was added for any of it.
+
 ### Phase 5 — Relation mastery, exams, calendar
 Connection questions record evidence on a relation, which gets its own derived state (weak or
-strong). `implies` shielding: a correct answer on an objective counts as a partial review of the
-objectives it implies. A miss triggers one diagnostic question on what it builds on. Exam tier
+strong). (Relations are between topics since 2026-10-06, so the `implies` shielding below needs
+rethinking: there is no objective-level `implies` any more.) `implies` shielding: a correct answer
+on an objective counts as a partial review of the objectives it implies. A miss triggers one diagnostic question on what it builds on. Exam tier
 (port `stage-boundaries.ts`): retired objectives in scope come back; retrieval → mixed → transfer.
 Calendar shows deep reviews, exam blocks and material due dates.
 

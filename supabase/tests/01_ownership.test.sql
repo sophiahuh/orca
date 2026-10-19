@@ -12,6 +12,7 @@ select plan(51);
 \set material d0000000-0000-4000-8000-00000000000a
 \set run e0000000-0000-4000-8000-00000000000a
 \set topic f0000000-0000-4000-8000-00000000000a
+\set topic2 f0000000-0000-4000-8000-00000000000b
 \set obj 10000000-0000-4000-8000-00000000000a
 \set inferred 10000000-0000-4000-8000-00000000000b
 \set q 20000000-0000-4000-8000-00000000000a
@@ -49,11 +50,13 @@ reset role;
 insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at, model) values (:'run', :'A', :'course', :'material', 'upload', now(), 'stub');
 select pg_temp.act_as(:'A');
 select lives_ok(format($$select public.save_structure(%L, %L)$$, :'course', jsonb_build_object(
-  'topics', jsonb_build_array(jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Boolean algebra', 'review', 'proposed', 'pos_x', 1, 'pos_y', 2, 'material_id', :'material', 'aliases', '[]'::jsonb)),
+  'topics', jsonb_build_array(
+    jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Boolean algebra', 'review', 'proposed', 'pos_x', 1, 'pos_y', 2, 'material_id', :'material', 'aliases', '[]'::jsonb),
+    jsonb_build_object('id', :'topic2', 'sort_order', 1, 'name', 'Karnaugh maps', 'review', 'proposed', 'pos_x', 3, 'pos_y', 4, 'material_id', :'material', 'aliases', '[]'::jsonb)),
   'objectives', jsonb_build_array(
     jsonb_build_object('id', :'obj', 'topic_id', :'topic', 'name', 'Simplify expressions', 'description', 'd', 'origin', 'material', 'review', 'proposed', 'material_id', :'material', 'run_id', :'run', 'aliases', '[]'::jsonb, 'signals', '[]'::jsonb, 'archived_with_topic', false),
     jsonb_build_object('id', :'inferred', 'topic_id', :'topic', 'name', 'De Morgan', 'description', 'd', 'origin', 'inferred', 'review', 'proposed', 'material_id', :'material', 'run_id', :'run', 'aliases', '[]'::jsonb, 'signals', '[]'::jsonb, 'archived_with_topic', false)),
-  'relations', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'from_objective', :'obj', 'to_objective', :'inferred', 'type', 'builds-on', 'review', 'proposed', 'material_id', :'material')),
+  'relations', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'from_topic', :'topic', 'to_topic', :'topic2', 'type', 'used-in', 'review', 'proposed', 'material_id', :'material')),
   'questions', jsonb_build_array(
     jsonb_build_object('id', :'q', 'topic_id', :'topic', 'sort_order', 0, 'objective_id', :'obj', 'kind', 'Short answer', 'topic_name', 'Boolean algebra', 'prompt', 'Simplify x + xy.', 'answer', -1, 'exact', jsonb_build_array('x'), 'explanation', 'e', 'anchor', jsonb_build_object('locator', 'slide 3', 'excerpt', 'x + xy = x'), 'material_id', :'material', 'options', '[]'::jsonb),
     jsonb_build_object('id', :'qi', 'topic_id', :'topic', 'sort_order', 1, 'objective_id', :'inferred', 'kind', 'True or false', 'topic_name', 'Boolean algebra', 'prompt', '(ab)'' = a'' + b''?', 'options', jsonb_build_array('True', 'False'), 'answer', 0, 'explanation', 'e'))

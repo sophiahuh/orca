@@ -44,6 +44,16 @@ const spendCap = {
 };
 const success = (usage = { input_tokens: 120, output_tokens: 30, cache_creation_input_tokens: 400, cache_read_input_tokens: 2000 }): Reply => ({ stream: { text: '{"ok":true}', usage } });
 
+test("images are sent as base64 image blocks before the question", async () => {
+  const api = fakeFetch([success()]);
+  await completeJson(config, "sys", "read these", Out, (t) => Out.parse(JSON.parse(t)), { images: [{ mediaType: "image/jpeg", data: "AAAA" }], fetch: api.fetch, retryBackoffMs: 0 });
+  const body = api.calls[0].body as { messages: Array<{ content: Array<Record<string, unknown>> }> };
+  assert.deepEqual(body.messages[0].content, [
+    { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "AAAA" } },
+    { type: "text", text: "read these" },
+  ]);
+});
+
 test("a spend-limit 429 is never retried and is reported as the budget being used up", async () => {
   const api = fakeFetch([spendCap, success()]);
   await assert.rejects(completeJson(config, "sys", "hi", Out, (t) => Out.parse(JSON.parse(t)), { fetch: api.fetch, retryBackoffMs: 1 }), (e: unknown) => e instanceof LlmError && e.status === 429 && e.spendLimit && e.message === SPEND_LIMIT_MESSAGE);

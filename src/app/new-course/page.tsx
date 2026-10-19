@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useOrca } from "@/lib/store";
+import { COURSE_NAME_MAX } from "@/lib/data";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
@@ -21,11 +22,11 @@ export default function NewCoursePage() {
   const create = () => {
     if (!trimmed) return;
     addCourse(trimmed);
-    router.push("/home");
+    router.push("/");
   };
 
   return (
-    <Screen bg="alice">
+    <Screen bg="ocean">
       <header className="px-[28px] pt-[28px]">
         <BackButton />
       </header>
@@ -56,6 +57,7 @@ export default function NewCoursePage() {
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
+              maxLength={COURSE_NAME_MAX}
               placeholder="Advanced Logic Design"
               className="h-[68px] w-[440px] max-w-full rounded-[24px] border-[3.5px] border-wisteria bg-parchment px-[22px] text-[24px] font-semibold text-prussian lip-5 lip-periwinkle placeholder:font-medium placeholder:text-alice-deep focus:border-wisteria-deep focus:outline-none"
             />
@@ -65,7 +67,7 @@ export default function NewCoursePage() {
             <Button type="submit" disabled={!trimmed}>
               Create Course
             </Button>
-            <Button variant="secondary" onClick={() => router.push("/home")}>
+            <Button variant="secondary" onClick={() => router.push("/")}>
               Cancel
             </Button>
           </motion.div>

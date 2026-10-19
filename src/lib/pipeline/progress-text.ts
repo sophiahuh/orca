@@ -8,14 +8,16 @@ export function progressMessage(p: { stage: string; [k: string]: unknown } | nul
   }
   const x = p as Progress | null | undefined;
   switch (x?.stage) {
+    case "transcribing":
+      return `Reading ${x.pages} handwritten or scanned page${x.pages === 1 ? "" : "s"}…`;
+    case "figures-reading":
+      return `Describing the figures on ${x.slides} slide${x.slides === 1 ? "" : "s"}…`;
     case "mapping":
       return "Mapping the material onto the course…";
     case "matching":
       return `Checking ${x.candidates} topics and objectives against what the course already has…`;
     case "writing":
       return x.objectives ? `Writing questions for ${x.objectives} objective${x.objectives === 1 ? "" : "s"}…` : "Writing questions…";
-    case "checking":
-      return `Checking ${x.questions} question${x.questions === 1 ? "" : "s"} with an independent solve…`;
     case "figures":
       return `Cutting ${x.slides} figure${x.slides === 1 ? "" : "s"} from the slides…`;
     default:

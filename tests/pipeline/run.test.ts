@@ -13,6 +13,8 @@ function fakeModel(h: Handlers) {
   const call: CallStep = async (step, input) => {
     calls.push({ step, input });
     const handler = h[step] as ((i: typeof input) => StepOutput<typeof step>) | undefined;
+    // The link step runs after every upload with new topics; unless a test says otherwise it finds nothing.
+    if (!handler && step === "link") return { links: [] } as StepOutput<typeof step>;
     if (!handler) throw new Error(`unexpected ${step} call`);
     return handler(input);
   };
@@ -65,11 +67,6 @@ const mc = (objectiveId: string, prompt: string, answer: number, extra: Partial<
   ...extra,
 });
 
-/** Solve every question "correctly" from a key of id → expected answer. */
-const honestSolver = (key: Map<string, { choice?: number; text?: string }>) => (i: StepInput<"solve">): StepOutput<"solve"> => ({
-  answers: i.questions.map((q) => ({ id: q.id, choice: key.get(q.prompt)?.choice ?? null, text: key.get(q.prompt)?.text ?? null })),
-});
-
 const lectureExtract: ExtractOutput = {
   topics: [
     { localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "Theorems.", slideStart: 1, slideEnd: 2 },
@@ -81,27 +78,28 @@ const lectureExtract: ExtractOutput = {
     { localId: "o3", existingId: null, topicRef: "t2", name: "Read binary numbers", description: "", aliases: [], origin: "inferred", places: [], emphasis: null },
   ],
   relations: [
-    { from: "o2", to: "o1", type: "builds-on", anchor: null },
-    { from: "o2", to: "nope", type: "builds-on", anchor: null },
+    { from: "t1", to: "t2", type: "used-in", anchor: null, reason: "K-maps group terms using Boolean algebra's absorption." },
+    { from: "t2", to: "nope", type: "related", anchor: null, reason: "Points at a topic that isn't there." },
   ],
   instructionsFound: [],
 };
 
-test("a first lecture creates proposed topics and objectives with signals, relations and checked questions", async () => {
-  const solveKey = new Map([
-    ["Simplify x + xy.", { text: "x" }],
-    ["Which group?", { choice: 2 }],
-    ["What is 101 in decimal?", { text: "5" }],
-  ]);
+test("a first lecture creates proposed topics and objectives with signals, relations and questions", async () => {
   const model = fakeModel({
     extract: () => lectureExtract,
+    link: () => ({
+      links: [
+        { from: "t1", to: "t2", type: "used-in", reason: "K-maps group terms using Boolean algebra's absorption." },
+        { from: "t2", to: "t1", type: "related", reason: "K-maps find by picture what algebra finds by rules." },
+        { from: "t1", to: "t1", type: "related", reason: "Linked to itself, so dropped." },
+        { from: "t9", to: "t1", type: "related", reason: "From a topic that doesn't exist." },
+      ],
+    }),
     generate: (i) => ({
       questions: i.objectives.flatMap((o) =>
         o.name.startsWith("Simplify") ? [short(o.id, "Simplify x + xy.", ["x"])] : o.name.startsWith("Group") ? [mc(o.id, "Which group?", 2)] : [short(o.id, "What is 101 in decimal?", ["5"])],
       ),
     }),
-    solve: honestSolver(solveKey),
-    ambiguity: (i) => ({ results: i.questions.map((q) => ({ id: q.id, ambiguous: false, reasoning: "" })) }),
   });
   const progress: string[] = [];
   const plan = await runUpload(input(), { call: model.call, newId, onProgress: (p) => progress.push(p.stage) });
@@ -111,22 +109,31 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.deepEqual(plan.newTopics[1].aliases, ["K-Maps"]);
   assert.equal(plan.newObjectives.length, 3);
   assert.ok(plan.newObjectives.every((o) => o.review === "proposed" && o.runId === "run1"));
-  const [simplify, group, inferred] = plan.newObjectives;
+  const [, group, inferred] = plan.newObjectives;
   assert.equal(group.topicId, plan.newTopics[1].id);
   assert.deepEqual(group.signals, [{ materialId: "mat", materialType: "Lecture", places: [{ locator: "slide 3", excerpt: "groups" }], emphasis: { kind: "tested", quote: "on the exam" } }]);
   assert.equal(inferred.origin, "inferred");
   assert.deepEqual(inferred.signals, []);
-  assert.deepEqual(plan.relations.map((r) => [r.from, r.to, r.type]), [[group.id, simplify.id, "builds-on"]], "the relation to an unknown objective is dropped");
+  const [t1, t2] = plan.newTopics.map((t) => t.id);
+  assert.deepEqual(
+    plan.relations.map((r) => [r.from, r.to, r.type]),
+    [[t1, t2, "used-in"]],
+    "extraction's link (one to an unknown topic dropped); the link step's repeat and its related link on the same pair are skipped: one link per pair",
+  );
+  const linkInput = model.calls.find((c) => c.step === "link")!.input as StepInput<"link">;
+  assert.deepEqual(linkInput.topics.map((t) => [t.ref, t.name, t.isNew]), [["t1", "Boolean Algebra", true], ["t2", "Karnaugh Maps", true]]);
+  assert.deepEqual(linkInput.existing, [{ from: "t1", to: "t2", type: "used-in" }]);
 
   const all = Object.values(plan.questions).flat();
   assert.equal(all.length, 3);
   assert.ok(all.every((q) => q.materialId === "mat"));
   assert.equal(all.find((q) => q.objectiveId === inferred.id)!.anchor, undefined, "inferred questions carry no anchor");
   assert.equal(plan.run.questionsAdded, 3);
-  assert.deepEqual(progress, ["mapping", "matching", "writing", "checking"]);
+  assert.deepEqual(progress, ["mapping", "matching", "writing"]);
+  assert.deepEqual([...new Set(model.calls.map((c) => c.step))], ["extract", "link", "generate"], "no second model call checks the questions");
   assert.equal(model.calls.filter((c) => c.step === "reconcile").length, 0, "nothing existing to compare against");
   const generateInputs = model.calls.filter((c) => c.step === "generate").map((c) => c.input as StepInput<"generate">);
-  assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 6)));
+  assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 2)), "an upload writes 2 per objective");
 });
 
 test("a later upload reuses existing items, records aliases and signals, skips rejected ones and flags uncertain ones", async () => {
@@ -140,7 +147,7 @@ test("a later upload reuses existing items, records aliases and signals, skips r
     O2: obj("O2", "Use don't-cares", { review: "archived" }),
     O3: obj("O3", "Place minterms using Gray code order"),
   };
-  const bank: Record<string, QuizQuestion[]> = { T1: [1, 2, 3, 4, 5].map((i) => ({ id: `q${i}`, objectiveId: "O1", prompt: `Old ${i}` }) as QuizQuestion) };
+  const bank: Record<string, QuizQuestion[]> = { T1: [1].map((i) => ({ id: `q${i}`, objectiveId: "O1", prompt: `Old ${i}` }) as QuizQuestion) };
   const model = fakeModel({
     extract: () => ({
       topics: [
@@ -180,65 +187,30 @@ test("a later upload reuses existing items, records aliases and signals, skips r
     ['Topic "Course Logistics"', 'Objective "Use don\'t-cares"', 'Objective "Know the grading policy"'],
   );
   const generate = model.calls.find((c) => c.step === "generate")!.input as StepInput<"generate">;
-  assert.equal(generate.objectives.find((o) => o.id === "O1")!.need, 1, "tops O1 up from 5 to 6");
-  assert.deepEqual(generate.objectives.find((o) => o.id === "O1")!.existingPrompts, ["Old 1", "Old 2", "Old 3", "Old 4", "Old 5"]);
+  assert.equal(generate.objectives.find((o) => o.id === "O1")!.need, 1, "tops O1 up from 1 to 2");
+  assert.deepEqual(generate.objectives.find((o) => o.id === "O1")!.existingPrompts, ["Old 1"]);
 });
 
-test("questions that fail a check, duplicate the bank or lack a figure are dropped with a reason", async () => {
+test("questions that duplicate the bank or break the rules are dropped with a reason; the rest are kept unchecked", async () => {
   const lone: ExtractOutput = {
     topics: [{ localId: "t1", existingId: null, name: "Logic", aliases: [], summary: "", slideStart: 1, slideEnd: 4 }],
     objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Do logic", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
     relations: [],
     instructionsFound: [],
   };
-  const rubric = { requiredIdeas: ["absorption"], acceptableAlternatives: [], knownMisconceptions: [] };
   const model = fakeModel({
     extract: () => lone,
     generate: (i) => {
       const id = i.objectives[0].id;
-      return {
-        questions: [
-          mc(id, "Wrong key?", 1),
-          mc(id, "Two answers?", 0),
-          short(id, "Exact mismatch?", ["1010"]),
-          short(id, "Why?", [], { exact: null, rubric, tier: "mechanism" }),
-          short(id, "Old question", ["x"]),
-          short(id, "No anchor?", ["x"], { anchor: null }),
-        ],
-      };
+      // A refused question doesn't count toward the 2 the objective needs; a duplicate does (it's dropped later).
+      return { questions: [short(id, "No anchor?", ["x"], { anchor: null }), mc(id, "Which gate?", 1), short(id, "Old question", ["x"])] };
     },
-    solve: (i) => ({
-      answers: i.questions.map((q) => ({
-        id: q.id,
-        choice: q.prompt === "Wrong key?" ? 3 : q.prompt === "Two answers?" ? 0 : null,
-        text: q.prompt === "Exact mismatch?" ? "1011" : q.prompt === "Why?" ? "No idea" : q.prompt === "Old question" ? "x" : null,
-      })),
-    }),
-    ambiguity: (i) => ({ results: i.questions.map((q) => ({ id: q.id, ambiguous: q.prompt === "Two answers?", reasoning: "B also works" })) }),
-    agreement: (i) => ({ results: i.items.map((x) => ({ id: x.id, agrees: false, reasoning: "misses absorption" })) }),
   });
   const plan = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: model.call, newId });
-  assert.deepEqual(Object.values(plan.questions).flat(), []);
+  assert.deepEqual(Object.values(plan.questions).flat().map((q) => q.prompt), ["Which gate?"]);
   const reasons = Object.fromEntries(plan.run.dropped.map((d) => [d.prompt, d.reason]));
-  assert.match(reasons["Wrong key?"], /independent solve picked "D"/);
-  assert.match(reasons["Two answers?"], /ambiguous: B also works/);
-  assert.match(reasons["Exact mismatch?"], /answered "1011", not 1010/);
-  assert.match(reasons["Why?"], /disagreed with the rubric/);
   assert.match(reasons["Old question"], /already has this question/);
   assert.match(reasons["No anchor?"], /no source anchor/);
-});
-
-test("a failing check call drops its batch instead of letting unchecked questions through", async () => {
-  const model = fakeModel({
-    extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [], instructionsFound: [] }),
-    generate: (i) => ({ questions: [short(i.objectives[0].id, "Simplify x + xy.", ["x"])] }),
-    solve: () => {
-      throw new Error("rate limited");
-    },
-  });
-  const plan = await runUpload(input(), { call: model.call, newId });
-  assert.equal(plan.run.questionsAdded, 0);
-  assert.match(plan.run.dropped.at(-1)!.reason, /couldn't be checked: rate limited/);
 });
 
 test("a figure question keeps its slide image, or is dropped when the slide can't be rendered", async () => {
@@ -247,11 +219,6 @@ test("a figure question keeps its slide image, or is dropped when the slide can'
       call: fakeModel({
         extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [], instructionsFound: [] }),
         generate: (i) => ({ questions: [mc(i.objectives[0].id, "In the figure, which gate?", 1, { figureSlide: 2 })] }),
-        solve: (i) => {
-          assert.equal(i.questions[0].context, "slide 2 text about logic", "the solver sees the slide's text");
-          return { answers: i.questions.map((q) => ({ id: q.id, choice: 1, text: null })) };
-        },
-        ambiguity: (i) => ({ results: i.questions.map((q) => ({ id: q.id, ambiguous: false, reasoning: "" })) }),
       }).call,
       newId,
       renderFigure: render,

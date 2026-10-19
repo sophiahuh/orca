@@ -13,6 +13,8 @@ test("the display percent climbs with credit before mastery and follows recall a
   assert.equal(masteryPercent({ ...base, status: "mixed-up", credit: 3 }), 40);
   assert.equal(masteryPercent({ ...base, status: "mastered", recall: 0.93 }), 93);
   assert.equal(masteryPercent({ ...base, status: "fading", recall: 0.52 }), 52);
+  // A missed check: FSRS's recall is ~100% right after the answer, but the display drops under the line.
+  assert.equal(masteryPercent({ ...base, status: "fading", recall: 0.999 }), 80, "a miss never reads as a rise");
   assert.equal(masteryPercent({ ...base, status: "retired", recall: null }), 100);
 });
 
@@ -22,6 +24,6 @@ test("the review phrase reads the next due day in the student's day", () => {
   assert.equal(reviewPhrase(undefined, now, dayKey), "comes up in your next quiz");
   assert.equal(reviewPhrase({ ...base, status: "mastered", dueAt: "2026-10-07T03:00:00Z" }, now, dayKey), "back in review tomorrow");
   assert.equal(reviewPhrase({ ...base, status: "mastered", dueAt: "2026-10-09T03:00:00Z" }, now, dayKey), "back in review in 3 days");
-  assert.equal(reviewPhrase({ ...base, status: "fading", dueAt: "2026-10-05T03:00:00Z" }, now, dayKey), "due for review today");
-  assert.equal(reviewPhrase({ ...base, status: "mixed-up" }, now, dayKey), "comes back in your next quiz to untangle it");
+  assert.equal(reviewPhrase({ ...base, status: "fading", dueAt: "2026-10-05T03:00:00Z" }, now, dayKey), "comes back in your next quick review");
+  assert.equal(reviewPhrase({ ...base, status: "mixed-up" }, now, dayKey), "comes back in your next quick review to untangle it");
 });

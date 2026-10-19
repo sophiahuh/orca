@@ -29,7 +29,7 @@ const LECTURE = {
     { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
     { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
   ],
-  relations: [{ from: "o2", to: "o1", type: "builds-on", anchor: null }],
+  relations: [{ from: "t1", to: "t2", type: "used-in", anchor: null, reason: "Simplifying with Boolean algebra is how a K-map grouping is justified." }],
 };
 
 const ONE_TOPIC = {
@@ -42,16 +42,15 @@ async function createCourse(page: Page, name: string) {
   await page.goto("/new-course");
   await page.getByPlaceholder("Advanced Logic Design").fill(name);
   await page.getByRole("button", { name: "Create Course" }).click();
-  await expect(page).toHaveURL(/\/home$/);
+  await expect(page).toHaveURL(/:\d+\/$/);
 }
 
 async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
   await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
-  await expect(page.locator("[data-part=model-note]")).toHaveText("Orca (Claude Opus 5.5) will build topics and quizzes from this file.");
   await page.getByRole("button", { name: type, exact: true }).click();
-  await page.getByRole("button", { name: /generate quizzes/ }).click();
+  await page.getByRole("button", { name: "Add to course" }).click();
 }
 
 test("a lecture upload is built by a job on the server; the review screen follows it and lands the questions on the trail", async ({ page, student }) => {
@@ -65,7 +64,11 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
-  expect(await fakeCalls()).toEqual(["extract", "generate", "generate", "solve"]);
+  // Slides 3 and 4 are pictures with only a slide number: they're read from their images first; then
+  // the 27 typed slides with a figure get it described (4 a call). The log can start with calls from
+  // the previous test's job still finishing in the background, so this run's are compared from its first.
+  const calls = await fakeCalls();
+  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", ...Array(7).fill("describe"), "extract", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -82,7 +85,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   const { data: row } = await student.db.from("materials").select("storage_path, content_hash, status, hidden_text").single();
   const bytes = await readFile(DECK);
   expect(row).toEqual({
-    storage_path: `${student.id}/${state.materials[0].id}/L02_Combinational.pdf`,
+    storage_path: `${student.id}/${state.materials[0].id}`,
     content_hash: createHash("sha256").update(bytes).digest("hex"),
     status: "ready",
     hidden_text: { items: 0, pages: [] },
@@ -102,11 +105,47 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
 });
 
+test("handwritten notes: every page is read from its image before the upload is built, and the clean text is stored", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await page.goto("/add-material");
+  await page.locator('input[type="file"]').setInputFiles(DECK);
+  await page.getByRole("button", { name: "Handwritten notes", exact: true }).click();
+  await page.getByRole("button", { name: "Add to course" }).click();
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 90_000 });
+  const { data: pages, error } = await student.db.from("material_pages").select("n, text, source").order("n");
+  expect(error).toBeNull();
+  expect(pages!.length).toBeGreaterThan(1);
+  expect(pages!.every((p) => p.source === "vision" && p.text === `Handwritten page ${p.n}: x + xy = x by absorption.`)).toBe(true);
+  const calls = await fakeCalls();
+  expect(calls.filter((c) => c === "transcribe")).toHaveLength(Math.ceil(pages!.length / 4));
+  expect(calls.indexOf("transcribe")).toBeLessThan(calls.indexOf("extract"));
+});
+
+test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await upload(page);
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  const state = await stored(page, student);
+  const material = state.materials[0];
+  // Reloading the upload page for it (its URL once the server made it) opens its run's review.
+  await page.goto(`/add-material?course=logic&material=${material.id}`);
+  await expect(page).toHaveURL(new RegExp(`/course/logic/review\\?run=${state.runs[0].id}`), { timeout: 15_000 });
+
+  // A reload while the browser was still sending the file: the file never arrived.
+  const stranded = crypto.randomUUID();
+  const inserted = await admin().from("materials").insert({ id: stranded, owner_id: student.id, course_id: state.courses[0].id, filename: "half.pdf", type: "Lecture", reflect: false, status: "uploaded", mime: "application/pdf", size_bytes: 10 });
+  expect(inserted.error).toBeNull();
+  await page.goto(`/add-material?course=logic&material=${stranded}`);
+  await expect(page.locator("[data-part=resume-upload]")).toContainText("half.pdf didn't finish uploading before the page reloaded.", { timeout: 15_000 });
+});
+
 test("re-uploading the same deck is recognised by its content and adds nothing", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
   await upload(page);
   await expect(page.getByText("Logic already has this file (L02_Combinational.pdf), so there's nothing new to add.")).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "extract")).toHaveLength(1);
@@ -169,10 +208,20 @@ async function sendFile(api: APIRequestContext, student: Student, courseId: stri
   return { id: material.id, path: upload.path, processed: await api.post(`/api/materials/${material.id}/process`) };
 }
 
+test("a file Orca can't take is refused on the page: it says why and nothing can be added", async ({ page, student }) => {
+  await createCourse(page, "Logic");
+  await page.goto("/add-material");
+  await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
+  await expect(page.getByText("Choose another file.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add to course" })).toBeDisabled();
+  const { count } = await student.db.from("materials").select("id", { count: "exact", head: true });
+  expect(count).toBe(0);
+});
+
 test("oversize and non-PDF files are refused before anything is stored", async ({ page, student }) => {
   const courseId = await newCourse(student);
   const pdf = makePdf([lines("Hello")]);
-  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 25 * 1024 * 1024 + 1 } });
+  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 30 * 1024 * 1024 + 1 } });
   expect(big.status()).toBe(413);
   const text = await page.request.post("/api/materials", { data: { ...details(courseId, pdf, "notes.txt"), mime: "text/plain" } });
   expect(text.status()).toBe(415);

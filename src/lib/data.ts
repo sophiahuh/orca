@@ -92,6 +92,16 @@ export function weightPercents(w: Weights): Record<string, number> {
 
 export type EventKind = "hw" | "lab" | "rev" | "exam";
 
+/** One of a course's exams: its date and, optionally, the topics it covers (ids; ones no longer live are ignored). */
+export interface Exam {
+  id: string;
+  courseId: string;
+  title: string;
+  /** ISO date, YYYY-MM-DD */
+  date: string;
+  topicIds: string[];
+}
+
 export interface CalendarEvent {
   id: string;
   /** ISO date, YYYY-MM-DD */
@@ -108,6 +118,7 @@ export type MaterialType =
   | "Practice exam"
   | "Homework"
   | "Lecture"
+  | "Handwritten notes"
   | "Other";
 
 export interface Material {
@@ -153,7 +164,40 @@ export interface QuizResult {
 }
 
 /** An upload's text, one entry per page or slide, kept so questions can be topped up later. */
-export type MaterialPages = Array<{ n: number; text: string }>;
+/**
+ * A material's pages; `source` says where a page's text comes from: its text layer (default),
+ * `needs-vision` until a handwritten or scanned page is read from its image (`vision` after), or
+ * `needs-figure` until a typed slide's figure is described and appended (`figure` after).
+ */
+export type MaterialPages = Array<{ n: number; text: string; source?: "text" | "needs-vision" | "vision" | "needs-figure" | "figure" }>;
+
+/** Why a student gave a question a thumbs down (optional). */
+export type FeedbackReason = "wrong-answer" | "unclear" | "too-easy" | "too-hard" | "not-my-course";
+export const FEEDBACK_REASONS: Record<FeedbackReason, string> = {
+  "wrong-answer": "Wrong answer",
+  unclear: "Unclear",
+  "too-easy": "Too easy",
+  "too-hard": "Too hard",
+  "not-my-course": "Not from my course",
+};
+
+/** A student's thumbs up or down on one question; a thumbs-down question isn't asked again. */
+export interface QuestionRating {
+  courseId: string;
+  rating: "up" | "down";
+  reason: FeedbackReason | null;
+  /** What was wrong, in the student's words (a thumbs down only; question writing reads it). */
+  note: string | null;
+}
+
+/** A question the student gave a thumbs down, as question writing reads it (cleaned; see `flaggedForWriting`). */
+export interface FlaggedQuestion {
+  /** Its objective (null when it had none). */
+  objectiveId: string | null;
+  prompt: string;
+  reason: FeedbackReason | null;
+  note: string | null;
+}
 
 /* ── Course structure from uploads ─────────────────────────────────────── */
 
@@ -196,17 +240,27 @@ export interface Objective {
   signals: ObjectiveSignal[];
 }
 
-export type RelationType = "builds-on" | "implies" | "contrasts-with" | "applies-to";
+/**
+ * How two topics are linked (the Concept Atlas's edges), `from` → `to`: used-in ("Boolean algebra"
+ * used-in "K-maps"), has-a-kind ("Flip-flops" has-a-kind "D flip-flop"), alternative-to (either
+ * does the job; one row, read both ways), related (any other link; drawn unlabelled).
+ */
+export type RelationType = "used-in" | "has-a-kind" | "alternative-to" | "related";
 
-/** `from` <type> `to`, e.g. "K-map grouping" builds-on "Gray code adjacency". */
+/** `from` <type> `to` between two topics of a course, proposed by an upload. */
 export interface Relation {
   id: string;
+  /** Topic id. */
   from: string;
+  /** Topic id. */
   to: string;
   type: RelationType;
   anchor: Anchor | null;
   review: Review;
-  materialId: string;
+  /** The upload it came from; null when "Find connections" linked the whole course. */
+  materialId: string | null;
+  /** One sentence on why the link is there (shown on the Atlas); null for links made before reasons were kept. */
+  reason: string | null;
 }
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */
@@ -215,16 +269,22 @@ export type RunStatus = "queued" | "waiting" | "running" | "done" | "failed";
 
 export interface PipelineRun {
   id: string;
-  /** An upload, or questions topped up after a session (absent on older records: an upload). */
-  kind?: "upload" | "top-up";
+  /** An upload, a post-session top-up, or a durable Dive In (absent on older records: an upload). */
+  kind?: "upload" | "top-up" | "deep-review";
   courseId: string;
   /** The material it was built from. A top-up written from several materials (or none) names none. */
   materialId: string | null;
   /** ISO time. */
   at: string;
   model: string;
+  /** Requested duration for a durable deep-review run. */
+  deepMinutes?: number;
+  /** The exact questions a durable Dive In wrote, in the order it should ask them. */
+  questionIds?: string[];
   /** Where its job is (runs are written by the server's jobs): queued → running → done | failed. */
   status: RunStatus;
+  /** When its job claimed it (ISO); a run still running long after this has died (`DEAD_RUN_MS`). Read only. */
+  startedAt?: string;
   /** While running: the stage it's at (`Progress` in pipeline/run.ts). */
   progress?: { stage: string; [k: string]: unknown } | null;
   /** Why it failed, for the student. */
@@ -286,6 +346,8 @@ export interface QuizQuestion {
   materialId?: string;
   /** The objective this question tests. Missing on generated questions until extraction assigns one. */
   objectiveId?: string;
+  /** A deep-review question (written when a deep review starts): longer and harder; only deep reviews ask it. */
+  deep?: boolean;
 }
 
 /* ── Defaults ─────────────────────────────────────────────────────────── */
@@ -304,7 +366,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   lectures: 25,
 };
 
-export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
 
 /* ── Dates ────────────────────────────────────────────────────────────── */
 export function toISODate(d: Date) {
@@ -327,6 +389,9 @@ export function slugify(name: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+
+/** Longest a course's name may be (the database enforces the same). */
+export const COURSE_NAME_MAX = 50;
 
 export function shortName(name: string) {
   const words = name.trim().split(/\s+/);

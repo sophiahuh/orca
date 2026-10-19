@@ -2,7 +2,7 @@
 -- the file (path, hash, status, hidden text), and never writes or sees another student's pages.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(16);
+select plan(19);
 
 \set A aaaaaaaa-0000-4000-8000-000000000001
 \set B bbbbbbbb-0000-4000-8000-000000000002
@@ -36,6 +36,14 @@ select throws_ok(format($$insert into public.materials (id, owner_id, course_id,
 select throws_ok(format($$insert into public.materials (id, owner_id, course_id, filename, type, storage_path)
   values ('d0000000-0000-4000-8000-00000000000c', %L, %L, 'x.pdf', 'Lecture', %L)$$, :'A', :'course', :'A' || '/d0000000-0000-4000-8000-00000000000c/a/b.pdf'),
   '23514', null, 'a nested path is refused');
+select lives_ok(format($$insert into public.materials (id, owner_id, course_id, filename, type, storage_path)
+  values ('d0000000-0000-4000-8000-0000000000a1', %L, %L, 'Lecture 3 (final).pdf', 'Lecture', %L)$$, :'A', :'course', :'A' || '/d0000000-0000-4000-8000-0000000000a1'),
+  'a new upload is stored at <owner>/<material id>, without its file name');
+select throws_ok(format($$insert into public.materials (id, owner_id, course_id, filename, type, storage_path)
+  values ('d0000000-0000-4000-8000-0000000000a2', %L, %L, 'x.pdf', 'Lecture', %L)$$, :'A', :'course', :'A' || '/d0000000-0000-4000-8000-0000000000a1'),
+  '23514', null, 'another material''s path is refused');
+select throws_ok(format($$update public.courses set name = %L where id = %L$$, repeat('x', 51), :'course'),
+  '23514', null, 'a course name is at most 50 characters');
 
 select pg_temp.act_as(:'A');
 select throws_ok(format($$insert into public.materials (id, course_id, filename, type, storage_path)

@@ -16,15 +16,15 @@
  */
 import { after } from "next/server";
 import { tasks } from "@trigger.dev/sdk";
-import type { processMaterialTask, topUpTask } from "@/trigger/jobs";
+import type { deepReviewTask, processMaterialTask, topUpTask } from "@/trigger/jobs";
 import * as core from "@/lib/jobs/start";
 import type { Dispatch, Generation, StartDeps, TopUpStart } from "@/lib/jobs/start";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 import { serverModel } from "@/lib/server/model";
 import { checkBudget } from "@/lib/server/usage";
-import { runMaterialJob, runTopUpJob } from "./run";
+import { runDeepReviewJob, runMaterialJob, runTopUpJob } from "./run";
 
-export type { Generation, TopUpStart } from "@/lib/jobs/start";
+export type { DeepReviewStart, Generation, TopUpStart } from "@/lib/jobs/start";
 
 export type JobsMode = "inline" | "trigger";
 
@@ -43,7 +43,7 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
     budget: (ownerId, pages) => checkBudget(db, ownerId, pages),
     async dispatch(d: Dispatch) {
       if (mode === "inline") {
-        const work = () => (d.kind === "material" ? runMaterialJob(d.job) : runTopUpJob(d.job)).then(() => undefined);
+        const work = () => (d.kind === "material" ? runMaterialJob(d.job) : d.kind === "top-up" ? runTopUpJob(d.job) : runDeepReviewJob(d.job)).then(() => undefined);
         // From a route: after its response. From a finishing job (already after a response): right
         // away, and awaited, so the enclosing after() covers the chained job too.
         if (run === "after-response") after(work);
@@ -53,7 +53,9 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
       const handle =
         d.kind === "material"
           ? await tasks.trigger<typeof processMaterialTask>("process-material", d.job)
-          : await tasks.trigger<typeof topUpTask>("top-up", d.job);
+          : d.kind === "top-up"
+            ? await tasks.trigger<typeof topUpTask>("top-up", d.job)
+            : await tasks.trigger<typeof deepReviewTask>("deep-review", d.job);
       const { error } = await db.from("pipeline_runs").update({ job_id: handle.id }).eq("owner_id", d.job.ownerId).eq("id", d.job.runId);
       if (error) throw new Error(error.message);
     },
@@ -70,6 +72,11 @@ export function startTopUpJob(db: OrcaSupabase, ownerId: string, req: { courseId
   return core.startTopUpJob(deps(db), ownerId, req);
 }
 
+/** See `startDeepReviewJob` in src/lib/jobs/start.ts. */
+export function startDeepReviewJob(db: OrcaSupabase, ownerId: string, req: { courseId: string; minutes: number; objectiveIds: string[] }): Promise<import("@/lib/jobs/start").DeepReviewStart> {
+  return core.startDeepReviewJob(deps(db), ownerId, req);
+}
+
 /**
  * Start the student's next queued or resumable waiting job (see `resumeNext`). Called by a job
  * that just finished (`src/lib/server/jobs/run.ts`), so the next one runs at once, not after a
@@ -79,9 +86,18 @@ export function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch 
   return core.resumeNext(deps(db, "now"), ownerId);
 }
 
-/** Every student with a run that isn't running yet (queued or waiting), for the scheduled sweep (trigger mode). */
+/**
+ * Check the student's runs from a route (POST /api/runs/check): a run past its job's limit
+ * (`DEAD_RUN_MS`, judged by the server's clock) is marked failed, and their next queued or resumable
+ * job starts after the response.
+ */
+export function checkRuns(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+  return core.resumeNext(deps(db, "after-response"), ownerId);
+}
+
+/** Every student with a live run (queued, waiting or running: a running one may have died), for the scheduled sweeps. */
 export async function ownersWithPendingRuns(db: OrcaSupabase): Promise<string[]> {
-  const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting"]);
+  const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting", "running"]);
   if (error) throw new Error(`Couldn't read the pending runs: ${error.message}`);
   return [...new Set(data.map((r) => r.owner_id))];
 }

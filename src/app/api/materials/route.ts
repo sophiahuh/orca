@@ -9,7 +9,7 @@ import { uploadReply } from "@/lib/server/upload-reply";
  * 201 { material, upload: { path, token } }: send the file to Storage with the token, then
  * POST /api/materials/:id/process. 200 { duplicate }: the course already has this file.
  * A duplicate also says what happens to its questions (`generation`, see upload-reply.ts).
- * 413 over 25 MB, 415 not a PDF, 404 not your course. See `src/lib/server/materials.ts`.
+ * 413 over 30 MB, 415 not a PDF, 404 not your course. See `src/lib/server/materials.ts`.
  */
 export const runtime = "nodejs";
 // A duplicate whose questions were never built starts the job here (inline mode runs it after the response).

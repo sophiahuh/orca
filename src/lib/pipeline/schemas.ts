@@ -51,10 +51,11 @@ export const ExtractOutput = z.object({
   relations: z
     .array(
       z.object({
-        from: z.string().max(60).describe("Objective localId or existing objective id"),
-        to: z.string().max(60),
-        type: z.enum(["builds-on", "implies", "contrasts-with", "applies-to"]),
+        from: z.string().max(60).describe("Topic localId or existing topic id"),
+        to: z.string().max(60).describe("Topic localId or existing topic id"),
+        type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
         anchor: Anchor.nullable(),
+        reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
       }),
     )
     .max(60),
@@ -100,30 +101,30 @@ export type GeneratedQuestion = z.infer<typeof GeneratedQuestion>;
 export const GenerateOutput = z.object({ questions: z.array(GeneratedQuestion).max(60) });
 export type GenerateOutput = z.infer<typeof GenerateOutput>;
 
-/* ── Validate ──────────────────────────────────────────────────────────── */
+/* ── Deep: harder questions written when a deep review starts ───────── */
 
-/** Blind solve: the solver sees only the question (and, for a figure question, that slide's text). */
-export const SolveOutput = z.object({
-  answers: z.array(z.object({ id: z.string().max(60), choice: z.number().int().nullable().describe("Option index for a choice question, else null"), text: z.string().max(TEXT).nullable().describe("Your answer for a short-answer question, else null") })).max(80),
-});
-export type SolveOutput = z.infer<typeof SolveOutput>;
+/** Dive questions are multi-step problems with worked solutions: longer than quiz questions. */
+export const DEEP_TEXT = 4000;
 
-export const AmbiguityOutput = z.object({
-  results: z.array(z.object({ id: z.string().max(60), ambiguous: z.boolean(), reasoning: z.string().max(400) })).max(80),
+/** A deep-review question: a short answer that takes a few minutes (no recall tier, no choices). */
+export const DeepQuestion = GeneratedQuestion.extend({
+  explanation: z.string().min(1).max(DEEP_TEXT),
+  kind: z.literal("Short answer"),
+  tier: z.enum(["mechanism", "application", "connection", "transfer"]),
+  options: z.array(z.string()).max(0).describe("Always empty"),
+  answer: z.literal(-1),
+  prompt: z.string().min(1).max(DEEP_TEXT).describe("Readable plain text: short paragraphs, line-separated givens, and numbered line-separated steps when appropriate; use \\n for line breaks, never Markdown or HTML"),
 });
-export type AmbiguityOutput = z.infer<typeof AmbiguityOutput>;
-
-export const AgreementOutput = z.object({
-  results: z.array(z.object({ id: z.string().max(60), agrees: z.boolean(), reasoning: z.string().max(400) })).max(80),
-});
-export type AgreementOutput = z.infer<typeof AgreementOutput>;
+export const DeepOutput = z.object({ questions: z.array(DeepQuestion).max(40) });
+export type DeepOutput = z.infer<typeof DeepOutput>;
 
 /* ── Step inputs (checked by the route) ────────────────────────────────── */
 
 const Page = z.object({ n: z.number().int().min(1), text: z.string().max(6000) });
 const Named = z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()), description: z.string().optional(), rejected: z.boolean() });
-const Course = z.object({ name: z.string().max(120), short: z.string().max(20) });
-const MaterialType = z.enum(["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
+// The short label is display text (often the whole name for courses made before initials), not a ref.
+const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
+const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
 
 export const ExtractInput = z.object({
   course: Course,
@@ -140,6 +141,11 @@ export const ReconcileInput = z.object({
   existing: z.array(Named).min(1).max(12),
 });
 export type ReconcileInput = z.infer<typeof ReconcileInput>;
+
+/** Questions the student gave a thumbs down (and why), so new ones avoid the same problems. */
+const Flagged = z
+  .array(z.object({ objectiveId: z.string().nullable(), prompt: z.string().max(1200), reason: z.string().nullable(), note: z.string().max(300).nullable() }))
+  .max(12);
 
 export const GenerateInput = z.object({
   course: Course,
@@ -159,21 +165,34 @@ export const GenerateInput = z.object({
     )
     .min(1)
     .max(12),
+  flagged: Flagged.optional(),
 });
 export type GenerateInput = z.infer<typeof GenerateInput>;
 
-const QuestionForCheck = z.object({ id: z.string(), kind: z.string(), prompt: z.string(), options: z.array(z.string()), context: z.string().max(6000).nullable() });
+/* ── Link: how a course's topics relate (a focused pass after each upload, or on demand) ── */
 
-export const SolveInput = z.object({ questions: z.array(QuestionForCheck).min(1).max(60) });
-export type SolveInput = z.infer<typeof SolveInput>;
-
-export const AmbiguityInput = z.object({ questions: z.array(QuestionForCheck.extend({ marked: z.number().int() })).min(1).max(60) });
-export type AmbiguityInput = z.infer<typeof AmbiguityInput>;
-
-export const AgreementInput = z.object({
-  items: z.array(z.object({ id: z.string(), prompt: z.string(), rubric: Rubric, independentAnswer: z.string() })).min(1).max(60),
+export const LinkInput = z.object({
+  course: Course,
+  /** Each topic by a short ref ("t1"…), with its summary; `isNew` marks this upload's topics. */
+  topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2).max(200),
+  /** Links the course already has, by ref (not to be repeated, except those that need a reason). */
+  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string(), needsReason: z.boolean().optional() })).max(1000),
 });
-export type AgreementInput = z.infer<typeof AgreementInput>;
+export type LinkInput = z.infer<typeof LinkInput>;
+
+export const LinkOutput = z.object({
+  links: z
+    .array(
+      z.object({
+        from: z.string().max(20).describe("A topic ref"),
+        to: z.string().max(20).describe("A topic ref"),
+        type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
+        reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
+      }),
+    )
+    .max(120),
+});
+export type LinkOutput = z.infer<typeof LinkOutput>;
 
 /* ── Reflect: which objectives a homework reflection says the student doesn't understand ── */
 
@@ -198,15 +217,69 @@ export const ReflectOutput = z.object({
 });
 export type ReflectOutput = z.infer<typeof ReflectOutput>;
 
+/* ── Transcribe: handwritten or scanned pages, read from their images ── */
+
+/** At most this many pages go in one transcribe call (each a page image). */
+export const TRANSCRIBE_PAGES_PER_CALL = 4;
+
+export const TranscribeInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200) }),
+  /** Each page's number and its rendered image (base64 JPEG, no data: prefix; about 5 MB at most). */
+  pages: z
+    .array(z.object({ n: z.number().int().min(1), image: z.string().min(1).max(7_000_000) }))
+    .min(1)
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type TranscribeInput = z.infer<typeof TranscribeInput>;
+
+export const TranscribeOutput = z.object({
+  pages: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).describe("The page's number, as given"),
+        text: z.string().max(6000).describe("Everything on the page written out as text; empty when the page is blank"),
+      }),
+    )
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type TranscribeOutput = z.infer<typeof TranscribeOutput>;
+
+/* ── Describe: the figures on typed slides, from their images (the slide's text stays as it is) ── */
+
+export const DescribeInput = z.object({
+  course: Course,
+  material: z.object({ filename: z.string().max(200) }),
+  /** Each slide's number, its text (to say what's already there) and its rendered image. */
+  pages: z
+    .array(z.object({ n: z.number().int().min(1), text: z.string().max(6000), image: z.string().min(1).max(7_000_000) }))
+    .min(1)
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type DescribeInput = z.infer<typeof DescribeInput>;
+
+export const DescribeOutput = z.object({
+  pages: z
+    .array(
+      z.object({
+        n: z.number().int().min(1).describe("The slide's number, as given"),
+        figures: z.string().max(2000).describe("What the slide's figures show that its text doesn't say; empty when it has only decoration"),
+      }),
+    )
+    .max(TRANSCRIBE_PAGES_PER_CALL),
+});
+export type DescribeOutput = z.infer<typeof DescribeOutput>;
+
 /** Every step: its input and output schemas. */
 export const STEPS = {
   extract: { input: ExtractInput, output: ExtractOutput },
   reconcile: { input: ReconcileInput, output: ReconcileOutput },
   generate: { input: GenerateInput, output: GenerateOutput },
-  solve: { input: SolveInput, output: SolveOutput },
-  ambiguity: { input: AmbiguityInput, output: AmbiguityOutput },
-  agreement: { input: AgreementInput, output: AgreementOutput },
+  deep: { input: GenerateInput, output: DeepOutput },
+  link: { input: LinkInput, output: LinkOutput },
   reflect: { input: ReflectInput, output: ReflectOutput },
+  transcribe: { input: TranscribeInput, output: TranscribeOutput },
+  describe: { input: DescribeInput, output: DescribeOutput },
 } as const;
 export type StepName = keyof typeof STEPS;
 export type StepInput<S extends StepName> = z.infer<(typeof STEPS)[S]["input"]>;

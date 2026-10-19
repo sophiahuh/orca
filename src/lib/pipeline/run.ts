@@ -1,25 +1,28 @@
 /**
- * The upload pipeline: extract → match duplicates → write questions → check them. Model calls are
+ * The upload pipeline: extract → match duplicates → write questions. Model calls are
  * injected (`call`), so the orchestration is tested with fakes; the result is a plan that
  * `applyUploadPlan` merges into the course. Nothing here touches the store.
  */
-import type { Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
-import { gradeExact } from "../grading.ts";
+import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
 import { type Named, exactMatch, normaliseName, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
+import { linkReason, linkTopics, liveDirectional } from "./link.ts";
+import { flaggedFor } from "./flagged.ts";
+import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
-import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "./schemas.ts";
+import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
 
 export type CallStep = <S extends StepName>(step: S, input: StepInput<S>) => Promise<StepOutput<S>>;
 
 export type Progress =
+  | { stage: "transcribing"; pages: number }
+  | { stage: "figures-reading"; slides: number }
   | { stage: "mapping" }
   | { stage: "matching"; candidates: number }
   | { stage: "writing"; objectives: number }
-  | { stage: "checking"; questions: number }
   | { stage: "figures"; slides: number };
 
 export interface RunInput {
@@ -31,6 +34,8 @@ export interface RunInput {
   pages: Array<{ n: number; text: string }>;
   /** What hidden text the server dropped when it read the file; recorded on the run (decision 13). */
   hiddenText?: { items: number; pages: number[] };
+  /** The course's thumbs-down questions (cleaned, newest first), for question writing. */
+  flagged?: readonly FlaggedQuestion[];
   runId: string;
   model: string;
   /** ISO time of the run. */
@@ -60,7 +65,6 @@ export interface UploadPlan {
   run: PipelineRun;
 }
 
-const CHECK_BATCH = 30;
 const OBJECTIVES_PER_CALL = 8;
 
 /** Run `fn` over `items`, at most `limit` at a time, keeping order. */
@@ -161,7 +165,7 @@ function anchorExists(locator: string, facts: MaterialFacts): boolean {
   return named.length === 0 || named.every((n) => facts.pages.has(n));
 }
 
-const TEXT_RULE = (facts: MaterialFacts) => ({ maxChars: 1200, allowedUrls: facts.allowedUrls });
+const TEXT_RULE = (facts: MaterialFacts, maxChars = 1200) => ({ maxChars, allowedUrls: facts.allowedUrls });
 const SHORT_RULE = (facts: MaterialFacts) => ({ maxChars: 240, allowedUrls: facts.allowedUrls });
 
 /** The pattern screen over every page of the material, each hit tagged with its slide and its severity. */
@@ -338,17 +342,29 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     objectiveByRef.set(o.localId, objective.id);
   });
 
-  /* 4. Relations */
-  const allObjectiveIds = new Set([...Object.keys(input.objectives), ...newObjectives.map((o) => o.id)]);
-  const objectiveId = (ref: string) => objectiveByRef.get(ref) ?? (allObjectiveIds.has(ref) ? ref : null);
-  const seenRelations = new Set(input.relations.map((r) => `${r.from}|${r.to}|${r.type}`));
+  /* 4. Relations between topics (new and existing; a merged topic's links go to its survivor) */
+  const linkTopic = (ref: string) => {
+    const id = topicIdOf(ref);
+    return id === null || id === "dropped" ? null : id;
+  };
+  // One link per pair of topics: a pair the course links already is skipped; within this upload the most specific kind comes first.
+  const linkedPairs = new Set(input.relations.filter((r) => r.review !== "archived").map((r) => pairKey(r.from, r.to)));
   const relations: Relation[] = [];
-  for (const r of extracted.relations) {
-    const from = objectiveId(r.from);
-    const to = objectiveId(r.to);
+  const directional = liveDirectional(input.relations, [...input.course.topics, ...newTopics]);
+  for (const r of [...extracted.relations].sort((a, b) => KIND_RANK[a.type] - KIND_RANK[b.type])) {
+    const from = linkTopic(r.from);
+    const to = linkTopic(r.to);
     if (!from || !to || from === to) continue;
-    const key = `${from}|${to}|${r.type}`;
-    if (seenRelations.has(key)) continue;
+    if (linkedPairs.has(pairKey(from, to))) continue;
+    const reason = linkReason(r.reason);
+    if (!reason.ok) {
+      refuse(`A ${r.type} relation`, reason.reason);
+      continue;
+    }
+    if (DIRECTIONAL.has(r.type) && closesLoop(directional, from, to)) {
+      dropped.push({ prompt: `A ${r.type} relation`, reason: LOOP_REASON });
+      continue;
+    }
     if (r.anchor) {
       const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));
       if (!v.ok || !anchorExists(r.anchor.locator, facts)) {
@@ -356,8 +372,32 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
         continue;
       }
     }
-    seenRelations.add(key);
-    relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id });
+    linkedPairs.add(pairKey(from, to));
+    if (DIRECTIONAL.has(r.type)) directional.push({ from, to, type: r.type });
+    relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id, reason: reason.text });
+  }
+
+  /* 5. A focused pass for links (the link step): this upload's new topics against every topic. Extraction
+     links only what the slides spell out; this one may use the subject. A failure costs only the links. */
+  if (newTopics.length) {
+    try {
+      const linked = await linkTopics(
+        {
+          course: input.course,
+          topics: [...input.course.topics, ...newTopics],
+          newIds: new Set(newTopics.map((t) => t.id)),
+          existing: input.relations,
+          fromThisRun: relations,
+          materialId: input.material.id,
+        },
+        { call, newId },
+      );
+      const replaced = new Set(linked.replaced);
+      relations.splice(0, relations.length, ...relations.filter((r) => !replaced.has(r.id)), ...linked.links);
+      dropped.push(...linked.dropped);
+    } catch (e) {
+      dropped.push({ prompt: "Links between topics", reason: `couldn't be found: ${errorText(e)}` });
+    }
   }
 
   const runRecord = (questions: UploadPlan["questions"]): PipelineRun => ({
@@ -399,6 +439,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       topics: new Map([...input.course.topics, ...newTopics].map((t) => [t.id, t])),
       targets,
       bank: input.bank,
+      ...(input.flagged ? { flagged: input.flagged } : {}),
     },
     deps,
   );
@@ -431,12 +472,17 @@ export interface WriteInput {
   targets: readonly WriteTarget[];
   /** Every question the course has (topicId → questions), for spotting duplicates. */
   bank: Readonly<Record<string, readonly QuizQuestion[]>>;
+  /** Deep-review questions (the "deep" step: longer, harder short answers), marked `deep`. */
+  deep?: boolean;
+  /** The course's thumbs-down questions (cleaned, newest first), so new ones avoid their problems. */
+  flagged?: readonly FlaggedQuestion[];
 }
 
 /**
- * Write questions for objectives from one material, then check them: a blind solve, an ambiguity
- * check for choice questions and rubric agreement for prose answers. Questions that fail, duplicate
- * one the course has, or need a figure that can't be rendered are dropped with a reason.
+ * Write questions for objectives from one material. They aren't checked by a second model call
+ * (owner's decision, 2026-10-06); code still refuses what breaks the rules (wrong objective, bad
+ * structure, untrusted-text rules, anchors to slides the material lacks), and duplicates of a
+ * question the course has or questions whose figure can't be rendered are dropped with a reason.
  */
 export async function writeQuestions(
   input: WriteInput,
@@ -459,12 +505,13 @@ export async function writeQuestions(
     await pool(jobs, 3, async ({ topicId, xs }) => {
       const topic = topicsById.get(topicId)!;
       try {
-        const out = await call("generate", {
+        const out = await call(input.deep ? "deep" : "generate", {
           course: { name: input.course.name, short: input.course.short },
           material: { filename: input.material.filename, type: input.material.type },
           pages: input.pages,
           topic: { name: topic.name, summary: topic.summary ?? "" },
           objectives: xs.map(({ o, existing, need }) => ({ id: o.id, name: o.name, description: o.description, origin: o.origin, need, existingPrompts: existing.map((q) => q.prompt).slice(0, 40) })),
+          ...(input.flagged?.length ? { flagged: flaggedFor(input.flagged, new Set(xs.map((x) => x.o.id))) } : {}),
         });
         const wanted = new Map(xs.map((x) => [x.o.id, x]));
         const kept: Array<{ topicId: string; q: QuizQuestion; figureSlide: number | null }> = [];
@@ -495,7 +542,7 @@ export async function writeQuestions(
               ...Object.fromEntries((g.rubric?.knownMisconceptions ?? []).flatMap((m, i) => [[`misconception ${i + 1}`, m.description], ...m.indicativePhrasing.map((ph, j) => [`misconception ${i + 1} phrasing ${j + 1}`, ph])])),
               ...(g.anchor ? { "anchor excerpt": g.anchor.excerpt } : {}),
             },
-            TEXT_RULE(facts),
+            TEXT_RULE(facts, input.deep ? DEEP_TEXT : undefined),
           );
           if (!texts.ok) {
             dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });
@@ -519,6 +566,7 @@ export async function writeQuestions(
               id: newId(),
               materialId: input.material.id,
               objectiveId: g.objectiveId,
+              ...(input.deep ? { deep: true } : {}),
               kind: g.kind,
               tier: g.tier,
               topic: topic.name,
@@ -548,73 +596,12 @@ export async function writeQuestions(
     })
   ).flat();
 
-  /* Check: blind solve, ambiguity for choice questions, rubric agreement */
-  progress({ stage: "checking", questions: generated.length });
   const slideText = new Map(input.pages.map((p) => [p.n, p.text]));
-  const failures = new Map<string, string>();
-  const batches = Array.from({ length: Math.ceil(generated.length / CHECK_BATCH) }, (_, i) => generated.slice(i * CHECK_BATCH, (i + 1) * CHECK_BATCH));
-  await pool(batches, 2, async (batch) => {
-    const forCheck = batch.map(({ q, figureSlide }) => ({ id: q.id, kind: q.kind, prompt: q.prompt, options: q.options, context: figureSlide ? (slideText.get(figureSlide) ?? null) : null }));
-    const fail = (ids: string[], reason: string) => ids.forEach((id) => failures.has(id) || failures.set(id, reason));
-    let solved: StepOutput<"solve">;
-    try {
-      solved = await call("solve", { questions: forCheck });
-    } catch (e) {
-      fail(batch.map((b) => b.q.id), `couldn't be checked: ${errorText(e)}`);
-      return;
-    }
-    const answers = new Map(solved.answers.map((a) => [a.id, a]));
-    const rubricItems: StepInput<"agreement">["items"] = [];
-    for (const { q } of batch) {
-      const a = answers.get(q.id);
-      if (!a) {
-        fail([q.id], "the independent check skipped it");
-      } else if (q.kind !== "Short answer") {
-        if (a.choice !== q.answer) fail([q.id], `an independent solve picked "${q.options[a.choice ?? -1] ?? "nothing"}", not the marked answer`);
-      } else if (q.exact) {
-        if (gradeExact(a.text ?? "", q.exact).outcome !== "correct") fail([q.id], `an independent solve answered "${a.text ?? ""}", not ${q.exact[0]}`);
-      } else if (q.rubric) {
-        rubricItems.push({ id: q.id, prompt: q.prompt, rubric: q.rubric, independentAnswer: a.text ?? "" });
-      }
-    }
-    const choice = batch.filter(({ q }) => q.kind !== "Short answer" && !failures.has(q.id));
-    await Promise.all([
-      choice.length
-        ? call("ambiguity", { questions: choice.map(({ q, figureSlide }) => ({ ...forCheck.find((f) => f.id === q.id)!, context: figureSlide ? (slideText.get(figureSlide) ?? null) : null, marked: q.answer })) })
-            .then((r) => {
-              const results = new Map(r.results.map((x) => [x.id, x]));
-              for (const { q } of choice) {
-                const x = results.get(q.id);
-                if (!x) fail([q.id], "the ambiguity check skipped it");
-                else if (x.ambiguous) fail([q.id], `ambiguous: ${shown(x.reasoning)}`);
-              }
-            })
-            .catch((e) => fail(choice.map((c) => c.q.id), `couldn't be checked: ${errorText(e)}`))
-        : null,
-      rubricItems.length
-        ? call("agreement", { items: rubricItems })
-            .then((r) => {
-              const results = new Map(r.results.map((x) => [x.id, x]));
-              for (const item of rubricItems) {
-                const x = results.get(item.id);
-                if (!x) fail([item.id], "the answer check skipped it");
-                else if (!x.agrees) fail([item.id], `an independent answer disagreed with the rubric: ${shown(x.reasoning)}`);
-              }
-            })
-            .catch((e) => fail(rubricItems.map((i) => i.id), `couldn't be checked: ${errorText(e)}`))
-        : null,
-    ]);
-  });
 
   /* Duplicates and figures */
   const seen = new Set(Object.values(input.bank).flat().map((q) => promptKey(q.prompt)));
   const passed: typeof generated = [];
   for (const g of generated) {
-    const failure = failures.get(g.q.id);
-    if (failure) {
-      dropped.push({ prompt: g.q.prompt, reason: failure });
-      continue;
-    }
     const key = promptKey(g.q.prompt);
     if (seen.has(key)) {
       dropped.push({ prompt: g.q.prompt, reason: "the course already has this question" });
@@ -626,7 +613,7 @@ export async function writeQuestions(
   const slides = [...new Set(passed.map((p) => p.figureSlide).filter((n): n is number => n !== null && slideText.has(n)))];
   if (slides.length) progress({ stage: "figures", slides: slides.length });
   const figures = new Map<number, string | null>();
-  for (const n of slides) figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null);
+  await pool(slides, 4, async (n) => figures.set(n, deps.renderFigure ? await deps.renderFigure(n).catch(() => null) : null));
   const questions: Record<string, QuizQuestion[]> = {};
   for (const p of passed) {
     if (p.figureSlide !== null) {

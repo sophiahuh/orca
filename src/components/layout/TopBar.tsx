@@ -27,7 +27,7 @@ export function TopBar() {
 
   return (
     <header data-part="top-bar" className="flex h-[var(--topbar-h)] shrink-0 items-center justify-between border-b-2 border-line bg-page px-[20px] sm:px-[28px]">
-      <Link href={guest ? "/" : "/home"} aria-label="Orca home" className="flex items-center gap-[12px]">
+      <Link href="/" aria-label="Orca home" className="flex items-center gap-[12px]">
         <OrcaLogo waves shadow={false} width={60} />
         <span className="hidden text-[34px] font-bold leading-none text-ink sm:inline">Orca</span>
       </Link>

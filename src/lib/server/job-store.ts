@@ -7,6 +7,7 @@ import type { Material, MaterialPages, QuizQuestion } from "@/lib/data";
 import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
 import { checkBudget } from "@/lib/server/usage";
+import { flaggedForWriting } from "@/lib/pipeline/flagged";
 import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -100,12 +101,19 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       // One request per material: a file has at most LIMITS.pagesPerFile pages, under the row cap.
       await Promise.all(
         materialIds.map(async (id) => {
-          const { data, error } = await db.from("material_pages").select("n, text").eq("owner_id", ownerId).eq("material_id", id).order("n").limit(LIMITS.pagesPerFile);
+          const { data, error } = await db.from("material_pages").select("n, text, source").eq("owner_id", ownerId).eq("material_id", id).order("n").limit(LIMITS.pagesPerFile);
           if (error) throw new Error(`Couldn't read the material's pages: ${error.message}`);
-          if (data.length) out[id] = data;
+          if (data.length) out[id] = data.map((p) => ({ n: p.n, text: p.text, source: p.source as NonNullable<MaterialPages[number]["source"]> }));
         }),
       );
       return out;
+    },
+
+    async savePages(materialId, pages, source) {
+      for (const p of pages) {
+        const { error } = await db.from("material_pages").update({ text: p.text, source }).eq("owner_id", ownerId).eq("material_id", materialId).eq("n", p.n);
+        if (error) throw new Error(`Couldn't store page ${p.n}'s text: ${error.message}`);
+      }
     },
 
     async answered(courseId) {
@@ -113,7 +121,29 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
         (a, b) => db.from("evidence_events").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "answer").order("at").order("id").range(a, b),
         "the answers",
       );
-      return new Set(rows.flatMap((r) => (r.question_id ? [r.question_id] : [])));
+      // A question the student gave a thumbs down counts as used: it's never asked again, so the
+      // top-up writes a replacement and a dive doesn't reuse it.
+      const { data: down, error } = await db.from("question_feedback").select("question_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("rating", "down");
+      if (error) throw new Error(`Couldn't read the student's question ratings: ${error.message}`);
+      return new Set([...rows.flatMap((r) => (r.question_id ? [r.question_id] : [])), ...down.map((r) => r.question_id)]);
+    },
+
+    async flagged(courseId) {
+      const { data, error } = await db
+        .from("question_feedback")
+        .select("reason, note, questions(prompt, objective_id)")
+        .eq("owner_id", ownerId)
+        .eq("course_id", courseId)
+        .eq("rating", "down")
+        .order("updated_at", { ascending: false })
+        .limit(30);
+      if (error) throw new Error(`Couldn't read the student's thumbs-down questions: ${error.message}`);
+      return flaggedForWriting(
+        data.flatMap((r) => {
+          const q = Array.isArray(r.questions) ? r.questions[0] : r.questions;
+          return q ? [{ objectiveId: q.objective_id, prompt: q.prompt, reason: r.reason, note: r.note }] : [];
+        }),
+      );
     },
 
     async save(courseId, rows) {

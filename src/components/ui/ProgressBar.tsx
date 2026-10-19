@@ -14,9 +14,11 @@ export interface ProgressBarProps {
   height?: number;
   className?: string;
   label?: string;
+  /** The empty part: alice by default, parchment on the ocean. */
+  track?: "alice" | "parchment";
 }
 
-export function ProgressBar({ value, height = 14, className, label = "Progress" }: ProgressBarProps) {
+export function ProgressBar({ value, height = 14, className, label = "Progress", track = "alice" }: ProgressBarProps) {
   const pct = Math.max(0, Math.min(1, value)) * 100;
   return (
     <div
@@ -25,7 +27,7 @@ export function ProgressBar({ value, height = 14, className, label = "Progress" 
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
-      className={cn("relative w-full overflow-hidden rounded-pill bg-alice", className)}
+      className={cn("relative w-full overflow-hidden rounded-pill", track === "parchment" ? "bg-parchment" : "bg-alice", className)}
       style={{ height }}
     >
       <motion.div

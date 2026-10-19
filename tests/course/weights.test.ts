@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Objective, ObjectiveSignal, Relation } from "../../src/lib/data.ts";
+import type { Objective, ObjectiveSignal, Relation, Topic } from "../../src/lib/data.ts";
 import { DEFAULT_WEIGHTS } from "../../src/lib/data.ts";
-import { WEIGHT_RULES, courseObjectiveWeights, objectiveWeight, placeValue, sliderFor, topicWeight } from "../../src/lib/course/weights.ts";
+import { WEIGHT_RULES, courseObjectiveWeights, objectiveWeight, placeValue, sliderFor, topicUses, topicWeight } from "../../src/lib/course/weights.ts";
 
 const lecture = (places: number, extra: Partial<ObjectiveSignal> = {}): ObjectiveSignal => ({
   materialId: "m",
@@ -33,7 +33,7 @@ test("material types map onto the Settings sliders; Other is neutral", () => {
 });
 
 test("by default every material type is worth the same", () => {
-  for (const type of ["Lecture", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
+  for (const type of ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
     close(placeValue(type, DEFAULT_WEIGHTS), 1);
   }
 });
@@ -75,17 +75,22 @@ test("inferred objectives sit at 1.0 unless emphasised", () => {
   close(objectiveWeight(objective("o", [], { origin: "inferred" }), 0, DEFAULT_WEIGHTS), 1);
 });
 
-test("course weights count builds-on through merges and ignore archived objectives", () => {
+test("an objective counts the topics its topic is used in, through merges, leaving out archived topics and other link kinds", () => {
+  const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
+  const topics = [topic("t"), topic("u"), topic("v"), topic("old", { review: "archived", mergedInto: "v" }), topic("gone", { review: "archived" })];
+  const rel = (from: string, to: string, type: Relation["type"] = "used-in"): Relation => ({ id: `${from}-${to}-${type}`, from, to, type, anchor: null, review: "confirmed", materialId: "m", reason: null });
+  const relations = [rel("t", "u"), rel("t", "old"), rel("t", "v"), rel("t", "gone"), rel("t", "u", "related"), rel("u", "t", "has-a-kind")];
+  // t is used in u and v (old was merged into v, so it's the same topic; gone was rejected).
+  assert.deepEqual([...topicUses(topics, relations).get("t")!].sort(), ["u", "v"]);
+  assert.equal(topicUses(topics, relations).get("u")!.size, 0);
   const objectives = {
     a: objective("a", [lecture(2)]),
-    b: objective("b", [lecture(2)], { review: "archived", mergedInto: "c" }),
     c: objective("c", [lecture(2)]),
     x: objective("x", [lecture(2)], { review: "archived" }),
   };
-  const rel = (from: string, to: string): Relation => ({ id: `${from}-${to}`, from, to, type: "builds-on", anchor: null, review: "confirmed", materialId: "m" });
-  const weights = courseObjectiveWeights(objectives, [rel("b", "a"), rel("c", "a"), rel("x", "a")], DEFAULT_WEIGHTS);
+  const weights = courseObjectiveWeights(objectives, topics, relations, DEFAULT_WEIGHTS);
   assert.deepEqual([...weights.keys()].sort(), ["a", "c"]);
-  close(weights.get("a")!, objectiveWeight(objectives.a, 1, DEFAULT_WEIGHTS)); // b and c are the same objective; x is rejected
+  close(weights.get("a")!, objectiveWeight(objectives.a, 2, DEFAULT_WEIGHTS));
   close(topicWeight("t", objectives, weights)!, (weights.get("a")! + weights.get("c")!) / 2);
   assert.equal(topicWeight("empty", objectives, weights), null);
 });

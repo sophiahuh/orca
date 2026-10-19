@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Material, Objective, QuizQuestion, Topic } from "../../src/lib/data.ts";
 import type { CallStep } from "../../src/lib/pipeline/run.ts";
-import { type TopUpInput, pagesFor, runTopUp, topUpTargets } from "../../src/lib/pipeline/topup.ts";
+import { type TopUpInput, pagesFor, runDeepReview, runTopUp, topUpTargets, unansweredDeepQuestions } from "../../src/lib/pipeline/topup.ts";
+import { deepQuestionCount } from "../../src/lib/deep-review.ts";
 import { locatorPages } from "../../src/lib/course/study.ts";
 import type { GeneratedQuestion, StepInput } from "../../src/lib/pipeline/schemas.ts";
 
@@ -42,23 +43,24 @@ const base = (over: Partial<TopUpInput> = {}): TopUpInput => ({
   materials: [material("L1")],
   materialPages: { L1: [{ n: 2, text: "Two's complement: invert and add one." }] },
   objectiveIds: ["a", "b"],
-  answered: new Set(["a1", "a2"]),
+  // a has one unseen question left (under 2), b has three.
+  answered: new Set(["a1", "a2", "a3"]),
   runId: "top1",
   model: "test-model",
   now: "2026-10-05T12:00:00Z",
   ...over,
 });
 
-test("only objectives under 3 unseen questions are topped up, back to 6 unseen", () => {
+test("only objectives under 2 unseen questions are topped up, with 2 more", () => {
   const { byMaterial, skipped } = topUpTargets(base());
   assert.deepEqual(skipped, []);
-  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need, t.existing.length]), [["a", 4, 4]]);
+  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need, t.existing.length]), [["a", 2, 4]]);
 });
 
 test("merged objectives top up their survivor; archived ones never", () => {
   const objectives = { a: objective("a"), old: objective("old", { mergedInto: "a", review: "archived" }), b: objective("b", { review: "archived" }) };
   const { byMaterial } = topUpTargets(base({ objectives, objectiveIds: ["old", "b"], bank: { t: [q("x1", "old")] }, answered: new Set() }));
-  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need]), [["a", 5]]);
+  assert.deepEqual(byMaterial.get("L1")!.map((t) => [t.objective.id, t.need]), [["a", 2]]);
 });
 
 test("the material that covers it most is used; without kept text the student is told why", () => {
@@ -75,7 +77,7 @@ test("the material that covers it most is used; without kept text the student is
   assert.deepEqual(topUpTargets({ ...input, objectives: { a: authored } }).skipped, [{ objectiveId: "a", reason: "no course material to write from" }]);
 });
 
-test("runTopUp writes and checks questions, drops duplicates and failures, and records a top-up run", async () => {
+test("runTopUp writes questions, drops duplicates, and records a top-up run", async () => {
   const generated = (objectiveId: string, prompt: string, exact: string): GeneratedQuestion => ({
     objectiveId,
     kind: "Short answer",
@@ -94,14 +96,10 @@ test("runTopUp writes and checks questions, drops duplicates and failures, and r
     calls.push(step);
     if (step === "generate") {
       const g = input as StepInput<"generate">;
-      assert.equal(g.objectives[0].need, 4);
+      assert.equal(g.objectives[0].need, 2);
       assert.ok(g.objectives[0].existingPrompts.includes("Question a1?"));
       assert.equal(g.pages[0].text, "Two's complement: invert and add one.");
-      return { questions: [generated("a", "Negate 0101 in 4 bits.", "1011"), generated("a", "Question a1?", "1"), generated("a", "Negate 0001.", "1111")] };
-    }
-    if (step === "solve") {
-      const s = input as StepInput<"solve">;
-      return { answers: s.questions.map((x) => ({ id: x.id, choice: null, text: x.prompt.startsWith("Negate 0101") ? "1011" : x.prompt === "Question a1?" ? "1" : "0000" })) };
+      return { questions: [generated("a", "Negate 0101 in 4 bits.", "1011"), generated("a", "Question a1?", "1")] };
     }
     throw new Error(`unexpected ${step}`);
   }) as CallStep;
@@ -115,8 +113,8 @@ test("runTopUp writes and checks questions, drops duplicates and failures, and r
   assert.equal(plan.run.status, "done");
   assert.equal(plan.run.questionsAdded, 1);
   assert.deepEqual(plan.run.objectivesAttached, ["a"]);
-  assert.deepEqual(plan.run.dropped.map((d) => d.reason), ["the course already has this question", 'an independent solve answered "0000", not 1111']);
-  assert.deepEqual(calls, ["generate", "solve"]);
+  assert.deepEqual(plan.run.dropped.map((d) => d.reason), ["the course already has this question"]);
+  assert.deepEqual(calls, ["generate"]);
 });
 
 test("nothing needed, nothing called", async () => {
@@ -160,4 +158,45 @@ test("a top-up sends only the anchored pages and their neighbours, never a whole
   assert.deepEqual(plan.pages.get("L1")!.map((p) => p.n), [9, 10, 11, 39, 40, 41, 42]);
   const skipped = topUpTargets(base({ objectives: { a: unanchored }, objectiveIds: ["a"], materialPages: { L1: book } })).skipped;
   assert.deepEqual(skipped, [{ objectiveId: "a", reason: "Orca doesn't know where in L1.pdf it's taught, and the file is too long to send whole" }]);
+});
+
+test("a deep review's length sets how many questions it writes", () => {
+  assert.equal(deepQuestionCount(10), 3);
+  assert.equal(deepQuestionCount(1), 1);
+  assert.equal(deepQuestionCount(600), 20);
+});
+
+test("a deep review writes harder questions through the deep step, spread over objectives in priority order, marked deep", async () => {
+  const calls: Array<{ step: string; need: Record<string, number> }> = [];
+  const call = (async (step: string, input: unknown) => {
+    const g = input as StepInput<"deep">;
+    calls.push({ step, need: Object.fromEntries(g.objectives.map((o) => [o.id, o.need])) });
+    return {
+      questions: g.objectives.flatMap((o) =>
+        Array.from({ length: o.need }, (_, i) => ({ objectiveId: o.id, kind: "Short answer", tier: "application", prompt: `Design for ${o.id} #${i}?`, options: [], answer: -1, exact: ["1"], rubric: null, explanation: "Steps.", anchor: { locator: "slide 2", excerpt: "x" }, figureSlide: null })),
+      ),
+    };
+  }) as CallStep;
+  // b first (more urgent); 3 questions over two objectives: b, a, then b again.
+  const out = await runDeepReview({ ...base(), objectiveIds: ["b", "a"], count: 3 }, { call, newId: (() => { let n = 0; return () => `d${++n}`; })() });
+  assert.deepEqual(calls, [{ step: "deep", need: { b: 2, a: 1 } }]);
+  const qs = out.questions.t;
+  assert.equal(qs.length, 3);
+  assert.ok(qs.every((x) => x.deep === true && x.materialId === "L1"));
+  assert.deepEqual(out.skipped, []);
+});
+
+test("unanswered dive questions are picked one per objective in priority order, then round again, up to the count", () => {
+  const deep = (id: string, objectiveId: string): QuizQuestion => ({ ...q(id, objectiveId), deep: true });
+  const bank = { t: [deep("a1", "a"), deep("a2", "a"), deep("b1", "b"), q("plain", "b"), deep("b2", "b")] };
+  const picked = unansweredDeepQuestions({ objectives: { a: objective("a"), b: objective("b") }, bank, objectiveIds: ["b", "a"], count: 3 }, new Set(["b1"]));
+  // b first (more urgent): b2 (b1 answered; "plain" isn't a dive question), then a1, then round two: a2.
+  assert.deepEqual(picked.map((p) => p.question.id), ["b2", "a1", "a2"]);
+});
+
+test("a dive question may be a long multi-step problem: a 1,500-character prompt and a 2,500-character solution parse", async () => {
+  const { DeepOutput } = await import("../../src/lib/pipeline/schemas.ts");
+  const question = { objectiveId: "a", kind: "Short answer", tier: "application", prompt: "x".repeat(1500), options: [], answer: -1, exact: ["1"], rubric: null, explanation: "y".repeat(2500), anchor: null, figureSlide: null };
+  assert.equal(DeepOutput.safeParse({ questions: [question] }).success, true);
+  assert.equal(DeepOutput.safeParse({ questions: [{ ...question, prompt: "x".repeat(4001) }] }).success, false);
 });

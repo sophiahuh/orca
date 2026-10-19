@@ -47,13 +47,21 @@ migrations in `supabase/migrations/` are the source of truth.
 3. **For the agent or CI to deploy tasks**: a personal access token (account → Personal Access
    Tokens, `tr_pat_…`).
 4. **Environment variables for the tasks** (project → Environment Variables, for Prod and Dev):
-   `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. Tasks run on Trigger.dev's
-   machines, so they need their own copies.
+   the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER` if set),
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
+   (the names `src/lib/supabase/env.ts` reads), and `ORCA_DAILY_BUDGET_USD` (the jobs check it).
+   Tasks run on Trigger.dev's machines, so they need their own copies.
+5. **Deploy the tasks** (separate from Vercel; again whenever the job code changes): put
+   `TRIGGER_PROJECT_REF=proj_…` in `.env`, then `npx trigger.dev@latest login` and
+   `npx trigger.dev@latest deploy`. On Vercel set `TRIGGER_SECRET_KEY` (`tr_prod_…`) and
+   `ORCA_JOBS=trigger`, and redeploy.
 
-## 3. Anthropic
+## 3. Anthropic or OpenAI
 
-Create an API key at console.anthropic.com for Orca's server (the only model key the server uses)
-and set a monthly spend limit on the workspace. The same key unlocks the extraction baseline
+Create an API key for Orca's server: at console.anthropic.com, or at platform.openai.com
+(`OPENAI_API_KEY`; set `ORCA_MODEL_PROVIDER=openai` to make the choice explicit). Set a monthly
+spend limit on the workspace or project either way. Unset, the provider is OpenAI when its key is
+set, else Anthropic (`src/lib/model-config.ts`). The same key unlocks the extraction baseline
 (`npm run score:extraction`), so it's worth adding to the cloud environment first.
 
 ## 4. Email provider (before real students, not before testing)
@@ -73,13 +81,30 @@ work):
 | `NEXT_PUBLIC_SUPABASE_URL` | project URL | public |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable key | public |
 | `SUPABASE_SECRET_KEY` | secret key | mark sensitive |
-| `ANTHROPIC_API_KEY` | Anthropic key | mark sensitive |
+| `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | the model key | mark sensitive |
+| `ORCA_MODEL_PROVIDER` | `openai` or `anthropic` (optional) | unset: OpenAI if its key is set, else Anthropic |
+| `ORCA_MODEL` | optional model override | must be priced in `src/lib/pricing.ts` |
 | `ORCA_JOBS` | `trigger` (or `inline` until Trigger.dev is set up: jobs then run inside the request, fine for short decks) | |
 | `TRIGGER_SECRET_KEY` | `tr_prod_…` | mark sensitive |
 | `SITE_URL` | the production address | emailed links come back to it; production refuses to send links without it |
 | `ORCA_DAILY_BUDGET_USD` | e.g. `25` | the service-wide daily ceiling on estimated model spend; unset means none |
+| `CRON_SECRET` | a long random string (`openssl rand -hex 32`) | mark sensitive; turns on the dead-run sweep below |
 
 The full list with explanations is `.env.example`.
+
+**Dead-run sweep (optional, added 2026-10-17).** A run still "running" 40 minutes after its job
+claimed it (an upload's 30-minute limit plus 10) has died, e.g. the server restarted. Pages that
+follow a run already ask the server to mark it failed (`POST /api/runs/check`); this sweep catches
+the ones nobody is looking at. With `CRON_SECRET` set, register the cron in a `vercel.json` at the
+repo root:
+
+```json
+{ "crons": [{ "path": "/api/cron/runs", "schedule": "*/15 * * * *" }] }
+```
+
+Every 15 minutes needs a Pro plan; Hobby allows one run a day (e.g. `"0 9 * * *"`), and Vercel
+refuses a deploy with a more frequent schedule on Hobby, so it isn't committed until the plan is
+known.
 
 GitHub auto-deploy isn't linked yet (CLAUDE.md, Deploy).
 
@@ -142,6 +167,35 @@ group by owner_id having count(*) >= 3;
 
 -- Turn a student's model grading back on (after looking at their answers).
 -- delete from public.security_events where owner_id = '<uuid>' and kind = 'student_answer';
+```
+
+### Question feedback (thumbs up / down, added 2026-10-18)
+
+Every student's ratings, across the platform (secret key). Use them to find weak question types and
+to build a test set for the prompts (the worst-rated questions with their reasons).
+
+```sql
+-- Ratings by question type and tier: how often each is thumbed down, and why.
+select q.kind, q.tier, q.deep,
+       count(*) filter (where f.rating = 'up') as up,
+       count(*) filter (where f.rating = 'down') as down,
+       round(100.0 * count(*) filter (where f.rating = 'down') / count(*), 1) as pct_down
+from public.question_feedback f join public.questions q on q.id = f.question_id
+group by q.kind, q.tier, q.deep order by pct_down desc;
+
+-- Reasons given for a thumbs down.
+select reason, count(*) from public.question_feedback where rating = 'down' group by reason order by count(*) desc;
+
+-- By the kind of material the question was written from.
+select m.type as material_type, count(*) filter (where f.rating = 'down') as down, count(*) as rated
+from public.question_feedback f join public.questions q on q.id = f.question_id
+left join public.materials m on m.id = q.material_id
+group by m.type order by down desc;
+
+-- The latest thumbs-down questions with the students' notes, for reading (and for a prompt test set).
+select f.created_at, f.reason, f.note, q.kind, q.prompt, q.explanation, q.exact
+from public.question_feedback f join public.questions q on q.id = f.question_id
+where f.rating = 'down' order by f.created_at desc limit 50;
 ```
 
 ## Order

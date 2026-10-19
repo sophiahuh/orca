@@ -15,10 +15,11 @@ const empty: CourseAgenda = {
   courseId: "c",
   ranked: [],
   dueToday: [],
+  heldForNext: [],
   dueTomorrow: [],
   quickReviewDue: false,
+  nextQuickDay: null,
   deepReview: { due: false, dueDay: null, tomorrow: false, candidates: 0 },
-  study: [],
 };
 
 test("nothing due, no cards", () => {
@@ -30,26 +31,18 @@ test("quick review shows its size and the top reason", () => {
   assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title, c.detail]), [["quick", "today", "Quick review · 10 min", "2 objectives due · Not mastered yet: 1 of 3 correct"]]);
 });
 
-test("deep review today or tomorrow, study items, re-quizzes and tomorrow's checks", () => {
+test("deep review today or tomorrow and tomorrow's checks", () => {
   const cards = todoCards(
     {
       ...empty,
       deepReview: { due: true, dueDay: "2026-10-05", tomorrow: false, candidates: 2 },
-      study: [
-        { objectiveId: "a", topicId: "t", sessionId: "s", day: "2026-10-04", missedQuestionIds: ["q1", "q2"], requiz: "today" },
-        { objectiveId: "b", topicId: "t", sessionId: "s2", day: "2026-10-05", missedQuestionIds: ["q3"], requiz: "tomorrow" },
-      ],
       dueTomorrow: [ranked("c", "t2", ""), ranked("d", "t2", "")],
     },
     DEFAULT_CONFIG,
     names,
   );
   assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title]), [
-    ["deep", "today", "Deep review"],
-    ["study", "today", "Review: Obj a"],
-    ["study", "today", "Review: Obj b"],
-    ["requiz", "today", "Re-quiz · 1 objective"],
-    ["requiz", "tomorrow", "Re-quiz · 1 objective"],
+    ["deep", "today", "Dive in"],
     ["checks", "tomorrow", "Topic t2 · 2 checks"],
   ]);
   const tomorrow = todoCards({ ...empty, deepReview: { due: false, dueDay: "2026-10-06", tomorrow: true, candidates: 1 } }, DEFAULT_CONFIG, names);

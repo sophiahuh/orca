@@ -10,11 +10,13 @@
  * or records why it failed (failed). The browser follows the row through Realtime. Pages come from
  * `material_pages` only: the stored file is never read again here.
  */
-import type { Course, Material, MaterialPages, PipelineRun } from "../data.ts";
+import type { Course, FlaggedQuestion, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
-import { runTopUp } from "../pipeline/topup.ts";
+import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
+import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
+import { DEEP_RULES, deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
 import type { BudgetVerdict } from "./budget.ts";
 
@@ -43,8 +45,12 @@ export interface JobStore {
   materials(courseId: string): Promise<Material[]>;
   /** Stored pages per material; a material with none is left out. */
   pages(materialIds: readonly string[]): Promise<Record<string, MaterialPages>>;
-  /** Every question the student has answered in the course. */
+  /** Store pages read from their images: transcribed (`vision`) or with their figures described (`figure`). */
+  savePages(materialId: string, pages: ReadonlyArray<{ n: number; text: string }>, source: "vision" | "figure"): Promise<void>;
+  /** Every question the student has answered in the course, or given a thumbs down (used either way). */
   answered(courseId: string): Promise<Set<string>>;
+  /** The course's thumbs-down questions, newest first, cleaned for question writing. */
+  flagged(courseId: string): Promise<FlaggedQuestion[]>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
   save(courseId: string, rows: StructureRows): Promise<void>;
 }
@@ -55,6 +61,8 @@ export interface JobDeps {
   newId: () => string;
   /** Render one slide of a material as an image for a figure question; null when it can't be. */
   renderFigure?: (material: Material, slide: number) => Promise<string | null>;
+  /** Render one page of a material whole, for reading a handwritten or scanned page; null when it can't be. */
+  renderPage?: (material: Material, page: number) => Promise<string | null>;
 }
 
 export type JobOutcome =
@@ -118,12 +126,35 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
     if (run.materialId !== job.materialId) throw new Error(`run ${run.id} is for another material`);
     const material = (await store.materials(run.courseId)).find((m) => m.id === job.materialId);
     if (!material) throw new Error("the material isn't in the course any more, or hasn't been read");
-    const pages = (await store.pages([material.id]))[material.id];
+    let pages = (await store.pages([material.id]))[material.id];
     if (!pages?.length) throw new Error("Orca found no text in this file to build from");
     const held = await heldByBudget(store, run.id, pages.length);
     if (held) return held;
     const loaded = await store.course(run.courseId);
     if (!loaded) throw new Error("the course is gone");
+    let kept: Array<{ n: number; reason: string }> = [];
+    // Pages read from their images first, and the new text stored (top-ups and dives read it too):
+    // handwritten or scanned pages written out, then typed slides' figures described. A page that
+    // can't be read keeps the file's own text.
+    const course = { name: loaded.course.name, short: loaded.course.short };
+    const passes = [
+      { marked: "needs-vision", done: "vision", run: transcribePages },
+      { marked: "needs-figure", done: "figure", run: describeFigures },
+    ] as const;
+    for (const pass of passes) {
+      const count = pages.filter((p) => p.source === pass.marked).length;
+      if (!count || !deps.renderPage) continue;
+      progress.write(pass.done === "vision" ? { stage: "transcribing", pages: count } : { stage: "figures-reading", slides: count });
+      const render = deps.renderPage;
+      const out = await pass.run({ course, material, pages }, { call: deps.call, render: (n) => render(material, n) });
+      kept = [...kept, ...out.kept];
+      if (out.read.length) {
+        await store.savePages(material.id, out.read, pass.done);
+        const read = new Map(out.read.map((p) => [p.n, p.text]));
+        pages = pages.map((p) => (read.has(p.n) ? { n: p.n, text: read.get(p.n)!, source: pass.done } : p));
+      }
+    }
+    if (kept.length || pages.some((p) => p.source === "vision" || p.source === "figure")) progress.write({ stage: "mapping" });
     const before = loaded.structure;
     const plan = await runUpload(
       {
@@ -134,6 +165,7 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         material,
         pages,
         ...(material.hiddenText ? { hiddenText: material.hiddenText } : {}),
+        flagged: await store.flagged(run.courseId),
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -145,6 +177,8 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         onProgress: progress.write,
       },
     );
+    // Pages that couldn't be read from their images are listed with what was left out.
+    for (const k of kept) plan.run.dropped.push({ prompt: `Page ${k.n}`, reason: `kept the file's own text: ${k.reason}` });
     const merged = applyUploadPlan(before, plan);
     const after: StructureState = { ...merged, topics: laidOut(merged.topics) };
     await progress.flushed();
@@ -183,6 +217,7 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
         materialPages,
         objectiveIds,
         answered,
+        flagged: await store.flagged(run.courseId),
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -197,5 +232,78 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
   } catch (e) {
     await progress.flushed();
     return failed(store, run.id, "Orca couldn't write new questions", e);
+  }
+}
+
+/** Write a durable Dive In's harder questions, then atomically save its questions and completed run. */
+export async function deepReview(deps: JobDeps, job: { runId: string; objectiveIds: readonly string[]; minutes: number }): Promise<JobOutcome> {
+  const { store } = deps;
+  const begun = await begin(store, job.runId, "deep-review", { stage: "writing", objectives: job.objectiveIds.length });
+  if ("outcome" in begun) return begun.outcome;
+  const { run } = begun;
+  try {
+    if (run.deepMinutes !== job.minutes) throw new Error("the Dive In's saved duration doesn't match its job");
+    const loaded = await store.course(run.courseId);
+    if (!loaded) throw new Error("the course is gone");
+    const before = loaded.structure;
+    const objectiveIds = job.objectiveIds.filter((id) => before.objectives[id]);
+    if (!objectiveIds.length) throw new Error("none of this Dive In's objectives are still in the course");
+    // No more than its objectives can hold (DEEP_RULES.maxPerObjective each), so a stock that already
+    // fills them doesn't send the model to write questions nothing would ask.
+    const count = Math.min(deepQuestionCount(job.minutes), objectiveIds.length * DEEP_RULES.maxPerObjective);
+    // Dive questions written before and never answered are asked first; only the rest are written.
+    const reused = unansweredDeepQuestions({ objectives: before.objectives, bank: before.bank, objectiveIds, count }, await store.answered(run.courseId));
+    const toWrite = count - reused.length;
+    let plan: Awaited<ReturnType<typeof runDeepReview>> = { questions: {}, dropped: [], skipped: [] };
+    if (toWrite > 0) {
+      const held = await heldByBudget(store, run.id, 0);
+      if (held) return held;
+      const materials = await store.materials(run.courseId);
+      const materialPages = await store.pages(materials.map((m) => m.id));
+      plan = await runDeepReview(
+        { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite, flagged: await store.flagged(run.courseId) },
+        { call: deps.call, newId: deps.newId },
+      );
+    }
+    const written = Object.entries(plan.questions).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+    const added = [...reused, ...written];
+    if (!added.length) {
+      const why = plan.skipped[0]?.reason ?? plan.dropped[0]?.reason ?? "the model wrote no usable questions";
+      throw new Error(why);
+    }
+    const bank = { ...before.bank };
+    for (const [topicId, questions] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...questions];
+    // One question per urgent objective before another round, matching the original Dive In order.
+    const priority = new Map(job.objectiveIds.map((id, index) => [id, index]));
+    const seen = new Map<string, number>();
+    const orderedIds = added
+      .map(({ question }) => {
+        const objectiveId = question.objectiveId!;
+        const round = seen.get(objectiveId) ?? 0;
+        seen.set(objectiveId, round + 1);
+        return { id: question.id, round, priority: priority.get(objectiveId) ?? priority.size };
+      })
+      .sort((a, b) => a.round - b.round || a.priority - b.priority)
+      .map((question) => question.id);
+    const finished: PipelineRun = {
+      id: run.id,
+      kind: "deep-review",
+      courseId: run.courseId,
+      materialId: null,
+      at: run.at,
+      model: run.model,
+      deepMinutes: job.minutes,
+      status: "done",
+      topicsCreated: [],
+      objectivesCreated: [],
+      objectivesAttached: [...new Set(objectiveIds)],
+      questionsAdded: written.length,
+      questionIds: orderedIds,
+      dropped: [...plan.dropped, ...plan.skipped.map((s) => ({ prompt: `Objective \"${before.objectives[s.objectiveId]?.name ?? s.objectiveId}\"`, reason: `${SKIPPED_PREFIX}${s.reason}` }))],
+    };
+    await store.save(run.courseId, structureRows(before, { ...before, bank }, [finished]));
+    return { status: "done", run: finished };
+  } catch (e) {
+    return failed(store, run.id, "Orca couldn't prepare this Dive In", e);
   }
 }

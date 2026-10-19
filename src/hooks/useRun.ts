@@ -5,6 +5,7 @@ import type { PipelineRun } from "@/lib/data";
 import { runFromRow } from "@/lib/supabase/app-rows";
 import { browserSupabase } from "@/lib/supabase/browser";
 import { useOrca } from "@/lib/store";
+import { DEAD_RUN_MS } from "@/lib/jobs/start";
 
 /** A finished job: its run won't change again. */
 export const isFinished = (run: Pick<PipelineRun, "status"> | null | undefined) => run?.status === "done" || run?.status === "failed";
@@ -17,7 +18,10 @@ const POLL_MS = 5000;
  * Supabase Realtime (under row-level security, so only the student's own), read once when the
  * subscription is up and every few seconds as a backstop. When the run finishes, the store reads
  * everything again, so the job's topics, objectives and questions are on screen. Null while it's
- * unknown; `missing` when there is no such run (or it isn't the student's).
+ * unknown; `missing` when there is no such run (or it isn't the student's). A run still running past
+ * its job's limit has died (e.g. the server restarted): the server is asked once to check it
+ * (POST /api/runs/check, which judges by its own clock), so it shows as failed instead of building
+ * forever.
  */
 export function useRun(runId: string | null | undefined): { run: PipelineRun | null; missing: boolean } {
   const { refresh, runs } = useOrca();
@@ -28,12 +32,19 @@ export function useRun(runId: string | null | undefined): { run: PipelineRun | n
   useEffect(() => {
     if (!runId) return;
     let alive = true;
+    let checked = false;
     const db = browserSupabase();
     const read = async () => {
       const { data, error } = await db.from("pipeline_runs").select().eq("id", runId).maybeSingle();
       if (!alive || error) return;
-      if (!data) setMissing(true);
-      else setLive(runFromRow(data));
+      if (!data) return setMissing(true);
+      const run = runFromRow(data);
+      setLive(run);
+      if (!checked && pastLimit(run)) {
+        checked = true;
+        const res = await fetch("/api/runs/check", { method: "POST" }).catch(() => null);
+        if (alive && res?.ok) void read();
+      }
     };
     const channel = db
       .channel(`run-${runId}`)
@@ -62,4 +73,10 @@ export function useRun(runId: string | null | undefined): { run: PipelineRun | n
 
   // The store's copy once it has the finished run (with everything it built); the live row until then.
   return { run: isFinished(stored) ? stored! : (live ?? stored ?? null), missing: missing && !stored };
+}
+
+/** A run still running past its job's limit by this browser's clock, plus a minute of slack (the server decides). */
+function pastLimit(run: PipelineRun): boolean {
+  if (run.status !== "running" || !run.startedAt) return false;
+  return Date.now() - Date.parse(run.startedAt) > DEAD_RUN_MS[run.kind ?? "upload"] + 60_000;
 }

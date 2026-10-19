@@ -100,6 +100,7 @@ async function startApp(): Promise<{ url: string; stop: () => void }> {
       // Never a model: these routes don't call one, and nothing here may spend.
       ANTHROPIC_API_KEY: "",
       OPENAI_API_KEY: "",
+      ORCA_MODEL_PROVIDER: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,

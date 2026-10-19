@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import type { Course, QuizQuestion, SessionMode } from "@/lib/data";
+import type { Course, FeedbackReason, QuizQuestion, SessionMode } from "@/lib/data";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { EvidenceSource, Grader, Outcome } from "@/lib/mastery/types";
 import { useDayKey, useMasteryByCourse, useOrca, useStreak, useTodos } from "@/lib/store";
@@ -24,6 +24,8 @@ import { ShortAnswer } from "@/components/quiz/ShortAnswer";
 import { type GradeResult, gradeExact } from "@/lib/grading";
 import { useServerStatus } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
+import { goBack } from "@/lib/nav-history";
+import { RateAnswered, RateUnanswered } from "./RateQuestion";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { Pill } from "@/components/review/parts";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -48,6 +50,8 @@ export interface QuizRunnerProps {
   backHref: string;
   /** An end-card button that starts another session of the same kind (deep review). */
   again?: { label: string; onStart: () => void };
+  /** Another question for the same objective, not one of `exclude`, to ask in place of a thumbs-down one; null when there's none. */
+  replacementFor?: (item: RunnerItem, exclude: ReadonlySet<string>) => RunnerItem | null;
 }
 
 /**
@@ -55,10 +59,10 @@ export interface QuizRunnerProps {
  * answer, records one evidence event per graded answer, records the finished session, then tops up
  * the stock for the objectives it asked about.
  */
-export function QuizRunner({ course, items: allItems, mode, title, backHref, again }: QuizRunnerProps) {
+export function QuizRunner({ course, items: firstItems, mode, title, backHref, again, replacementFor }: QuizRunnerProps) {
   const router = useRouter();
   const streak = useStreak();
-  const { recordQuiz, recordEvidence, objectives } = useOrca();
+  const { recordQuiz, recordEvidence, objectives, feedback, rateQuestion } = useOrca();
   const masteryByCourse = useMasteryByCourse();
   const todos = useTodos();
   const dayKey = useDayKey();
@@ -67,6 +71,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const serverModel = serverStatus === undefined ? undefined : serverStatus.serverModel;
   const topUp = useTopUp(serverModel);
   const catalogue = objectives[course.id];
+  // Every item, plus replacements for thumbs-down questions as they come in.
+  const [allItems, setAllItems] = useState<RunnerItem[]>(firstItems);
   // null = every item; a list = the "review misses" subset.
   const [subset, setSubset] = useState<RunnerItem[] | null>(null);
   const items = subset ?? allItems;
@@ -75,6 +81,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const [selected, setSelected] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
   const [grading, setGrading] = useState(false);
+  /** Kept here for Deep Review, whose Check button lives in the footer. */
+  const [deepResponse, setDeepResponse] = useState("");
   const [grade, setGrade] = useState<GradeResult | null>(null);
   /** The objective's display percent before the answer was recorded (Figma: Your mastery, 60% → 52%). */
   const [before, setBefore] = useState(0);
@@ -83,6 +91,8 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   const [correct, setCorrect] = useState(0);
   /** Answers that couldn't be graded (a grading outage): no evidence, and not in the score either. */
   const [ungraded, setUngraded] = useState(0);
+  /** Questions skipped without an answer: they record nothing and stay out of the score. */
+  const [skipped, setSkipped] = useState(0);
   const [missed, setMissed] = useState<RunnerItem[]>([]);
   const [finished, setFinished] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -99,28 +109,31 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     return () => window.clearInterval(id);
   }, [finished]);
 
-  // Persist the result exactly once when the set completes. Ungraded answers are left out of the
-  // score (a grading outage would otherwise make every quiz look poor and queue re-quizzes); a set
-  // with nothing graded records no session at all.
+  // Persist the result exactly once when the set completes. Ungraded answers and skipped questions
+  // are left out of the score (a grading outage or a skip would otherwise make the quiz look poor and
+  // queue re-quizzes); a set with nothing graded, all skipped included, records no session at all.
   useEffect(() => {
     if (!finished || recorded.current) return;
     recorded.current = true;
     sessionId.current ??= crypto.randomUUID();
-    const total = questions.length - ungraded;
+    const total = questions.length - ungraded - skipped;
     if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
-  }, [finished, course, mode, allItems, correct, ungraded, questions.length, seconds, recordQuiz]);
+  }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz]);
 
-  // Then top up the stock for the objectives this run asked about (waits for the server-model check).
+  // Then write more questions for the objectives this run asked about that the student is still
+  // working on (waits for the server-model check); a mastered one gets none until it fades.
   const { start: startTopUp } = topUp;
   useEffect(() => {
     if (!finished) return;
+    const states = masteryByCourse[course.id]?.objectives;
     const ids = allItems.flatMap((i) => {
       const o = liveObjectiveOf(i.question, i.topicId, catalogue ?? {});
-      return o ? [o.id] : [];
+      const status = o ? states?.get(o.id)?.status : undefined;
+      return o && status !== "mastered" && status !== "retired" ? [o.id] : [];
     });
     // The session id was set when the result was recorded (the effect above).
-    if (sessionId.current) startTopUp(course.id, sessionId.current, ids);
-  }, [finished, allItems, catalogue, course.id, startTopUp]);
+    if (sessionId.current && ids.length) startTopUp(course.id, sessionId.current, ids);
+  }, [finished, allItems, catalogue, course.id, startTopUp, masteryByCourse]);
 
   const item = items[index];
   const q = item?.question;
@@ -227,9 +240,40 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     [q, checked, grading, settle],
   );
 
+  /**
+   * A thumbs down before answering: the rating is saved, the question is skipped without being
+   * offered again in "review missed" (nothing is recorded), and another question for the same
+   * objective comes next when the stock has one.
+   */
+  const skipBad = useCallback(
+    (reason: FeedbackReason | null, note: string | null) => {
+      if (!item) return;
+      rateQuestion(course.id, item.question.id, "down", reason, note);
+      const replacement = !subset && replacementFor ? replacementFor(item, new Set(allItems.map((i) => i.question.id))) : null;
+      if (replacement) setAllItems((xs) => [...xs.slice(0, index + 1), replacement, ...xs.slice(index + 1)]);
+      setSkipped((n) => n + 1);
+      if (index + 1 >= total + (replacement ? 1 : 0)) {
+        setFinished(true);
+        window.scrollTo(0, 0);
+        return;
+      }
+      setIndex((i) => i + 1);
+      setSelected(null);
+      setChecked(false);
+      setGrade(null);
+      setDeepResponse("");
+      bodyRef.current?.scrollTo({ top: 0 });
+    },
+    [item, subset, replacementFor, allItems, index, total, rateQuestion, course.id],
+  );
+
   const advance = useCallback(() => {
     if (!item) return;
-    if (!checked) setMissed((m) => [...m, item]); // skipped counts as a miss
+    if (!checked) {
+      // Skipped: offered again in "review missed", but no answer is recorded and it isn't scored.
+      setMissed((m) => [...m, item]);
+      setSkipped((n) => n + 1);
+    }
     if (index + 1 >= total) {
       setFinished(true);
       window.scrollTo(0, 0);
@@ -239,6 +283,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     setSelected(null);
     setChecked(false);
     setGrade(null);
+    setDeepResponse("");
     bodyRef.current?.scrollTo({ top: 0 });
   }, [checked, index, total, item]);
 
@@ -274,6 +319,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
     setGrade(null);
     setCorrect(0);
     setUngraded(0);
+    setSkipped(0);
     setMissed([]);
     setFinished(false);
     setSeconds(0);
@@ -287,13 +333,14 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
         topicName={title}
         extra={<TopUpNote status={topUp.status} />}
         correct={correct}
-        total={total - ungraded}
+        total={total - ungraded - skipped}
+        skipped={skipped}
         seconds={seconds}
         streak={streak}
-        onContinue={() => router.push(backHref)}
+        onContinue={() => goBack(router, backHref)}
         onReview={missed.length ? () => restart(missed) : undefined}
         again={again}
-        onClose={() => router.push(backHref)}
+        onClose={() => goBack(router, backHref)}
       />
     );
   }
@@ -313,13 +360,13 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
   };
   const outcomeShown: Outcome = q.kind === "Short answer" ? (grade?.outcome ?? "incorrect") : selected === q.answer ? "correct" : "incorrect";
   const suggestedCard = todos.find((t) => t.courseId === course.id && t.when === "today");
-  const suggested = suggestedCard ? { course: course.short, title: suggestedCard.title, detail: suggestedCard.detail, href: todoHref(suggestedCard, course), kind: suggestedCard.kind } : null;
+  const suggested = suggestedCard ? { course: course.name, title: suggestedCard.title, detail: suggestedCard.detail, href: todoHref(suggestedCard, course), kind: suggestedCard.kind } : null;
 
   return (
     <Screen bg="parchment" className="h-screen-below-bar max-h-screen-below-bar">
       <ResultBanner outcome={checked ? banner.outcome : null} line={banner.line} nonce={banner.nonce} />
       <header className="flex shrink-0 items-center gap-[24px] px-[40px] pt-[28px]">
-        <RoundButton size={48} label="Exit quiz" onClick={() => router.push(backHref)}>
+        <RoundButton size={48} label="Exit quiz" onClick={() => goBack(router, backHref)}>
           <IconClose size={20} />
         </RoundButton>
         <div className="max-w-[880px] flex-1">
@@ -333,22 +380,18 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
       <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[100px] pb-[24px] pt-[32px]">
         <AnimatePresence mode="wait">
           <motion.div key={q.id} variants={stagger(0.05, 0.07)} initial="hidden" animate="show" exit="exit" className="flex max-w-[800px] flex-col">
-            <motion.div variants={fadeUp} className="flex items-center gap-[10px]">
-              <span className="eyebrow">
-                {q.kind}{q.tier ? ` · ${q.tier}` : ""} · {q.topic}
-              </span>
-              {liveObjectiveOf(q, item.topicId, catalogue ?? {})?.review === "proposed" && (
+            {liveObjectiveOf(q, item.topicId, catalogue ?? {})?.review === "proposed" && (
+              <motion.div variants={fadeUp} className="mb-[10px] flex">
                 <Pill tone="strong" className="normal-case">
                   Unreviewed
                 </Pill>
-              )}
-            </motion.div>
-            {item.notes.length > 0 && (
-              <motion.p variants={fadeUp} data-part="question-notes" className="mt-[6px] text-[14px] font-medium text-wisteria-deep">
-                {item.notes.join(" · ")}
-              </motion.p>
+              </motion.div>
             )}
-            <motion.h1 variants={fadeUp} className="mt-[10px] text-[34px] font-bold leading-tight text-prussian">
+            <motion.h1
+              variants={fadeUp}
+              className={q.deep ? "whitespace-pre-line text-[18px] font-bold leading-[1.55] text-prussian" : "text-[34px] font-bold leading-tight text-prussian"}
+              data-part={q.deep ? "deep-question-prompt" : "question-prompt"}
+            >
               {q.prompt}
             </motion.h1>
 
@@ -373,6 +416,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
                   result={grade}
                   noModel={noModel}
                   selfMarkNow={gradingOff !== null}
+                  {...(q.deep ? { value: deepResponse, onValueChange: setDeepResponse, hideCheck: true } : {})}
                   onSubmit={(r) => void submitShort(r)}
                   onSelfReport={(ok) =>
                     settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." }, "self")
@@ -404,6 +448,7 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
                 />
               )}
             </AnimatePresence>
+            {checked && <RateAnswered key={q.id} rating={feedback[q.id]} onRate={(rating, reason, note) => rateQuestion(course.id, q.id, rating, reason ?? null, note ?? null)} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -414,14 +459,34 @@ export function QuizRunner({ course, items: allItems, mode, title, backHref, aga
             {correct} correct so far · <span className="text-periwinkle-deep">Enter to continue</span>
           </span>
         ) : (
-          <Button variant="ghost" size="sm" onClick={advance}>
-            Skip
-          </Button>
+          <div className="flex items-center gap-[12px]">
+            <Button variant="ghost" size="sm" onClick={advance}>
+              Skip
+            </Button>
+            <RateUnanswered key={q.id} onDown={skipBad} />
+          </div>
         )}
         {checked ? (
           <Button size="sm" onClick={advance}>
             {index + 1 >= total ? "Finish" : "Continue"}
           </Button>
+        ) : q.kind === "Short answer" && q.deep ? (
+          // A dive's Check sits here, across from Skip. Once the answer is being self-marked (no AI to
+          // grade it), the card shows the key and the self-report buttons instead.
+          gradingOff !== null && !q.exact?.length ? null : (
+            <Button
+              size="sm"
+              data-part="deep-check"
+              onClick={() => {
+                if (!deepResponse.trim()) return;
+                if (!q.exact?.length && noModel !== null) setGradingOff("no AI connected");
+                else void submitShort(deepResponse);
+              }}
+              disabled={!deepResponse.trim() || grading}
+            >
+              {grading ? "Checking…" : "Check"}
+            </Button>
+          )
         ) : q.kind === "Short answer" ? (
           <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
         ) : (

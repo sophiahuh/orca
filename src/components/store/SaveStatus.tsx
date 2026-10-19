@@ -44,7 +44,7 @@ export function SaveStatus() {
 export function LoadFailed() {
   const { loadError, reload } = useOrca();
   return (
-    <Screen bg="alice" className="items-center justify-center px-[16px]">
+    <Screen bg="ocean" className="items-center justify-center px-[16px]">
       <OrcaLogo width={72} shadow={false} />
       <Card className="mt-[24px] flex w-[520px] max-w-full flex-col items-start gap-[12px] px-[32px] py-[28px]">
         <h1 className="text-[28px] font-semibold text-prussian">Orca couldn&apos;t load your courses</h1>
