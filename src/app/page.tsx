@@ -18,8 +18,9 @@ export default function HomePage() {
       <KnowledgeMap courses={courses} dueCount={dueCount} />
 
       {hydrated && courses.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[8px] text-center">
-          <p className="text-[22px] font-bold text-prussian">No islands yet.</p>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-[8px] text-center" data-part="no-islands">
+          <OrcaLogo width={110} swim />
+          <p className="mt-[8px] text-[22px] font-bold text-prussian">No islands yet.</p>
           <p className="text-[16px] text-wisteria-deep">Add a course, then upload its slides to map its topics.</p>
         </div>
       )}
