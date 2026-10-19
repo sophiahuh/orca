@@ -26,7 +26,7 @@ export default function NewCoursePage() {
   };
 
   return (
-    <Screen bg="ocean">
+    <Screen bg="ocean" className="overflow-y-auto">
       <header className="px-[28px] pt-[28px]">
         <BackButton />
       </header>
@@ -38,7 +38,7 @@ export default function NewCoursePage() {
         }}
         className="relative flex flex-1"
       >
-        <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="z-10 flex w-[560px] max-w-full flex-col px-[72px] pb-[48px] pt-[72px] lg:px-[100px]">
+        <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="z-10 flex w-[560px] max-w-full flex-col px-[72px] pb-[120px] pt-[40px] lg:px-[100px]">
           <motion.span variants={fadeUp} className="eyebrow">
             New island
           </motion.span>
@@ -75,10 +75,11 @@ export default function NewCoursePage() {
 
         <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[620px] md:block" aria-hidden>
           <Wave tone="light" x={20} y={120} width={70} seed={1} />
-          <Wave tone="light" x={80} y={620} width={60} seed={2} />
-          <motion.div variants={popIn} initial="hidden" animate="show" className="absolute" style={{ left: 60, top: 150 }}>
-            <Island variant="ald" level="growing" scale={2.1} float seed={2} />
-            <div className="absolute left-[294px] -translate-x-1/2" style={{ top: 420 }}>
+          <Wave tone="light" x={80} y={560} width={60} seed={2} />
+          {/* Sized and placed to leave the label clear of the bottom edge, with room to spare on shorter windows. */}
+          <motion.div variants={popIn} initial="hidden" animate="show" className="absolute" style={{ left: 70, top: 64 }}>
+            <Island variant="ald" level="growing" scale={1.9} float seed={2} />
+            <div className="absolute left-[266px] -translate-x-1/2" style={{ top: 380 }}>
               <LabelPill interactive={false} className="text-[16px]">
                 {trimmed || "Your course"}
               </LabelPill>
