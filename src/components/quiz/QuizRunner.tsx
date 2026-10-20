@@ -520,9 +520,9 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
           // grade it), the card shows the key and the self-report buttons instead.
           gradingOff !== null && !q.exact?.length ? null : (
             <span className="flex items-center gap-[12px]">
-              <Button variant="ghost" size="sm" onClick={dontKnow} disabled={grading} data-part="dont-know">
+              <button type="button" onClick={dontKnow} disabled={grading} data-part="dont-know" className="text-[15px] font-bold text-wisteria-deep hover:underline disabled:opacity-50">
                 Don&apos;t know
-              </Button>
+              </button>
               <Button
               size="sm"
               data-part="deep-check"
@@ -539,16 +539,16 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
           )
         ) : q.kind === "Short answer" ? (
           <span className="flex items-center gap-[12px]">
-            <Button variant="ghost" size="sm" onClick={dontKnow} disabled={grading} data-part="dont-know">
+            <button type="button" onClick={dontKnow} disabled={grading} data-part="dont-know" className="text-[15px] font-bold text-wisteria-deep hover:underline disabled:opacity-50">
               Don&apos;t know
-            </Button>
+            </button>
             <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
           </span>
         ) : (
           <span className="flex items-center gap-[12px]">
-            <Button variant="ghost" size="sm" onClick={dontKnow} data-part="dont-know">
+            <button type="button" onClick={dontKnow} disabled={grading} data-part="dont-know" className="text-[15px] font-bold text-wisteria-deep hover:underline disabled:opacity-50">
               Don&apos;t know
-            </Button>
+            </button>
             <Button size="sm" onClick={check} disabled={selected === null}>
               Check
             </Button>
