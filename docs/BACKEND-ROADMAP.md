@@ -156,6 +156,10 @@ For each upload:
    question-writing call (upload, top-up, dive) gets the course's recent thumbs-downs (question,
    reason, note) as a `student_feedback` data block: up to 6 on its own objectives, 4 from the rest
    (`src/lib/pipeline/flagged.ts`); a note that screens as an instruction to an AI is dropped.
+   *Resumable sessions (owner, 2026-10-19):* a quick review or dive saves its progress after every
+   question (`session_progress`: the questions, position, score and misses so far); reopening it
+   within a day asks "Pick up where you left off?". Resume keeps the session id, so it's recorded as
+   one session. Plan: `docs/superpowers/plans/2026-10-19-resume-sessions.md`.
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
