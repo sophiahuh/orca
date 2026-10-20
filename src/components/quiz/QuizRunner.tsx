@@ -26,6 +26,7 @@ import { useServerStatus } from "@/hooks/useServerModel";
 import { type TopUpStatus, useTopUp } from "@/hooks/useTopUp";
 import { goBack } from "@/lib/nav-history";
 import { RateAnswered, RateUnanswered } from "./RateQuestion";
+import { shuffleChoices } from "@/lib/shuffle-choices";
 import { QuizEnd } from "@/components/quiz/QuizEnd";
 import { Pill } from "@/components/review/parts";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -75,8 +76,9 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   const serverModel = serverStatus === undefined ? undefined : serverStatus.serverModel;
   const topUp = useTopUp(serverModel);
   const catalogue = objectives[course.id];
-  // Every item, plus replacements for thumbs-down questions as they come in.
-  const [allItems, setAllItems] = useState<RunnerItem[]>(firstItems);
+  // Every item, plus replacements for thumbs-down questions as they come in. Multiple-choice options
+  // are put in a random order once per session, so the answer's position gives nothing away.
+  const [allItems, setAllItems] = useState<RunnerItem[]>(() => firstItems.map((i) => ({ ...i, question: shuffleChoices(i.question) })));
   // null = every item; a list = the "review misses" subset.
   const [subset, setSubset] = useState<RunnerItem[] | null>(null);
   const items = subset ?? allItems;
@@ -284,7 +286,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
       if (!item) return;
       rateQuestion(course.id, item.question.id, "down", reason, note);
       const replacement = !subset && replacementFor ? replacementFor(item, new Set(allItems.map((i) => i.question.id))) : null;
-      if (replacement) setAllItems((xs) => [...xs.slice(0, index + 1), replacement, ...xs.slice(index + 1)]);
+      if (replacement) setAllItems((xs) => [...xs.slice(0, index + 1), { ...replacement, question: shuffleChoices(replacement.question) }, ...xs.slice(index + 1)]);
       setSkipped((n) => n + 1);
       if (index + 1 >= total + (replacement ? 1 : 0)) {
         setFinished(true);
