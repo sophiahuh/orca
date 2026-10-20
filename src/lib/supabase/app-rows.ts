@@ -21,6 +21,7 @@ import type {
   ObjectiveSignal,
   PipelineRun,
   QuestionRating,
+  SessionProgress,
   QuizQuestion,
   QuizResult,
   Relation,
@@ -410,6 +411,7 @@ export interface MyData {
   exams: Row<"exams">[];
   /** Older databases (before the feedback migration) don't send it. */
   question_feedback?: Row<"question_feedback">[];
+  session_progress?: Row<"session_progress">[];
   evidence: EvidenceRow[];
   snapshots: SnapshotRow[];
 }
@@ -437,6 +439,8 @@ export interface LoadedState {
   exams: Exam[];
   /** questionId → the student's rating of it. */
   feedback: Record<string, QuestionRating>;
+  /** `${courseId}:${kind}` → an unfinished session. */
+  progress: Record<string, SessionProgress>;
   evidence: EvidenceEvent[];
   snapshots: SnapshotRow[];
 }
@@ -493,7 +497,47 @@ export function loadedState(d: MyData): LoadedState {
     events: d.calendar.map(calendarFromRow),
     exams: d.exams.map(examFromRow),
     feedback: Object.fromEntries((d.question_feedback ?? []).map((r) => [r.question_id, { courseId: r.course_id, rating: r.rating as QuestionRating["rating"], reason: (r.reason as FeedbackReason | null) ?? null, note: r.note ?? null }])),
+    progress: Object.fromEntries((d.session_progress ?? []).map((r) => [progressKey(r.course_id, r.kind as SessionProgress["kind"]), progressFromRow(r)])),
     evidence: d.evidence.map(eventFromRow),
     snapshots: d.snapshots,
+  };
+}
+
+/** Where a course's unfinished session of one kind is kept. */
+export function progressKey(courseId: string, kind: SessionProgress["kind"]): string {
+  return `${courseId}:${kind}`;
+}
+
+export function progressFromRow(r: Row<"session_progress">): SessionProgress {
+  return {
+    courseId: r.course_id,
+    kind: r.kind as SessionProgress["kind"],
+    sessionId: r.session_id,
+    items: r.items as unknown as SessionProgress["items"],
+    position: r.position,
+    correct: r.correct,
+    skipped: r.skipped,
+    ungraded: r.ungraded,
+    missed: r.missed,
+    seconds: r.seconds,
+    title: r.title,
+    updatedAt: new Date(r.updated_at).toISOString(),
+  };
+}
+
+export function progressToRow(p: SessionProgress) {
+  return {
+    course_id: p.courseId,
+    kind: p.kind,
+    session_id: p.sessionId,
+    items: p.items as unknown as NonNullable<Json>,
+    position: p.position,
+    correct: p.correct,
+    skipped: p.skipped,
+    ungraded: p.ungraded,
+    missed: p.missed,
+    seconds: p.seconds,
+    title: p.title.slice(0, 200),
+    updated_at: p.updatedAt,
   };
 }

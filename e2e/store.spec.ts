@@ -122,7 +122,9 @@ test("reloading in the middle of a session keeps the answers given, and the rest
   expect(s.results).toEqual([]);
 
   await page.reload();
-  // The session is assembled again from what's recorded: the two answers stay, nothing is re-asked blindly.
+  // The unfinished session is offered (resume.spec covers Resume); a new one is assembled again from
+  // what's recorded: the two answers stay, nothing is re-asked blindly.
+  await page.getByRole("button", { name: "Start a new one" }).click();
   const count = await page.getByText(/^1 \/ \d+$/).textContent();
   const total = Number(/\/ (\d+)/.exec(count ?? "")?.[1] ?? 0);
   expect(total).toBeGreaterThan(0);

@@ -36,6 +36,7 @@ import {
   type Exam,
   type FeedbackReason,
   type QuestionRating,
+  type SessionProgress,
   type Course,
   type IslandVariant,
   type Material,
@@ -67,7 +68,7 @@ import { laidOut } from "./course/layout";
 import { placeIslands } from "./course/islands";
 import { streakDays } from "./mastery/streak";
 import { browserSupabase } from "./supabase/browser";
-import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
+import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, progressKey, progressToRow, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
 import type { Json } from "./supabase/database.types";
@@ -80,6 +81,8 @@ interface OrcaState {
   exams: Exam[];
   /** questionId → the student's thumbs up or down; a thumbs-down question isn't asked again. */
   feedback: Record<string, QuestionRating>;
+  /** Unfinished sessions, by `progressKey(courseId, kind)`. */
+  progress: Record<string, SessionProgress>;
   materials: Material[];
   configs: Record<string, ReviewConfig>;
   weights: Record<string, Weights>;
@@ -123,6 +126,7 @@ const initialState: OrcaState = {
   events: [],
   exams: [],
   feedback: {},
+  progress: {},
   materials: [],
   configs: {},
   weights: {},
@@ -155,6 +159,8 @@ interface OrcaActions {
   addExam: (courseId: string, title: string, date: string, topicIds: string[]) => void;
   updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[] }) => void;
   removeExam: (id: string) => void;
+  /** Save an unfinished session's progress (after every question), or clear it (`null`, when it finishes or is abandoned). */
+  saveProgress: (courseId: string, kind: SessionProgress["kind"], progress: SessionProgress | null) => void;
   /** Thumbs up or down on a question (a later one replaces it); null clears it. */
   rateQuestion: (courseId: string, questionId: string, rating: QuestionRating["rating"] | null, reason?: FeedbackReason | null, note?: string | null) => void;
   clearWeightOverride: (courseId: string) => void;
@@ -580,6 +586,24 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  const saveProgress = useCallback<OrcaActions["saveProgress"]>(
+    (courseId, kind, progress) => {
+      const key = progressKey(courseId, kind);
+      setState((s) => {
+        const all = { ...s.progress };
+        if (progress) all[key] = progress;
+        else delete all[key];
+        return { ...s, progress: all };
+      });
+      save(async () => {
+        const db = browserSupabase();
+        if (!progress) return void must(await db.from("session_progress").delete().eq("course_id", courseId).eq("kind", kind));
+        must(await db.from("session_progress").upsert(progressToRow(progress), { onConflict: "owner_id,course_id,kind" }));
+      });
+    },
+    [save],
+  );
+
   const rateQuestion = useCallback<OrcaActions["rateQuestion"]>(
     (courseId, questionId, rating, reason = null, note = null) => {
       const down = rating === "down";
@@ -848,6 +872,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       updateExam,
       removeExam,
       rateQuestion,
+      saveProgress,
       setDefaults,
       addMaterial,
       recordQuiz,
@@ -864,7 +889,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, rateQuestion, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, setWeights, clearConfigOverride, clearWeightOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

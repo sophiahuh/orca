@@ -75,7 +75,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   `20261018110000_handwritten_type_30mb` (until then every PDF upload fails to store its pages, and
   the "Handwritten notes" type and files over 25 MB are refused), and `20261018120000_question_feedback`
   (until then the app's data load fails: `my_data()` reads the new table) and
-  `20261018130000_feedback_note` (the note on a thumbs down). Check with `npx supabase migration list --linked`
+  `20261018130000_feedback_note` (the note on a thumbs down) and `20261019090000_session_progress`
+  (unfinished sessions; `my_data()` reads it, so the data load fails until it's pushed). Check with `npx supabase migration list --linked`
   (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets

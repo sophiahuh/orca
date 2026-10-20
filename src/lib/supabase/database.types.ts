@@ -387,6 +387,25 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"session_progress": {
+                  Row: {
+                    "correct": number,"course_id": string,"items": NonNullable<Json>,"kind": string,"missed": (string)[],"owner_id": string,"position": number,"seconds": number,"session_id": string,"skipped": number,"title": string,"ungraded": number,"updated_at": string
+                  }
+                  Insert: {
+                    "correct"?: number,"course_id": string,"items": NonNullable<Json>,"kind": string,"missed"?: (string)[],"owner_id"?: string,"position": number,"seconds"?: number,"session_id": string,"skipped"?: number,"title": string,"ungraded"?: number,"updated_at"?: string
+                  }
+                  Update: {
+                    "correct"?: number,"course_id"?: string,"items"?: NonNullable<Json>,"kind"?: string,"missed"?: (string)[],"owner_id"?: string,"position"?: number,"seconds"?: number,"session_id"?: string,"skipped"?: number,"title"?: string,"ungraded"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "session_progress_course_id_owner_id_fkey"
+      columns: ["course_id","owner_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id","owner_id"]
+    }
+                  ]
                 },"session_results": {
                   Row: {
                     "correct": number,"course_id": string,"finished_at": string,"id": string,"mode": string,"owner_id": string,"seconds": number,"session_id": string,"topic_id": string | null,"total": number

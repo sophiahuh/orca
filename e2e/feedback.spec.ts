@@ -41,3 +41,11 @@ test("after answering, a thumbs up is saved; tapping it again clears it", async 
   const { data: evidence } = await student.db.from("evidence_events").select("kind");
   expect((evidence as Array<Pick<AnswerEvent, "kind">>).length).toBe(1);
 });
+
+test("Don't know counts as a wrong answer, recorded as the student's own, and shows the solution", async ({ page, student }) => {
+  await page.goto(`/session/${SLUG}?kind=quick`);
+  await expect(page.getByPlaceholder("Type your answer")).toBeEnabled();
+  await page.locator("[data-part=dont-know]").click();
+  await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
+  await expect.poll(async () => (await student.db.from("evidence_events").select("outcome, grader")).data).toEqual([{ outcome: "incorrect", grader: "self" }]);
+});
