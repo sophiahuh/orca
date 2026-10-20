@@ -28,9 +28,11 @@ export interface ShortAnswerProps {
   hideCheck?: boolean;
   onSubmit: (response: string) => void;
   onSelfReport: (correct: boolean) => void;
+  /** "Don't know", beside Check: the quiz counts it as a miss. */
+  onDontKnow?: () => void;
 }
 
-export function ShortAnswer({ question, grading, result, noModel, selfMarkNow = false, value: controlledValue, onValueChange, hideCheck = false, onSubmit, onSelfReport }: ShortAnswerProps) {
+export function ShortAnswer({ question, grading, result, noModel, selfMarkNow = false, value: controlledValue, onValueChange, hideCheck = false, onSubmit, onSelfReport, onDontKnow }: ShortAnswerProps) {
   const [localValue, setLocalValue] = useState("");
   const value = controlledValue ?? localValue;
   const setValue = (next: string) => {
@@ -108,6 +110,11 @@ export function ShortAnswer({ question, grading, result, noModel, selfMarkNow = 
           <Button size="sm" onClick={submit} disabled={!value.trim() || grading}>
             {grading ? "Checking…" : "Check"}
           </Button>
+          {onDontKnow && (
+            <button type="button" onClick={onDontKnow} disabled={grading} data-part="dont-know" className="text-[15px] font-bold text-wisteria-deep hover:underline disabled:opacity-50">
+              Don&apos;t know
+            </button>
+          )}
         </div>
       )}
 

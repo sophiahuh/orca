@@ -463,6 +463,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
                   selfMarkNow={gradingOff !== null}
                   {...(q.deep ? { value: deepResponse, onValueChange: setDeepResponse, hideCheck: true } : {})}
                   onSubmit={(r) => void submitShort(r)}
+                  onDontKnow={dontKnow}
                   onSelfReport={(ok) =>
                     settle({ outcome: ok ? "correct" : "incorrect", feedback: ok ? "Marked as known." : "Marked as missed; it'll come back." }, "self")
                   }
@@ -538,12 +539,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
             </span>
           )
         ) : q.kind === "Short answer" ? (
-          <span className="flex items-center gap-[12px]">
-            <button type="button" onClick={dontKnow} disabled={grading} data-part="dont-know" className="text-[15px] font-bold text-wisteria-deep hover:underline disabled:opacity-50">
-              Don&apos;t know
-            </button>
-            <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
-          </span>
+          <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
         ) : (
           <span className="flex items-center gap-[12px]">
             <button type="button" onClick={dontKnow} disabled={grading} data-part="dont-know" className="text-[15px] font-bold text-wisteria-deep hover:underline disabled:opacity-50">
