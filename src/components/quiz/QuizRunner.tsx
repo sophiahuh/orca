@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import type { Course, FeedbackReason, QuizQuestion, SessionMode } from "@/lib/data";
+import type { Course, FeedbackReason, QuizQuestion, SessionMode, SessionProgress } from "@/lib/data";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { EvidenceSource, Grader, Outcome } from "@/lib/mastery/types";
 import { useDayKey, useMasteryByCourse, useOrca, useStreak, useTodos } from "@/lib/store";
@@ -52,6 +52,10 @@ export interface QuizRunnerProps {
   again?: { label: string; onStart: () => void };
   /** Another question for the same objective, not one of `exclude`, to ask in place of a thumbs-down one; null when there's none. */
   replacementFor?: (item: RunnerItem, exclude: ReadonlySet<string>) => RunnerItem | null;
+  /** Save the session's progress after every question under this kind (cleared when it finishes), so it can be resumed. */
+  progressKind?: SessionProgress["kind"];
+  /** Where an unfinished session left off (its items are `items`). */
+  resume?: { sessionId: string; index: number; correct: number; skipped: number; ungraded: number; missed: RunnerItem[]; seconds: number };
 }
 
 /**
@@ -59,10 +63,10 @@ export interface QuizRunnerProps {
  * answer, records one evidence event per graded answer, records the finished session, then tops up
  * the stock for the objectives it asked about.
  */
-export function QuizRunner({ course, items: firstItems, mode, title, backHref, again, replacementFor }: QuizRunnerProps) {
+export function QuizRunner({ course, items: firstItems, mode, title, backHref, again, replacementFor, progressKind, resume }: QuizRunnerProps) {
   const router = useRouter();
   const streak = useStreak();
-  const { recordQuiz, recordEvidence, objectives, feedback, rateQuestion } = useOrca();
+  const { recordQuiz, recordEvidence, objectives, feedback, rateQuestion, saveProgress } = useOrca();
   const masteryByCourse = useMasteryByCourse();
   const todos = useTodos();
   const dayKey = useDayKey();
@@ -77,7 +81,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   const [subset, setSubset] = useState<RunnerItem[] | null>(null);
   const items = subset ?? allItems;
   const questions = useMemo(() => items.map((i) => i.question), [items]);
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(resume?.index ?? 0);
   const [selected, setSelected] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
   const [grading, setGrading] = useState(false);
@@ -88,18 +92,47 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   const [before, setBefore] = useState(0);
   /** The result banner's outcome; the nonce restarts its timer for each answer. */
   const [banner, setBanner] = useState<{ outcome: Outcome; line: string | null; nonce: number }>({ outcome: "correct", line: null, nonce: 0 });
-  const [correct, setCorrect] = useState(0);
+  const [correct, setCorrect] = useState(resume?.correct ?? 0);
   /** Answers that couldn't be graded (a grading outage): no evidence, and not in the score either. */
-  const [ungraded, setUngraded] = useState(0);
+  const [ungraded, setUngraded] = useState(resume?.ungraded ?? 0);
   /** Questions skipped without an answer: they record nothing and stay out of the score. */
-  const [skipped, setSkipped] = useState(0);
-  const [missed, setMissed] = useState<RunnerItem[]>([]);
+  const [skipped, setSkipped] = useState(resume?.skipped ?? 0);
+  const [missed, setMissed] = useState<RunnerItem[]>(resume?.missed ?? []);
   const [finished, setFinished] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const startedAt = useRef<number | null>(null);
+  const [seconds, setSeconds] = useState(resume?.seconds ?? 0);
+  // A resumed session's clock carries on from its saved seconds.
+  const [resumedAt] = useState(() => (resume ? Date.now() - resume.seconds * 1000 : null));
+  const startedAt = useRef<number | null>(resumedAt);
   const bodyRef = useRef<HTMLDivElement>(null);
   const recorded = useRef(false);
-  const sessionId = useRef<string | null>(null);
+  const sessionId = useRef<string | null>(resume?.sessionId ?? null);
+  const secondsNow = useRef(seconds);
+  useEffect(() => {
+    secondsNow.current = seconds;
+  }, [seconds]);
+
+  // Save where the session is after every question, so leaving and coming back picks it up again
+  // (answers themselves are evidence, saved as they're graded). Not for "review missed" at the end.
+  useEffect(() => {
+    if (!progressKind || finished || subset) return;
+    const position = checked ? index + 1 : index;
+    if (position === 0 || position >= allItems.length) return;
+    sessionId.current ??= crypto.randomUUID();
+    saveProgress(course.id, progressKind, {
+      courseId: course.id,
+      kind: progressKind,
+      sessionId: sessionId.current,
+      items: allItems.map((i) => ({ questionId: i.question.id, topicId: i.topicId })),
+      position,
+      correct,
+      skipped,
+      ungraded,
+      missed: missed.map((i) => i.question.id),
+      seconds: secondsNow.current,
+      title,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [progressKind, finished, subset, checked, index, allItems, correct, skipped, ungraded, missed, title, course.id, saveProgress]);
 
   // Tick the clock while the quiz is live.
   useEffect(() => {
@@ -115,10 +148,11 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   useEffect(() => {
     if (!finished || recorded.current) return;
     recorded.current = true;
+    if (progressKind) saveProgress(course.id, progressKind, null);
     sessionId.current ??= crypto.randomUUID();
     const total = questions.length - ungraded - skipped;
     if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
-  }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz]);
+  }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz, progressKind, saveProgress]);
 
   // Then write more questions for the objectives this run asked about that the student is still
   // working on (waits for the server-model check); a mastered one gets none until it fades.
