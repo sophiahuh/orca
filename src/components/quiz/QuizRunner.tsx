@@ -277,6 +277,15 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   );
 
   /**
+   * "Don't know": a wrong answer, recorded as the student's own (grader "self"), so it counts fully as
+   * a miss (no credit, back to learning) without suggesting a mix-up; the solution shows as for any miss.
+   */
+  const dontKnow = useCallback(() => {
+    if (!item || checked || grading) return;
+    settle({ outcome: "incorrect", feedback: "You said you didn't know this one." }, "self");
+  }, [item, checked, grading, settle]);
+
+  /**
    * A thumbs down before answering: the rating is saved, the question is skipped without being
    * offered again in "review missed" (nothing is recorded), and another question for the same
    * objective comes next when the stock has one.
@@ -510,7 +519,11 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
           // A dive's Check sits here, across from Skip. Once the answer is being self-marked (no AI to
           // grade it), the card shows the key and the self-report buttons instead.
           gradingOff !== null && !q.exact?.length ? null : (
-            <Button
+            <span className="flex items-center gap-[12px]">
+              <Button variant="ghost" size="sm" onClick={dontKnow} disabled={grading} data-part="dont-know">
+                Don&apos;t know
+              </Button>
+              <Button
               size="sm"
               data-part="deep-check"
               onClick={() => {
@@ -521,14 +534,25 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
               disabled={!deepResponse.trim() || grading}
             >
               {grading ? "Checking…" : "Check"}
-            </Button>
+              </Button>
+            </span>
           )
         ) : q.kind === "Short answer" ? (
-          <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
+          <span className="flex items-center gap-[12px]">
+            <Button variant="ghost" size="sm" onClick={dontKnow} disabled={grading} data-part="dont-know">
+              Don&apos;t know
+            </Button>
+            <span className="text-[15px] font-medium text-periwinkle-deep">Enter to check</span>
+          </span>
         ) : (
-          <Button size="sm" onClick={check} disabled={selected === null}>
-            Check
-          </Button>
+          <span className="flex items-center gap-[12px]">
+            <Button variant="ghost" size="sm" onClick={dontKnow} data-part="dont-know">
+              Don&apos;t know
+            </Button>
+            <Button size="sm" onClick={check} disabled={selected === null}>
+              Check
+            </Button>
+          </span>
         )}
       </footer>
     </Screen>
