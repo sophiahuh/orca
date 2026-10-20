@@ -2,7 +2,8 @@
 
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { type Course, DEFAULT_CONFIG, type QuizQuestion, trailTopics } from "@/lib/data";
+import { type Course, DEFAULT_CONFIG, type QuizQuestion, type SessionProgress, trailTopics } from "@/lib/data";
+import { progressKey } from "@/lib/supabase/app-rows";
 import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import { reasonsOf } from "@/lib/mastery/priority";
@@ -49,11 +50,92 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
   return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}`} course={course} kind={kind} topicId={topicId} minutes={minutes} />;
 }
 
-/** Mounted once the store is loaded. A deep review asks for its length first and can be run again from its end card. */
+/** How long an unfinished session can be picked up again. */
+const RESUME_WITHIN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Mounted once the store is loaded. An unfinished session of this kind from the last day is offered
+ * first ("Pick up where you left off?"). A deep review asks for its length first and can be run
+ * again from its end card.
+ */
 function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind: Kind; topicId?: string; minutes?: number }) {
   const [round, setRound] = useState(0);
+  const { progress, saveProgress } = useOrca();
+  const saved = progress[progressKey(course.id, kind)];
+  // Decided once at mount: a session started now shouldn't flip to the prompt when it saves.
+  const [choice, setChoice] = useState<"ask" | "resume" | "new">(() => (saved && Date.now() - Date.parse(saved.updatedAt) < RESUME_WITHIN_MS ? "ask" : "new"));
+  const resumed = useResumed(course, saved);
+  if (choice !== "new" && saved && resumed) {
+    if (choice === "resume") {
+      return <QuizRunner course={course} items={resumed.items} mode={kind} title={saved.title} backHref={`/course/${course.slug}`} progressKind={kind} resume={resumed.resume} />;
+    }
+    return (
+      <ResumePrompt
+        title={saved.title}
+        done={resumed.resume.index}
+        total={resumed.items.length}
+        backHref={`/course/${course.slug}`}
+        onResume={() => setChoice("resume")}
+        onNew={() => {
+          saveProgress(course.id, kind, null);
+          setChoice("new");
+        }}
+      />
+    );
+  }
   if (kind === "deep") return <DeepReview key={round} course={course} topicId={topicId} startMinutes={minutes} onAgain={() => setRound((r) => r + 1)} />;
   return <QuickReview course={course} />;
+}
+
+/**
+ * An unfinished session's questions as they are now: removed ones are dropped (the position moves
+ * back for each one before it), and questions not reached yet that got a thumbs down since are left
+ * out. Null when nothing is left to ask.
+ */
+function useResumed(course: Course, saved: SessionProgress | undefined) {
+  const { questionBank, feedback } = useOrca();
+  const [out] = useState(() => {
+    if (!saved) return null;
+    const byId = new Map(Object.values(questionBank[course.id] ?? {}).flat().map((q) => [q.id, q]));
+    const items: RunnerItem[] = [];
+    let index = saved.position;
+    saved.items.forEach((it, i) => {
+      const question = byId.get(it.questionId);
+      const notYet = i >= saved.position;
+      if (!question || (notYet && feedback[it.questionId]?.rating === "down")) {
+        if (!notYet) index--;
+        return;
+      }
+      items.push({ question, topicId: it.topicId, notes: [] });
+    });
+    if (index >= items.length) return null;
+    const missed = saved.missed.flatMap((id) => items.filter((i) => i.question.id === id));
+    return { items, resume: { sessionId: saved.sessionId, index, correct: saved.correct, skipped: saved.skipped, ungraded: saved.ungraded, missed, seconds: saved.seconds } };
+  });
+  return out;
+}
+
+function ResumePrompt({ title, done, total, backHref, onResume, onNew }: { title: string; done: number; total: number; backHref: string; onResume: () => void; onNew: () => void }) {
+  return (
+    <Screen bg="ocean">
+      <header className="px-[28px] pt-[28px]">
+        <BackButton href={backHref} />
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-[14px] px-[28px] pb-[80px] text-center" data-part="resume-session">
+        <span className="eyebrow">{title}</span>
+        <h1 className="text-[34px] font-bold leading-tight text-prussian">Pick up where you left off?</h1>
+        <p className="text-[16px] font-medium text-wisteria-deep">
+          {done} of {total} questions done. Your answers so far are saved either way.
+        </p>
+        <div className="mt-[8px] flex gap-[12px]">
+          <Button onClick={onResume}>Resume</Button>
+          <Button variant="secondary" onClick={onNew}>
+            Start a new one
+          </Button>
+        </div>
+      </div>
+    </Screen>
+  );
 }
 
 /** What every session draws on, read from the store once at mount so the session doesn't change under the student. */
@@ -122,7 +204,7 @@ function QuickReview({ course }: { course: Course }) {
       : `Nothing to review in ${course.name} right now.`;
     return <NothingToDo course={course} message={message} onBack={() => goBack(router, backHref)} />;
   }
-  return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} replacementFor={replacementFor} />;
+  return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} replacementFor={replacementFor} progressKind="quick" />;
 }
 
 /**
@@ -190,7 +272,7 @@ function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course
     return <NothingToDo course={course} message={topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet: answer some questions first."} onBack={() => goBack(router, backHref)} />;
   }
   if (items) {
-    return <QuizRunner course={course} items={items} mode="deep" title={topicName ?? course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} />;
+    return <QuizRunner course={course} items={items} mode="deep" title={topicName ?? course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} progressKind="deep" />;
   }
   const writing = phase.kind === "starting" || (!!followedRunId && (!run || !isFinished(run) || (run.status === "done" && !items)));
   const error = phase.kind === "error" ? phase.message : run?.status === "failed" ? run.error ?? "Orca couldn't prepare your dive in." : null;
