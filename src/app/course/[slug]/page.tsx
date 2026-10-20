@@ -116,8 +116,8 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
               .map((u) => (
                 <FollowRun key={u.id} runId={u.id} />
               ))}
-            {/* Always there: the course's uploads (the page's Review tab holds what they need reviewed). The badge counts both. */}
-            <CountLink href={`/course/${course.slug}/review${uploading > 0 || toReview === 0 ? "?tab=uploads" : "?tab=review"}`} label="Uploads" count={uploading + toReview} countLabel={countLabel(uploading, toReview)} part="uploads-link" />
+            {/* Always there: the course's uploads. The badge counts only uploads still building (the page's Review tab counts what's to review). */}
+            <CountLink href={`/course/${course.slug}/review${uploading > 0 || toReview === 0 ? "?tab=uploads" : "?tab=review"}`} label="Uploads" count={uploading} countLabel={`${uploading} building`} part="uploads-link" />
           </motion.nav>
         </div>
       </motion.header>
@@ -168,9 +168,4 @@ function CountLink({ href, label, count, countLabel, part }: { href: string; lab
       {count > 0 && <span className="flex h-[20px] min-w-[20px] items-center justify-center rounded-pill bg-wisteria px-[6px] text-[11px] font-bold text-parchment">{count}</span>}
     </Link>
   );
-}
-
-/** What the Uploads badge counts, for screen readers: "1 building, 3 to review". */
-function countLabel(uploading: number, toReview: number): string {
-  return [uploading > 0 && `${uploading} building`, toReview > 0 && `${toReview} to review`].filter(Boolean).join(", ");
 }
