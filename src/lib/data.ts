@@ -190,6 +190,27 @@ export interface QuestionRating {
   note: string | null;
 }
 
+/** An unfinished quick review or dive, saved after every question so it can be resumed. */
+export interface SessionProgress {
+  courseId: string;
+  kind: "quick" | "deep";
+  sessionId: string;
+  /** Its questions in order. */
+  items: Array<{ questionId: string; topicId: string }>;
+  /** The next question to ask. */
+  position: number;
+  correct: number;
+  skipped: number;
+  ungraded: number;
+  /** Questions missed or skipped so far ("review missed" at the end). */
+  missed: string[];
+  seconds: number;
+  /** What the quiz is called (the course, or a dive's topic). */
+  title: string;
+  /** ISO time it was last saved. */
+  updatedAt: string;
+}
+
 /** A question the student gave a thumbs down, as question writing reads it (cleaned; see `flaggedForWriting`). */
 export interface FlaggedQuestion {
   /** Its objective (null when it had none). */
