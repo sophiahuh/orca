@@ -26,8 +26,8 @@ export interface GradeResult {
 
 /** Longest answer graded (decision 10); anything past it is cut before the call. */
 export const ANSWER_MAX_CHARS = 2000;
-/** Longest feedback shown; the schema asks the model for one sentence. */
-export const FEEDBACK_MAX_CHARS = 240;
+/** Longest feedback shown (a dive's answer has more ideas to comment on); longer feedback is cut at a sentence. */
+export const FEEDBACK_MAX_CHARS = 400;
 
 /** Lowercase, drop spaces/underscores/commas, unify quote-like primes, strip a trailing period. */
 export function normaliseExact(s: string) {
@@ -72,7 +72,9 @@ export const GradeSchema = z.object({
   outcome: z.enum(["correct", "partial", "incorrect"]),
   satisfied: z.array(z.string().max(500)).max(50).describe("Which required ideas the response satisfied, each exactly as the rubric lists it"),
   misconception: z.string().max(500).nullable().describe("The matched known misconception's description, exactly as listed, or null"),
-  feedback: z.string().max(FEEDBACK_MAX_CHARS).describe("One sentence for the student: what was right, what was missing"),
+  // No tight length limit here: OpenAI's strict format can't enforce one, and an over-long reply must
+  // not throw the whole grade away. `validateGrade` cuts it to FEEDBACK_MAX_CHARS at a sentence.
+  feedback: z.string().max(4000).describe("One or two sentences for the student: what was right, what was missing"),
 });
 
 /** The first line is fixed: e2e/fake-anthropic.ts recognises the grade step by it. */
@@ -112,6 +114,16 @@ ${untrustedBlock("student_answer", response)}
 Now grade the answer inside the data block against the rubric above. Output: {"outcome": "correct" | "partial" | "incorrect", "satisfied": string[], "misconception": string | null, "feedback": string}`;
 }
 
+/** Text cut to `max` characters at the last sentence end that fits (else the last word, with "…"). */
+export function shortened(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
+  const end = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "));
+  if (end > max / 3) return head.slice(0, end + 1);
+  return `${head.slice(0, head.lastIndexOf(" ") > 0 ? head.lastIndexOf(" ") : max - 1).trimEnd()}…`;
+}
+
 /**
  * What the model said, kept to what the rubric allows: `satisfied` only lists required ideas that
  * exist, `misconception` only a known one (else null), feedback sanitised and cut to a sentence's
@@ -122,7 +134,7 @@ export function validateGrade(result: GradeResult, rubric: AnswerRubric): GradeR
   const known = new Set(rubric.knownMisconceptions.map((m) => m.description.trim()));
   const satisfied = [...new Set((result.satisfied ?? []).map((s) => s.trim()).filter((s) => ideas.has(s)))];
   const misconception = result.misconception && known.has(result.misconception.trim()) ? result.misconception.trim() : null;
-  const feedback = sanitize(result.feedback ?? "", FEEDBACK_MAX_CHARS).text.replace(/\n+/g, " ") || FALLBACK_FEEDBACK[result.outcome];
+  const feedback = shortened(sanitize(result.feedback ?? "", 4000).text.replace(/\n+/g, " "), FEEDBACK_MAX_CHARS) || FALLBACK_FEEDBACK[result.outcome];
   return { outcome: result.outcome, satisfied, misconception, feedback };
 }
 
