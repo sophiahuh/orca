@@ -26,8 +26,8 @@ export interface GradeResult {
 
 /** Longest answer graded (decision 10); anything past it is cut before the call. */
 export const ANSWER_MAX_CHARS = 2000;
-/** Longest feedback shown (a dive's answer has more ideas to comment on); longer feedback is cut at a sentence. */
-export const FEEDBACK_MAX_CHARS = 400;
+/** How long the grader is asked to keep its feedback (said in the prompt and the reply format); a longer reply is still shown whole. */
+export const FEEDBACK_MAX_CHARS = 300;
 
 /** Lowercase, drop spaces/underscores/commas, unify quote-like primes, strip a trailing period. */
 export function normaliseExact(s: string) {
@@ -72,9 +72,9 @@ export const GradeSchema = z.object({
   outcome: z.enum(["correct", "partial", "incorrect"]),
   satisfied: z.array(z.string().max(500)).max(50).describe("Which required ideas the response satisfied, each exactly as the rubric lists it"),
   misconception: z.string().max(500).nullable().describe("The matched known misconception's description, exactly as listed, or null"),
-  // No tight length limit here: OpenAI's strict format can't enforce one, and an over-long reply must
-  // not throw the whole grade away. `validateGrade` cuts it to FEEDBACK_MAX_CHARS at a sentence.
-  feedback: z.string().max(4000).describe("One or two sentences for the student: what was right, what was missing"),
+  // The model is asked for under FEEDBACK_MAX_CHARS (here and in the prompt); a reply that runs a
+  // little over is kept whole, not thrown away or cut (owner, 2026-10-20). Only an absurd one is refused.
+  feedback: z.string().max(4000).describe(`One or two sentences for the student, under ${FEEDBACK_MAX_CHARS} characters: what was right, what was missing`),
 });
 
 /** The first line is fixed: e2e/fake-anthropic.ts recognises the grade step by it. */
@@ -85,6 +85,7 @@ Grade understanding, not wording (owner, 2026-10-20):
 - "correct" when a fair teaching assistant would give full marks for the answer as written: the core reasoning the question asks for is there and nothing in it is wrong. Short is fine; a missing detail the question didn't ask about is fine; extra correct detail never costs marks.
 - "partial" only when a substantive part of the reasoning the question asks for is missing or wrong, and "incorrect" when the core idea is missing or wrong.
 - For a "correct" answer, the feedback says what was right, without asking for more. For "partial", it names the one substantive thing that was missing.
+- Feedback is one or two sentences, under 300 characters.
 
 ${UNTRUSTED_POLICY}
 
@@ -114,16 +115,6 @@ ${untrustedBlock("student_answer", response)}
 Now grade the answer inside the data block against the rubric above. Output: {"outcome": "correct" | "partial" | "incorrect", "satisfied": string[], "misconception": string | null, "feedback": string}`;
 }
 
-/** Text cut to `max` characters at the last sentence end that fits (else the last word, with "…"). */
-export function shortened(text: string, max: number): string {
-  const t = text.trim();
-  if (t.length <= max) return t;
-  const head = t.slice(0, max);
-  const end = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "));
-  if (end > max / 3) return head.slice(0, end + 1);
-  return `${head.slice(0, head.lastIndexOf(" ") > 0 ? head.lastIndexOf(" ") : max - 1).trimEnd()}…`;
-}
-
 /**
  * What the model said, kept to what the rubric allows: `satisfied` only lists required ideas that
  * exist, `misconception` only a known one (else null), feedback sanitised and cut to a sentence's
@@ -134,7 +125,7 @@ export function validateGrade(result: GradeResult, rubric: AnswerRubric): GradeR
   const known = new Set(rubric.knownMisconceptions.map((m) => m.description.trim()));
   const satisfied = [...new Set((result.satisfied ?? []).map((s) => s.trim()).filter((s) => ideas.has(s)))];
   const misconception = result.misconception && known.has(result.misconception.trim()) ? result.misconception.trim() : null;
-  const feedback = shortened(sanitize(result.feedback ?? "", 4000).text.replace(/\n+/g, " "), FEEDBACK_MAX_CHARS) || FALLBACK_FEEDBACK[result.outcome];
+  const feedback = sanitize(result.feedback ?? "", 4000).text.replace(/\n+/g, " ").trim() || FALLBACK_FEEDBACK[result.outcome];
   return { outcome: result.outcome, satisfied, misconception, feedback };
 }
 

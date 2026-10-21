@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANSWER_MAX_CHARS, FEEDBACK_MAX_CHARS, GRADE_SYSTEM, GradeSchema, RubricSchema, cleanAnswer, gradeExact, gradePrompt, normaliseExact, shortened, validateGrade } from "../src/lib/grading.ts";
+import { ANSWER_MAX_CHARS, GRADE_SYSTEM, GradeSchema, RubricSchema, cleanAnswer, gradeExact, gradePrompt, normaliseExact, validateGrade } from "../src/lib/grading.ts";
 
 test("normaliseExact ignores case, spacing, middle dots and a trailing period", () => {
   assert.equal(normaliseExact(" X1 · X2' . "), "x1x2'");
@@ -54,7 +54,7 @@ test("the model's reply is kept to the rubric: unknown ideas and misconceptions 
     misconception: null,
     feedback: "Not quite; compare with the key below.",
   });
-  assert.equal(validateGrade({ outcome: "correct", feedback: "well done ".repeat(100) }, rubric).feedback.length, FEEDBACK_MAX_CHARS);
+  assert.equal(validateGrade({ outcome: "correct", feedback: "well done ".repeat(100) }, rubric).feedback, "well done ".repeat(100).trim(), "kept whole, not cut");
 });
 
 test("answers are sanitised and cut before grading; stored rubrics may lack the optional lists", () => {
@@ -67,10 +67,9 @@ test("answers are sanitised and cut before grading; stored rubrics may lack the 
   assert.equal(RubricSchema.safeParse({ requiredIdeas: [] }).success, false);
 });
 
-test("over-long feedback from the model still grades: it's accepted and cut at a sentence, never failing the grade", () => {
-  const long = "You name file-backed and anonymous memory correctly. " + "You also explain where heap and stack data come from in detail. ".repeat(12);
+test("over-long feedback from the model still grades, shown whole (the model is asked to keep it short)", () => {
+  const long = "You name file-backed and anonymous memory correctly. " + "You also explain where heap and stack data come from in detail. ".repeat(6);
   assert.equal(GradeSchema.safeParse({ outcome: "correct", satisfied: [], misconception: null, feedback: long }).success, true);
-  const cut = shortened(long, FEEDBACK_MAX_CHARS);
-  assert.ok(cut.length <= FEEDBACK_MAX_CHARS && cut.endsWith("."));
-  assert.equal(shortened("Short and sweet.", FEEDBACK_MAX_CHARS), "Short and sweet.");
+  assert.equal(validateGrade({ outcome: "correct", feedback: long }, { requiredIdeas: ["x"], acceptableAlternatives: [], knownMisconceptions: [] }).feedback, long.trim());
+  assert.match(GRADE_SYSTEM, /under 300 characters/);
 });
