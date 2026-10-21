@@ -42,3 +42,12 @@ test("every pipeline step's output and the grade convert to OpenAI's strict sche
   assert.equal(grade.properties.feedback.maxLength, undefined, "string lengths are left to the zod parse");
   assert.throws(() => openAiJsonSchema(z.object({ a: z.string().optional() })), /optional a/);
 });
+
+test("grading uses the server's model unless ORCA_GRADE_MODEL names another (the provider's own, priced)", async () => {
+  const { resolveGradeModel } = await import("../src/lib/model-config.ts");
+  assert.equal(resolveGradeModel({ OPENAI_API_KEY: "k" })!.model, "gpt-6.1-sol");
+  assert.equal(resolveGradeModel({ OPENAI_API_KEY: "k", ORCA_GRADE_MODEL: "gpt-6-luna" })!.model, "gpt-6-luna");
+  assert.throws(() => resolveGradeModel({ OPENAI_API_KEY: "k", ORCA_GRADE_MODEL: "claude-haiku-4-5" }), /isn't an OpenAI model/);
+  assert.throws(() => resolveGradeModel({ OPENAI_API_KEY: "k", ORCA_GRADE_MODEL: "gpt-unpriced" }), /has no price/);
+  assert.equal(resolveGradeModel({}), null);
+});
