@@ -3,8 +3,9 @@
  * the same from the SDK's `betaZodOutputFormat`). Strict mode takes a subset: a root object, every
  * property required, `additionalProperties: false`, and of the constraints only `pattern`/`format`
  * on strings, `minimum`/`maximum`/`multipleOf` on numbers and `minItems`/`maxItems` on arrays
- * (developers.openai.com/api/docs/guides/structured-outputs, read 2026-10-06). Other constraints
- * (string lengths) are dropped here and still enforced by the zod parse of the reply. An optional
+ * (developers.openai.com/api/docs/guides/structured-outputs, read 2026-10-06). A string's length
+ * limit can't be a constraint, so it's told to the model in the field's description instead ("Keep
+ * it under N characters.", owner 2026-10-20) and still checked by the zod parse of the reply. An optional
  * field throws: Orca's output schemas say "or null" with `.nullable()` instead. Pure.
  */
 import { z } from "zod";
@@ -18,7 +19,14 @@ function strictify(node: unknown, path: string): unknown {
   if (Array.isArray(node)) return node.map((n, i) => strictify(n, `${path}[${i}]`));
   if (!node || typeof node !== "object") return node;
   const out: Json = {};
+  // A length limit the format can't carry is said in words, so the model keeps to it.
+  const max = (node as Json).maxLength;
+  if (typeof max === "number") {
+    const said = typeof (node as Json).description === "string" ? `${(node as Json).description} ` : "";
+    out.description = `${said}Keep it under ${max} characters.`;
+  }
   for (const [key, value] of Object.entries(node as Json)) {
+    if (key === "description" && typeof max === "number") continue;
     if (DROPPED.has(key)) continue;
     if (key === "format" && !STRING_FORMATS.has(String(value))) continue;
     // zod's int() bounds (±2^53−1) say nothing to the model.
