@@ -51,3 +51,11 @@ test("grading uses the server's model unless ORCA_GRADE_MODEL names another (the
   assert.throws(() => resolveGradeModel({ OPENAI_API_KEY: "k", ORCA_GRADE_MODEL: "gpt-unpriced" }), /has no price/);
   assert.equal(resolveGradeModel({}), null);
 });
+
+test("a string's length limit, which OpenAI's strict format can't carry, is told to the model in the field's description", async () => {
+  const { z } = await import("zod");
+  const schema = openAiJsonSchema(z.object({ note: z.string().max(240).describe("What was wrong"), plain: z.string().max(60) })) as { properties: Record<string, { description?: string; maxLength?: number }> };
+  assert.equal(schema.properties.note.description, "What was wrong Keep it under 240 characters.");
+  assert.equal(schema.properties.plain.description, "Keep it under 60 characters.");
+  assert.equal(schema.properties.note.maxLength, undefined);
+});
