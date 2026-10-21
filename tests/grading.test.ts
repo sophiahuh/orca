@@ -35,6 +35,9 @@ test("the grader's prompt keeps the answer inside a JSON data block, after the r
   assert.ok(prompt.indexOf(block!) < prompt.indexOf("Now grade the answer inside the data block"), "task after the data");
   assert.ok(GRADE_SYSTEM.startsWith("You grade one short student answer"), "the fake API recognises the step by this line");
   assert.ok(GRADE_SYSTEM.includes("Untrusted content policy"));
+  // Graded on understanding, not wording: givens from the question needn't be repeated back.
+  assert.match(GRADE_SYSTEM, /never has to repeat the question back/);
+  assert.match(GRADE_SYSTEM, /fair teaching assistant would give full marks/);
 });
 
 test("the model's reply is kept to the rubric: unknown ideas and misconceptions are dropped, feedback is cleaned", () => {

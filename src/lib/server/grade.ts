@@ -17,7 +17,7 @@
 import type { AnswerRubric } from "@/lib/data";
 import { GRADE_SYSTEM, GradeSchema, type GradeResult, RubricSchema, cleanAnswer, gradePrompt, parseGradeLoose, validateGrade } from "@/lib/grading";
 import { LlmError, completeJson } from "@/lib/llm-server";
-import { meter, orcaConfig } from "@/lib/server/model";
+import { gradeConfig, meter } from "@/lib/server/model";
 import { rateLimit } from "@/lib/server/rate-limit";
 import { flaggedCount, recordSecurityEvents, summaryHit } from "@/lib/server/security";
 import { checkBudget } from "@/lib/server/usage";
@@ -37,7 +37,7 @@ export const REPEAT_OFFENDER = { flags: 3, days: 7 } as const;
 
 /** Whether this student's prose answers are graded by the model ("model") or self-marked ("self") right now. */
 export async function gradingMode(db: OrcaSupabase, ownerId: string, now = new Date()): Promise<"model" | "self"> {
-  if (!orcaConfig()) return "self";
+  if (!gradeConfig()) return "self";
   const since = new Date(now.getTime() - REPEAT_OFFENDER.days * 86_400_000);
   return (await flaggedCount(db, ownerId, "student_answer", since)) >= REPEAT_OFFENDER.flags ? "self" : "model";
 }
@@ -45,7 +45,17 @@ export async function gradingMode(db: OrcaSupabase, ownerId: string, now = new D
 export async function gradeAnswer(db: OrcaSupabase, ownerId: string, questionId: string, response: string): Promise<GradeReply> {
   const answer = cleanAnswer(response);
   if (!answer) return { status: 400, body: { error: "Type an answer first." } };
-  const { data: q, error } = await db.from("questions").select("id, kind, prompt, rubric, exact").eq("owner_id", ownerId).eq("id", questionId).maybeSingle();
+  const config = gradeConfig();
+  if (!config) return { status: 503, body: { error: NO_MODEL_FOR_GRADING, graded: "self" } };
+  // The checks don't depend on each other, so they run together (each is a round trip to the
+  // database); their answers are applied in order: the question, the rate limit, the budgets
+  // (decision 10), then whether this student's grading is off (decision 13).
+  const [{ data: q, error }, rate, budget, mode] = await Promise.all([
+    db.from("questions").select("id, kind, prompt, rubric, exact").eq("owner_id", ownerId).eq("id", questionId).maybeSingle(),
+    rateLimit(db, ownerId, "grade"),
+    checkBudget(db, ownerId, 0),
+    gradingMode(db, ownerId),
+  ]);
   if (error) throw new Error(`Couldn't read the question: ${error.message}`);
   if (!q) return { status: 404, body: { error: "No such question." } };
   if (q.kind !== "Short answer" || q.exact?.length || !q.rubric) {
@@ -53,17 +63,11 @@ export async function gradeAnswer(db: OrcaSupabase, ownerId: string, questionId:
   }
   const rubric = RubricSchema.safeParse(q.rubric);
   if (!rubric.success) return { status: 422, body: { error: "This question's rubric can't be read, so Orca can't grade it. Mark it yourself." } };
-  const config = orcaConfig();
-  if (!config) return { status: 503, body: { error: NO_MODEL_FOR_GRADING, graded: "self" } };
-
-  // Decision 10: the rate limit, then the budgets, before anything is spent.
-  const rate = await rateLimit(db, ownerId, "grade");
   if (!rate.ok) return { status: 429, body: { error: rate.message, retryAfterSeconds: rate.retryAfterSeconds } };
-  const budget = await checkBudget(db, ownerId, 0);
   if (!budget.ok) return { status: 429, body: { error: `${budget.message} Mark this answer yourself for now.` } };
+  if (mode === "self") return { status: 403, body: { error: GRADING_OFF_MESSAGE, graded: "self" } };
 
-  // Decision 13: screen the answer and log a hit; a repeat offender's grading is off.
-  if ((await gradingMode(db, ownerId)) === "self") return { status: 403, body: { error: GRADING_OFF_MESSAGE, graded: "self" } };
+  // Decision 13: screen the answer and log a hit.
   const suspected = screen(answer);
   const flagged = summaryHit(suspected.hits);
   if (flagged) await recordSecurityEvents(db, ownerId, "student_answer", [flagged], { questionId });

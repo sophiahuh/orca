@@ -39,6 +39,10 @@ file, and the checker pass (planned) grades each generated question against it.
    choices ("valid" or "invalid", yes or no, which of two) is multiple choice or true/false, not a
    typed answer: a student who writes "is valid" for "valid" is right, and the checker drops such
    lead-in words, but it can't read every phrasing. (Added 2026-10-18.)
+   A rubric's required ideas are the reasoning the student must supply, never a given the question
+   already states, and the grader marks understanding, not wording: "now each set holds twice as
+   many ways" fully answers why doubling associativity (same sets, same line size) doubles
+   capacity; the unchanged sets and line size are the question's givens. (Added 2026-10-20.)
 
 ## Level
 
