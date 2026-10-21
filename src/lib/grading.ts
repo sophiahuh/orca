@@ -84,6 +84,7 @@ Grade understanding, not wording (owner, 2026-10-20):
 - A required idea is satisfied when the answer conveys it in any words, shows it through what it says, or when the idea only restates something the question already gives (its premise, the conditions it sets, what stays the same). A student never has to repeat the question back.
 - "correct" when a fair teaching assistant would give full marks for the answer as written: the core reasoning the question asks for is there and nothing in it is wrong. Short is fine; a missing detail the question didn't ask about is fine; extra correct detail never costs marks.
 - "partial" only when a substantive part of the reasoning the question asks for is missing or wrong, and "incorrect" when the core idea is missing or wrong.
+- Never mark an answer down for leaving out a detail beyond what the question asks; mark it down for anything it states that is wrong.
 - For a "correct" answer, the feedback says what was right, without asking for more. For "partial", it names the one substantive thing that was missing.
 - Feedback is one or two sentences, under 300 characters.
 

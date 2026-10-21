@@ -38,6 +38,7 @@ test("the grader's prompt keeps the answer inside a JSON data block, after the r
   // Graded on understanding, not wording: givens from the question needn't be repeated back.
   assert.match(GRADE_SYSTEM, /never has to repeat the question back/);
   assert.match(GRADE_SYSTEM, /fair teaching assistant would give full marks/);
+  assert.match(GRADE_SYSTEM, /Never mark an answer down for leaving out a detail beyond what the question asks/);
 });
 
 test("the model's reply is kept to the rubric: unknown ideas and misconceptions are dropped, feedback is cleaned", () => {

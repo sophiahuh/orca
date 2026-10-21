@@ -43,6 +43,11 @@ file, and the checker pass (planned) grades each generated question against it.
    already states, and the grader marks understanding, not wording: "now each set holds twice as
    many ways" fully answers why doubling associativity (same sets, same line size) doubles
    capacity; the unchanged sets and line size are the question's givens. (Added 2026-10-20.)
+   Required ideas come only from what the material teaches: the grader never sees the material, so
+   the writer keeps anything beyond it out of the rubric (it may be in the explanation, or an
+   acceptable alternative). For an inferred objective, the rubric requires only its core idea. The
+   grader never marks down for a detail beyond what the question asks, only for what's wrong.
+   (Added 2026-10-20.)
 
 ## Level
 
