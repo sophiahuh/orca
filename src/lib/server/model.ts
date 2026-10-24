@@ -13,7 +13,7 @@
 import type { z } from "zod";
 import type { LlmConfig } from "@/lib/llm";
 import { LlmError, completeJson } from "@/lib/llm-server";
-import { SERVER_PROVIDERS, callsAreLocal, resolveServerModel } from "@/lib/model-config";
+import { SERVER_PROVIDERS, callsAreLocal, resolveGradeModel, resolveServerModel } from "@/lib/model-config";
 import { STEP_BUDGET } from "@/lib/pipeline/budget";
 import { parseLooseJson } from "@/lib/pipeline/parse";
 import { buildPrompt } from "@/lib/pipeline/prompts";
@@ -34,6 +34,12 @@ export function serverModel(): string | null {
 /** Orca's provider, model and key as `completeJson` takes them, or null without a key. Server only; never sent anywhere. */
 export function orcaConfig(): LlmConfig | null {
   const m = resolveServerModel(process.env);
+  return m ? { provider: m.provider, model: m.model, apiKey: m.apiKey, ...(m.baseUrl ? { baseUrl: m.baseUrl } : {}) } : null;
+}
+
+/** The same, for grading prose answers (`resolveGradeModel`: the server's model unless ORCA_GRADE_MODEL is set). */
+export function gradeConfig(): LlmConfig | null {
+  const m = resolveGradeModel(process.env);
   return m ? { provider: m.provider, model: m.model, apiKey: m.apiKey, ...(m.baseUrl ? { baseUrl: m.baseUrl } : {}) } : null;
 }
 

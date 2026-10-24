@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANSWER_MAX_CHARS, FEEDBACK_MAX_CHARS, GRADE_SYSTEM, RubricSchema, cleanAnswer, gradeExact, gradePrompt, normaliseExact, validateGrade } from "../src/lib/grading.ts";
+import { ANSWER_MAX_CHARS, GRADE_SYSTEM, GradeSchema, RubricSchema, cleanAnswer, gradeExact, gradePrompt, normaliseExact, validateGrade } from "../src/lib/grading.ts";
 
 test("normaliseExact ignores case, spacing, middle dots and a trailing period", () => {
   assert.equal(normaliseExact(" X1 · X2' . "), "x1x2'");
@@ -35,6 +35,10 @@ test("the grader's prompt keeps the answer inside a JSON data block, after the r
   assert.ok(prompt.indexOf(block!) < prompt.indexOf("Now grade the answer inside the data block"), "task after the data");
   assert.ok(GRADE_SYSTEM.startsWith("You grade one short student answer"), "the fake API recognises the step by this line");
   assert.ok(GRADE_SYSTEM.includes("Untrusted content policy"));
+  // Graded on understanding, not wording: givens from the question needn't be repeated back.
+  assert.match(GRADE_SYSTEM, /never has to repeat the question back/);
+  assert.match(GRADE_SYSTEM, /fair teaching assistant would give full marks/);
+  assert.match(GRADE_SYSTEM, /Never mark an answer down for leaving out a detail beyond what the question asks/);
 });
 
 test("the model's reply is kept to the rubric: unknown ideas and misconceptions are dropped, feedback is cleaned", () => {
@@ -51,7 +55,7 @@ test("the model's reply is kept to the rubric: unknown ideas and misconceptions 
     misconception: null,
     feedback: "Not quite; compare with the key below.",
   });
-  assert.equal(validateGrade({ outcome: "correct", feedback: "well done ".repeat(100) }, rubric).feedback.length, FEEDBACK_MAX_CHARS);
+  assert.equal(validateGrade({ outcome: "correct", feedback: "well done ".repeat(100) }, rubric).feedback, "well done ".repeat(100).trim(), "kept whole, not cut");
 });
 
 test("answers are sanitised and cut before grading; stored rubrics may lack the optional lists", () => {
@@ -62,4 +66,11 @@ test("answers are sanitised and cut before grading; stored rubrics may lack the 
   const parsed = RubricSchema.parse({ requiredIdeas: ["x"] });
   assert.deepEqual(parsed, { requiredIdeas: ["x"], acceptableAlternatives: [], knownMisconceptions: [] });
   assert.equal(RubricSchema.safeParse({ requiredIdeas: [] }).success, false);
+});
+
+test("over-long feedback from the model still grades, shown whole (the model is asked to keep it short)", () => {
+  const long = "You name file-backed and anonymous memory correctly. " + "You also explain where heap and stack data come from in detail. ".repeat(6);
+  assert.equal(GradeSchema.safeParse({ outcome: "correct", satisfied: [], misconception: null, feedback: long }).success, true);
+  assert.equal(validateGrade({ outcome: "correct", feedback: long }, { requiredIdeas: ["x"], acceptableAlternatives: [], knownMisconceptions: [] }).feedback, long.trim());
+  assert.match(GRADE_SYSTEM, /under 300 characters/);
 });

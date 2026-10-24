@@ -49,10 +49,11 @@ test.beforeEach(async ({ student }, info) => {
   if (!info.title.startsWith("the course's uploads")) await seedState(student, STATE);
 });
 
-test("the course page always has Uploads; its badge counts what's waiting for review, and it opens on the Review tab then", async ({ page }) => {
+test("the course page always has Uploads; with nothing building it shows no count, and it opens on the Review tab when there's something to review", async ({ page }) => {
   await page.goto(`/course/${SLUG}`);
-  const uploads = page.getByRole("link", { name: "Uploads, 4 to review" });
-  await expect(uploads).toHaveText("Uploads4");
+  // Nothing building: no badge (the 4 to review are counted on the page's Review tab).
+  const uploads = page.getByRole("link", { name: "Uploads", exact: true });
+  await expect(uploads).toHaveText("Uploads");
   await uploads.click();
   await expect(page).toHaveURL(/\/review\?tab=review$/);
   await expect(page.locator("[data-part=duplicate]")).toHaveCount(2);
@@ -79,8 +80,8 @@ test("the course's uploads: the button counts the one building, and the Uploads 
   });
   await seedState(student, { ...STATE, runs: [run("done", 60), run("failed", 30, { error: "The model didn't answer." }), run("running", 1, { progress: { stage: "writing" } })] });
   await page.goto(`/course/${SLUG}`);
-  const button = page.getByRole("link", { name: "Uploads, 1 building, 4 to review" });
-  await expect(button).toHaveText("Uploads5");
+  const button = page.getByRole("link", { name: "Uploads, 1 building" });
+  await expect(button).toHaveText("Uploads1");
   await button.click();
   await expect(page).toHaveURL(/\/review\?tab=uploads$/);
   const cards = page.locator("[data-part=upload-card]");
