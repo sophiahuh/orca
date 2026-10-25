@@ -10,8 +10,10 @@ name: Deploy
 # Needs, once, in the repository's Settings → Secrets and variables → Actions:
 #   SUPABASE_ACCESS_TOKEN   a personal access token from supabase.com/dashboard/account/tokens
 #   SUPABASE_DB_PASSWORD    the project's database password (Supabase → Connect → reset if lost)
-# Without them a change that adds a migration is NOT deployed (the run fails and says so), so the
-# site never runs ahead of its database; changes without migrations still deploy.
+# With them every deploy runs `supabase db push` first (it applies only what the hosted project is
+# missing, so this also catches up on any migration pushed late). Without them a change that adds a
+# migration is NOT deployed (the run fails and says so), so the site never runs ahead of its
+# database; changes without migrations still deploy.
 on:
   workflow_run:
     workflows: [CI]
@@ -62,12 +64,12 @@ jobs:
           exit 1
 
       - uses: supabase/setup-cli@v1
-        if: steps.diff.outputs.nothing != 'true' && steps.diff.outputs.migrations != ''
+        if: steps.diff.outputs.nothing != 'true' && env.HAVE_SUPABASE_SECRETS == 'true'
         with:
           version: latest
 
-      - name: Push migrations to the hosted project
-        if: steps.diff.outputs.nothing != 'true' && steps.diff.outputs.migrations != ''
+      - name: Push pending migrations to the hosted project
+        if: steps.diff.outputs.nothing != 'true' && env.HAVE_SUPABASE_SECRETS == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
