@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     if (sameError) return reply(500, { error: "Orca couldn't check that chat." });
     if (same) return reply(200, { duplicate: same, generation: await startUploadJob(db, student.id, same.id) });
     const id = crypto.randomUUID();
-    const { data, error } = await db.from("materials").insert({ id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/plain" }).select().single();
+    const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/plain" }).select().single();
     if (error) return reply(500, { error: "Orca couldn't save that AI chat." });
     const saved = await db.from("material_pages").insert({ owner_id: student.id, material_id: id, n: 1, text });
     if (saved.error) return reply(500, { error: "Orca saved that AI chat but couldn't read it." });

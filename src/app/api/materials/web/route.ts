@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const filename = `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`.slice(0, 255);
     const hash = createHash("sha256").update(url.href).digest("hex");
-    const { data, error } = await db.from("materials").insert({ id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/html" }).select().single();
+    const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/html" }).select().single();
     if (error) return reply(error.code === "23505" ? 409 : 500, { error: error.code === "23505" ? "That course page was already added." : "Orca couldn't save that website." });
     const pages = [{ owner_id: student.id, material_id: id, n: 1, text }];
     const inserted = await db.from("material_pages").insert(pages);
