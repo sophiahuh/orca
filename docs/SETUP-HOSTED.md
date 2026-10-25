@@ -106,7 +106,20 @@ Every 15 minutes needs a Pro plan; Hobby allows one run a day (e.g. `"0 9 * * *"
 refuses a deploy with a more frequent schedule on Hobby, so it isn't committed until the plan is
 known.
 
-GitHub auto-deploy isn't linked yet (CLAUDE.md, Deploy).
+**Auto-deploy (added 2026-10-25).** `.github/workflows/deploy.yml` deploys every change that
+reaches `main`: once CI on `main` passes, it pushes any new migration to the hosted project and
+merges `main` into `backend-implementation`, which Vercel builds. Its merge commit is authored as
+the owner, because Hobby builds only the account owner's commits. It needs two repository secrets
+(GitHub → Settings → Secrets and variables → Actions → New repository secret):
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_ACCESS_TOKEN` | a personal access token from supabase.com/dashboard/account/tokens |
+| `SUPABASE_DB_PASSWORD` | the project's database password (Supabase → Connect → "Reset database password" if lost) |
+
+Until they exist, a change that adds a migration isn't deployed (the run fails and says why);
+changes without migrations deploy regardless. Optional repository variables `DEPLOY_AUTHOR_NAME`
+and `DEPLOY_AUTHOR_EMAIL` change whose name the deploy commits carry (default: the owner's).
 
 ## 6. The Claude Code cloud environment
 

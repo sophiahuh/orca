@@ -37,8 +37,9 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   commit whose author email isn't on the owner's GitHub account, so commits that will reach
   `backend-implementation` are authored as `Sophia Huh <sophiahuh@gmail.com>` (agents: pass
   `-c user.name=… -c user.email=…` to `git commit`; a merge commit by another author blocks the
-  deploy until an empty commit by the owner follows). `main` is the pre-Phase-1 prototype. No PRs
-  are open; `deploy-candidate` (if it still exists) was a staging copy of the merged tree.
+  deploy until an empty commit by the owner follows). Since 2026-10-24 the team merges `phase-4`
+  into `main` by pull request, and `main` is deployed automatically (Deploy, below); nobody needs
+  to touch `backend-implementation`.
 - Phases 1–4 are built (mastery core, uploads build the course, scheduling and sessions, Supabase
   with auth, RLS, Storage, server jobs, cost guard, injection defences, CI). See
   `docs/BACKEND-ROADMAP.md` and the Phase 4 plan's status notes for what each contains.
@@ -324,7 +325,10 @@ All 11 Figma screens are built. Where things live:
   things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - `docs/samples/ald/` — real ALD decks for trying uploads; `docs/OBJECTIVES-ALD.md` the benchmark.
 - Deploy: Vercel (https://orca-lake-omega.vercel.app) builds `backend-implementation` (Production);
-  pushes to other branches get Preview deploys at most. Production env vars (Vercel → Settings →
+  pushes to other branches get Preview deploys at most. **Nobody pushes there by hand any more:**
+  `.github/workflows/deploy.yml` merges `main` into it (after pushing new migrations) whenever CI
+  on `main` is green, so merging a PR into `main` is the deploy (`docs/SETUP-HOSTED.md` §5 lists
+  the two secrets it needs for migrations). Production env vars (Vercel → Settings →
   Environments → Production): the Supabase three, `SITE_URL`, `ORCA_JOBS=inline`, and the model
   key (`OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) with `ORCA_MODEL` if not the default; without a
   key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
