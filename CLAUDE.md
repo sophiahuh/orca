@@ -18,7 +18,7 @@ links), **Next** (the next step), **Notes** (only explanations or decisions the 
 A few bullets each; no restating the plan, no long background, no option surveys. Answer a
 question directly first, then stop.
 
-## Start here (handoff, updated 2026-10-06, evening)
+## Start here (handoff, updated 2026-10-25)
 
 **Who it's for.** A college student who wants to actually master their classes, not cram. They
 create a course, upload its material (lecture decks, syllabus, homework, past exams), and Orca
@@ -63,23 +63,48 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
     "Edit Exams" on the course page; they show on the calendar and drive the exam cadences.
   - Homework reflection is a text box on the upload page; the calendar shows scheduled reviews,
     has a course filter and expanding weeks.
-- **The owner runs `npm run dev` on port 3000 against the hosted Supabase project and a real
-  OpenAI key** (`.env`, OpenAI default model `gpt-6.1-sol`): uploads there spend money and write real
-  data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** pushed up to `20261018130000` (checked 2026-10-25). Still to push (the owner
-  runs `npx supabase db push`; the agent's auto mode blocks it): `20261019090000_session_progress`
-  (unfinished sessions; until then the live app's saves fail with "Could not find the table
-  'public.session_progress'"). Check with `npx supabase migration list --linked` (read-only).
+- **Since 2026-10-18** (details in `docs/BACKEND-ROADMAP.md` §2 and the plan docs): handwritten
+  and scanned PDF pages read from their images, figures on typed slides described; thumbs up/down
+  on questions (a thumbs down skips and replaces it, its note feeds question writing); unfinished
+  sessions resume (`session_progress`); "Don't know" beside Check (a self-graded wrong answer, then
+  the solution); multiple-choice options are shuffled per showing; the prose grader judges
+  understanding against rubrics built only from what the material teaches. The sidebar's
+  quick-review card reads "Covers N objectives": N is planned exactly as the session plans it
+  (`src/lib/askable.ts` + `assembleQuickReview`), not the full due count.
+- **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
+  keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
+  used for development. `.env` may point at either (Amanda switched it to production on 2026-10-25):
+  check `NEXT_PUBLIC_SUPABASE_URL` before anything that reads or writes hosted data. The Supabase
+  CLI doesn't read `.env`: `db push` and `--linked` commands go to the project in
+  `supabase/.temp/project-ref` (`npx supabase link --project-ref <ref>` changes it).
+- **The owner runs `npm run dev` on port 3000 against a hosted project and a real OpenAI key**
+  (`.env`, default model `gpt-6.1-sol`): uploads there spend money and write real data. Don't seed
+  test users or test data there. Browser tests and screenshots use the local stack.
+- **Hosted migrations:** every migration through `20261019090000_session_progress` is on
+  `mtztzsxgcopohlokragm` (checked 2026-10-25). Production had everything but `session_progress`
+  (checked 2026-10-25); Amanda then ran its `db push`, but no agent has checked it since. Pushing is
+  the owner's step (the agent's auto mode blocks `db push`); the Deploy workflow pushes pending
+  migrations itself once its two secrets are set. A migration the code needs but the database
+  lacks shows as "Could not find the table … in the schema cache". Check with
+  `npx supabase migration list --linked` (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
   and the weight constants are untuned.
-- Checks were run per change (Fix mode); the full merge gate (below) hasn't been run on `phase-4`
-  since the Phase 4 merge.
+- **CI** (`.github/workflows/ci.yml`) runs the whole merge gate on every push to `phase-4` and
+  `main` and is green as of e2fbf8b (2026-10-25: 79/79 browser tests). Red runs from 10-19 to 10-25
+  were a real bug (finishing a resumed session showed "Nothing to review"; fixed in e2fbf8b).
+  Remaining occasional failures come from the environment, not the product: `next dev` compiling a
+  route mid-test (a save waits 5 s+ and an `expect.poll` gives up; the one CI retry usually
+  passes), the dev server taking over 120 s to start, and `next build` failing to fetch the
+  Gabarito font from Google Fonts. Read a failing run's trace (`gh run download <id> -n
+  playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Push the pending migration to the hosted project (above).
-2. Run the full merge gate on `phase-4` (Conventions) and fix what it finds.
+1. Confirm production has `20261019090000` (link to `fbbimuspcsytjhbqlzzc`, `migration list`), and
+   set the Deploy workflow's two secrets so later migrations push themselves.
+2. Optional CI hardening offered to the owner, not decided: run the browser tests against
+   `next build` + `next start` instead of `next dev`, and serve Gabarito from the repo.
 3. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
    exam review proper (the "Exam review" setting is stored but no session uses it yet; Phase 5),
    and the rest of Phase 5 per `docs/BACKEND-ROADMAP.md`.
@@ -89,7 +114,7 @@ them silently; list what you assumed.
 **Environment gotchas.**
 - The machine's default `node` may be 16; Next needs ≥ 20.9 and the tests ≥ 22.6. Use
   `export PATH=$HOME/.nvm/versions/node/v24.20.0/bin:$PATH` (or `nvm use`).
-- `.env` holds the hosted project's keys and the OpenAI key; `.env.local` may not exist. The e2e
+- `.env` holds a hosted project's keys (which one: see "Two hosted Supabase projects") and the OpenAI key; `.env.local` may not exist. The e2e
   config takes the local stack's keys from `supabase status` and overrides the model settings, so
   tests stay local either way.
 - Next refuses a second `next dev` in the same directory. If the owner's dev server is running,

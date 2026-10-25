@@ -160,6 +160,18 @@ For each upload:
    question (`session_progress`: the questions, position, score and misses so far); reopening it
    within a day asks "Pick up where you left off?". Resume keeps the session id, so it's recorded as
    one session. Plan: `docs/superpowers/plans/2026-10-19-resume-sessions.md`.
+   *Answering and grading (owner, 2026-10-20):* "Don't know" beside Check records a wrong answer
+   graded `self` (no credit, back to learning, never a mix-up) and shows the solution. Multiple-choice
+   options are shuffled each time a question is shown (the key remapped; "all/none of the above"
+   stays last), since generated keys leaned to A. Prose grading uses the server's model unless
+   `ORCA_GRADE_MODEL` names another; it marks understanding, not wording, never asks the student to
+   restate the question's givens or a detail beyond the question, and rubrics require only what the
+   material teaches. Feedback is asked for under 300 characters and shown whole if longer (OpenAI's
+   strict format can't enforce a length, so limits go in each field's description).
+   *Sidebar quick-review count (owner, 2026-10-25):* the card reads "Covers N objectives", where N
+   is how many due objectives the course's time budget fits, planned exactly as the session plans
+   it (`src/lib/askable.ts`, `assembleQuickReview`). The full due count isn't shown: it counted every
+   unseen objective and overstated what one session covers. The "Dive in" card has no detail line.
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
