@@ -55,7 +55,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   The Settings sliders default to equal (25 each, decided 2026-10-05), so by default every
   material type's coverage counts the same; the student's sliders are what make one type count more.
 
-### Before Phase 4's live checks (Task 10)
+### Before Phase 4's live checks (Task 10) — mostly settled
+- **Status (2026-10-25):** production runs on hosted Supabase `fbbimuspcsytjhbqlzzc`, OpenAI, and inline jobs; Trigger.dev isn't set up. What's left: the scripted live checks against production and the choice below.
 - **Credentials the session needs** to run the live checks the invariants require: the owner's
   Supabase project (URL, publishable and secret keys, a personal access token to push migrations), a
   Trigger.dev project (secret key, project ref), `ANTHROPIC_API_KEY`, `SITE_URL` and

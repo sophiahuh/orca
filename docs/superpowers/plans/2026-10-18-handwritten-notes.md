@@ -1,5 +1,7 @@
 # Handwritten notes: read pages as images (2026-10-18)
 
+**Status:** built 2026-10-18 (both parts), on `phase-4` and live.
+
 **Why.** Orca reads a PDF's text layer only. Notes apps (GoodNotes, Notability…) store their own
 handwriting recognition as an invisible, often tiny text layer: the hidden-text guard drops the
 tiny parts, and what's left is garbled ("iisel, cell & think of as | in line 1 I -I voltage"), with
