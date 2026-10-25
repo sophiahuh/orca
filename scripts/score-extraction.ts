@@ -5,7 +5,7 @@
  * Uploads docs/samples/ald L02–L04 in order through the production pipeline (runUpload with the
  * same prompts, schemas, budgets and completeJson as /api/pipeline; each deck sees the structure the
  * previous ones built), then compares the objectives each deck created or covered with that
- * lecture's rows in docs/OBJECTIVES-ALD.md: exact name or alias first, then the production
+ * lecture's rows in docs/OBJECTIVES-ALD.md: exact name first, then the production
  * reconcile call. Reports recall and precision per deck and overall.
  *
  * There is no target number to justify yet, so this guards against regressions: it fails only when
@@ -182,18 +182,18 @@ async function main() {
 
     const touched: Objective[] = [...plan.newObjectives, ...Object.keys(plan.objectiveUpdates).map((id) => course.objectives[id])];
     const expected = benchmark.filter((b) => b.lecture === lecture);
-    const expectedNamed: Named[] = expected.map((e) => ({ id: e.id, name: e.name, aliases: [], review: "confirmed", description: e.topic }));
+    const expectedNamed: Named[] = expected.map((e) => ({ id: e.id, name: e.name, review: "confirmed", description: e.topic }));
     const matchedExpected = new Set<string>();
     const extras: string[] = [];
     for (const o of touched) {
-      let hit = exactMatch([o.name, ...o.aliases], expectedNamed)?.id ?? null;
+      let hit = exactMatch([o.name], expectedNamed)?.id ?? null;
       if (!hit) {
-        const close = shortlist({ name: o.name, aliases: o.aliases, description: o.description }, expectedNamed);
+        const close = shortlist({ name: o.name, description: o.description }, expectedNamed);
         if (close.length) {
           const r = await call("reconcile", {
             kind: "objective",
-            candidate: { name: o.name, aliases: o.aliases, description: o.description },
-            existing: close.map((c) => ({ id: c.id, name: c.name, aliases: [], description: c.description ?? "", rejected: false })),
+            candidate: { name: o.name, description: o.description },
+            existing: close.map((c) => ({ id: c.id, name: c.name, description: c.description ?? "", rejected: false })),
           });
           if (r.decision === "same" && r.matchId && expected.some((e) => e.id === r.matchId)) hit = r.matchId;
         }

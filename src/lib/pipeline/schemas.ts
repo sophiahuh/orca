@@ -16,45 +16,45 @@ const Anchor = z.object({
 
 /* ── Extract: structure and signals, no questions ──────────────────────── */
 
+/** Extraction's text has no length limit and its topics and objectives no count limit (2026-10-25): a long summary or a long lecture lost whole topics. */
+const ExtractAnchor = z.object({
+  locator: z.string().max(60).describe("e.g. 'slide 14'"),
+  excerpt: z.string().describe("Short quote or close paraphrase from that place"),
+});
+
 export const ExtractOutput = z.object({
-  topics: z
-    .array(
-      z.object({
-        localId: z.string().max(60).describe("Your own short id for a new topic, e.g. 't1'. For an existing topic, repeat its id."),
-        existingId: z.string().max(60).nullable().describe("The id of the existing topic this is, or null for a new one"),
-        name: z.string().min(1).max(60),
-        aliases: z.array(z.string().max(60)).max(6).describe("Other names the material uses for it"),
-        summary: z.string().max(400),
-        slideStart: z.number().int().min(1),
-        slideEnd: z.number().int().min(1),
-      }),
-    )
-    .max(8),
-  objectives: z
-    .array(
-      z.object({
-        localId: z.string().max(60).describe("Your own short id for a new objective, e.g. 'o1'. For an existing objective, repeat its id."),
-        existingId: z.string().max(60).nullable().describe("The id of the existing objective this material covers, or null for a new one"),
-        topicRef: z.string().max(60).describe("localId of a topic above, or the id of an existing topic"),
-        name: z.string().min(1).max(120).describe("'Can …' statement of one skill, e.g. 'Convert between decimal and n-bit 2's complement'"),
-        description: z.string().max(400),
-        aliases: z.array(z.string().max(120)).max(6),
-        origin: z.enum(["material", "inferred"]).describe("'inferred' only when it comes from general knowledge of the subject, not this material"),
-        places: z.array(Anchor).max(12).describe("Every place that genuinely teaches or uses it; empty for inferred"),
-        emphasis: z
-          .object({ kind: z.enum(["tested", "skipped"]), quote: z.string().max(240) })
-          .nullable()
-          .describe("Only when the material explicitly says it will or won't be examined, quoted; else null"),
-      }),
-    )
-    .max(40),
+  topics: z.array(
+    z.object({
+      localId: z.string().max(60).describe("Your own short id for a new topic, e.g. 't1'. For an existing topic, repeat its id."),
+      existingId: z.string().max(60).nullable().describe("The id of the existing topic this is, or null for a new one"),
+      name: z.string().min(1),
+      summary: z.string(),
+      slideStart: z.number().int().min(1),
+      slideEnd: z.number().int().min(1),
+    }),
+  ),
+  objectives: z.array(
+    z.object({
+      localId: z.string().max(60).describe("Your own short id for a new objective, e.g. 'o1'. For an existing objective, repeat its id."),
+      existingId: z.string().max(60).nullable().describe("The id of the existing objective this material covers, or null for a new one"),
+      topicRef: z.string().max(60).describe("localId of a topic above, or the id of an existing topic"),
+      name: z.string().min(1).describe("'Can …' statement of one skill, e.g. 'Convert between decimal and n-bit 2's complement'"),
+      description: z.string(),
+      origin: z.enum(["material", "inferred"]).describe("'inferred' only when it comes from general knowledge of the subject, not this material"),
+      places: z.array(ExtractAnchor).max(12).describe("Every place that genuinely teaches or uses it; empty for inferred"),
+      emphasis: z
+        .object({ kind: z.enum(["tested", "skipped"]), quote: z.string() })
+        .nullable()
+        .describe("Only when the material explicitly says it will or won't be examined, quoted; else null"),
+    }),
+  ),
   relations: z
     .array(
       z.object({
         from: z.string().max(60).describe("Topic localId or existing topic id"),
         to: z.string().max(60).describe("Topic localId or existing topic id"),
         type: z.enum(["used-in", "has-a-kind", "alternative-to", "related"]),
-        anchor: Anchor.nullable(),
+        anchor: ExtractAnchor.nullable(),
         reason: z.string().max(300).describe("One specific sentence on why this link is there: what B needs from A, which limitation one works around, or what the contrast teaches"),
       }),
     )
@@ -120,8 +120,8 @@ export type DeepOutput = z.infer<typeof DeepOutput>;
 
 /* ── Step inputs (checked by the route) ────────────────────────────────── */
 
-const Page = z.object({ n: z.number().int().min(1), text: z.string().max(6000) });
-const Named = z.object({ id: z.string(), name: z.string(), aliases: z.array(z.string()), description: z.string().optional(), rejected: z.boolean() });
+const Page = z.object({ n: z.number().int().min(1), text: z.string() });
+const Named = z.object({ id: z.string(), name: z.string(), description: z.string().optional(), rejected: z.boolean() });
 // The short label is display text (often the whole name for courses made before initials), not a ref.
 const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
 const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
@@ -130,14 +130,14 @@ export const ExtractInput = z.object({
   course: Course,
   material: z.object({ filename: z.string().max(200), type: MaterialType }),
   pages: z.array(Page).min(1).max(400),
-  existingTopics: z.array(Named.extend({ id: z.string() })).max(200),
-  existingObjectives: z.array(Named.extend({ topicId: z.string() })).max(1000),
+  existingTopics: z.array(Named.extend({ id: z.string() })),
+  existingObjectives: z.array(Named.extend({ topicId: z.string() })),
 });
 export type ExtractInput = z.infer<typeof ExtractInput>;
 
 export const ReconcileInput = z.object({
   kind: z.enum(["topic", "objective"]),
-  candidate: z.object({ name: z.string(), aliases: z.array(z.string()), description: z.string() }),
+  candidate: z.object({ name: z.string(), description: z.string() }),
   existing: z.array(Named).min(1).max(12),
 });
 export type ReconcileInput = z.infer<typeof ReconcileInput>;
@@ -159,8 +159,8 @@ export const GenerateInput = z.object({
         name: z.string(),
         description: z.string(),
         origin: z.enum(["material", "inferred", "authored"]),
-        need: z.number().int().min(1).max(8),
-        existingPrompts: z.array(z.string()).max(40),
+        need: z.number().int().min(1),
+        existingPrompts: z.array(z.string()),
       }),
     )
     .min(1)
@@ -174,9 +174,9 @@ export type GenerateInput = z.infer<typeof GenerateInput>;
 export const LinkInput = z.object({
   course: Course,
   /** Each topic by a short ref ("t1"…), with its summary; `isNew` marks this upload's topics. */
-  topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2).max(200),
+  topics: z.array(z.object({ ref: z.string(), name: z.string(), summary: z.string(), isNew: z.boolean() })).min(2),
   /** Links the course already has, by ref (not to be repeated, except those that need a reason). */
-  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string(), needsReason: z.boolean().optional() })).max(1000),
+  existing: z.array(z.object({ from: z.string(), to: z.string(), type: z.string(), needsReason: z.boolean().optional() })),
 });
 export type LinkInput = z.infer<typeof LinkInput>;
 
@@ -200,7 +200,7 @@ export const ReflectInput = z.object({
   course: Course,
   material: z.object({ filename: z.string().max(200), type: MaterialType }),
   note: z.string().min(1).max(2000),
-  objectives: z.array(z.object({ id: z.string(), name: z.string(), description: z.string(), topic: z.string() })).min(1).max(400),
+  objectives: z.array(z.object({ id: z.string(), name: z.string(), description: z.string(), topic: z.string() })).min(1),
 });
 export type ReflectInput = z.infer<typeof ReflectInput>;
 
@@ -238,7 +238,7 @@ export const TranscribeOutput = z.object({
     .array(
       z.object({
         n: z.number().int().min(1).describe("The page's number, as given"),
-        text: z.string().max(6000).describe("Everything on the page written out as text; empty when the page is blank"),
+        text: z.string().describe("Everything on the page written out as text; empty when the page is blank"),
       }),
     )
     .max(TRANSCRIBE_PAGES_PER_CALL),
@@ -252,7 +252,7 @@ export const DescribeInput = z.object({
   material: z.object({ filename: z.string().max(200) }),
   /** Each slide's number, its text (to say what's already there) and its rendered image. */
   pages: z
-    .array(z.object({ n: z.number().int().min(1), text: z.string().max(6000), image: z.string().min(1).max(7_000_000) }))
+    .array(z.object({ n: z.number().int().min(1), text: z.string(), image: z.string().min(1).max(7_000_000) }))
     .min(1)
     .max(TRANSCRIBE_PAGES_PER_CALL),
 });

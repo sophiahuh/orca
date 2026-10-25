@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { DEEP_MAX_MINUTES, DEEP_MINUTE_PRESETS } from "@/lib/deep-review";
+import { DEEP_MINUTE_PRESETS } from "@/lib/deep-review";
 import { BackButton } from "@/components/layout/BackButton";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
@@ -28,7 +28,7 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
   const setCustomMinutes = (raw: string) => {
     setCustom(raw);
     const n = Number(raw);
-    if (Number.isInteger(n) && n >= 1 && n <= DEEP_MAX_MINUTES) onMinutes(n);
+    if (Number.isInteger(n) && n >= 1) onMinutes(n);
   };
 
   return (
@@ -66,7 +66,6 @@ export function DeepReviewSetup({ courseName, backHref, minutes, onMinutes, onSt
               type="number"
               inputMode="numeric"
               min={1}
-              max={DEEP_MAX_MINUTES}
               value={custom}
               disabled={writing}
               onChange={(e) => setCustomMinutes(e.target.value)}

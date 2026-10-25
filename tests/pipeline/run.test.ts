@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Material, Objective, QuizQuestion, Topic } from "../../src/lib/data.ts";
 import { type CallStep, type RunInput, runUpload } from "../../src/lib/pipeline/run.ts";
 import { applyUploadPlan } from "../../src/lib/pipeline/apply.ts";
+import { ExtractOutput as ExtractOutputSchema } from "../../src/lib/pipeline/schemas.ts";
 import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "../../src/lib/pipeline/schemas.ts";
 
 type Handlers = { [S in StepName]?: (input: StepInput<S>) => StepOutput<S> | Promise<StepOutput<S>> };
@@ -69,13 +70,13 @@ const mc = (objectiveId: string, prompt: string, answer: number, extra: Partial<
 
 const lectureExtract: ExtractOutput = {
   topics: [
-    { localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "Theorems.", slideStart: 1, slideEnd: 2 },
-    { localId: "t2", existingId: null, name: "Karnaugh Maps", aliases: ["K-Maps"], summary: "Grouping.", slideStart: 3, slideEnd: 4 },
+    { localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 1, slideEnd: 2 },
+    { localId: "t2", existingId: null, name: "Karnaugh Maps", summary: "Grouping.", slideStart: 3, slideEnd: 4 },
   ],
   objectives: [
-    { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-    { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [{ locator: "slide 3", excerpt: "groups" }], emphasis: { kind: "tested", quote: "on the exam" } },
-    { localId: "o3", existingId: null, topicRef: "t2", name: "Read binary numbers", description: "", aliases: [], origin: "inferred", places: [], emphasis: null },
+    { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null },
+    { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", origin: "material", places: [{ locator: "slide 3", excerpt: "groups" }], emphasis: { kind: "tested", quote: "on the exam" } },
+    { localId: "o3", existingId: null, topicRef: "t2", name: "Read binary numbers", description: "", origin: "inferred", places: [], emphasis: null },
   ],
   relations: [
     { from: "t1", to: "t2", type: "used-in", anchor: null, reason: "K-maps group terms using Boolean algebra's absorption." },
@@ -106,7 +107,6 @@ test("a first lecture creates proposed topics and objectives with signals, relat
 
   assert.equal(plan.newTopics.length, 2);
   assert.ok(plan.newTopics.every((t) => t.review === "proposed" && t.materialId === "mat"));
-  assert.deepEqual(plan.newTopics[1].aliases, ["K-Maps"]);
   assert.equal(plan.newObjectives.length, 3);
   assert.ok(plan.newObjectives.every((o) => o.review === "proposed" && o.runId === "run1"));
   const [, group, inferred] = plan.newObjectives;
@@ -136,12 +136,12 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 2)), "an upload writes 2 per objective");
 });
 
-test("a later upload reuses existing items, records aliases and signals, skips rejected ones and flags uncertain ones", async () => {
+test("a later upload reuses existing items, records signals, skips rejected ones and flags uncertain ones", async () => {
   const topics: Topic[] = [
-    { id: "T1", name: "Karnaugh Maps", aliases: [], review: "confirmed", pos: { x: 0, y: 0 } },
-    { id: "T2", name: "Course logistics", aliases: [], review: "archived", pos: { x: 0, y: 0 } },
+    { id: "T1", name: "Karnaugh Maps", review: "confirmed", pos: { x: 0, y: 0 } },
+    { id: "T2", name: "Course logistics", review: "archived", pos: { x: 0, y: 0 } },
   ];
-  const obj = (id: string, name: string, extra: Partial<Objective> = {}): Objective => ({ id, topicId: "T1", name, description: "", aliases: [], origin: "material", review: "confirmed", materialId: "old", runId: "r0", signals: [], ...extra });
+  const obj = (id: string, name: string, extra: Partial<Objective> = {}): Objective => ({ id, topicId: "T1", name, description: "", origin: "material", review: "confirmed", materialId: "old", runId: "r0", signals: [], ...extra });
   const objectives = {
     O1: obj("O1", "Group ones on a Karnaugh map"),
     O2: obj("O2", "Use don't-cares", { review: "archived" }),
@@ -151,15 +151,15 @@ test("a later upload reuses existing items, records aliases and signals, skips r
   const model = fakeModel({
     extract: () => ({
       topics: [
-        { localId: "T1", existingId: "T1", name: "K-maps", aliases: [], summary: "", slideStart: 1, slideEnd: 4 },
-        { localId: "t9", existingId: null, name: "Course Logistics", aliases: [], summary: "", slideStart: 1, slideEnd: 1 },
+        { localId: "T1", existingId: "T1", name: "K-maps", summary: "", slideStart: 1, slideEnd: 4 },
+        { localId: "t9", existingId: null, name: "Course Logistics", summary: "", slideStart: 1, slideEnd: 1 },
       ],
       objectives: [
-        { localId: "a", existingId: null, topicRef: "T1", name: "Group ones on a Karnaugh Map", description: "", aliases: ["Form K-map groups"], origin: "material", places: [anchor], emphasis: null },
-        { localId: "b", existingId: null, topicRef: "T1", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-        { localId: "c", existingId: null, topicRef: "T1", name: "Order minterms by Gray code on a map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-        { localId: "d", existingId: null, topicRef: "T1", name: "Find essential prime implicants", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-        { localId: "e", existingId: null, topicRef: "t9", name: "Know the grading policy", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
+        { localId: "a", existingId: null, topicRef: "T1", name: "Group ones on a Karnaugh Map", description: "", origin: "material", places: [anchor], emphasis: null },
+        { localId: "b", existingId: null, topicRef: "T1", name: "Use don't-cares", description: "", origin: "material", places: [anchor], emphasis: null },
+        { localId: "c", existingId: null, topicRef: "T1", name: "Order minterms by Gray code on a map", description: "", origin: "material", places: [anchor], emphasis: null },
+        { localId: "d", existingId: null, topicRef: "T1", name: "Find essential prime implicants", description: "", origin: "material", places: [anchor], emphasis: null },
+        { localId: "e", existingId: null, topicRef: "t9", name: "Know the grading policy", description: "", origin: "material", places: [anchor], emphasis: null },
       ],
       relations: [],
       instructionsFound: [],
@@ -173,9 +173,7 @@ test("a later upload reuses existing items, records aliases and signals, skips r
   const plan = await runUpload(input({ course: { id: "c", name: "Logic", short: "LOG", topics }, objectives, bank }), { call: model.call, newId });
 
   assert.equal(plan.newTopics.length, 0);
-  assert.deepEqual(plan.topicAliases, { T1: ["K-maps"] });
   assert.deepEqual(Object.keys(plan.objectiveUpdates), ["O1"]);
-  assert.deepEqual(plan.objectiveUpdates.O1.aliases, ["Form K-map groups"]);
   assert.equal(plan.objectiveUpdates.O1.signal!.places.length, 1);
   const names = plan.newObjectives.map((o) => [o.name, o.review, o.uncertain?.candidateId ?? null]);
   assert.deepEqual(names, [
@@ -193,8 +191,8 @@ test("a later upload reuses existing items, records aliases and signals, skips r
 
 test("questions that duplicate the bank or break the rules are dropped with a reason; the rest are kept unchecked", async () => {
   const lone: ExtractOutput = {
-    topics: [{ localId: "t1", existingId: null, name: "Logic", aliases: [], summary: "", slideStart: 1, slideEnd: 4 }],
-    objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Do logic", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
+    topics: [{ localId: "t1", existingId: null, name: "Logic", summary: "", slideStart: 1, slideEnd: 4 }],
+    objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Do logic", description: "", origin: "material", places: [anchor], emphasis: null }],
     relations: [],
     instructionsFound: [],
   };
@@ -235,12 +233,11 @@ test("applying a plan adds topics, objectives, questions and relations and updat
     call: fakeModel({ extract: () => lectureExtract, generate: () => ({ questions: [] }) }).call,
     newId,
   });
-  const existing = { id: "OLD", topicId: "T", name: "Old", description: "", aliases: [], origin: "material", review: "confirmed", materialId: null, runId: null, signals: [] } as Objective;
-  plan.objectiveUpdates.OLD = { aliases: ["Older"], signal: { materialId: "mat", materialType: "Lecture", places: [anchor] } };
+  const existing = { id: "OLD", topicId: "T", name: "Old", description: "", origin: "material", review: "confirmed", materialId: null, runId: null, signals: [] } as Objective;
+  plan.objectiveUpdates.OLD = { signal: { materialId: "mat", materialType: "Lecture", places: [anchor] } };
   const s = applyUploadPlan({ topics: [], objectives: { OLD: existing }, bank: {}, relations: [] }, plan);
   assert.equal(s.topics.length, 2);
   assert.equal(Object.keys(s.objectives).length, 4);
-  assert.deepEqual(s.objectives.OLD.aliases, ["Older"]);
   assert.equal(s.objectives.OLD.signals.length, 1);
   assert.equal(s.relations.length, 1);
   assert.throws(() => applyUploadPlan({ topics: [], objectives: {}, bank: {}, relations: [] }, plan), /isn't in the course/);
@@ -252,4 +249,18 @@ test("the run record carries the hidden text the server dropped from the file", 
   const plan = await runUpload(input({ hiddenText }), { call: model.call, newId, structureOnly: true });
   assert.deepEqual(plan.run.hiddenText, hiddenText);
   assert.equal((await runUpload(input(), { call: fakeModel({ extract: () => ({ ...lectureExtract, relations: [], instructionsFound: [] }) }).call, newId, structureOnly: true })).run.hiddenText, undefined);
+});
+
+test("extraction has no length or count limit: a long topic summary keeps its topic and objectives, and a long lecture may have more than 8 topics", async () => {
+  const summary = "Binary heaps keep the smallest key at the root. ".repeat(8).trim();
+  const topics = Array.from({ length: 10 }, (_, i) => ({ localId: `t${i + 1}`, existingId: null, name: `Topic ${i + 1}`, summary: i === 0 ? summary : "Short.", slideStart: 1, slideEnd: 2 }));
+  const objectives = topics.map((t, i) => ({ localId: `o${i + 1}`, existingId: null, topicRef: t.localId, name: `Do skill ${i + 1}`, description: "", origin: "inferred" as const, places: [], emphasis: null }));
+  const extract: ExtractOutput = { topics, objectives, relations: [], instructionsFound: [] };
+  assert.ok(ExtractOutputSchema.safeParse(extract).success);
+  const model = fakeModel({ extract: () => extract, generate: () => ({ questions: [] }) });
+  const plan = await runUpload(input(), { call: model.call, newId });
+  assert.equal(plan.newTopics.length, 10);
+  assert.equal(plan.newTopics[0].summary, summary);
+  assert.equal(plan.newObjectives.length, 10);
+  assert.deepEqual(plan.run.dropped.filter((d) => /refused|its topic/.test(d.reason)), []);
 });

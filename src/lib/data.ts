@@ -24,8 +24,6 @@ export interface Topic {
   /** Random UUID, never derived from the name. */
   id: string;
   name: string;
-  /** Other names for the same topic (merged duplicates keep theirs here). */
-  aliases: string[];
   review: Review;
   /** Set when this topic was merged into another; it is then also archived. */
   mergedInto?: string;
@@ -245,7 +243,6 @@ export interface Objective {
   topicId: string;
   name: string;
   description: string;
-  aliases: string[];
   /** `material`: taught in an upload (has anchors). `inferred`: from general knowledge of the subject, no anchor. `authored`: written by hand. */
   origin: "material" | "inferred" | "authored";
   review: Review;

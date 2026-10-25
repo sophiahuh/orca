@@ -5,7 +5,7 @@ import { type SeedState, admin, expect, test, fixtureMaterial, ids, laidOut, obj
 const SLUG = "logic";
 const id = ids("course", "A", "B", "C", "a1", "b1", "b2", "b3", "c1", "qa1", "qb1", "qb3", "qc1");
 const ID = id.course;
-const topic = (id: string, name: string, review: Topic["review"], extra: Partial<Topic> = {}): Topic => ({ id, name, aliases: [], review, pos: { x: 0, y: 0 }, ...extra });
+const topic = (id: string, name: string, review: Topic["review"], extra: Partial<Topic> = {}): Topic => ({ id, name, review, pos: { x: 0, y: 0 }, ...extra });
 
 const STATE: SeedState = {
   courses: [
@@ -125,13 +125,13 @@ test("settling duplicates and confirming a topic", async ({ page, student }) => 
   const s = await stored(page, student);
   const topics = s.courses[0].topics;
   expect(topics.find((t: Topic) => t.id === id.C)).toMatchObject({ review: "archived", mergedInto: id.B });
-  expect(topics.find((t: Topic) => t.id === id.B)).toMatchObject({ review: "confirmed", aliases: ["K Maps"] });
+  expect(topics.find((t: Topic) => t.id === id.B)).toMatchObject({ review: "confirmed" });
   const o = s.objectives[ID];
   expect([o[id.b1].review, o[id.b2].review, o[id.b3].review, o[id.c1].review, o[id.c1].topicId]).toEqual(["confirmed", "archived", "confirmed", "confirmed", id.B]);
   expect(s.questionBank[ID][id.B].map((q: { id: string }) => q.id)).toEqual([id.qb1, id.qb3, id.qc1]);
 });
 
-test("renaming a new topic keeps its old name as an alias", async ({ page, student }) => {
+test("renaming a new topic saves its new name", async ({ page, student }) => {
   await page.goto(`/course/${SLUG}/review`);
   const card = page.locator("[data-part=new-topic]").filter({ hasText: "Karnaugh Maps" });
   await card.getByRole("button", { name: "Rename" }).click();
@@ -140,7 +140,7 @@ test("renaming a new topic keeps its old name as an alias", async ({ page, stude
   await field.fill("Karnaugh Maps (K-Maps)");
   await field.press("Enter");
   await expect(page.locator("[data-part=new-topic]").filter({ hasText: "Karnaugh Maps (K-Maps)" })).toBeVisible();
-  expect((await stored(page, student)).courses[0].topics[1].aliases).toEqual(["Karnaugh Maps"]);
+  expect((await stored(page, student)).courses[0].topics[1].name).toBe("Karnaugh Maps (K-Maps)");
 });
 
 test("the objective list shows status and weight, and rejects, restores, merges and un-merges", async ({ page, student }) => {

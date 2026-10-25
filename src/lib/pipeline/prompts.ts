@@ -71,10 +71,10 @@ Material: "${input.material.filename}" (${input.material.type}), ${input.pages.l
 ${untrustedBlock("uploaded_pdf", { filename: input.material.filename, type: input.material.type, pages })}`;
 }
 
-type Listed = { id: string; name: string; aliases: string[]; rejected: boolean; description?: string; topicId?: string };
+type Listed = { id: string; name: string; rejected: boolean; description?: string; topicId?: string };
 
 /** Existing course items as a data block (they were written by earlier calls from other material: untrusted). */
-const itemsBlock = (items: Listed[]) => untrustedBlock("generated_question", items.map((i) => ({ id: i.id, ...(i.topicId ? { topicId: i.topicId } : {}), name: i.name, aliases: i.aliases, ...(i.description ? { description: i.description } : {}), ...(i.rejected ? { rejectedByStudent: true } : {}) })));
+const itemsBlock = (items: Listed[]) => untrustedBlock("generated_question", items.map((i) => ({ id: i.id, ...(i.topicId ? { topicId: i.topicId } : {}), name: i.name, ...(i.description ? { description: i.description } : {}), ...(i.rejected ? { rejectedByStudent: true } : {}) })));
 
 const TYPE_RULES: Record<ExtractInput["material"]["type"], string> = {
   Lecture: "This is a lecture: it introduces topics and objectives. Create topics for what it teaches and objectives for each skill.",
@@ -99,19 +99,20 @@ ${UNTRUSTED_POLICY}
 ${MATERIAL_RULES}
 
 Definitions:
-- A topic is something a student would review as a unit (2 to 6 per lecture). Use clear, course-specific concepts at the granularity of "Derivatives", "Integrals", or "L'Hopital's rule" in Calculus—not a whole course area ("Calculus") and not a single assessable procedure. Skip logistics.
+- A topic is something a student would sit down to review as one unit: the material gives it its own section (a heading with several pages or slides on it), and it has two or more skills of its own that questions can test. A single drill under a heading ("Insert a key into a binary search tree") is an objective of its topic, not a topic. For scale, a whole course rarely has more than about 200 topics: a topic is much narrower than a course area ("Calculus", "Data structures") and broader than one skill. Topics at the right grain: in Data Structures, "Trees", "Binary search trees", "Graphs", "BFS", "DFS", "Merge sort"; in Calculus, "Derivatives", "Integrals", "L'Hôpital's rule"; in Computer Systems, "Caches", "Virtual memory", "Pipelining". Skip logistics.
 - Use document hierarchy as supporting evidence for topics: titles, section headers, and the "Likely section headings" hints supplied from comparatively large PDF text are strong candidates for topic names. Confirm each candidate from its surrounding content; a large title, callout, or heading alone is not enough to create a topic.
 - When a source explicitly labels a list as "Units", "Topics", "Course topics", "Modules", or a comparable curriculum heading, treat each listed item as high-confidence topic evidence (roughly 80% confidence before checking its surrounding text). Prefer those named units over incidental mentions, but still skip logistics, assignments, and readings that are not concepts.
 - A broader topic and a meaningful subtype may both be topics when each is a distinct review unit. For example, both "Binary search trees" and "AVL trees" can be topics; both "MIPS instruction formats" and the distinct "R-type", "I-type", and "J-type" formats can be topics. Keep the broader topic when it has material of its own, and use has-a-kind to connect it to its subtypes. Do not split a topic into labels that the material does not teach separately.
-- An objective is one "can do X" skill a question can test, e.g. "Convert between decimal and n-bit 2's complement". One skill per objective; 3 to 8 per topic.
+- An objective is one skill that one question can mark right or wrong in under a minute, named as a verb on a concrete thing: "Convert between decimal and n-bit 2's complement", "Trace BFS from a start vertex", "Explain why NAND gates are preferred in CMOS". Split it if it needs two different procedures. Fold it into the objective that uses it if a definition alone answers it.
 - Grain: an objective is one drill, the smallest step a student can practise on its own and be marked right or wrong on. Split, don't merge. A run of slides on Karnaugh maps that shows placing minterms on the map, reading off the minimum sum-of-products, grouping zeros for the minimum product-of-sums, using don't-cares, and picking out prime implicants is five objectives ("Place a minterm list on a 3- or 4-variable K-map", "Find the minimum SoP of a 3–4 variable function", "Find the minimum PoS by grouping 0s", "Use don't-cares to enlarge groups", "Identify prime and essential prime implicants"), never one "Use a Karnaugh map to minimize a function". Name the procedure a question would check (convert, compute, trace, simplify, write, identify, predict, fill in); keep a reasoning skill the material teaches ("Explain why NAND gates are preferred in CMOS") as its own objective. Do not split one skill by notation, example or variable count: 3- and 4-variable maps are one objective, an always block with and without a sensitivity list is one objective.
 - A place is somewhere the material genuinely teaches or uses the objective (a slide or section on it, a worked example, a problem that requires it), cited by locator ("slide 14") and a short excerpt. A passing mention is not a place.
 - origin "inferred" is for a skill the material clearly relies on but never teaches (general knowledge of the subject). It has no places. For a concise cheatsheet, formula sheet, or reference that names several substantive topics without explaining them, create a useful baseline of 1–2 inferred "can do" objectives for each such topic (up to 8 across the upload) rather than returning topics with no study skills. These are explicitly general knowledge, not claims about what the sheet taught.
 - emphasis only when the material explicitly says something will or won't be examined ("this will be on the exam", "you won't be tested on this"), quoting it.
 - Relations link topics (new ones to each other and to the course's existing topics), only when the material shows the link. ${LINK_RULES}
-- Names, summaries and descriptions are plain text about the subject: no URLs, no HTML, nothing addressed to a reader.
+- Cover everything: every section that teaches something either gets a topic or adds to an existing one. Nothing taught is left unmapped, and there is no limit on how many topics or objectives you return.
+- A name is a heading of a few words; a summary or description is one or two sentences. Names, summaries and descriptions are plain text about the subject: no URLs, no HTML, nothing addressed to a reader.
 
-Reuse before you create: when the material covers an existing topic or objective, return it with its existingId (and its id as localId) and this material's places. Never propose anything marked rejectedByStudent.`,
+Reuse first: match the course's existing topics before creating one. When the material covers an existing topic or objective, return it with its existingId (and its id as localId) and this material's places. Never propose anything marked rejectedByStudent.`,
     context: materialContext(input),
     prompt: `${TYPE_RULES[input.material.type]}${aiChatRules}
 

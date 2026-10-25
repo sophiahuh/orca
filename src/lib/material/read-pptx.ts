@@ -15,7 +15,6 @@ export interface ReadPptx {
   pages: ReadPage[];
   hidden: HiddenText;
   removed: number;
-  truncated: number[];
 }
 
 /** Text runs under this size (hundredths of a point, as the XML stores it) are too small to see. */
@@ -123,7 +122,6 @@ export async function readPptx(bytes: Uint8Array): Promise<ReadPptx> {
 
     const pages: ReadPage[] = [];
     const hidden: HiddenText = { items: 0, pages: [] };
-    const truncated: number[] = [];
     let removed = 0;
     order.forEach((part, i) => {
       const n = i + 1;
@@ -137,12 +135,11 @@ export async function readPptx(bytes: Uint8Array): Promise<ReadPptx> {
         hidden.pages.push(n);
       }
       const text = notes.text.trim() ? `${slide.text}\n\n[Speaker notes]\n${notes.text}` : slide.text;
-      const clean = sanitize(text, LIMITS.pageChars);
+      const clean = sanitize(text);
       removed += clean.removed;
-      if (clean.truncated) truncated.push(n);
       pages.push({ n, text: clean.text });
     });
-    return { pages, hidden, removed, truncated };
+    return { pages, hidden, removed };
   } catch (e) {
     if (e instanceof ZipError) throw new UnreadablePdfError(`Orca couldn't read this deck (${e.message}).`);
     throw e;

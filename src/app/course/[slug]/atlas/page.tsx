@@ -4,7 +4,6 @@ import { use, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { DiveModal } from "@/components/quiz/DiveModal";
-import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { durationSeconds } from "@/lib/mastery/session";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { TopicGraph } from "@/components/atlas/TopicGraph";
@@ -133,7 +132,7 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
       )}
       <DiveModal
         topic={diving}
-        initialMinutes={Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60)}
+        initialMinutes={durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60}
         onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
         onClose={closeDive}
       />

@@ -4,7 +4,6 @@ import { use, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { DiveModal } from "@/components/quiz/DiveModal";
-import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { durationSeconds } from "@/lib/mastery/session";
 import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { AppShell } from "@/components/layout/AppShell";
@@ -141,7 +140,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
       <ExamsModal course={editingExams ? course : null} onClose={closeExams} />
       <DiveModal
         topic={diving}
-        initialMinutes={Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60)}
+        initialMinutes={durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60}
         onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
         onClose={closeDive}
       />
