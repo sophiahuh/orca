@@ -1,5 +1,7 @@
 # Resume an unfinished session (2026-10-19)
 
+**Status:** built 2026-10-19; finishing a resumed session fixed 2026-10-25 (e2fbf8b). Needs migration `20261019090000` on the database.
+
 **Owner's ask.** X-ing out of a review and opening it again should pick up where you left off.
 
 **Today.** Every answer is saved as it's graded (evidence), so nothing answered is lost; what's lost

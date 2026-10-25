@@ -1,5 +1,7 @@
 # Question feedback: thumbs up / down (2026-10-18)
 
+**Status:** built 2026-10-18 (thumbs, popup with note, notes fed to question writing), on `phase-4` and live.
+
 **Owner's ask.** A thumbs up/down on each question, used in the student's course and kept
 platform-wide for Orca's own tracking.
 

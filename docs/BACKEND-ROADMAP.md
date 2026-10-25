@@ -160,6 +160,18 @@ For each upload:
    question (`session_progress`: the questions, position, score and misses so far); reopening it
    within a day asks "Pick up where you left off?". Resume keeps the session id, so it's recorded as
    one session. Plan: `docs/superpowers/plans/2026-10-19-resume-sessions.md`.
+   *Answering and grading (owner, 2026-10-20):* "Don't know" beside Check records a wrong answer
+   graded `self` (no credit, back to learning, never a mix-up) and shows the solution. Multiple-choice
+   options are shuffled each time a question is shown (the key remapped; "all/none of the above"
+   stays last), since generated keys leaned to A. Prose grading uses the server's model unless
+   `ORCA_GRADE_MODEL` names another; it marks understanding, not wording, never asks the student to
+   restate the question's givens or a detail beyond the question, and rubrics require only what the
+   material teaches. Feedback is asked for under 300 characters and shown whole if longer (OpenAI's
+   strict format can't enforce a length, so limits go in each field's description).
+   *Sidebar quick-review count (owner, 2026-10-25):* the card reads "Covers N objectives", where N
+   is how many due objectives the course's time budget fits, planned exactly as the session plans
+   it (`src/lib/askable.ts`, `assembleQuickReview`). The full due count isn't shown: it counted every
+   unseen objective and overstated what one session covers. The "Dive in" card has no detail line.
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
@@ -263,10 +275,14 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   the same day). The study page and the `requiz` session are gone; old `requiz` evidence and results
   still load.
 
-### Phase 4 — Supabase (built locally; live checks pending)
+### Phase 4 — Supabase ✅ (live)
 Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; Tasks 1–9
-built on branch `phase-4` by 2026-10-06, every check green against the local stack; Task 10's live
-checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
+built on branch `phase-4` by 2026-10-06, every check green against the local stack). Live since
+2026-10-12 on Vercel (https://orca-lake-omega.vercel.app) with hosted Supabase project
+`fbbimuspcsytjhbqlzzc`, jobs inline (`ORCA_JOBS=inline`; no Trigger.dev project yet), OpenAI as the
+model. Not recorded as done: Task 10's scripted live checks (`check:isolation` against the
+production project), custom SMTP for emails, the dead-run cron (`vercel.json` waits on the plan;
+`docs/SETUP-HOSTED.md` §5).
 - Auth screens in Orca's style; `proxy.ts` session refresh (Next 16's name for middleware).
   Email + password through Supabase Auth (email confirmation, password reset, custom SMTP before
   real students); Google sign-in later as a second provider (decided 2026-10-05).
@@ -274,8 +290,9 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   platform's migrations (0001/0003/0004/0012/0015/0016/0017) and policies; its `artifacts` bugs
   (no student UPDATE policy; `status` excluded from the column grant) are the checklist. The
   source-anchor check constraint becomes "at least one unless inferred".
-- **Files in Supabase Storage**: private bucket, `${userId}/${uuid}/${safeName}`, signed uploads
-  from the browser, 25 MB limit, filename sanitising (all ported).
+- **Files in Supabase Storage**: private bucket, signed uploads from the browser, filename
+  sanitising (ported). Since 2026-10-18: stored at `<owner>/<material id>`, 30 MB limit (uploads
+  over it are refused before sending), PDFs and .pptx decks.
 - **Snapshots:** an `objective_state` row per objective holding the accumulator, updated in the
   same transaction as each evidence insert, with a rules version. A rules change marks every
   snapshot stale (rebuilt lazily on read); a merge or re-tag marks only the objectives involved.
@@ -340,14 +357,17 @@ checks wait for the owner's hosted projects, `docs/SETUP-HOSTED.md`).
   thread so the read budget is real; emailed links from `SITE_URL`; token-hash links accepted by the
   callback. Dependencies: none added in Tasks 7b–9 (`worker_threads` and `Intl` are Node's).
 
-### Since Phase 4 (2026-10-06, owner's decisions)
+### Since Phase 4 (owner's decisions; the 2026-10-18 to 10-25 ones are under Uploads above)
 Exams have their own table (`exams`: course, title, date, optional `topic_ids`), edited from the
 course page and shown on the calendar; hand-added exam calendar entries moved into it. Dives (deep
 review) write their questions when they start, course-wide or for one topic. Course review settings
 and weights are overrides of account defaults kept on the profile (null inherits). Relations are
 between topics (see Uploads above). No new dependency or persistence layer was added for any of it.
 
-### Phase 5 — Relation mastery, exams, calendar
+### Phase 5 — Relation mastery, exams, calendar (not started)
+Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not
+built: everything below, and the exam review itself (the "Exam review" setting is stored, but no
+session uses it).
 Connection questions record evidence on a relation, which gets its own derived state (weak or
 strong). (Relations are between topics since 2026-10-06, so the `implies` shielding below needs
 rethinking: there is no objective-level `implies` any more.) `implies` shielding: a correct answer
@@ -355,10 +375,24 @@ on an objective counts as a partial review of the objectives it implies. A miss 
 (port `stage-boundaries.ts`): retired objectives in scope come back; retrieval → mixed → transfer.
 Calendar shows deep reviews, exam blocks and material due dates.
 
-### Phase 6 — Drills and exact checkers for ALD
+### Phase 6 — Drills and exact checkers for ALD (not started)
 Generators for the procedural objectives in `docs/OBJECTIVES-ALD.md`; Boolean answers checked by
 truth-table equivalence.
 
-### Phase 7 — MCP connector
+### Phase 7 — MCP connector (not started)
 `/api/mcp` with per-student tokens: `log_study`, `get_due`, `get_material`
 (`docs/MASTERY-PLAN.md` §5). Connector activity raises priority; it never counts toward mastery.
+
+## Offered, not decided (2026-10-25)
+Proposals an agent made that the owner hasn't accepted or refused; don't build them unasked.
+- Store each student's answer text with its evidence, and bring a missed question back after ~3
+  days (today a miss only puts the objective back in the quick-review queue).
+- Two-stage upload: build topics and objectives first, write questions after the student reviews
+  them.
+- DAU/WAU: SQL in `docs/SETUP-HOSTED.md`, or Vercel Analytics.
+- Deploy Trigger.dev tasks from CI; raise route `maxDuration` to 800 s on Vercel Pro.
+- Pass the server's real error message through to failed uploads (today a generic one).
+- CI: browser tests against `next build` + `next start` instead of `next dev`; serve Gabarito
+  from the repo so builds don't depend on Google Fonts.
+- Courses map: the number beside each course counts its due sidebar cards (0–2); show the
+  quick review's "Covers N", label it, or hide 0.
