@@ -18,8 +18,8 @@ const MARKDOWN_LINK = /\[[^\]\n]{1,200}\]\((?:https?:\/\/|www\.|\/)[^)\s]*\)/i;
 export interface TextRule {
   /** URLs the text may contain (those in the material). Anything else is refused. */
   allowedUrls?: ReadonlySet<string>;
-  /** Longest the text may be after sanitising. */
-  maxChars: number;
+  /** Longest the text may be after sanitising; unset, any length. */
+  maxChars?: number;
 }
 
 export type Validated = { ok: true; text: string } | { ok: false; reason: string };

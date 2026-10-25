@@ -4,7 +4,7 @@
  * `applyUploadPlan` merges into the course. Nothing here touches the store.
  */
 import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
-import { type Named, exactMatch, normaliseName, shortlist } from "../course/match.ts";
+import { type Named, exactMatch, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
@@ -54,11 +54,9 @@ export interface RunDeps {
 
 export interface UploadPlan {
   newTopics: Topic[];
-  /** Existing topics: names this upload used for them. */
-  topicAliases: Record<string, string[]>;
   newObjectives: Objective[];
-  /** Existing objectives this upload covered: extra names and this upload's signal. */
-  objectiveUpdates: Record<string, { aliases: string[]; signal: ObjectiveSignal | null }>;
+  /** Existing objectives this upload covered: this upload's signal. */
+  objectiveUpdates: Record<string, { signal: ObjectiveSignal | null }>;
   relations: Relation[];
   /** topicId → new questions. */
   questions: Record<string, QuizQuestion[]>;
@@ -66,6 +64,8 @@ export interface UploadPlan {
 }
 
 const OBJECTIVES_PER_CALL = 8;
+/** Questions one writing call is asked for: a batch size, not a limit (more are written over several rounds). */
+const QUESTIONS_PER_CALL = { generate: 16, deep: 8 } as const;
 
 /** Run `fn` over `items`, at most `limit` at a time, keeping order. */
 async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
@@ -84,9 +84,9 @@ async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T, inde
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** Course items as the matcher and the prompts see them; merged-away items live on as aliases of their survivor. */
-function asNamed<T extends { id: string; name: string; aliases: string[]; review: Topic["review"]; mergedInto?: string; description?: string }>(items: readonly T[]): Named[] {
-  return items.map((i) => ({ id: i.id, name: i.name, aliases: i.aliases, review: i.review, mergedInto: i.mergedInto, description: i.description }));
+/** Course items as the matcher and the prompts see them; a merged-away item stands for its survivor. */
+function asNamed<T extends { id: string; name: string; review: Topic["review"]; mergedInto?: string; description?: string }>(items: readonly T[]): Named[] {
+  return items.map((i) => ({ id: i.id, name: i.name, review: i.review, mergedInto: i.mergedInto, description: i.description }));
 }
 
 function survivor<T extends { id: string; mergedInto?: string }>(id: string, byId: ReadonlyMap<string, T>): T | undefined {
@@ -103,7 +103,7 @@ type Resolution = { kind: "existing"; id: string } | { kind: "new"; uncertain?: 
  */
 async function resolve(
   kind: "topic" | "objective",
-  candidate: { existingId: string | null; name: string; aliases: string[]; description: string },
+  candidate: { existingId: string | null; name: string; description: string },
   existing: readonly Named[],
   call: CallStep,
 ): Promise<Resolution> {
@@ -114,15 +114,15 @@ async function resolve(
     return s.review === "archived" ? { kind: "dropped", reason: `the same as rejected ${kind} "${s.name}"` } : { kind: "existing", id: s.id };
   };
   if (candidate.existingId && byId.has(candidate.existingId)) return verdict(candidate.existingId);
-  const exact = exactMatch([candidate.name, ...candidate.aliases], existing);
+  const exact = exactMatch([candidate.name], existing);
   if (exact) return exact.kind === "live" ? { kind: "existing", id: exact.id } : { kind: "dropped", reason: `the same as rejected ${kind} "${byId.get(exact.id)?.name}"` };
   const close = shortlist(candidate, existing);
   if (!close.length) return { kind: "new" };
   try {
     const r = await call("reconcile", {
       kind,
-      candidate: { name: candidate.name, aliases: candidate.aliases, description: candidate.description },
-      existing: close.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases, description: c.description ?? "", rejected: c.review === "archived" })),
+      candidate: { name: candidate.name, description: candidate.description },
+      existing: close.map((c) => ({ id: c.id, name: c.name, description: c.description ?? "", rejected: c.review === "archived" })),
     });
     const match = r.matchId && byId.has(r.matchId) ? r.matchId : null;
     if (r.decision === "same" && match) return verdict(match);
@@ -166,7 +166,8 @@ function anchorExists(locator: string, facts: MaterialFacts): boolean {
 }
 
 const TEXT_RULE = (facts: MaterialFacts, maxChars = 1200) => ({ maxChars, allowedUrls: facts.allowedUrls });
-const SHORT_RULE = (facts: MaterialFacts) => ({ maxChars: 240, allowedUrls: facts.allowedUrls });
+/** Extracted text (topics, objectives, their excerpts) has no length limit (2026-10-25): only what it contains is checked. */
+const EXTRACTED_RULE = (facts: MaterialFacts) => ({ allowedUrls: facts.allowedUrls });
 
 /** The pattern screen over every page of the material, each hit tagged with its slide and its severity. */
 export function screenMaterial(pages: ReadonlyArray<{ n: number; text: string }>): NonNullable<PipelineRun["security"]>["screen"] {
@@ -189,7 +190,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
 
   const existingTopics = asNamed(input.course.topics);
   const existingObjectives = asNamed(Object.values(input.objectives));
-  const listed = <T extends Named>(items: T[]) => items.filter((i) => !i.mergedInto).map((i) => ({ id: i.id, name: i.name, aliases: i.aliases, description: i.description, rejected: i.review === "archived" }));
+  const listed = <T extends Named>(items: T[]) => items.filter((i) => !i.mergedInto).map((i) => ({ id: i.id, name: i.name, description: i.description, rejected: i.review === "archived" }));
 
   /* 1. Extract */
   progress({ stage: "mapping" });
@@ -210,11 +211,10 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   progress({ stage: "matching", candidates: extracted.topics.length + extracted.objectives.length });
   const topicByRef = new Map<string, { kind: "existing" | "new"; id: string } | { kind: "dropped" }>();
   const newTopics: Topic[] = [];
-  const topicAliases: Record<string, string[]> = {};
   // Validators first (decision 13): a topic whose text holds a URL the material doesn't, HTML, a link or an instruction is refused, never repaired.
-  const topicTexts = extracted.topics.map((t) => validateFields({ name: t.name, summary: t.summary, ...Object.fromEntries(t.aliases.map((a, i) => [`alias ${i + 1}`, a])) }, SHORT_RULE(facts)));
+  const topicTexts = extracted.topics.map((t) => validateFields({ name: t.name, summary: t.summary }, EXTRACTED_RULE(facts)));
   const topicResolutions = await pool(extracted.topics, 4, (t, i) =>
-    topicTexts[i].ok ? resolve("topic", { existingId: t.existingId, name: t.name, aliases: t.aliases, description: t.summary }, existingTopics, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
+    topicTexts[i].ok ? resolve("topic", { existingId: t.existingId, name: t.name, description: t.summary }, existingTopics, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
   );
   extracted.topics.forEach((t, i) => {
     const r = topicResolutions[i];
@@ -230,14 +230,11 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       return;
     }
     if (r.kind === "existing") {
-      const existing = input.course.topics.find((x) => x.id === r.id)!;
-      const extra = [t.name, ...t.aliases].filter((n) => ![existing.name, ...existing.aliases].some((a) => normaliseName(a) === normaliseName(n)));
-      if (extra.length) topicAliases[r.id] = [...(topicAliases[r.id] ?? []), ...extra];
       topicByRef.set(t.localId, { kind: "existing", id: r.id });
       return;
     }
     // Two extracted topics with the same name in one upload are one topic.
-    const twin = exactMatch([t.name, ...t.aliases], asNamed(newTopics));
+    const twin = exactMatch([t.name], asNamed(newTopics));
     if (twin) {
       topicByRef.set(t.localId, { kind: "new", id: twin.id });
       return;
@@ -245,7 +242,6 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     const topic: Topic = {
       id: newId(),
       name: t.name,
-      aliases: t.aliases.filter((a) => normaliseName(a) !== normaliseName(t.name)),
       review: "proposed",
       materialId: input.material.id,
       pos: { x: 0, y: 0 },
@@ -257,12 +253,13 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     topicByRef.set(t.localId, { kind: "new", id: topic.id });
   });
   const liveTopicIds = new Set(input.course.topics.filter((t) => t.review !== "archived").map((t) => t.id));
-  const topicIdOf = (ref: string): string | null | "dropped" => {
+  // "dropped": this upload left the topic out (refused or skipped, listed above); "rejected": the student rejected it.
+  const topicIdOf = (ref: string): string | null | "dropped" | "rejected" => {
     const r = topicByRef.get(ref);
     if (r) return r.kind === "dropped" ? "dropped" : r.id;
     const existing = survivor(ref, new Map(input.course.topics.map((t) => [t.id, t])));
     if (!existing) return null;
-    return liveTopicIds.has(existing.id) ? existing.id : "dropped";
+    return liveTopicIds.has(existing.id) ? existing.id : "rejected";
   };
   const confirmedTopic = (id: string) => input.course.topics.some((t) => t.id === id && t.review === "confirmed");
 
@@ -275,15 +272,14 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       {
         name: o.name,
         description: o.description,
-        ...Object.fromEntries(o.aliases.map((a, i) => [`alias ${i + 1}`, a])),
         ...Object.fromEntries(o.places.map((pl, i) => [`place ${i + 1}`, pl.excerpt])),
         ...(o.emphasis ? { emphasis: o.emphasis.quote } : {}),
       },
-      { maxChars: 400, allowedUrls: facts.allowedUrls },
+      EXTRACTED_RULE(facts),
     ),
   );
   const objectiveResolutions = await pool(extracted.objectives, 4, (o, i) =>
-    objectiveTexts[i].ok ? resolve("objective", { existingId: o.existingId, name: o.name, aliases: o.aliases, description: o.description }, existingObjectives, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
+    objectiveTexts[i].ok ? resolve("objective", { existingId: o.existingId, name: o.name, description: o.description }, existingObjectives, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
   );
   extracted.objectives.forEach((o, i) => {
     const r = objectiveResolutions[i];
@@ -304,21 +300,18 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       return;
     }
     if (r.kind === "existing") {
-      const existing = input.objectives[r.id];
-      const update = (objectiveUpdates[r.id] ??= { aliases: [], signal: null });
-      for (const n of [o.name, ...o.aliases]) {
-        if (![existing.name, ...existing.aliases, ...update.aliases].some((a) => normaliseName(a) === normaliseName(n))) update.aliases.push(n);
-      }
+      const update = (objectiveUpdates[r.id] ??= { signal: null });
       if (signal) update.signal = update.signal ? { ...update.signal, places: [...update.signal.places, ...signal.places], emphasis: signal.emphasis ?? update.signal.emphasis } : signal;
       objectiveByRef.set(o.localId, r.id);
       return;
     }
     const topicId = topicIdOf(o.topicRef);
-    if (topicId === null || topicId === "dropped") {
-      dropped.push({ prompt: `Objective "${o.name}"`, reason: topicId === null ? `skipped: its topic "${o.topicRef}" doesn't exist` : "skipped: its topic was rejected" });
+    if (topicId === null || topicId === "dropped" || topicId === "rejected") {
+      const why = topicId === null ? `its topic "${o.topicRef}" doesn't exist` : topicId === "dropped" ? "its topic was left out of this upload (see above)" : "its topic was rejected";
+      dropped.push({ prompt: `Objective "${o.name}"`, reason: `skipped: ${why}` });
       return;
     }
-    const twin = exactMatch([o.name, ...o.aliases], asNamed(newObjectives));
+    const twin = exactMatch([o.name], asNamed(newObjectives));
     if (twin) {
       const t = newObjectives.find((x) => x.id === twin.id)!;
       if (signal) t.signals = [...t.signals, signal];
@@ -330,7 +323,6 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       topicId,
       name: o.name,
       description: o.description,
-      aliases: o.aliases.filter((a) => normaliseName(a) !== normaliseName(o.name)),
       origin: o.origin,
       review: confirmedTopic(topicId) && !r.uncertain ? "confirmed" : "proposed",
       materialId: input.material.id,
@@ -345,7 +337,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   /* 4. Relations between topics (new and existing; a merged topic's links go to its survivor) */
   const linkTopic = (ref: string) => {
     const id = topicIdOf(ref);
-    return id === null || id === "dropped" ? null : id;
+    return id === null || id === "dropped" || id === "rejected" ? null : id;
   };
   // One link per pair of topics: a pair the course links already is skipped; within this upload the most specific kind comes first.
   const linkedPairs = new Set(input.relations.filter((r) => r.review !== "archived").map((r) => pairKey(r.from, r.to)));
@@ -366,7 +358,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       continue;
     }
     if (r.anchor) {
-      const v = validateFields({ excerpt: r.anchor.excerpt }, SHORT_RULE(facts));
+      const v = validateFields({ excerpt: r.anchor.excerpt }, EXTRACTED_RULE(facts));
       if (!v.ok || !anchorExists(r.anchor.locator, facts)) {
         refuse(`A ${r.type} relation`, v.ok ? `its anchor names ${r.anchor.locator}, which this material doesn't have` : v.reason);
         continue;
@@ -421,7 +413,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       refusedItems: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).slice(0, 40).map((d) => ({ what: d.prompt.slice(0, 120), reason: d.reason.slice(REFUSED_PREFIX.length, REFUSED_PREFIX.length + 110) })),
     },
   });
-  if (deps.structureOnly) return { newTopics, topicAliases, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
+  if (deps.structureOnly) return { newTopics, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
 
   /* 5–7. Questions for every objective this upload touched that is short of its stock */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
@@ -448,7 +440,6 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
 
   return {
     newTopics,
-    topicAliases,
     newObjectives,
     objectiveUpdates,
     relations,
@@ -493,108 +484,128 @@ export async function writeQuestions(
   const dropped: PipelineRun["dropped"] = [];
   const facts = materialFacts(input.pages);
   /* Write */
-  const touched = input.targets.map((t) => ({ o: t.objective, existing: t.existing, need: t.need }));
+  const touched = input.targets.map((t) => ({ o: t.objective, asked: t.existing.map((q) => q.prompt), need: t.need }));
   progress({ stage: "writing", objectives: touched.length });
   const topicsById = input.topics;
-  const byTopic = new Map<string, typeof touched>();
-  for (const x of touched) byTopic.set(x.o.topicId, [...(byTopic.get(x.o.topicId) ?? []), x]);
-  const jobs = [...byTopic.entries()].flatMap(([topicId, xs]) =>
-    Array.from({ length: Math.ceil(xs.length / OBJECTIVES_PER_CALL) }, (_, i) => ({ topicId, xs: xs.slice(i * OBJECTIVES_PER_CALL, (i + 1) * OBJECTIVES_PER_CALL) })),
-  );
-  const generated = (
-    await pool(jobs, 3, async ({ topicId, xs }) => {
-      const topic = topicsById.get(topicId)!;
-      try {
-        const out = await call(input.deep ? "deep" : "generate", {
-          course: { name: input.course.name, short: input.course.short },
-          material: { filename: input.material.filename, type: input.material.type },
-          pages: input.pages,
-          topic: { name: topic.name, summary: topic.summary ?? "" },
-          objectives: xs.map(({ o, existing, need }) => ({ id: o.id, name: o.name, description: o.description, origin: o.origin, need, existingPrompts: existing.map((q) => q.prompt).slice(0, 40) })),
-          ...(input.flagged?.length ? { flagged: flaggedFor(input.flagged, new Set(xs.map((x) => x.o.id))) } : {}),
-        });
-        const wanted = new Map(xs.map((x) => [x.o.id, x]));
-        const kept: Array<{ topicId: string; q: QuizQuestion; figureSlide: number | null }> = [];
-        const count = new Map<string, number>();
-        for (const g of out.questions) {
-          const target = wanted.get(g.objectiveId);
-          if (!target) {
-            dropped.push({ prompt: shown(g.prompt, 1200), reason: "written for an objective it wasn't asked about" });
-            continue;
-          }
-          if ((count.get(g.objectiveId) ?? 0) >= target.need) continue;
-          const inferred = target.o.origin === "inferred";
-          const problem = structuralProblem(g, inferred);
-          if (problem) {
-            dropped.push({ prompt: shown(g.prompt, 1200), reason: problem });
-            continue;
-          }
-          // Decision 13: every string the model wrote is sanitised and refused for a URL the material
-          // doesn't have, HTML, a link or instruction-like text; an anchor must name slides that exist.
-          const texts = validateFields(
-            {
-              prompt: g.prompt,
-              explanation: g.explanation,
-              ...Object.fromEntries(g.options.map((o, i) => [`option ${i + 1}`, o])),
-              ...Object.fromEntries((g.exact ?? []).map((e, i) => [`exact answer ${i + 1}`, e])),
-              ...Object.fromEntries((g.rubric?.requiredIdeas ?? []).map((e, i) => [`required idea ${i + 1}`, e])),
-              ...Object.fromEntries((g.rubric?.acceptableAlternatives ?? []).map((e, i) => [`alternative ${i + 1}`, e])),
-              ...Object.fromEntries((g.rubric?.knownMisconceptions ?? []).flatMap((m, i) => [[`misconception ${i + 1}`, m.description], ...m.indicativePhrasing.map((ph, j) => [`misconception ${i + 1} phrasing ${j + 1}`, ph])])),
-              ...(g.anchor ? { "anchor excerpt": g.anchor.excerpt } : {}),
-            },
-            TEXT_RULE(facts, input.deep ? DEEP_TEXT : undefined),
-          );
-          if (!texts.ok) {
-            dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });
-            continue;
-          }
-          if (g.anchor && !anchorExists(g.anchor.locator, facts)) {
-            dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}its anchor names ${shown(g.anchor.locator, 60)}, which this material doesn't have` });
-            continue;
-          }
-          if (g.figureSlide !== null && !facts.pages.has(g.figureSlide)) {
-            dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}needs slide ${g.figureSlide}, which this material doesn't have` });
-            continue;
-          }
-          count.set(g.objectiveId, (count.get(g.objectiveId) ?? 0) + 1);
-          const short = g.kind === "Short answer";
-          const v = texts.values;
-          kept.push({
-            topicId,
-            figureSlide: g.figureSlide,
-            q: {
-              id: newId(),
-              materialId: input.material.id,
-              objectiveId: g.objectiveId,
-              ...(input.deep ? { deep: true } : {}),
-              kind: g.kind,
-              tier: g.tier,
-              topic: topic.name,
-              prompt: v.prompt,
-              options: short ? [] : g.options.map((_, i) => v[`option ${i + 1}`]),
-              answer: short ? -1 : g.answer,
-              exact: short && g.exact && g.exact.length ? g.exact.map((_, i) => v[`exact answer ${i + 1}`]) : undefined,
-              rubric:
-                short && !(g.exact && g.exact.length) && g.rubric
-                  ? {
-                      requiredIdeas: g.rubric.requiredIdeas.map((_, i) => v[`required idea ${i + 1}`]),
-                      acceptableAlternatives: g.rubric.acceptableAlternatives.map((_, i) => v[`alternative ${i + 1}`]),
-                      knownMisconceptions: g.rubric.knownMisconceptions.map((m, i) => ({ description: v[`misconception ${i + 1}`], indicativePhrasing: m.indicativePhrasing.map((_, j) => v[`misconception ${i + 1} phrasing ${j + 1}`]) })),
-                    }
-                  : undefined,
-              explanation: v.explanation,
-              // Questions for inferred objectives must not present themselves as course-specific.
-              anchor: inferred ? undefined : g.anchor ? { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } : undefined,
-            },
-          });
-        }
-        return kept;
-      } catch (e) {
-        dropped.push({ prompt: `Questions for "${topic.name}"`, reason: `couldn't be written: ${errorText(e)}` });
-        return [];
+  const perCall = QUESTIONS_PER_CALL[input.deep ? "deep" : "generate"];
+  // Each round asks every objective with questions still to write for up to a call's worth, in calls
+  // of at most OBJECTIVES_PER_CALL objectives and `perCall` questions; a later round sees what the
+  // earlier ones wrote, so an objective that needs many questions gets different ones.
+  const left = new Map(touched.map((x) => [x.o.id, x.need]));
+  const generated: Array<{ topicId: string; q: QuizQuestion; figureSlide: number | null }> = [];
+  while (touched.some((x) => left.get(x.o.id)! > 0)) {
+    const byTopic = new Map<string, Array<{ o: Objective; asked: string[]; need: number }>>();
+    for (const x of touched) {
+      const need = Math.min(perCall, left.get(x.o.id)!);
+      if (need <= 0) continue;
+      left.set(x.o.id, left.get(x.o.id)! - need);
+      byTopic.set(x.o.topicId, [...(byTopic.get(x.o.topicId) ?? []), { o: x.o, asked: [...x.asked], need }]);
+    }
+    const jobs: Array<{ topicId: string; xs: Array<{ o: Objective; asked: string[]; need: number }> }> = [];
+    for (const [topicId, xs] of byTopic) {
+      for (const x of xs) {
+        const last = jobs.at(-1);
+        if (last && last.topicId === topicId && last.xs.length < OBJECTIVES_PER_CALL && last.xs.reduce((n, y) => n + y.need, 0) + x.need <= perCall) last.xs.push(x);
+        else jobs.push({ topicId, xs: [x] });
       }
-    })
-  ).flat();
+    }
+    const round = (
+      await pool(jobs, 3, async ({ topicId, xs }) => {
+        const topic = topicsById.get(topicId)!;
+        try {
+          const out = await call(input.deep ? "deep" : "generate", {
+            course: { name: input.course.name, short: input.course.short },
+            material: { filename: input.material.filename, type: input.material.type },
+            pages: input.pages,
+            topic: { name: topic.name, summary: topic.summary ?? "" },
+            objectives: xs.map(({ o, asked, need }) => ({ id: o.id, name: o.name, description: o.description, origin: o.origin, need, existingPrompts: asked })),
+            ...(input.flagged?.length ? { flagged: flaggedFor(input.flagged, new Set(xs.map((x) => x.o.id))) } : {}),
+          });
+          const wanted = new Map(xs.map((x) => [x.o.id, x]));
+          const kept: Array<{ topicId: string; q: QuizQuestion; figureSlide: number | null }> = [];
+          const count = new Map<string, number>();
+          for (const g of out.questions) {
+            const target = wanted.get(g.objectiveId);
+            if (!target) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: "written for an objective it wasn't asked about" });
+              continue;
+            }
+            if ((count.get(g.objectiveId) ?? 0) >= target.need) continue;
+            const inferred = target.o.origin === "inferred";
+            const problem = structuralProblem(g, inferred);
+            if (problem) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: problem });
+              continue;
+            }
+            // Decision 13: every string the model wrote is sanitised and refused for a URL the material
+            // doesn't have, HTML, a link or instruction-like text; an anchor must name slides that exist.
+            const texts = validateFields(
+              {
+                prompt: g.prompt,
+                explanation: g.explanation,
+                ...Object.fromEntries(g.options.map((o, i) => [`option ${i + 1}`, o])),
+                ...Object.fromEntries((g.exact ?? []).map((e, i) => [`exact answer ${i + 1}`, e])),
+                ...Object.fromEntries((g.rubric?.requiredIdeas ?? []).map((e, i) => [`required idea ${i + 1}`, e])),
+                ...Object.fromEntries((g.rubric?.acceptableAlternatives ?? []).map((e, i) => [`alternative ${i + 1}`, e])),
+                ...Object.fromEntries((g.rubric?.knownMisconceptions ?? []).flatMap((m, i) => [[`misconception ${i + 1}`, m.description], ...m.indicativePhrasing.map((ph, j) => [`misconception ${i + 1} phrasing ${j + 1}`, ph])])),
+                ...(g.anchor ? { "anchor excerpt": g.anchor.excerpt } : {}),
+              },
+              TEXT_RULE(facts, input.deep ? DEEP_TEXT : undefined),
+            );
+            if (!texts.ok) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });
+              continue;
+            }
+            if (g.anchor && !anchorExists(g.anchor.locator, facts)) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}its anchor names ${shown(g.anchor.locator, 60)}, which this material doesn't have` });
+              continue;
+            }
+            if (g.figureSlide !== null && !facts.pages.has(g.figureSlide)) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}needs slide ${g.figureSlide}, which this material doesn't have` });
+              continue;
+            }
+            count.set(g.objectiveId, (count.get(g.objectiveId) ?? 0) + 1);
+            const short = g.kind === "Short answer";
+            const v = texts.values;
+            kept.push({
+              topicId,
+              figureSlide: g.figureSlide,
+              q: {
+                id: newId(),
+                materialId: input.material.id,
+                objectiveId: g.objectiveId,
+                ...(input.deep ? { deep: true } : {}),
+                kind: g.kind,
+                tier: g.tier,
+                topic: topic.name,
+                prompt: v.prompt,
+                options: short ? [] : g.options.map((_, i) => v[`option ${i + 1}`]),
+                answer: short ? -1 : g.answer,
+                exact: short && g.exact && g.exact.length ? g.exact.map((_, i) => v[`exact answer ${i + 1}`]) : undefined,
+                rubric:
+                  short && !(g.exact && g.exact.length) && g.rubric
+                    ? {
+                        requiredIdeas: g.rubric.requiredIdeas.map((_, i) => v[`required idea ${i + 1}`]),
+                        acceptableAlternatives: g.rubric.acceptableAlternatives.map((_, i) => v[`alternative ${i + 1}`]),
+                        knownMisconceptions: g.rubric.knownMisconceptions.map((m, i) => ({ description: v[`misconception ${i + 1}`], indicativePhrasing: m.indicativePhrasing.map((_, j) => v[`misconception ${i + 1} phrasing ${j + 1}`]) })),
+                      }
+                    : undefined,
+                explanation: v.explanation,
+                // Questions for inferred objectives must not present themselves as course-specific.
+                anchor: inferred ? undefined : g.anchor ? { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } : undefined,
+              },
+            });
+          }
+          return kept;
+        } catch (e) {
+          dropped.push({ prompt: `Questions for "${topic.name}"`, reason: `couldn't be written: ${errorText(e)}` });
+          return [];
+        }
+      })
+    ).flat();
+    for (const g of round) touched.find((x) => x.o.id === g.q.objectiveId)?.asked.push(g.q.prompt);
+    generated.push(...round);
+  }
 
   const slideText = new Map(input.pages.map((p) => [p.n, p.text]));
 

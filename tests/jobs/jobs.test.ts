@@ -79,8 +79,8 @@ function honestModel(per = 2, failOn?: string): { call: CallStep; steps: string[
     if (step === failOn) throw new Error("Anthropic is rate-limiting you. Try again in a moment.");
     if (step === "extract") {
       return {
-        topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "Theorems.", slideStart: 1, slideEnd: 3 }],
-        objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
+        topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 1, slideEnd: 3 }],
+        objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null }],
         relations: [],
       };
     }
@@ -223,8 +223,8 @@ test("a run for another material is refused", async () => {
 });
 
 test("topUp writes questions for the session's objectives from their stored pages and records one run", async () => {
-  const topic: Topic = { id: "t", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 } };
-  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", aliases: [], origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [{ materialId: "m1", materialType: "Lecture", places: [anchor] }] };
+  const topic: Topic = { id: "t", name: "Boolean Algebra", review: "confirmed", pos: { x: 0, y: 0 } };
+  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [{ materialId: "m1", materialType: "Lecture", places: [anchor] }] };
   const q = (id: string): QuizQuestion => ({ id, kind: "Short answer", topic: "Boolean Algebra", prompt: `${id}?`, options: [], answer: -1, exact: ["1"], explanation: "", anchor, objectiveId: "o" });
   const structure: StructureState = { topics: [topic], objectives: { o: objective }, bank: { t: [q("q1"), q("q2")] }, relations: [] };
   const mem = memoryStore({ run: queued({ kind: "top-up", materialId: null }), structure, pages, answered: ["q1"] });
@@ -272,8 +272,8 @@ test("a top-up asks the budget with no pages and is held the same way", async ()
 });
 
 test("a Dive In asks the dive questions written before and never answered first, and writes nothing when they're enough", async () => {
-  const topic: Topic = { id: "t", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 } };
-  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", aliases: [], origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [] };
+  const topic: Topic = { id: "t", name: "Boolean Algebra", review: "confirmed", pos: { x: 0, y: 0 } };
+  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [] };
   const deepQ = (id: string): QuizQuestion => ({ id, kind: "Short answer", tier: "application", topic: "Boolean Algebra", prompt: `${id}?`, options: [], answer: -1, exact: ["1"], explanation: "", anchor, objectiveId: "o", deep: true });
   // d1 was answered in an earlier dive; d2, d3 and d4 never were. 10 minutes is 3 questions.
   const structure: StructureState = { topics: [topic], objectives: { o: objective }, bank: { t: [deepQ("d1"), deepQ("d2"), deepQ("d3"), deepQ("d4")] }, relations: [] };
@@ -289,15 +289,15 @@ test("a Dive In asks the dive questions written before and never answered first,
   assert.equal(mem.saves[0].questions, undefined, "no questions are written");
 });
 
-test("a Dive In asks no more than its objectives can hold: 20 minutes on one objective with 4 unanswered questions writes nothing", async () => {
-  const topic: Topic = { id: "t", name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 } };
-  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", aliases: [], origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [] };
+test("a Dive In is as long as picked, whatever its objectives: 20 minutes on one objective with 5 unanswered questions asks them all and writes nothing", async () => {
+  const topic: Topic = { id: "t", name: "Boolean Algebra", review: "confirmed", pos: { x: 0, y: 0 } };
+  const objective: Objective = { id: "o", topicId: "t", name: "Simplify", description: "", origin: "material", review: "confirmed", materialId: "m1", runId: "r0", signals: [] };
   const deepQ = (id: string): QuizQuestion => ({ id, kind: "Short answer", tier: "application", topic: "Boolean Algebra", prompt: `${id}?`, options: [], answer: -1, exact: ["1"], explanation: "", anchor, objectiveId: "o", deep: true });
   const structure: StructureState = { topics: [topic], objectives: { o: objective }, bank: { t: ["d1", "d2", "d3", "d4", "d5"].map(deepQ) }, relations: [] };
   const mem = memoryStore({ run: queued({ kind: "deep-review", materialId: null, deepMinutes: 20 }), structure, pages });
   const model = honestModel();
   const out = await deepReview({ store: mem.store, call: model.call, newId }, { runId: "run1", objectiveIds: ["o"], minutes: 20 });
   assert.equal(out.status, "done");
-  assert.deepEqual(model.steps, [], "20 minutes is 5 questions, but one objective holds 4: all from the stock");
-  assert.deepEqual(mem.saves[0].runs![0].question_ids, ["d1", "d2", "d3", "d4"]);
+  assert.deepEqual(model.steps, [], "20 minutes is 5 questions, all from the stock");
+  assert.deepEqual(mem.saves[0].runs![0].question_ids, ["d1", "d2", "d3", "d4", "d5"]);
 });

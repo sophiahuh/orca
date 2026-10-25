@@ -15,7 +15,7 @@ const objective = (id: string, signals: ObjectiveSignal[], extra: Partial<Object
   topicId: "t",
   name: id,
   description: "",
-  aliases: [],
+ 
   origin: "material",
   review: "confirmed",
   materialId: "m",
@@ -76,7 +76,7 @@ test("inferred objectives sit at 1.0 unless emphasised", () => {
 });
 
 test("an objective counts the topics its topic is used in, through merges, leaving out archived topics and other link kinds", () => {
-  const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
+  const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
   const topics = [topic("t"), topic("u"), topic("v"), topic("old", { review: "archived", mergedInto: "v" }), topic("gone", { review: "archived" })];
   const rel = (from: string, to: string, type: Relation["type"] = "used-in"): Relation => ({ id: `${from}-${to}-${type}`, from, to, type, anchor: null, review: "confirmed", materialId: "m", reason: null });
   const relations = [rel("t", "u"), rel("t", "old"), rel("t", "v"), rel("t", "gone"), rel("t", "u", "related"), rel("u", "t", "has-a-kind")];

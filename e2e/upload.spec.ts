@@ -21,20 +21,20 @@ const anchor = { locator: "slide 12", excerpt: "x + xy = x" };
 
 const LECTURE = {
   topics: [
-    { localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "Theorems.", slideStart: 10, slideEnd: 20 },
-    { localId: "t2", existingId: null, name: "Karnaugh Maps", aliases: ["K-Maps"], summary: "Grouping.", slideStart: 30, slideEnd: 40 },
+    { localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 10, slideEnd: 20 },
+    { localId: "t2", existingId: null, name: "Karnaugh Maps", summary: "Grouping.", slideStart: 30, slideEnd: 40 },
   ],
   objectives: [
-    { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-    { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
-    { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null },
+    { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null },
+    { localId: "o2", existingId: null, topicRef: "t2", name: "Group ones on a K-map", description: "", origin: "material", places: [anchor], emphasis: null },
+    { localId: "o3", existingId: null, topicRef: "t2", name: "Use don't-cares", description: "", origin: "material", places: [anchor], emphasis: null },
   ],
   relations: [{ from: "t1", to: "t2", type: "used-in", anchor: null, reason: "Simplifying with Boolean algebra is how a K-map grouping is justified." }],
 };
 
 const ONE_TOPIC = {
-  topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "", slideStart: 1, slideEnd: 2 }],
-  objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
+  topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", summary: "", slideStart: 1, slideEnd: 2 }],
+  objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null }],
   relations: [],
 };
 

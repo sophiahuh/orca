@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { type Course, DEFAULT_CONFIG, type QuizQuestion, type SessionProgress, trailTopics } from "@/lib/data";
 import { askableQuestions } from "@/lib/askable";
 import { progressKey } from "@/lib/supabase/app-rows";
-import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { reasonsOf } from "@/lib/mastery/priority";
 import {
   type AssembledSession,
@@ -46,7 +45,7 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
   // A topic's dive ("Dive into [topic]" on the path or the Atlas): that topic only, at the length picked there.
   const topicId = typeof sp.topic === "string" && trailTopics(course).some((t) => t.id === sp.topic) ? sp.topic : undefined;
   const picked = Number(sp.minutes);
-  const minutes = Number.isInteger(picked) && picked >= 1 && picked <= DEEP_MAX_MINUTES ? picked : undefined;
+  const minutes = Number.isInteger(picked) && picked >= 1 ? picked : undefined;
   return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}`} course={course} kind={kind} topicId={topicId} minutes={minutes} />;
 }
 
@@ -207,7 +206,7 @@ function DeepReview({ course, onAgain, topicId, startMinutes }: { course: Course
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
   const backHref = `/course/${course.slug}`;
   // The course's deep-review length is the starting suggestion; the student picks the length here.
-  const [minutes, setMinutes] = useState(() => startMinutes ?? Math.min(DEEP_MAX_MINUTES, durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60));
+  const [minutes, setMinutes] = useState(() => startMinutes ?? durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60);
   const autostart = topicId !== undefined && startMinutes !== undefined;
   const [phase, setPhase] = useState<{ kind: "setup" | "starting" } | { kind: "following"; runId: string } | { kind: "error"; message: string }>({ kind: autostart ? "starting" : "setup" });
   // What it covers, most urgent first: one topic's live objectives, or every objective the student has answered (not retired).

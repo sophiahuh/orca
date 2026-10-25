@@ -14,13 +14,13 @@ import {
   restoreTopic,
 } from "../../src/lib/course/ops.ts";
 
-const topic = (id: string, name: string, review: Topic["review"] = "proposed"): Topic => ({ id, name, aliases: [], review, pos: { x: 0, y: 0 } });
+const topic = (id: string, name: string, review: Topic["review"] = "proposed"): Topic => ({ id, name, review, pos: { x: 0, y: 0 } });
 const objective = (id: string, topicId: string, extra: Partial<Objective> = {}): Objective => ({
   id,
   topicId,
   name: `Do ${id}`,
   description: "",
-  aliases: [],
+ 
   origin: "material",
   review: "proposed",
   materialId: "m1",
@@ -59,16 +59,14 @@ test("rejecting a topic archives it and its objectives; restoring brings back on
   assert.equal(s.objectives.a.review, "archived", "rejected on its own before the topic was");
 });
 
-test("renaming keeps the old name as an alias", () => {
+test("renaming changes the name", () => {
   const s = renameTopic(base(), "t2", "Karnaugh Maps (K-Maps)");
   assert.equal(s.topics[1].name, "Karnaugh Maps (K-Maps)");
-  assert.deepEqual(s.topics[1].aliases, ["K-Maps"]);
 });
 
 test("merging topics moves objectives and questions and archives the loser with a pointer", () => {
   const s = mergeTopics(base(), "t2", "t1");
-  const [survivor, loser] = s.topics;
-  assert.deepEqual(survivor.aliases, ["K-Maps"]);
+  const [, loser] = s.topics;
   assert.equal(loser.review, "archived");
   assert.equal(loser.mergedInto, "t1");
   assert.equal(s.objectives.d.topicId, "t1");
@@ -82,16 +80,14 @@ test("merging objectives points the loser at the survivor and moves questions ac
   assert.equal(s.objectives.b.mergedInto, "c");
   assert.equal(s.objectives.b.review, "archived");
   assert.equal(s.objectives.b.uncertain, undefined);
-  assert.deepEqual(s.objectives.c.aliases, ["Do b"]);
   assert.deepEqual(s.bank.t1.map((q) => q.id), ["q1"]);
   assert.deepEqual(s.bank.t3.map((q) => q.id), ["q4", "q2"]);
 });
 
-test("undoing a merge restores the objective, its questions and the survivor's aliases", () => {
+test("undoing a merge restores the objective and its questions", () => {
   const s = restoreObjective(mergeObjectives(base(), "b", "c"), "b");
   assert.equal(s.objectives.b.mergedInto, undefined);
   assert.equal(s.objectives.b.review, "confirmed");
-  assert.deepEqual(s.objectives.c.aliases, []);
   assert.deepEqual(s.bank.t1.map((q) => q.id), ["q1", "q2"]);
   assert.deepEqual(s.bank.t3.map((q) => q.id), ["q4"]);
 });

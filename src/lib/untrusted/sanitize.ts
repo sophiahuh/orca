@@ -14,7 +14,7 @@
  *   tab in slide text is a column break worth keeping; three or more line breaks to two; a letter
  *   or digit repeated more than 64 times (long bit strings stay intact) and any other character
  *   repeated more than 8 times.
- * - Capped at `maxChars`.
+ * - Capped at `maxChars`, when given.
  */
 
 /** Characters that draw nothing or reorder text: \p{Cf} covers zero-width, bidi, tags, soft hyphen and BOM. */
@@ -48,8 +48,8 @@ function count(text: string, pattern: RegExp): number {
   return text.match(pattern)?.length ?? 0;
 }
 
-export function sanitize(input: string, maxChars: number): Sanitized {
-  if (!Number.isInteger(maxChars) || maxChars < 1) throw new Error(`sanitize: maxChars must be a positive integer, got ${maxChars}`);
+export function sanitize(input: string, maxChars?: number): Sanitized {
+  if (maxChars !== undefined && (!Number.isInteger(maxChars) || maxChars < 1)) throw new Error(`sanitize: maxChars must be a positive integer, got ${maxChars}`);
   // Line separators become newlines before anything else, so they aren't removed as format characters.
   let text = spellScripts(input.replace(/\r\n?|[\u2028\u2029\u0085]/g, "\n")).normalize("NFKC");
   const removed = count(text, INVISIBLE) + count(text, CONTROLS);
@@ -64,7 +64,7 @@ export function sanitize(input: string, maxChars: number): Sanitized {
     .replace(/([^\p{L}\p{N}\s])\1{8,}/gu, (_, c: string) => c.repeat(REPEAT_OTHER))
     .trim();
   let truncated = false;
-  if (text.length > maxChars) {
+  if (maxChars !== undefined && text.length > maxChars) {
     truncated = true;
     text = text.slice(0, maxChars);
     // Don't leave half of a surrogate pair at the end.

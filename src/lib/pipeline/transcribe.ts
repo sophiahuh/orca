@@ -9,7 +9,6 @@
  * rendering are injected. Pure.
  */
 import type { MaterialPages } from "../data.ts";
-import { LIMITS } from "../limits.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import type { CallStep } from "./run.ts";
 import { TRANSCRIBE_PAGES_PER_CALL } from "./schemas.ts";
@@ -62,7 +61,7 @@ async function readFromImages(
         for (const p of ready) {
           const answer = answers.get(p.n);
           if (answer === undefined) result.kept.push({ n: p.n, reason: "the model didn't return this page" });
-          else result.read.push({ n: p.n, text: sanitize(textOf(p, answer), LIMITS.pageChars).text });
+          else result.read.push({ n: p.n, text: sanitize(textOf(p, answer)).text });
         }
       } catch (e) {
         for (const p of ready) result.kept.push({ n: p.n, reason: `couldn't be read from its image: ${e instanceof Error ? e.message : String(e)}` });
@@ -92,7 +91,7 @@ export function describeFigures(input: ReadInput, deps: { call: CallStep; render
     input.pages.filter((p) => p.source === "needs-figure"),
     deps.render,
     async (pages) => {
-      const out = await deps.call("describe", { course: input.course, material: { filename: input.material.filename }, pages: pages.map(({ n, text, image }) => ({ n, text: text.slice(0, 6000), image })) });
+      const out = await deps.call("describe", { course: input.course, material: { filename: input.material.filename }, pages: pages.map(({ n, text, image }) => ({ n, text, image })) });
       return new Map(out.pages.map((p) => [p.n, p.figures]));
     },
     // Nothing worth describing (decoration only): the text as it was.

@@ -15,8 +15,8 @@ import {
   topicToRow,
 } from "../../src/lib/supabase/app-rows.ts";
 
-const topic: Topic = { id: "t1", name: "Boolean algebra", aliases: [], review: "proposed", pos: { x: 330, y: 240 }, uncertain: { candidateId: "t0", reasoning: "same" } };
-const objective: Objective = { id: "o1", topicId: "t1", name: "Simplify", description: "", aliases: [], origin: "material", review: "proposed", materialId: "m", runId: "r", signals: [] };
+const topic: Topic = { id: "t1", name: "Boolean algebra", review: "proposed", pos: { x: 330, y: 240 }, uncertain: { candidateId: "t0", reasoning: "same" } };
+const objective: Objective = { id: "o1", topicId: "t1", name: "Simplify", description: "", origin: "material", review: "proposed", materialId: "m", runId: "r", signals: [] };
 const question: QuizQuestion = { id: "q1", kind: "Short answer", topic: "Boolean algebra", prompt: "x + xy?", options: [], answer: -1, exact: ["x"], explanation: "", anchor: { locator: "slide 2", excerpt: "x" }, objectiveId: "o1" };
 const owned = { owner_id: "u", course_id: "c", created_at: "2026-10-05T12:00:00+00:00" };
 
@@ -41,9 +41,9 @@ test("a save sends only changed rows, names cleared fields as null, and carries 
 test("an existing row is saved with only the columns that changed; a new row whole", () => {
   const before: StructureState = { topics: [topic], objectives: { o1: objective }, bank: {}, relations: [] };
   const added: Topic = { ...topic, id: "t2", name: "K-maps" };
-  const after: StructureState = { ...before, topics: [{ ...topic, aliases: ["Switching algebra"] }, added] };
+  const after: StructureState = { ...before, topics: [{ ...topic, summary: "Switching algebra" }, added] };
   const rows = structureRows(before, after);
-  assert.deepEqual(rows.topics![0], { id: "t1", aliases: ["Switching algebra"] });
+  assert.deepEqual(rows.topics![0], { id: "t1", summary: "Switching algebra" });
   assert.deepEqual(rows.topics![1], topicToRow(added, 1));
 });
 

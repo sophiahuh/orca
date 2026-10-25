@@ -51,11 +51,11 @@ insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at
 select pg_temp.act_as(:'A');
 select lives_ok(format($$select public.save_structure(%L, %L)$$, :'course', jsonb_build_object(
   'topics', jsonb_build_array(
-    jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Boolean algebra', 'review', 'proposed', 'pos_x', 1, 'pos_y', 2, 'material_id', :'material', 'aliases', '[]'::jsonb),
-    jsonb_build_object('id', :'topic2', 'sort_order', 1, 'name', 'Karnaugh maps', 'review', 'proposed', 'pos_x', 3, 'pos_y', 4, 'material_id', :'material', 'aliases', '[]'::jsonb)),
+    jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Boolean algebra', 'review', 'proposed', 'pos_x', 1, 'pos_y', 2, 'material_id', :'material'),
+    jsonb_build_object('id', :'topic2', 'sort_order', 1, 'name', 'Karnaugh maps', 'review', 'proposed', 'pos_x', 3, 'pos_y', 4, 'material_id', :'material')),
   'objectives', jsonb_build_array(
-    jsonb_build_object('id', :'obj', 'topic_id', :'topic', 'name', 'Simplify expressions', 'description', 'd', 'origin', 'material', 'review', 'proposed', 'material_id', :'material', 'run_id', :'run', 'aliases', '[]'::jsonb, 'signals', '[]'::jsonb, 'archived_with_topic', false),
-    jsonb_build_object('id', :'inferred', 'topic_id', :'topic', 'name', 'De Morgan', 'description', 'd', 'origin', 'inferred', 'review', 'proposed', 'material_id', :'material', 'run_id', :'run', 'aliases', '[]'::jsonb, 'signals', '[]'::jsonb, 'archived_with_topic', false)),
+    jsonb_build_object('id', :'obj', 'topic_id', :'topic', 'name', 'Simplify expressions', 'description', 'd', 'origin', 'material', 'review', 'proposed', 'material_id', :'material', 'run_id', :'run', 'signals', '[]'::jsonb, 'archived_with_topic', false),
+    jsonb_build_object('id', :'inferred', 'topic_id', :'topic', 'name', 'De Morgan', 'description', 'd', 'origin', 'inferred', 'review', 'proposed', 'material_id', :'material', 'run_id', :'run', 'signals', '[]'::jsonb, 'archived_with_topic', false)),
   'relations', jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'from_topic', :'topic', 'to_topic', :'topic2', 'type', 'used-in', 'review', 'proposed', 'material_id', :'material')),
   'questions', jsonb_build_array(
     jsonb_build_object('id', :'q', 'topic_id', :'topic', 'sort_order', 0, 'objective_id', :'obj', 'kind', 'Short answer', 'topic_name', 'Boolean algebra', 'prompt', 'Simplify x + xy.', 'answer', -1, 'exact', jsonb_build_array('x'), 'explanation', 'e', 'anchor', jsonb_build_object('locator', 'slide 3', 'excerpt', 'x + xy = x'), 'material_id', :'material', 'options', '[]'::jsonb),
@@ -93,7 +93,7 @@ select throws_ok(format($$insert into public.material_pages (owner_id, material_
 select lives_ok(format($$insert into public.courses (id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
   values (%L, 'signals', 'Signals', 'SIG', 'signals', 0, 0, '{}', '{}')$$, :'course2'), 'A adds a second course');
 select throws_ok(format($$select public.save_structure(%L, %L)$$, :'course2', jsonb_build_object('topics', jsonb_build_array(
-  jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Stolen', 'review', 'proposed', 'pos_x', 0, 'pos_y', 0, 'aliases', '[]'::jsonb)))),
+  jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Stolen', 'review', 'proposed', 'pos_x', 0, 'pos_y', 0)))),
   '23514', null, 'save_structure refuses a row that belongs to another course');
 
 -- B sees none of it.

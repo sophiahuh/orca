@@ -21,8 +21,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
   so no answer outlives what it answered. An archived (rejected) objective stays so it can be
   restored, so the mastery fold can skip its answers explicitly, and so duplicate detection
   drops it when a later upload proposes it again. A merged one keeps a pointer to the survivor
-  (`mergedInto`) and its name as an alias. Duplicate detection is separate from identity: a
-  normalised prompt (`promptKey`) for questions, names and aliases then reconciliation for
+  (`mergedInto`), so an exact match on its name stands for the survivor. Duplicate detection is
+  separate from identity: a normalised prompt (`promptKey`) for questions, names then reconciliation for
   objectives, and it checks archived and merged ones too. Where a question came from is a field
   (`materialId`), not part of its id.
 - **Every topic and objective has a weight**, starting at a neutral 1.0. Claude records signals
@@ -121,7 +121,7 @@ Phase 4 moves it server-side.
 
 For each upload:
 1. **Extraction** (Claude) reads the material together with the course's existing topics,
-   objectives and aliases, and proposes new topics, new objectives, which existing objectives the
+   objectives, and proposes new topics, new objectives, which existing objectives the
    material covers, relations between topics, and weight signals. It may use general knowledge
    of the subject. Relations link topics, not objectives (owner, 2026-10-06), and are the Concept
    Atlas's edges: used-in, has-a-kind, alternative-to, and related (an unlabelled edge). The same
@@ -175,10 +175,11 @@ For each upload:
    Two topics get at most one link, the most specific kind (has-a-kind, used-in, alternative-to,
    related): a pair the course already links is skipped, a more specific kind replaces one made
    earlier in the same upload, and the Atlas draws one edge per pair for older data that has two.
-2. **Duplicate detection**, cheapest first: normalised names and aliases match exactly; the
+2. **Duplicate detection**, cheapest first: normalised names match exactly (a merged-away name
+   stands for its survivor); the
    prompt is told to reuse existing ids; reconciliation (one Claude call per still-new item, against
-   the closest existing ones with full descriptions) answers `same | new | uncertain`; every merge
-   keeps the losing name as an alias so it matches instantly next time.
+   the closest existing ones with full descriptions) answers `same | new | uncertain`. Topics and
+   objectives have no aliases (dropped 2026-10-25).
 3. **Review:** the student confirms new topics; `uncertain` matches are highlighted. Nothing waits
    on review to be practiced (confirmation rule below).
 4. **Questions** are generated per objective (about 6) and stocked. They used to be checked by a
@@ -363,6 +364,22 @@ course page and shown on the calendar; hand-added exam calendar entries moved in
 review) write their questions when they start, course-wide or for one topic. Course review settings
 and weights are overrides of account defaults kept on the profile (null inherits). Relations are
 between topics (see Uploads above). No new dependency or persistence layer was added for any of it.
+
+2026-10-25 (Amanda): extraction's text has no length limit and its topics and objectives no count
+limit (they were 60–400 characters, 8 topics, 40 objectives). The schema let a topic summary run to
+400 characters while the validator refused it past 240, and a refused topic took all its objectives
+with it ("its topic was rejected"). Validators still refuse URLs, HTML, links and instruction-like
+text, never length. The extract step may write 32,000 tokens (was 16,000). Uploads queued together
+now start oldest first even when their requests race, so a later file maps onto the earlier one's
+topics. Extraction's prompt drops its "2 to 6 topics per lecture" and "3 to 8 objectives per topic": it says
+what a topic and an objective are, that a course rarely has more than about 200 topics (scale, not a
+limit), gives topics at the right grain for a few kinds of course, and asks it to cover every section
+that teaches something. The course-size caps on step inputs (200 topics, 1,000 objectives, 400 for a
+reflection or a dive) are gone. A Dive In is as long as the student picks (no 80-minute or
+4-per-objective cap); questions are written in rounds of at most 8 per call (16 for quick-review
+questions), each round told what the last wrote. Pages have no character limit any more (they were cut at 20,000 when read and refused past
+6,000 by the extract, generate and describe steps), nor do transcribed pages. Other limits stay until
+reviewed.
 
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not

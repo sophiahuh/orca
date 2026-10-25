@@ -10,8 +10,6 @@ export const LIMITS = {
   uploadBytes: 30 * 1024 * 1024,
   /** Most pages (or slides) read from one file. */
   pagesPerFile: 150,
-  /** Most characters kept from one page after sanitising (a dense slide has a few thousand). */
-  pageChars: 20_000,
   /** Longest the server spends reading one file (the process route may run 60 s). */
   readMs: 40_000,
   /** A read that started longer ago than this died (its function was stopped): another request may take it over. */

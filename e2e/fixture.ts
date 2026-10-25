@@ -200,7 +200,7 @@ export const objective = (id: string, topicId: string, name: string, extra: Part
   topicId,
   name,
   description: "",
-  aliases: [],
+ 
   origin: "material",
   review: "confirmed",
   materialId: F.material,
@@ -222,8 +222,8 @@ export const FIXTURE_STATE = {
       variant: "circuit",
       pos: { x: 70, y: 110 },
       topics: laidOut([
-        { id: F.booleanAlgebra, name: "Boolean Algebra", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 1, slideEnd: 5 } },
-        { id: F.twosComplement, name: "Two's Complement", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 6, slideEnd: 9 } },
+        { id: F.booleanAlgebra, name: "Boolean Algebra", review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 1, slideEnd: 5 } },
+        { id: F.twosComplement, name: "Two's Complement", review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: DECK, slideStart: 6, slideEnd: 9 } },
       ] satisfies Topic[]),
     },
   ] satisfies Course[],

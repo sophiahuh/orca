@@ -5,7 +5,7 @@ import { closesLoop } from "../../src/lib/course/links.ts";
 import { linkTopics } from "../../src/lib/pipeline/link.ts";
 import type { CallStep } from "../../src/lib/pipeline/run.ts";
 
-const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id.toUpperCase(), aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
+const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id.toUpperCase(), review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
 const rel = (from: string, to: string, type: Relation["type"], reason: string | null = "Because the one builds directly on the other."): Relation => ({ id: `${from}-${type}-${to}`, from, to, type, anchor: null, review: "proposed", materialId: null, reason });
 let n = 0;
 const newId = () => `new${n++}`;
