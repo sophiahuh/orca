@@ -173,8 +173,6 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   if (!count) return { state: "no-text" };
 
   const runId = deps.newId?.() ?? crypto.randomUUID();
-  // Read before the insert, so this run never counts as its own "other job".
-  const queueBehind = await hasJobInFlight(deps, ownerId);
   const inserted = await db.from("pipeline_runs").insert({
     id: runId,
     owner_id: ownerId,
@@ -187,11 +185,10 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   });
   if (inserted.error?.code === UNIQUE_VIOLATION) return startUploadJob(deps, ownerId, materialId); // another request started it
   if (inserted.error) throw new Error(`Couldn't record the job: ${inserted.error.message}`);
-  // One job at a time per student: behind another, it stays queued until resumeNext starts it (now,
-  // if nothing of the student's is actually running).
-  if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
-  await handOff(deps, { kind: "material", job: { ownerId, runId, materialId } });
-  return { state: "started", runId };
+  // One job at a time per student, oldest first: even two uploads started together run in the order
+  // they were recorded, so the later one maps its file onto the topics the earlier one made. This
+  // run starts now only if nothing of the student's is running and no older run is queued.
+  return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
 }
 
 /**
