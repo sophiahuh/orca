@@ -23,7 +23,11 @@ export interface TodoNames {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames): TodoCard[] {
+/**
+ * `covered`: how many of today's due objectives the quick review's time budget fits (the session
+ * plans the same way); when it's fewer than are due, the card says so.
+ */
+export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames, covered?: number): TodoCard[] {
   const c = agenda.courseId;
   const cards: TodoCard[] = [];
   if (agenda.quickReviewDue) {
@@ -33,7 +37,10 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
       kind: "quick",
       when: "today",
       title: `Quick review · ${config.quick.duration}`,
-      detail: `${plural(agenda.dueToday.length, "objective")} due`,
+      detail:
+        covered !== undefined && covered < agenda.dueToday.length
+          ? `Covers ${covered} of ${agenda.dueToday.length} due objectives`
+          : `${plural(agenda.dueToday.length, "objective")} due`,
       ref: null,
     });
   }
