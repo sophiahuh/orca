@@ -14,8 +14,8 @@ import { DEFAULT_CONFIG, DEFAULT_WEIGHTS } from "../src/lib/data";
  */
 const anchor = { locator: "slide 1", excerpt: "x + xy = x" };
 const ONE_TOPIC = {
-  topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", aliases: [], summary: "", slideStart: 1, slideEnd: 2 }],
-  objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", aliases: [], origin: "material", places: [anchor], emphasis: null }],
+  topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", summary: "", slideStart: 1, slideEnd: 2 }],
+  objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null }],
   relations: [],
 };
 

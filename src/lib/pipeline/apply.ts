@@ -8,15 +8,12 @@ export interface CourseStructureWithRelations extends CourseStructure {
 }
 
 export function applyUploadPlan(s: CourseStructureWithRelations, plan: UploadPlan): CourseStructureWithRelations {
-  const topics = [
-    ...s.topics.map((t) => (plan.topicAliases[t.id] ? { ...t, aliases: [...t.aliases, ...plan.topicAliases[t.id]] } : t)),
-    ...plan.newTopics,
-  ];
+  const topics = [...s.topics, ...plan.newTopics];
   const objectives = { ...s.objectives };
   for (const [id, update] of Object.entries(plan.objectiveUpdates)) {
     const o = objectives[id];
     if (!o) throw new Error(`The upload updates objective ${id}, which isn't in the course`);
-    objectives[id] = { ...o, aliases: [...o.aliases, ...update.aliases], signals: update.signal ? [...o.signals, update.signal] : o.signals };
+    objectives[id] = { ...o, signals: update.signal ? [...o.signals, update.signal] : o.signals };
   }
   for (const o of plan.newObjectives) objectives[o.id] = o;
   const bank = { ...s.bank };

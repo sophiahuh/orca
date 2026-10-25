@@ -4,7 +4,7 @@ import type { Relation, Topic } from "../../src/lib/data.ts";
 import type { ObjectiveState } from "../../src/lib/mastery/types.ts";
 import { GRAPH, labelBottom, topicGraph, topicStrength, topicSummary, wrapLabel } from "../../src/lib/course/topic-graph.ts";
 
-const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
+const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, review: "confirmed", pos: { x: 0, y: 0 }, ...extra });
 const rel = (from: string, to: string, type: Relation["type"], extra: Partial<Relation> = {}): Relation => ({ id: `${from}-${type}-${to}`, from, to, type, anchor: null, review: "proposed", materialId: "m", reason: null, ...extra });
 
 test("foundations sit on top: a topic is a row above what it's used in and its kinds; sizes grow with use", () => {

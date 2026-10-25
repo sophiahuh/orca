@@ -6,7 +6,6 @@
  */
 import type { FlaggedQuestion, Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../data.ts";
 import { locatorPages } from "../course/study.ts";
-import { DEEP_RULES } from "../deep-review.ts";
 import { type RunDeps, type WriteTarget, writeQuestions } from "./run.ts";
 
 export const TOP_UP_RULES = {
@@ -192,7 +191,7 @@ export interface DeepInput extends Pick<TopUpInput, "course" | "objectives" | "b
 
 /**
  * Write a deep review's questions: `count` of them spread over the objectives in priority order
- * (one each down the list, then round again, at most `maxPerObjective` each), each from the pages
+ * (one each down the list, then round again), each from the pages
  * its objective is taught on, marked `deep`. Objectives with nothing to write from are skipped.
  */
 export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call" | "newId">): Promise<{ questions: Record<string, QuizQuestion[]>; dropped: PipelineRun["dropped"]; skipped: TopUpSkip[] }> {
@@ -207,7 +206,7 @@ export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call"
     else writable.push({ o, ...found });
   }
   const need = new Map<string, number>();
-  for (let assigned = 0, round = 0; assigned < input.count && round < DEEP_RULES.maxPerObjective; round++) {
+  for (let assigned = 0; assigned < input.count && writable.length; ) {
     for (const w of writable) {
       if (assigned >= input.count) break;
       need.set(w.o.id, (need.get(w.o.id) ?? 0) + 1);
@@ -240,8 +239,8 @@ export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call"
 
 /**
  * Dive questions written earlier and never answered, for these objectives (merged ones followed),
- * picked the way a dive is ordered: one per objective in priority order, then round again, at most
- * `maxPerObjective` each and `count` in all. A dive asks these before any new ones are written.
+ * picked the way a dive is ordered: one per objective in priority order, then round again, `count`
+ * in all. A dive asks these before any new ones are written.
  */
 export function unansweredDeepQuestions(
   input: Pick<DeepInput, "objectives" | "bank" | "objectiveIds" | "count">,
@@ -257,7 +256,8 @@ export function unansweredDeepQuestions(
   }
   const order = [...new Set(input.objectiveIds.map((id) => survivorId(id, input.objectives)))].filter((id) => input.objectives[id] && input.objectives[id].review !== "archived");
   const picked: Array<{ topicId: string; question: QuizQuestion }> = [];
-  for (let round = 0; round < DEEP_RULES.maxPerObjective && picked.length < input.count; round++) {
+  const rounds = Math.max(0, ...order.map((id) => byObjective.get(id)?.length ?? 0));
+  for (let round = 0; round < rounds && picked.length < input.count; round++) {
     for (const id of order) {
       if (picked.length >= input.count) break;
       const next = byObjective.get(id)?.[round];

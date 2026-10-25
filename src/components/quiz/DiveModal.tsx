@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { DEEP_MAX_MINUTES, DEEP_MINUTE_PRESETS } from "@/lib/deep-review";
+import { DEEP_MINUTE_PRESETS } from "@/lib/deep-review";
 import { IconClose } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
@@ -27,7 +27,7 @@ export function DiveModal({ topic, initialMinutes, onStart, onClose }: { topic: 
   const setCustomMinutes = (raw: string) => {
     setCustom(raw);
     const n = Number(raw);
-    if (Number.isInteger(n) && n >= 1 && n <= DEEP_MAX_MINUTES) setMinutes(n);
+    if (Number.isInteger(n) && n >= 1) setMinutes(n);
   };
 
   return (
@@ -79,7 +79,6 @@ export function DiveModal({ topic, initialMinutes, onStart, onClose }: { topic: 
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  max={DEEP_MAX_MINUTES}
                   value={custom}
                   onChange={(e) => setCustomMinutes(e.target.value)}
                   aria-label="Other length in minutes"

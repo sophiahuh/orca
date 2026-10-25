@@ -16,7 +16,7 @@ import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
 import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
 import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
-import { DEEP_RULES, deepQuestionCount } from "../deep-review.ts";
+import { deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
 import type { BudgetVerdict } from "./budget.ts";
 
@@ -248,9 +248,7 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
     const before = loaded.structure;
     const objectiveIds = job.objectiveIds.filter((id) => before.objectives[id]);
     if (!objectiveIds.length) throw new Error("none of this Dive In's objectives are still in the course");
-    // No more than its objectives can hold (DEEP_RULES.maxPerObjective each), so a stock that already
-    // fills them doesn't send the model to write questions nothing would ask.
-    const count = Math.min(deepQuestionCount(job.minutes), objectiveIds.length * DEEP_RULES.maxPerObjective);
+    const count = deepQuestionCount(job.minutes);
     // Dive questions written before and never answered are asked first; only the rest are written.
     const reused = unansweredDeepQuestions({ objectives: before.objectives, bank: before.bank, objectiveIds, count }, await store.answered(run.courseId));
     const toWrite = count - reused.length;

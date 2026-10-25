@@ -264,3 +264,17 @@ test("a queued run is never taken for dead, however old: behind a running job it
   assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-q" });
   assert.deepEqual(sent, [{ kind: "material", job: { ownerId: OWNER, runId: "run-q", materialId: "m1" } }]);
 });
+
+test("two uploads started together run oldest first: both requests hand off the earlier run, the later one stays queued", async () => {
+  const m2 = { id: "m2", owner_id: OWNER, course_id: "c1", status: "ready" };
+  const f = fakeDb({ materials: [material, m2], material_pages: [page, { ...page, material_id: "m2" }], pipeline_runs: [] });
+  let n = 0;
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  d.newId = () => `run-${++n}`;
+  // Interleaved: each request inserts its run before either one decides what to start.
+  const [first, second] = await Promise.all([startUploadJob(d, OWNER, "m1"), startUploadJob(d, OWNER, "m2")]);
+  assert.deepEqual(first, { state: "started", runId: "run-1" });
+  assert.deepEqual(second, { state: "queued", runId: "run-2" });
+  assert.ok(sent.length > 0 && sent.every((s) => s.job.runId === "run-1"), "only the earlier upload is handed off");
+  assert.equal(f.tables.pipeline_runs.find((r) => r.id === "run-2")!.status, "queued");
+});

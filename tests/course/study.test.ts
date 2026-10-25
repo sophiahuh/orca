@@ -17,14 +17,14 @@ const objective = (signals: Objective["signals"]): Objective => ({
   topicId: "t",
   name: "Negate",
   description: "",
-  aliases: [],
+ 
   origin: "material",
   review: "confirmed",
   materialId: "m1",
   runId: "r",
   signals,
 });
-const topic: Topic = { id: "t", name: "2's complement", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: "L03.pdf", slideStart: 12, slideEnd: 30 } };
+const topic: Topic = { id: "t", name: "2's complement", review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: "L03.pdf", slideStart: 12, slideEnd: 30 } };
 
 test("where an objective is taught, per file", () => {
   const o = objective([

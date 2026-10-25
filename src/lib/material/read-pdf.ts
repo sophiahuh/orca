@@ -50,8 +50,6 @@ export interface ReadPdf {
   hidden: HiddenText;
   /** Invisible or control characters removed by the sanitiser, over all pages. */
   removed: number;
-  /** Pages cut at `LIMITS.pageChars`. */
-  truncated: number[];
   /** Where pdf.js parsed the file: its own thread (the rule) or this one (the worker couldn't start). */
   engine: "worker" | "main-thread";
 }
@@ -186,14 +184,13 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
     const drawn = new Map<number, { images: Array<{ id: string; w: number; h: number }>; paths: number }>();
     const pages: ReadPage[] = [];
     const hidden: HiddenText = { items: 0, pages: [] };
-    const truncated: number[] = [];
     let removed = 0;
     for (let n = 1; n <= doc.numPages; n++) {
       const page = await inTime(doc.getPage(n));
       const content = await inTime(page.getTextContent());
       const visible = visibleItems(content.items, page.view as unknown as PageBox);
       const text = pageText(visible.items);
-      const vision = handwritten || fromNotesApp || sanitize(text, LIMITS.pageChars).text.trim().length < MIN_TEXT_CHARS;
+      const vision = handwritten || fromNotesApp || sanitize(text).text.trim().length < MIN_TEXT_CHARS;
       // A page read from its image is read as it looks: text hidden in its layer never reaches the model.
       if (visible.hidden && !vision) {
         hidden.items += visible.hidden;
@@ -201,15 +198,14 @@ async function read(bytes: Uint8Array, deadline: number, workerSource: string | 
       }
       const headings = likelyHeadings(visible.items);
       const annotated = headings.length ? `[Likely section headings, inferred from comparatively large text: ${headings.join(" | ")}]\n${text}` : text;
-      const clean = sanitize(annotated, LIMITS.pageChars);
+      const clean = sanitize(annotated);
       removed += clean.removed;
-      if (clean.truncated) truncated.push(n);
       pages.push({ n, text: clean.text, ...(vision ? { source: "needs-vision" as const } : {}) });
       if (!vision && Date.now() < figuresUntil) drawn.set(n, await inTime(drawingsOf(page, pdfjs.OPS)).catch(() => ({ images: [], paths: 0 })));
       page.cleanup();
     }
     markFigures(pages, drawn);
-    return { pages, hidden, removed, truncated, engine: parser ? "worker" : "main-thread" };
+    return { pages, hidden, removed, engine: parser ? "worker" : "main-thread" };
   } catch (e) {
     if (e instanceof WorkerDied && documentLoaded) throw new UnreadablePdfError(`Orca couldn't read this PDF (${e.message}).`);
     throw e;

@@ -8,13 +8,13 @@ import { locatorPages } from "../../src/lib/course/study.ts";
 import type { GeneratedQuestion, StepInput } from "../../src/lib/pipeline/schemas.ts";
 
 const material = (id: string): Material => ({ id, courseId: "c", filename: `${id}.pdf`, type: "Lecture", assigned: null, due: null, reflect: false });
-const topic: Topic = { id: "t", name: "Two's complement", aliases: [], review: "confirmed", pos: { x: 0, y: 0 }, summary: "Signed numbers" };
+const topic: Topic = { id: "t", name: "Two's complement", review: "confirmed", pos: { x: 0, y: 0 }, summary: "Signed numbers" };
 const objective = (id: string, extra: Partial<Objective> = {}): Objective => ({
   id,
   topicId: "t",
   name: `Objective ${id}`,
   description: "",
-  aliases: [],
+ 
   origin: "material",
   review: "confirmed",
   materialId: "L1",
@@ -163,7 +163,22 @@ test("a top-up sends only the anchored pages and their neighbours, never a whole
 test("a deep review's length sets how many questions it writes", () => {
   assert.equal(deepQuestionCount(10), 3);
   assert.equal(deepQuestionCount(1), 1);
-  assert.equal(deepQuestionCount(600), 20);
+  assert.equal(deepQuestionCount(600), 150, "no upper limit");
+});
+
+test("a long dive into one objective writes every question it needs over several rounds, each seeing what the last wrote", async () => {
+  const calls: Array<{ need: number; asked: string[] }> = [];
+  const call = (async (_step: string, input: unknown) => {
+    const g = input as StepInput<"deep">;
+    const o = g.objectives[0];
+    calls.push({ need: o.need, asked: o.existingPrompts });
+    const round = calls.length;
+    return { questions: Array.from({ length: o.need }, (_, i) => ({ objectiveId: o.id, kind: "Short answer", tier: "application", prompt: `Round ${round} problem ${i}?`, options: [], answer: -1, exact: ["1"], rubric: null, explanation: "Steps.", anchor: { locator: "slide 2", excerpt: "x" }, figureSlide: null })) };
+  }) as CallStep;
+  const out = await runDeepReview({ ...base({ bank: { t: [] } }), objectiveIds: ["a"], count: deepQuestionCount(48) }, { call, newId: (() => { let n = 0; return () => `d${++n}`; })() });
+  assert.equal(out.questions.t.length, 12);
+  assert.deepEqual(calls.map((c) => c.need), [8, 4]);
+  assert.equal(calls[1].asked.length, 8, "the second round is told the first round's questions");
 });
 
 test("a deep review writes harder questions through the deep step, spread over objectives in priority order, marked deep", async () => {

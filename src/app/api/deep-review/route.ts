@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
 import { startDeepReviewJob } from "@/lib/server/jobs/start";
 import { forStudent, reply } from "@/lib/server/student";
 
@@ -11,7 +10,7 @@ import { forStudent, reply } from "@/lib/server/student";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const Body = z.object({ courseId: z.uuid(), minutes: z.number().int().min(1).max(DEEP_MAX_MINUTES), objectiveIds: z.array(z.uuid()).min(1).max(400) });
+const Body = z.object({ courseId: z.uuid(), minutes: z.number().int().min(1), objectiveIds: z.array(z.uuid()).min(1) });
 
 export async function POST(request: Request) {
   return forStudent(request, async (student, db) => {
