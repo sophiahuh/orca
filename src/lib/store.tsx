@@ -59,6 +59,8 @@ import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types
 import type { CourseStructure } from "./course/ops";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { type TodoCard, todoCards } from "./mastery/todo";
+import { assembleQuickReview, durationSeconds, lastSeenOf, sessionCandidates } from "./mastery/session";
+import { askableQuestions } from "./askable";
 import { type CourseAgenda, courseAgenda, withNeutralWeights } from "./mastery/agenda";
 import { isUnsortedObjectiveId } from "./mastery/catalogue";
 import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
@@ -940,15 +942,27 @@ export function useMasteryByCourse(): Record<string, CourseMastery> {
 
 /** The sidebar's to-do cards for every course, today's first. */
 export function useTodos(): TodoCard[] {
-  const { courses, objectives, configs } = useOrca();
+  const { courses, objectives, configs, questionBank, feedback } = useOrca();
   const agenda = useAgenda();
+  const mastery = useMasteryByCourse();
+  const dayKey = useDayKey();
+  const nowMs = useNow();
   return useMemo(
     () =>
       courses.flatMap((c) => {
         const a = agenda[c.id];
-        if (!a) throw new Error(`No agenda computed for course ${c.id}`);
+        const m = mastery[c.id];
+        if (!a || !m) throw new Error(`No agenda computed for course ${c.id}`);
         const catalogue = objectives[c.id] ?? {};
-        return todoCards(a, configs[c.id] ?? DEFAULT_CONFIG, {
+        const config = configs[c.id] ?? DEFAULT_CONFIG;
+        // Plan the quick review as the session will, to say how many due objectives it fits.
+        let covered: number | undefined;
+        if (a.quickReviewDue) {
+          const { byObjective } = askableQuestions(c, questionBank[c.id], catalogue, feedback);
+          const plan = assembleQuickReview(sessionCandidates(a.dueToday, m.objectives, byObjective), { lastSeen: lastSeenOf(m.events), now: new Date(nowMs), dayKey, budgetSeconds: durationSeconds(config.quick.duration) });
+          covered = new Set(plan.items.map((i) => i.objectiveId)).size;
+        }
+        return todoCards(a, config, {
           objective: (id) => {
             if (isUnsortedObjectiveId(id)) return "Questions not yet sorted into objectives";
             const o = catalogue[id];
@@ -960,9 +974,9 @@ export function useTodos(): TodoCard[] {
             if (!t) throw new Error(`Topic ${id} is not in course ${c.id}`);
             return t.name;
           },
-        });
+        }, covered);
       }),
-    [courses, objectives, configs, agenda],
+    [courses, objectives, configs, agenda, mastery, questionBank, feedback, nowMs, dayKey],
   );
 }
 
