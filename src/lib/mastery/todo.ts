@@ -1,7 +1,6 @@
 /** The sidebar's to-do cards for one course, from its agenda. Derived on every render, never stored. */
 import type { ReviewConfig } from "../data.ts";
 import type { CourseAgenda } from "./agenda.ts";
-import { reasonsOf } from "./priority.ts";
 
 export type TodoKind = "quick" | "deep" | "checks";
 
@@ -11,7 +10,7 @@ export interface TodoCard {
   kind: TodoKind;
   when: "today" | "tomorrow";
   title: string;
-  /** A second line: size, or the top reason. */
+  /** A second line: how much is due, or the cadence. */
   detail: string | null;
   /** The topic (checks) the card is about. */
   ref: string | null;
@@ -28,15 +27,13 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
   const c = agenda.courseId;
   const cards: TodoCard[] = [];
   if (agenda.quickReviewDue) {
-    const top = agenda.dueToday[0];
-    const reason = top ? reasonsOf(top.priority)[0] : undefined;
     cards.push({
       id: `${c}:quick`,
       courseId: c,
       kind: "quick",
       when: "today",
       title: `Quick review · ${config.quick.duration}`,
-      detail: `${plural(agenda.dueToday.length, "objective")} due${reason ? ` · ${reason}` : ""}`,
+      detail: `${plural(agenda.dueToday.length, "objective")} due`,
       ref: null,
     });
   }

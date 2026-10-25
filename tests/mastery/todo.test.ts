@@ -28,7 +28,7 @@ test("nothing due, no cards", () => {
 
 test("quick review shows its size and the top reason", () => {
   const cards = todoCards({ ...empty, quickReviewDue: true, dueToday: [ranked("a", "t", "Not mastered yet: 1 of 3 correct"), ranked("b", "t", "x")] }, DEFAULT_CONFIG, names);
-  assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title, c.detail]), [["quick", "today", "Quick review · 10 min", "2 objectives due · Not mastered yet: 1 of 3 correct"]]);
+  assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title, c.detail]), [["quick", "today", "Quick review · 10 min", "2 objectives due"]]);
 });
 
 test("deep review today or tomorrow and tomorrow's checks", () => {
