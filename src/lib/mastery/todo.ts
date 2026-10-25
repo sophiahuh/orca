@@ -1,7 +1,6 @@
 /** The sidebar's to-do cards for one course, from its agenda. Derived on every render, never stored. */
 import type { ReviewConfig } from "../data.ts";
 import type { CourseAgenda } from "./agenda.ts";
-import { reasonsOf } from "./priority.ts";
 
 export type TodoKind = "quick" | "deep" | "checks";
 
@@ -11,7 +10,7 @@ export interface TodoCard {
   kind: TodoKind;
   when: "today" | "tomorrow";
   title: string;
-  /** A second line: size, or the top reason. */
+  /** A second line: how many objectives the quick review covers. */
   detail: string | null;
   /** The topic (checks) the card is about. */
   ref: string | null;
@@ -24,24 +23,27 @@ export interface TodoNames {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames): TodoCard[] {
+/**
+ * `covered`: how many of today's due objectives the quick review's time budget fits (the session
+ * plans the same way); required when a quick review is due.
+ */
+export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames, covered?: number): TodoCard[] {
   const c = agenda.courseId;
   const cards: TodoCard[] = [];
   if (agenda.quickReviewDue) {
-    const top = agenda.dueToday[0];
-    const reason = top ? reasonsOf(top.priority)[0] : undefined;
+    if (covered === undefined) throw new Error(`Quick review due in course ${c} without its planned size`);
     cards.push({
       id: `${c}:quick`,
       courseId: c,
       kind: "quick",
       when: "today",
       title: `Quick review · ${config.quick.duration}`,
-      detail: `${plural(agenda.dueToday.length, "objective")} due${reason ? ` · ${reason}` : ""}`,
+      detail: `Covers ${plural(covered, "objective")}`,
       ref: null,
     });
   }
   if (agenda.deepReview.due) {
-    cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Dive in", detail: `On your ${config.deep.cadence.toLowerCase()} cadence · you choose how long`, ref: null });
+    cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Dive in", detail: null, ref: null });
   }
   const byTopic = new Map<string, number>();
   for (const r of agenda.dueTomorrow) byTopic.set(r.topicId, (byTopic.get(r.topicId) ?? 0) + 1);

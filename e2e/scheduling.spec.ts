@@ -64,7 +64,7 @@ test.describe("scheduling", () => {
     await page.goto("/");
     const card = page.locator('[data-todo="quick"]');
     await expect(card).toContainText("Quick review · 10 min");
-    await expect(card).toContainText("3 objectives due · New: not practiced yet");
+    await expect(card).toContainText("Covers 3 objectives");
 
     await card.click();
     await expect(page).toHaveURL(/\/session\/logic-e2e\?kind=quick/);

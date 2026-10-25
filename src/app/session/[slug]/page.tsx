@@ -3,9 +3,9 @@
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Course, DEFAULT_CONFIG, type QuizQuestion, type SessionProgress, trailTopics } from "@/lib/data";
+import { askableQuestions } from "@/lib/askable";
 import { progressKey } from "@/lib/supabase/app-rows";
 import { DEEP_MAX_MINUTES } from "@/lib/deep-review";
-import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import { reasonsOf } from "@/lib/mastery/priority";
 import {
   type AssembledSession,
@@ -64,14 +64,16 @@ function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind:
   const saved = progress[progressKey(course.id, kind)];
   // Decided once at mount: a session started now shouldn't flip to the prompt when it saves.
   const [choice, setChoice] = useState<"ask" | "resume" | "new">(() => (saved && Date.now() - Date.parse(saved.updatedAt) < RESUME_WITHIN_MS ? "ask" : "new"));
+  // `resumed` is fixed at mount: finishing the resumed session clears `saved` (its progress row
+  // goes), and the end card must stay up instead of giving way to a brand-new session.
   const resumed = useResumed(course, saved);
-  if (choice !== "new" && saved && resumed) {
+  if (choice !== "new" && resumed) {
     if (choice === "resume") {
-      return <QuizRunner course={course} items={resumed.items} mode={kind} title={saved.title} backHref={`/course/${course.slug}`} progressKind={kind} resume={resumed.resume} />;
+      return <QuizRunner course={course} items={resumed.items} mode={kind} title={resumed.title} backHref={`/course/${course.slug}`} progressKind={kind} resume={resumed.resume} />;
     }
     return (
       <ResumePrompt
-        title={saved.title}
+        title={resumed.title}
         done={resumed.resume.index}
         total={resumed.items.length}
         backHref={`/course/${course.slug}`}
@@ -110,7 +112,7 @@ function useResumed(course: Course, saved: SessionProgress | undefined) {
     });
     if (index >= items.length) return null;
     const missed = saved.missed.flatMap((id) => items.filter((i) => i.question.id === id));
-    return { items, resume: { sessionId: saved.sessionId, index, correct: saved.correct, skipped: saved.skipped, ungraded: saved.ungraded, missed, seconds: saved.seconds } };
+    return { items, title: saved.title, resume: { sessionId: saved.sessionId, index, correct: saved.correct, skipped: saved.skipped, ungraded: saved.ungraded, missed, seconds: saved.seconds } };
   });
   return out;
 }
@@ -146,21 +148,7 @@ function useSessionSources(course: Course) {
   const mastery = useMasteryByCourse()[course.id];
   if (!agenda || !mastery) throw new Error(`No agenda computed for course ${course.id}`);
   const [sources] = useState(() => {
-    const catalogue = objectives[course.id] ?? {};
-    const byId = new Map<string, QuizQuestion>();
-    const byObjective = new Map<string, QuizQuestion[]>();
-    const placeOf = new Map<string, { objectiveId: string; topicId: string }>();
-    for (const t of trailTopics(course)) {
-      for (const q of questionBank[course.id]?.[t.id] ?? []) {
-        const o = liveObjectiveOf(q, t.id, catalogue);
-        // Deep-review questions are written for, and asked in, deep reviews only; a question the
-        // student gave a thumbs down is never asked again.
-        if (!o || q.deep || feedback[q.id]?.rating === "down") continue;
-        byId.set(q.id, q);
-        byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);
-        placeOf.set(q.id, { objectiveId: o.id, topicId: t.id });
-      }
-    }
+    const { byId, byObjective, placeOf } = askableQuestions(course, questionBank[course.id], objectives[course.id] ?? {}, feedback);
     const ctx = { lastSeen: lastSeenOf(mastery.events), now: new Date(), dayKey };
     const reasons = new Map(agenda.ranked.map((r) => [r.objectiveId, reasonsOf(r.priority)[0]]));
     const toItems = (assembled: AssembledSession): RunnerItem[] =>

@@ -37,8 +37,9 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   commit whose author email isn't on the owner's GitHub account, so commits that will reach
   `backend-implementation` are authored as `Sophia Huh <sophiahuh@gmail.com>` (agents: pass
   `-c user.name=… -c user.email=…` to `git commit`; a merge commit by another author blocks the
-  deploy until an empty commit by the owner follows). `main` is the pre-Phase-1 prototype. No PRs
-  are open; `deploy-candidate` (if it still exists) was a staging copy of the merged tree.
+  deploy until an empty commit by the owner follows). Since 2026-10-24 the team merges `phase-4`
+  into `main` by pull request, and `main` is deployed automatically (Deploy, below); nobody needs
+  to touch `backend-implementation`.
 - Phases 1–4 are built (mastery core, uploads build the course, scheduling and sessions, Supabase
   with auth, RLS, Storage, server jobs, cost guard, injection defences, CI). See
   `docs/BACKEND-ROADMAP.md` and the Phase 4 plan's status notes for what each contains.
@@ -65,19 +66,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **The owner runs `npm run dev` on port 3000 against the hosted Supabase project and a real
   OpenAI key** (`.env`, OpenAI default model `gpt-6.1-sol`): uploads there spend money and write real
   data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** pushed up to `20261006100000`. Still to push (the owner runs
-  `npx supabase db push`; the agent's auto mode blocks it): `20261010090000_pptx_uploads` (until
-  then the hosted bucket refuses .pptx uploads), `20261017090000_relation_reasons` (until then
-  every upload and "Find connections" fails to save links on the hosted project) and
-  `20261017100000_upload_paths_course_names` (until then every new upload is refused: files are
-  stored at `<owner>/<material id>` now; course names are capped at 50 characters) and
-  `20261018090000_handwritten_pages`, `20261018100000_figure_pages` and
-  `20261018110000_handwritten_type_30mb` (until then every PDF upload fails to store its pages, and
-  the "Handwritten notes" type and files over 25 MB are refused), and `20261018120000_question_feedback`
-  (until then the app's data load fails: `my_data()` reads the new table) and
-  `20261018130000_feedback_note` (the note on a thumbs down) and `20261019090000_session_progress`
-  (unfinished sessions; `my_data()` reads it, so the data load fails until it's pushed). Check with `npx supabase migration list --linked`
-  (read-only).
+- **Hosted migrations:** pushed up to `20261018130000` (checked 2026-10-25). Still to push (the owner
+  runs `npx supabase db push`; the agent's auto mode blocks it): `20261019090000_session_progress`
+  (unfinished sessions; until then the live app's saves fail with "Could not find the table
+  'public.session_progress'"). Check with `npx supabase migration list --linked` (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
@@ -324,7 +316,10 @@ All 11 Figma screens are built. Where things live:
   things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
 - `docs/samples/ald/` — real ALD decks for trying uploads; `docs/OBJECTIVES-ALD.md` the benchmark.
 - Deploy: Vercel (https://orca-lake-omega.vercel.app) builds `backend-implementation` (Production);
-  pushes to other branches get Preview deploys at most. Production env vars (Vercel → Settings →
+  pushes to other branches get Preview deploys at most. **Nobody pushes there by hand any more:**
+  `.github/workflows/deploy.yml` merges `main` into it (after pushing new migrations) whenever CI
+  on `main` is green, so merging a PR into `main` is the deploy (`docs/SETUP-HOSTED.md` §5 lists
+  the two secrets it needs for migrations). Production env vars (Vercel → Settings →
   Environments → Production): the Supabase three, `SITE_URL`, `ORCA_JOBS=inline`, and the model
   key (`OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) with `ORCA_MODEL` if not the default; without a
   key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
