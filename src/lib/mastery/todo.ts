@@ -10,7 +10,7 @@ export interface TodoCard {
   kind: TodoKind;
   when: "today" | "tomorrow";
   title: string;
-  /** A second line: how much is due, or the cadence. */
+  /** A second line: how much is due. */
   detail: string | null;
   /** The topic (checks) the card is about. */
   ref: string | null;
@@ -38,7 +38,7 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
     });
   }
   if (agenda.deepReview.due) {
-    cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Dive in", detail: `On your ${config.deep.cadence.toLowerCase()} cadence · you choose how long`, ref: null });
+    cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Dive in", detail: null, ref: null });
   }
   const byTopic = new Map<string, number>();
   for (const r of agenda.dueTomorrow) byTopic.set(r.topicId, (byTopic.get(r.topicId) ?? 0) + 1);
