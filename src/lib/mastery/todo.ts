@@ -10,7 +10,7 @@ export interface TodoCard {
   kind: TodoKind;
   when: "today" | "tomorrow";
   title: string;
-  /** A second line: how much is due. */
+  /** A second line: how many objectives the quick review covers. */
   detail: string | null;
   /** The topic (checks) the card is about. */
   ref: string | null;
@@ -25,22 +25,20 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * `covered`: how many of today's due objectives the quick review's time budget fits (the session
- * plans the same way); when it's fewer than are due, the card says so.
+ * plans the same way); required when a quick review is due.
  */
 export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames, covered?: number): TodoCard[] {
   const c = agenda.courseId;
   const cards: TodoCard[] = [];
   if (agenda.quickReviewDue) {
+    if (covered === undefined) throw new Error(`Quick review due in course ${c} without its planned size`);
     cards.push({
       id: `${c}:quick`,
       courseId: c,
       kind: "quick",
       when: "today",
       title: `Quick review · ${config.quick.duration}`,
-      detail:
-        covered !== undefined && covered < agenda.dueToday.length
-          ? `Covers ${covered} of ${agenda.dueToday.length} due objectives`
-          : `${plural(agenda.dueToday.length, "objective")} due`,
+      detail: `Covers ${plural(covered, "objective")}`,
       ref: null,
     });
   }
