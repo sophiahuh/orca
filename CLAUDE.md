@@ -66,19 +66,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **The owner runs `npm run dev` on port 3000 against the hosted Supabase project and a real
   OpenAI key** (`.env`, OpenAI default model `gpt-6.1-sol`): uploads there spend money and write real
   data. Don't seed test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** pushed up to `20261006100000`. Still to push (the owner runs
-  `npx supabase db push`; the agent's auto mode blocks it): `20261010090000_pptx_uploads` (until
-  then the hosted bucket refuses .pptx uploads), `20261017090000_relation_reasons` (until then
-  every upload and "Find connections" fails to save links on the hosted project) and
-  `20261017100000_upload_paths_course_names` (until then every new upload is refused: files are
-  stored at `<owner>/<material id>` now; course names are capped at 50 characters) and
-  `20261018090000_handwritten_pages`, `20261018100000_figure_pages` and
-  `20261018110000_handwritten_type_30mb` (until then every PDF upload fails to store its pages, and
-  the "Handwritten notes" type and files over 25 MB are refused), and `20261018120000_question_feedback`
-  (until then the app's data load fails: `my_data()` reads the new table) and
-  `20261018130000_feedback_note` (the note on a thumbs down) and `20261019090000_session_progress`
-  (unfinished sessions; `my_data()` reads it, so the data load fails until it's pushed). Check with `npx supabase migration list --linked`
-  (read-only).
+- **Hosted migrations:** pushed up to `20261018130000` (checked 2026-10-25). Still to push (the owner
+  runs `npx supabase db push`; the agent's auto mode blocks it): `20261019090000_session_progress`
+  (unfinished sessions; until then the live app's saves fail with "Could not find the table
+  'public.session_progress'"). Check with `npx supabase migration list --linked` (read-only).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
