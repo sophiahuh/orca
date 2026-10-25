@@ -64,14 +64,16 @@ function SessionBody({ course, kind, topicId, minutes }: { course: Course; kind:
   const saved = progress[progressKey(course.id, kind)];
   // Decided once at mount: a session started now shouldn't flip to the prompt when it saves.
   const [choice, setChoice] = useState<"ask" | "resume" | "new">(() => (saved && Date.now() - Date.parse(saved.updatedAt) < RESUME_WITHIN_MS ? "ask" : "new"));
+  // `resumed` is fixed at mount: finishing the resumed session clears `saved` (its progress row
+  // goes), and the end card must stay up instead of giving way to a brand-new session.
   const resumed = useResumed(course, saved);
-  if (choice !== "new" && saved && resumed) {
+  if (choice !== "new" && resumed) {
     if (choice === "resume") {
-      return <QuizRunner course={course} items={resumed.items} mode={kind} title={saved.title} backHref={`/course/${course.slug}`} progressKind={kind} resume={resumed.resume} />;
+      return <QuizRunner course={course} items={resumed.items} mode={kind} title={resumed.title} backHref={`/course/${course.slug}`} progressKind={kind} resume={resumed.resume} />;
     }
     return (
       <ResumePrompt
-        title={saved.title}
+        title={resumed.title}
         done={resumed.resume.index}
         total={resumed.items.length}
         backHref={`/course/${course.slug}`}
@@ -110,7 +112,7 @@ function useResumed(course: Course, saved: SessionProgress | undefined) {
     });
     if (index >= items.length) return null;
     const missed = saved.missed.flatMap((id) => items.filter((i) => i.question.id === id));
-    return { items, resume: { sessionId: saved.sessionId, index, correct: saved.correct, skipped: saved.skipped, ungraded: saved.ungraded, missed, seconds: saved.seconds } };
+    return { items, title: saved.title, resume: { sessionId: saved.sessionId, index, correct: saved.correct, skipped: saved.skipped, ungraded: saved.ungraded, missed, seconds: saved.seconds } };
   });
   return out;
 }
