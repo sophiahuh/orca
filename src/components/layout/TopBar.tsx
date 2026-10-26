@@ -47,9 +47,10 @@ export function TopBar() {
         {guest ? (
           <Avatar creature={creature} size={44} className="sm:h-[48px] sm:w-[48px]" />
         ) : (
-          <Link href="/settings" aria-label="Account" title="Account" className="pressable rounded-pill lip-2 lip-alice">
+          // Not a link: Settings is right beside it.
+          <span className="rounded-pill lip-2 lip-alice">
             <Avatar creature={creature} size={44} className="sm:h-[48px] sm:w-[48px]" />
-          </Link>
+          </span>
         )}
       </div>
     </header>
