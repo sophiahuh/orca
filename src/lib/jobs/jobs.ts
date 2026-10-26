@@ -124,7 +124,8 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
   const progress = progressWriter(store, run.id);
   try {
     if (run.materialId !== job.materialId) throw new Error(`run ${run.id} is for another material`);
-    const material = (await store.materials(run.courseId)).find((m) => m.id === job.materialId);
+    const materials = await store.materials(run.courseId);
+    const material = materials.find((m) => m.id === job.materialId);
     if (!material) throw new Error("the material isn't in the course any more, or hasn't been read");
     let pages = (await store.pages([material.id]))[material.id];
     if (!pages?.length) throw new Error("Orca found no text in this file to build from");
@@ -163,6 +164,7 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         bank: before.bank,
         relations: before.relations,
         material,
+        materials: materials.map((m) => ({ id: m.id, filename: m.filename })),
         pages,
         ...(material.hiddenText ? { hiddenText: material.hiddenText } : {}),
         flagged: await store.flagged(run.courseId),

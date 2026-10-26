@@ -75,7 +75,7 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_REF"
-          supabase db push
+          supabase db push --linked
 
       - name: Merge main into backend-implementation and push (Vercel builds it)
         if: steps.diff.outputs.nothing != 'true'

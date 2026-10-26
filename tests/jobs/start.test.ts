@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, type StartDeps, resumeNext, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
+import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, type StartDeps, resumeNext, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
 
 type Row = Record<string, unknown>;
 
@@ -277,4 +277,42 @@ test("two uploads started together run oldest first: both requests hand off the 
   assert.deepEqual(second, { state: "queued", runId: "run-2" });
   assert.ok(sent.length > 0 && sent.every((s) => s.job.runId === "run-1"), "only the earlier upload is handed off");
   assert.equal(f.tables.pipeline_runs.find((r) => r.id === "run-2")!.status, "queued");
+});
+
+test("a run handed to a job that never claimed it is failed after HANDOFF_MS, and uploading again starts a new one", async () => {
+  const at = new Date(now.getTime() - HANDOFF_MS - 1000).toISOString();
+  const dropped = { id: "run-dropped", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "queued", at, started_at: at };
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [dropped] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-new" });
+  assert.equal(dropped.status, "failed");
+  assert.equal((dropped as Row).error, NEVER_STARTED_ERROR);
+  assert.deepEqual(sent, [{ kind: "material", job: { ownerId: OWNER, runId: "run-new", materialId: "m1" } }]);
+});
+
+test("a hand-off stamps started_at, so a recently handed-off run is left to its job and re-uploading hands it off again", async () => {
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  await startUploadJob(d, OWNER, "m1");
+  const run = f.tables.pipeline_runs[0];
+  assert.equal(run.started_at, now.toISOString());
+  assert.equal(run.status, "queued");
+  // Still unclaimed a minute later: handed off again (the claim takes it once), not failed.
+  d.now = () => new Date(now.getTime() + 60_000);
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-new" });
+  assert.equal(run.status, "queued");
+  assert.equal(run.started_at, new Date(now.getTime() + 60_000).toISOString());
+  assert.equal(sent.length, 2);
+});
+
+test("a top-up handed off at once is stamped; one queued behind another job isn't until it's handed off", async () => {
+  const f = fakeDb({ session_results: [session], pipeline_runs: [] });
+  const { deps: d } = deps(f.db, "claude-opus-5-5");
+  await startTopUpJob(d, OWNER, { courseId: "c1", sessionId: "sess-1", objectiveIds: ["o1"] });
+  assert.equal(f.tables.pipeline_runs[0].started_at, now.toISOString());
+  const busy = { id: "run-busy", owner_id: OWNER, course_id: "c2", material_id: "m0", kind: "upload", status: "running", at: now.toISOString(), started_at: now.toISOString() };
+  const g = fakeDb({ session_results: [session], pipeline_runs: [busy] });
+  const { deps: e } = deps(g.db, "claude-opus-5-5");
+  await startTopUpJob(e, OWNER, { courseId: "c1", sessionId: "sess-1", objectiveIds: ["o1"] });
+  assert.equal(g.tables.pipeline_runs.find((r) => r.kind === "top-up")!.started_at, undefined);
 });

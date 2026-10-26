@@ -377,7 +377,11 @@ limit), gives topics at the right grain for a few kinds of course, and asks it t
 that teaches something. The course-size caps on step inputs (200 topics, 1,000 objectives, 400 for a
 reflection or a dive) are gone. A Dive In is as long as the student picks (no 80-minute or
 4-per-objective cap); questions are written in rounds of at most 8 per call (16 for quick-review
-questions), each round told what the last wrote. Pages have no character limit any more (they were cut at 20,000 when read and refused past
+questions), each round told what the last wrote. Uploads are mapped through a course index (spec: `docs/superpowers/specs/2026-10-25-course-index-design.md`):
+part by part, each part against the course's table of contents, then one topic's objectives at a
+time; `topics.source` lists every file and page range a topic is taught on, and questions are
+written from each objective's own pages. The 180,000-character cut on the material is gone.
+Pages have no character limit any more (they were cut at 20,000 when read and refused past
 6,000 by the extract, generate and describe steps), nor do transcribed pages. Other limits stay until
 reviewed.
 

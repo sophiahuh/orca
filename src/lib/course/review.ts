@@ -25,6 +25,14 @@ export function courseUploads(runs: readonly PipelineRun[], courseId: string): P
   return runs.filter((r) => r.courseId === courseId && (r.kind ?? "upload") === "upload").sort((a, b) => b.at.localeCompare(a.at));
 }
 
+/**
+ * Whether a queued run is behind another of the student's jobs (one runs at a time, any course or
+ * kind): one running, or one queued before it. A run waiting on a limit doesn't hold others back.
+ */
+export function jobAhead(runs: readonly PipelineRun[], run: PipelineRun): boolean {
+  return runs.some((r) => r.id !== run.id && (r.status === "running" || (r.status === "queued" && r.at < run.at)));
+}
+
 /** Uploads still being built (queued, running or waiting on a limit). */
 export function uploadsInProgress(runs: readonly PipelineRun[], courseId: string): number {
   return courseUploads(runs, courseId).filter((r) => r.status !== "done" && r.status !== "failed").length;

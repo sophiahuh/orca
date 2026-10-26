@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { materialFromRow } from "@/lib/supabase/app-rows";
+import { sanitize } from "@/lib/untrusted/sanitize";
 import { startUploadJob } from "@/lib/server/jobs/start";
+import { fetchPublicPage } from "@/lib/server/public-page";
 import { forStudent, reply } from "@/lib/server/student";
 import { ownsCourse } from "@/lib/server/student";
 
@@ -21,12 +23,14 @@ export async function POST(request: Request) {
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return reply(400, { error: "Enter a valid public course-page URL." });
     const url = new URL(parsed.data.url);
-    if (!/^https?:$/.test(url.protocol) || /^(localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(url.hostname)) return reply(400, { error: "Use a public http(s) website." });
     if (!(await ownsCourse(db, student.id, parsed.data.courseId))) return reply(404, { error: "No such course." });
-    let response: Response;
-    try { response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { "user-agent": "Orca course-material importer" } }); } catch { return reply(422, { error: "Orca couldn't fetch that public page." }); }
-    if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return reply(422, { error: "That link needs to be a public HTML course page." });
-    const text = pageText(await response.text());
+    const page = await fetchPublicPage(url.href, { schemes: ["https:", "http:"], userAgent: "Orca course-material importer" });
+    if (!page.ok) {
+      if (page.reason === "blocked") return reply(400, { error: "Use a public http(s) website." });
+      return reply(422, { error: page.reason === "unreachable" ? "Orca couldn't fetch that public page." : page.reason === "too-big" ? "That page is too large to read." : "That link needs to be a public HTML course page." });
+    }
+    // Stored as the model will see it (decision 13): invisible and control characters removed.
+    const text = sanitize(pageText(page.html), 180_000).text;
     if (text.length < 80) return reply(422, { error: "Orca couldn't find enough readable course text on that page." });
     const id = crypto.randomUUID();
     const filename = `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`.slice(0, 255);

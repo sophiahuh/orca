@@ -77,12 +77,12 @@ function honestModel(per = 2, failOn?: string): { call: CallStep; steps: string[
   const call = (async (step: string, input: unknown) => {
     steps.push(step);
     if (step === failOn) throw new Error("Anthropic is rate-limiting you. Try again in a moment.");
-    if (step === "extract") {
-      return {
-        topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 1, slideEnd: 3 }],
-        objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null }],
-        relations: [],
-      };
+    if (step === "map") {
+      const pagesSent = (input as StepInput<"map">).pages.map((p) => p.n);
+      return { topics: [{ localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", pages: [{ from: Math.min(...pagesSent), to: Math.max(...pagesSent) }] }], relations: [], instructionsFound: [] };
+    }
+    if (step === "objectives") {
+      return { objectives: [{ localId: "o1", existingId: null, name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null }] };
     }
     if (step === "generate") {
       const g = input as StepInput<"generate">;
@@ -124,10 +124,10 @@ test("processMaterial builds the structure from the stored pages and saves it wi
   assert.deepEqual(rows.topics!.map((t) => [t.name, t.review]), [["Boolean Algebra", "proposed"]]);
   assert.equal(rows.objectives!.length, 1);
   assert.equal(rows.questions!.length, 2);
-  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "matching", "writing"]);
+  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "objectives", "writing"]);
 });
 
-test("handwritten pages are read from their images first: the text is stored, extraction reads it, and an unrenderable page keeps its own", async () => {
+test("handwritten pages are read from their images first: the text is stored, mapping reads it, and an unrenderable page keeps its own", async () => {
   const handwritten: Record<string, MaterialPages> = {
     m1: [
       { n: 1, text: "iisel cell & think", source: "needs-vision" },
@@ -138,14 +138,14 @@ test("handwritten pages are read from their images first: the text is stored, ex
   const mem = memoryStore({ run: queued(), pages: handwritten });
   const honest = honestModel();
   const sent: Array<StepInput<"transcribe">> = [];
-  let extracted: StepInput<"extract"> | null = null;
+  let extracted: StepInput<"map"> | null = null;
   const call = (async (step: string, input: unknown) => {
     if (step === "transcribe") {
       const t = input as StepInput<"transcribe">;
       sent.push(t);
       return { pages: t.pages.map((p) => ({ n: p.n, text: `A DRAM cell stores one bit (page ${p.n}).` })) };
     }
-    if (step === "extract") extracted = input as StepInput<"extract">;
+    if (step === "map") extracted = input as StepInput<"map">;
     return honest.call(step as never, input as never);
   }) as CallStep;
   const render = async (_m: unknown, page: number) => (page === 3 ? null : `data:image/jpeg;base64,PAGE${page}`);
@@ -170,14 +170,14 @@ test("typed slides with a figure get its description appended to their text; dec
   const mem = memoryStore({ run: queued(), pages: slides });
   const honest = honestModel();
   const asked: Array<StepInput<"describe">> = [];
-  let extracted: StepInput<"extract"> | null = null;
+  let extracted: StepInput<"map"> | null = null;
   const call = (async (step: string, input: unknown) => {
     if (step === "describe") {
       const d = input as StepInput<"describe">;
       asked.push(d);
       return { pages: d.pages.map((p) => ({ n: p.n, figures: p.n === 1 ? "A mux with inputs A, B, select S and output Y." : "" })) };
     }
-    if (step === "extract") extracted = input as StepInput<"extract">;
+    if (step === "map") extracted = input as StepInput<"map">;
     return honest.call(step as never, input as never);
   }) as CallStep;
   const out = await processMaterial({ store: mem.store, call, newId, renderPage: async (_m, n) => `data:image/jpeg;base64,S${n}` }, { runId: "run1", materialId: "m1" });
@@ -190,7 +190,7 @@ test("typed slides with a figure get its description appended to their text; dec
 
 test("a failed job records why, and saves nothing", async () => {
   const mem = memoryStore({ run: queued(), pages });
-  const out = await processMaterial({ store: mem.store, call: honestModel(2, "extract").call, newId }, { runId: "run1", materialId: "m1" });
+  const out = await processMaterial({ store: mem.store, call: honestModel(2, "map").call, newId }, { runId: "run1", materialId: "m1" });
   assert.deepEqual(out, { status: "failed", error: "Orca couldn't build this upload: Anthropic is rate-limiting you. Try again in a moment." });
   assert.equal(mem.state.status, "failed");
   assert.equal(mem.state.error, out.status === "failed" ? out.error : "");
