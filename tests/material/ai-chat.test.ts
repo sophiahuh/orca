@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiChatFilename, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript } from "../../src/lib/material/ai-chat.ts";
+import { aiChatFilename, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "../../src/lib/material/ai-chat.ts";
 
 test("AI-chat intake accepts only supported public-share providers", () => {
   assert.equal(isPublicAIChatUrl("https://chatgpt.com/share/abc"), true);
@@ -17,6 +17,14 @@ test("AI-chat intake labels pasted markdown and ChatGPT-style export turns", () 
   const exported = normaliseAIChatTranscript(JSON.stringify({ mapping: { a: { message: { author: { role: "user" }, content: { parts: ["Explain recursion"] } } }, b: { message: { author: { role: "assistant" }, content: { parts: ["It calls itself."] } } } } }));
   assert.match(exported, /STUDENT: Explain recursion/);
   assert.match(exported, /AI ASSISTANT: It calls itself/);
+});
+
+test("only the chat's own text counts toward enough to import, not Orca's header or role labels", () => {
+  // A share page whose chat is rendered by script: visible text is just the app's name.
+  const empty = chatTextFromHtml("<html><body><div>ChatGPT</div><script>{\"huge\":\"app state\"}</script></body></html>");
+  assert.ok(empty.length > 80);
+  assert.equal(spokenChars(empty), 0);
+  assert.equal(spokenChars(normaliseAIChatTranscript("You: What is a heap?\nChatGPT: A tree with the heap property.")), "What is a heap?".length + "A tree with the heap property.".length);
 });
 
 test("AI-chat public-share HTML retains provider role attributes", () => {

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { aiChatFilename, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript } from "@/lib/material/ai-chat";
+import { aiChatFilename, chatTextFromHtml, isAIChatHost, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "@/lib/material/ai-chat";
+import { sanitize } from "@/lib/untrusted/sanitize";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import { startUploadJob } from "@/lib/server/jobs/start";
+import { fetchPublicPage } from "@/lib/server/public-page";
 import { ownsCourse, forStudent, reply } from "@/lib/server/student";
 
 export const runtime = "nodejs";
@@ -25,16 +27,15 @@ export async function POST(request: Request) {
     if (parsed.data.url) {
       if (!isPublicAIChatUrl(parsed.data.url)) return reply(400, { error: "Use a public ChatGPT, Claude, or Gemini shared-chat link, or paste the transcript instead." });
       sourceUrl = parsed.data.url;
-      let response: Response;
-      try {
-        response = await fetch(sourceUrl, { redirect: "error", signal: AbortSignal.timeout(15_000), headers: { "user-agent": "Orca AI-chat material importer" } });
-      } catch { return reply(422, { error: "Orca couldn't fetch that public AI chat. Paste its transcript instead." }); }
-      if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return reply(422, { error: "That link needs to be a publicly viewable AI chat." });
-      text = chatTextFromHtml(await response.text());
+      const page = await fetchPublicPage(sourceUrl, { allowHost: isAIChatHost, userAgent: "Orca AI-chat material importer" });
+      if (!page.ok) return reply(422, { error: page.reason === "unreachable" ? "Orca couldn't fetch that public AI chat. Paste its transcript instead." : page.reason === "too-big" ? "That AI chat page is too large to read. Paste its transcript instead." : "That link needs to be a publicly viewable AI chat." });
+      text = chatTextFromHtml(page.html);
     } else {
       text = normaliseAIChatTranscript(parsed.data.text!);
     }
-    if (text.length < 80) return reply(422, { error: "Orca couldn't find enough readable chat text. Paste the conversation transcript instead." });
+    // Stored as the model will see it (decision 13): invisible and control characters removed.
+    text = sanitize(text, 180_000).text;
+    if (spokenChars(text) < 80) return reply(422, { error: "Orca couldn't find enough readable chat text. Paste the conversation transcript instead." });
     const filename = aiChatFilename(sourceUrl);
     const hash = createHash("sha256").update(text).digest("hex");
     const { data: same, error: sameError } = await db.from("materials").select("id, filename").eq("owner_id", student.id).eq("course_id", parsed.data.courseId).eq("content_hash", hash).maybeSingle();
