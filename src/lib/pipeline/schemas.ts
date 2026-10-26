@@ -14,9 +14,9 @@ const Anchor = z.object({
   excerpt: z.string().max(SHORT).describe("Short quote or close paraphrase from that place"),
 });
 
-/* ── Extract: structure and signals, no questions ──────────────────────── */
+/* ── Map and objectives: a file's structure and signals, no questions ────── */
 
-/** Extraction's text has no length limit and its topics and objectives no count limit (2026-10-25): a long summary or a long lecture lost whole topics. */
+/** Mapped text has no length limit and topics and objectives no count limit (2026-10-25): a long summary or a long lecture lost whole topics. */
 const ExtractAnchor = z.object({
   locator: z.string().max(60).describe("e.g. 'slide 14'"),
   excerpt: z.string().describe("Short quote or close paraphrase from that place"),
@@ -52,22 +52,6 @@ const InstructionsFound = z
   .max(20)
   .describe("Quoted spans of the material that address an AI or try to steer it (instructions, requests for an outcome, role tags); empty when there are none");
 
-export const ExtractOutput = z.object({
-  topics: z.array(
-    z.object({
-      localId: z.string().max(60).describe("Your own short id for a new topic, e.g. 't1'. For an existing topic, repeat its id."),
-      existingId: z.string().max(60).nullable().describe("The id of the existing topic this is, or null for a new one"),
-      name: z.string().min(1),
-      summary: z.string(),
-      slideStart: z.number().int().min(1),
-      slideEnd: z.number().int().min(1),
-    }),
-  ),
-  objectives: z.array(ExtractedObjective.extend({ topicRef: z.string().max(60).describe("localId of a topic above, or the id of an existing topic") })),
-  relations: TopicRelations,
-  instructionsFound: InstructionsFound,
-});
-export type ExtractOutput = z.infer<typeof ExtractOutput>;
 
 /* ── Map: which topics one part of a file teaches, against the course's table of contents ── */
 
@@ -154,14 +138,6 @@ const Named = z.object({ id: z.string(), name: z.string(), description: z.string
 const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
 const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
 
-export const ExtractInput = z.object({
-  course: Course,
-  material: z.object({ filename: z.string().max(200), type: MaterialType }),
-  pages: z.array(Page).min(1).max(400),
-  existingTopics: z.array(Named.extend({ id: z.string() })),
-  existingObjectives: z.array(Named.extend({ topicId: z.string() })),
-});
-export type ExtractInput = z.infer<typeof ExtractInput>;
 
 /** A topic as the table of contents lists it: what it is and where the course teaches it (file names, never ids). */
 const TocEntry = z.object({ id: z.string(), name: z.string(), summary: z.string(), objectives: z.number().int().min(0), taught: z.string(), rejected: z.boolean() });
@@ -324,7 +300,6 @@ export type DescribeOutput = z.infer<typeof DescribeOutput>;
 
 /** Every step: its input and output schemas. */
 export const STEPS = {
-  extract: { input: ExtractInput, output: ExtractOutput },
   map: { input: MapInput, output: MapOutput },
   objectives: { input: ObjectivesInput, output: ObjectivesOutput },
   reconcile: { input: ReconcileInput, output: ReconcileOutput },

@@ -4,9 +4,9 @@
  * code path (the SDK, structured outputs, the jobs) runs while nothing reaches Anthropic or costs
  * anything. It recognises each pipeline step by its system prompt and answers with canned output:
  *
- * - extract: the scenario's `extract` (default: nothing found);
- * - map / objectives: the same scenario, part by part (topics whose slide range meets the part's
- *   pages) and topic by topic (objectives whose topicRef is the topic);
+ * - map / objectives: the scenario's `extract` (what the file holds; default: nothing found), part
+ *   by part (topics whose slide range meets the part's pages) and topic by topic (objectives whose
+ *   topicRef is the topic);
  * - reconcile: "new"; grade: correct;
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
@@ -43,7 +43,6 @@ export interface Scenario {
 }
 
 const STEPS: Array<[string, string]> = [
-  ["You map one piece of college course material", "extract"],
   ["You map part of one piece of college course material", "map"],
   ["You list the skills one topic of college course material teaches", "objectives"],
   ["You decide whether a newly extracted course item", "reconcile"],
@@ -79,9 +78,6 @@ function blocks(prompt: string, source: string): unknown[] {
 
 function answer(step: string, prompt: string): unknown {
   switch (step) {
-    case "extract":
-      // The schema requires instructionsFound; a scenario may say what the "model" saw.
-      return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
     case "map": {
       const [material] = blocks(prompt, "uploaded_pdf") as Array<{ pages: Array<{ n: number }> }>;
       const index = Number(/This is part (\d+) of/.exec(prompt)?.[1] ?? 1);

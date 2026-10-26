@@ -3,7 +3,17 @@
  * slide range, objectives with a topicRef), so unit tests and e2e/fake-anthropic.ts describe what a
  * file holds once and get it back part by part and topic by topic. Pure.
  */
-import type { ExtractOutput, MapOutput, ObjectivesOutput } from "../../src/lib/pipeline/schemas.ts";
+import type { MapOutput, ObjectivesOutput } from "../../src/lib/pipeline/schemas.ts";
+
+type ScenarioObjective = ObjectivesOutput["objectives"][number] & { topicRef: string };
+
+/** What a whole file holds: topics with a slide range, objectives naming their topic. */
+export interface ExtractOutput {
+  topics: Array<{ localId: string; existingId: string | null; name: string; summary: string; slideStart: number; slideEnd: number }>;
+  objectives: ScenarioObjective[];
+  relations: MapOutput["relations"];
+  instructionsFound: string[];
+}
 
 export type ExtractScenario = Partial<ExtractOutput>;
 

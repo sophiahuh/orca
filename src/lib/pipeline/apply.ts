@@ -8,7 +8,7 @@ export interface CourseStructureWithRelations extends CourseStructure {
 }
 
 export function applyUploadPlan(s: CourseStructureWithRelations, plan: UploadPlan): CourseStructureWithRelations {
-  const topics = [...s.topics, ...plan.newTopics];
+  const topics = [...s.topics.map((t) => (plan.topicSources[t.id] ? { ...t, source: plan.topicSources[t.id] } : t)), ...plan.newTopics];
   const objectives = { ...s.objectives };
   for (const [id, update] of Object.entries(plan.objectiveUpdates)) {
     const o = objectives[id];
