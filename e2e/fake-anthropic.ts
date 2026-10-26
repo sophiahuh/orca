@@ -5,6 +5,8 @@
  * anything. It recognises each pipeline step by its system prompt and answers with canned output:
  *
  * - extract: the scenario's `extract` (default: nothing found);
+ * - map / objectives: the same scenario, part by part (topics whose slide range meets the part's
+ *   pages) and topic by topic (objectives whose topicRef is the topic);
  * - reconcile: "new"; grade: correct;
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
@@ -19,6 +21,7 @@
  * Run: node --experimental-strip-types e2e/fake-anthropic.ts [port]
  */
 import { createServer } from "node:http";
+import { type ExtractScenario, mapAnswer, objectivesAnswer } from "../tests/support/extract-scenario.ts";
 
 export interface Scenario {
   extract?: unknown;
@@ -41,6 +44,8 @@ export interface Scenario {
 
 const STEPS: Array<[string, string]> = [
   ["You map one piece of college course material", "extract"],
+  ["You map part of one piece of college course material", "map"],
+  ["You list the skills one topic of college course material teaches", "objectives"],
   ["You decide whether a newly extracted course item", "reconcile"],
   ["You write quick-review quiz questions", "generate"],
   ["You write deep-review questions", "deep"],
@@ -77,6 +82,15 @@ function answer(step: string, prompt: string): unknown {
     case "extract":
       // The schema requires instructionsFound; a scenario may say what the "model" saw.
       return { instructionsFound: [], topics: [], objectives: [], relations: [], ...((scenario.extract as object | undefined) ?? {}) };
+    case "map": {
+      const [material] = blocks(prompt, "uploaded_pdf") as Array<{ pages: Array<{ n: number }> }>;
+      const index = Number(/This is part (\d+) of/.exec(prompt)?.[1] ?? 1);
+      return mapAnswer((scenario.extract ?? {}) as ExtractScenario, { pages: material?.pages ?? [], part: { index } });
+    }
+    case "objectives": {
+      const [topic] = blocks(prompt, "generated_question") as Array<{ id: string; name: string }>;
+      return objectivesAnswer((scenario.extract ?? {}) as ExtractScenario, { topic });
+    }
     case "reconcile":
       return { decision: "new", matchId: null, reasoning: "The fake API keeps them separate." };
     case "describe": {
