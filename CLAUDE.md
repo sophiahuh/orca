@@ -52,7 +52,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
     topic's play button on the path, or its Atlas node, opens "Dive into [topic]" to pick a length).
     Deep questions are marked `deep` and only dives ask them.
   - **Topic links**: relations connect topics (used-in, has-a-kind, alternative-to, related). The
-    extraction call proposes some, and the **link step** (`src/lib/pipeline/link.ts`) runs after each
+    map calls propose some, and the **link step** (`src/lib/pipeline/link.ts`) runs after each
     upload and from "Find connections" on the Atlas (`POST /api/relink`).
   - **Concept Atlas** is a topic graph (`src/lib/course/topic-graph.ts`, `src/components/atlas/`):
     foundations on top, nodes sized by how many topics they're used in, strength glyphs.
@@ -184,9 +184,13 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 
 - **Course → topic → objective → questions.** An objective is a "can do X" statement and the unit
   of mastery. Every question belongs to one objective.
-- **Objectives are created once per course**, when material is uploaded: extraction proposes new
-  topics and objectives against the course's existing list, reconciliation matches duplicates,
-  and the student reviews topics. Inferred objectives (from general knowledge, not the material)
+- **Objectives are created once per course**, when material is uploaded. The file is read part by
+  part (about 60,000 characters each): a `map` call sees the part and the course's table of contents
+  (every topic, its summary and where it's taught), then an `objectives` call per topic touched sees
+  only that topic's objectives and pages; reconciliation matches duplicates (topics against the
+  table of contents, objectives within their topic), and the student reviews topics. Each topic's
+  `source` lists every file and page range it's taught on, and questions are written from each
+  objective's own pages (spec: `docs/superpowers/specs/2026-10-25-course-index-design.md`). Inferred objectives (from general knowledge, not the material)
   are allowed and labelled. Unreviewed objectives are quizzable, with an "unreviewed" tag.
 - **Learner state is derived, never stored.** Every graded answer appends an evidence event;
   objective status (unseen → learning → mastered → fading → retired, plus mixed-up; table in
@@ -313,7 +317,7 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/store.tsx` — `useOrca()`: loads the student's data once, saves optimistically in order
   (structure via `save_structure`, evidence only via `POST /api/evidence`, the rest under RLS).
   Structure changes in the browser only through `editStructure`; jobs change it on the server.
-- `src/lib/pipeline/` — upload pipeline (extract, reconcile, generate; no model check of the
+- `src/lib/pipeline/` — upload pipeline (map and objectives part by part, reconcile, generate; no model check of the
   questions since 2026-10-06), prompts and zod schemas; `topup.ts` writes more questions after a
   session and a deep review's harder ones (`runDeepReview`, the "deep" step, called by
   `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there);

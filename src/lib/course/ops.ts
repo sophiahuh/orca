@@ -4,6 +4,7 @@
  * both can be undone (except a topic merge, which moves questions).
  */
 import type { Objective, QuizQuestion, Topic } from "../data.ts";
+import { unionPlaces } from "./places.ts";
 
 export interface CourseStructure {
   topics: Topic[];
@@ -110,10 +111,12 @@ export function renameTopic(s: CourseStructure, topicId: string, name: string): 
  */
 export function mergeTopics(s: CourseStructure, loserId: string, survivorId: string): CourseStructure {
   if (loserId === survivorId) throw new Error("Can't merge a topic into itself");
-  topicOf(s, loserId); // throws for a topic the course doesn't have
+  const loser = topicOf(s, loserId);
   const survivor = topicOf(s, survivorId);
   if (survivor.review === "archived") throw new Error(`Topic ${survivorId} is archived`);
-  let next = withTopic(s, loserId, (t) => ({ ...t, review: "archived", mergedInto: survivorId }));
+  // The survivor is taught everywhere either was.
+  let next = withTopic(s, survivorId, (t) => ({ ...t, source: unionPlaces(t.source ?? [], loser.source ?? []) }));
+  next = withTopic(next, loserId, (t) => ({ ...t, review: "archived", mergedInto: survivorId }));
   next = withObjectives(next, objectiveIdsIn(next, loserId), (o) => ({ ...o, topicId: survivorId }));
   const bank = { ...next.bank, [survivorId]: [...(next.bank[survivorId] ?? []), ...(next.bank[loserId] ?? [])], [loserId]: [] };
   return { ...next, bank };

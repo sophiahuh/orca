@@ -3,17 +3,20 @@ import assert from "node:assert/strict";
 import type { Material, Objective, QuizQuestion, Topic } from "../../src/lib/data.ts";
 import { type CallStep, type RunInput, runUpload } from "../../src/lib/pipeline/run.ts";
 import { applyUploadPlan } from "../../src/lib/pipeline/apply.ts";
-import { ExtractOutput as ExtractOutputSchema } from "../../src/lib/pipeline/schemas.ts";
-import type { ExtractOutput, GeneratedQuestion, StepInput, StepName, StepOutput } from "../../src/lib/pipeline/schemas.ts";
+import type { GeneratedQuestion, StepInput, StepName, StepOutput } from "../../src/lib/pipeline/schemas.ts";
+import { type ExtractOutput, mapAnswer, objectivesAnswer } from "../support/extract-scenario.ts";
 
-type Handlers = { [S in StepName]?: (input: StepInput<S>) => StepOutput<S> | Promise<StepOutput<S>> };
+/** Step handlers, plus `extract`: what the whole file holds, answered part by part (map) and topic by topic (objectives). */
+type Handlers = { [S in StepName]?: (input: StepInput<S>) => StepOutput<S> | Promise<StepOutput<S>> } & { extract?: () => ExtractOutput };
 
 /** A fake model: each step answers from its handler; calls are recorded. */
 function fakeModel(h: Handlers) {
   const calls: Array<{ step: StepName; input: unknown }> = [];
   const call: CallStep = async (step, input) => {
     calls.push({ step, input });
-    const handler = h[step] as ((i: typeof input) => StepOutput<typeof step>) | undefined;
+    if (step === "map" && !h.map && h.extract) return mapAnswer(h.extract(), input as StepInput<"map">) as StepOutput<typeof step>;
+    if (step === "objectives" && !h.objectives && h.extract) return objectivesAnswer(h.extract(), input as StepInput<"objectives">) as StepOutput<typeof step>;
+    const handler = h[step as StepName] as ((i: typeof input) => StepOutput<typeof step>) | undefined;
     // The link step runs after every upload with new topics; unless a test says otherwise it finds nothing.
     if (!handler && step === "link") return { links: [] } as StepOutput<typeof step>;
     if (!handler) throw new Error(`unexpected ${step} call`);
@@ -32,6 +35,7 @@ const input = (over: Partial<RunInput> = {}): RunInput => ({
   bank: {},
   relations: [],
   material: material(),
+  materials: [{ id: "mat", filename: "L02.pdf" }],
   pages,
   runId: "run1",
   model: "test-model",
@@ -129,8 +133,8 @@ test("a first lecture creates proposed topics and objectives with signals, relat
   assert.ok(all.every((q) => q.materialId === "mat"));
   assert.equal(all.find((q) => q.objectiveId === inferred.id)!.anchor, undefined, "inferred questions carry no anchor");
   assert.equal(plan.run.questionsAdded, 3);
-  assert.deepEqual(progress, ["mapping", "matching", "writing"]);
-  assert.deepEqual([...new Set(model.calls.map((c) => c.step))], ["extract", "link", "generate"], "no second model call checks the questions");
+  assert.deepEqual(progress, ["mapping", "objectives", "objectives", "writing", "writing"]);
+  assert.deepEqual([...new Set(model.calls.map((c) => c.step))], ["map", "objectives", "link", "generate"], "no second model call checks the questions");
   assert.equal(model.calls.filter((c) => c.step === "reconcile").length, 0, "nothing existing to compare against");
   const generateInputs = model.calls.filter((c) => c.step === "generate").map((c) => c.input as StepInput<"generate">);
   assert.ok(generateInputs.every((g) => g.objectives.every((o) => o.need === 2)), "an upload writes 2 per objective");
@@ -180,9 +184,10 @@ test("a later upload reuses existing items, records signals, skips rejected ones
     ["Order minterms by Gray code on a map", "proposed", "O3"],
     ["Find essential prime implicants", "confirmed", null],
   ]);
+  // A skipped topic's objectives are never asked for: the topic is what's listed.
   assert.deepEqual(
     plan.run.dropped.map((d) => d.prompt),
-    ['Topic "Course Logistics"', 'Objective "Use don\'t-cares"', 'Objective "Know the grading policy"'],
+    ['Topic "Course Logistics"', 'Objective "Use don\'t-cares"'],
   );
   const generate = model.calls.find((c) => c.step === "generate")!.input as StepInput<"generate">;
   assert.equal(generate.objectives.find((o) => o.id === "O1")!.need, 1, "tops O1 up from 1 to 2");
@@ -256,11 +261,91 @@ test("extraction has no length or count limit: a long topic summary keeps its to
   const topics = Array.from({ length: 10 }, (_, i) => ({ localId: `t${i + 1}`, existingId: null, name: `Topic ${i + 1}`, summary: i === 0 ? summary : "Short.", slideStart: 1, slideEnd: 2 }));
   const objectives = topics.map((t, i) => ({ localId: `o${i + 1}`, existingId: null, topicRef: t.localId, name: `Do skill ${i + 1}`, description: "", origin: "inferred" as const, places: [], emphasis: null }));
   const extract: ExtractOutput = { topics, objectives, relations: [], instructionsFound: [] };
-  assert.ok(ExtractOutputSchema.safeParse(extract).success);
   const model = fakeModel({ extract: () => extract, generate: () => ({ questions: [] }) });
   const plan = await runUpload(input(), { call: model.call, newId });
   assert.equal(plan.newTopics.length, 10);
   assert.equal(plan.newTopics[0].summary, summary);
   assert.equal(plan.newObjectives.length, 10);
   assert.deepEqual(plan.run.dropped.filter((d) => /refused|its topic/.test(d.reason)), []);
+});
+
+test("a long file is mapped part by part: every page is read once, and a topic running across parts is extended, not made twice", async () => {
+  const long = Array.from({ length: 30 }, (_, i) => ({ n: i + 1, text: "x".repeat(5000) }));
+  const scenario: ExtractOutput = {
+    topics: [{ localId: "t1", existingId: null, name: "Heaps", summary: "Binary heaps.", slideStart: 1, slideEnd: 30 }],
+    objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Insert into a heap", description: "", origin: "material", places: [{ locator: "slide 2", excerpt: "insert" }], emphasis: null }],
+    relations: [],
+    instructionsFound: [],
+  };
+  const seen: number[][] = [];
+  const model = fakeModel({
+    map: (i) => {
+      seen.push(i.pages.map((p) => p.n));
+      // Later parts see the topic the first part made, and name it.
+      const made = i.toc.find((t) => t.name === "Heaps");
+      const out = mapAnswer(scenario, i);
+      return made ? { ...out, topics: out.topics.map((t) => ({ ...t, localId: made.id, existingId: made.id })) } : out;
+    },
+    objectives: (i) => objectivesAnswer(scenario, i),
+    generate: () => ({ questions: [] }),
+  });
+  const plan = await runUpload(input({ pages: long }), { call: model.call, newId });
+  assert.equal(seen.length, 3);
+  assert.deepEqual(seen.flat(), long.map((p) => p.n));
+  assert.equal(plan.newTopics.length, 1);
+  assert.deepEqual(plan.newTopics[0].source, [{ materialId: "mat", from: 1, to: 30 }]);
+  assert.equal(plan.newObjectives.length, 1, "the same objective found in every part is one objective");
+});
+
+test("an objectives call gets only its topic's objectives and pages, and the table of contents says where each topic is taught", async () => {
+  const topics: Topic[] = [
+    { id: "T1", name: "Heaps", review: "confirmed", pos: { x: 0, y: 0 }, summary: "Binary heaps.", source: [{ materialId: "old", from: 3, to: 5 }] },
+    { id: "T2", name: "Hashing", review: "confirmed", pos: { x: 0, y: 0 }, summary: "Hash tables." },
+  ];
+  const obj = (id: string, topicId: string): Objective => ({ id, topicId, name: `Skill ${id}`, description: "", origin: "material", review: "confirmed", materialId: "old", runId: "r0", signals: [] });
+  const calls: Array<StepInput<"objectives">> = [];
+  let toc: StepInput<"map">["toc"] = [];
+  const model = fakeModel({
+    map: (i) => ((toc = i.toc), { topics: [{ localId: "T1", existingId: "T1", name: "Heaps", summary: "Binary heaps.", pages: [{ from: 1, to: 2 }] }], relations: [], instructionsFound: [] }),
+    objectives: (i) => (calls.push(i), { objectives: [] }),
+  });
+  const plan = await runUpload(
+    input({ course: { id: "c", name: "DS", short: "DS", topics }, objectives: { O1: obj("O1", "T1"), O2: obj("O2", "T2") }, materials: [{ id: "old", filename: "L1.pdf" }, { id: "mat", filename: "L02.pdf" }] }),
+    { call: model.call, newId },
+  );
+  assert.deepEqual(toc.map((t) => [t.id, t.objectives, t.taught]), [["T1", 1, "L1.pdf p3–5"], ["T2", 1, ""]]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].topic.id, "T1");
+  assert.deepEqual(calls[0].existingObjectives.map((o) => o.id), ["O1"]);
+  assert.deepEqual(calls[0].pages.map((p) => p.n), [1, 2]);
+  assert.deepEqual(plan.topicSources.T1, [{ materialId: "old", from: 3, to: 5 }, { materialId: "mat", from: 1, to: 2 }]);
+});
+
+test("a part that can't be mapped is listed with its pages, and the rest of the file is kept", async () => {
+  const long = Array.from({ length: 30 }, (_, i) => ({ n: i + 1, text: "x".repeat(5000) }));
+  const scenario: ExtractOutput = { topics: [{ localId: "t1", existingId: null, name: "Heaps", summary: "", slideStart: 1, slideEnd: 5 }], objectives: [], relations: [], instructionsFound: [] };
+  const model = fakeModel({
+    map: (i) => {
+      if (i.part.index === 2) throw new Error("the model timed out");
+      return mapAnswer(scenario, i);
+    },
+    objectives: () => ({ objectives: [] }),
+  });
+  const plan = await runUpload(input({ pages: long }), { call: model.call, newId });
+  assert.deepEqual(plan.run.dropped.find((d) => d.prompt === "Pages 13–24"), { prompt: "Pages 13–24", reason: "couldn't be mapped: the model timed out" });
+  assert.deepEqual(plan.newTopics.map((t) => t.name), ["Heaps"]);
+});
+
+test("upload questions are written from each objective's own pages", async () => {
+  const ten = Array.from({ length: 10 }, (_, i) => ({ n: i + 1, text: `slide ${i + 1} text` }));
+  const scenario: ExtractOutput = {
+    topics: [{ localId: "t1", existingId: null, name: "Heaps", summary: "", slideStart: 1, slideEnd: 10 }],
+    objectives: [{ localId: "o1", existingId: null, topicRef: "t1", name: "Insert into a heap", description: "", origin: "material", places: [{ locator: "slide 7", excerpt: "insert" }], emphasis: null }],
+    relations: [],
+    instructionsFound: [],
+  };
+  const written: number[][] = [];
+  const model = fakeModel({ extract: () => scenario, generate: (i) => (written.push(i.pages.map((p) => p.n)), { questions: [] }) });
+  await runUpload(input({ pages: ten }), { call: model.call, newId });
+  assert.deepEqual(written, [[6, 7, 8]]);
 });

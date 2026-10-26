@@ -63,13 +63,14 @@ test("an injected deck: the screen and the model's report are recorded, planted 
   const run = state.runs.find((r) => r.id === generation.runId)!;
   expect(run.security!.instructionsFound).toEqual(INJECTED_EXTRACT.instructionsFound);
   expect(run.security!.screen.some((h) => /ignore previous instructions/i.test(h.quote))).toBe(true);
-  expect(run.dropped.map((d) => d.reason)).toEqual(expect.arrayContaining([expect.stringMatching(/^refused: summary contains a URL not in the material/), expect.stringMatching(/^skipped: its topic was/), expect.stringMatching(/^refused: names slide 9/)]));
+  expect(run.dropped.map((d) => d.reason)).toEqual(expect.arrayContaining([expect.stringMatching(/^refused: summary contains a URL not in the material/), expect.stringMatching(/^refused: names slide 9/)]));
   // The place that named a slide the deck doesn't have went; the objective stayed with its real place.
   const dontCares = Object.values(state.objectives[course.id]).find((o) => (o as { name: string }).name === "Use don't-cares") as { signals: Array<{ places: Array<{ locator: string }> }> };
   expect(dontCares.signals[0].places.map((p) => p.locator)).toEqual(["slide 2"]);
   // Questions were still written for the real objectives.
   expect(run.questionsAdded).toBe(4);
-  expect(await fakeCalls()).toEqual(["extract", "generate"]);
+  // The refused topic's objectives are never asked for.
+  expect(await fakeCalls()).toEqual(["map", "objectives", "generate"]);
 
   const { data: events } = await admin().from("security_events").select("kind, check, severity, quote, run_id, material_id").eq("owner_id", student.id).order("check");
   expect(events!.length).toBeGreaterThanOrEqual(3);

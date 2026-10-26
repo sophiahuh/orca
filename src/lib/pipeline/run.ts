@@ -3,9 +3,11 @@
  * injected (`call`), so the orchestration is tested with fakes; the result is a plan that
  * `applyUploadPlan` merges into the course. Nothing here touches the store.
  */
-import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
+import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic, TopicPlace } from "../data.ts";
 import { type Named, exactMatch, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
+import { type PageRange, addRanges, describePlaces } from "../course/places.ts";
+import { pagesFor } from "./topup.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
@@ -13,15 +15,16 @@ import { linkReason, linkTopics, liveDirectional } from "./link.ts";
 import { flaggedFor } from "./flagged.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
-import { DEEP_TEXT, type ExtractOutput, type GeneratedQuestion, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
+import { DEEP_TEXT, type GeneratedQuestion, type MapOutput, type ObjectivesOutput, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
 
 export type CallStep = <S extends StepName>(step: S, input: StepInput<S>) => Promise<StepOutput<S>>;
 
 export type Progress =
   | { stage: "transcribing"; pages: number }
   | { stage: "figures-reading"; slides: number }
-  | { stage: "mapping" }
-  | { stage: "matching"; candidates: number }
+  /** Mapping the file; `part` (of `parts`, pages `from`–`to`) once the parts are known. */
+  | { stage: "mapping"; part?: number; parts?: number; from?: number; to?: number }
+  | { stage: "objectives"; topic: string }
   | { stage: "writing"; objectives: number }
   | { stage: "figures"; slides: number };
 
@@ -31,6 +34,8 @@ export interface RunInput {
   bank: Readonly<Record<string, QuizQuestion[]>>;
   relations: readonly Relation[];
   material: Material;
+  /** The course's materials, so the table of contents can say where each topic is taught by file name. */
+  materials: ReadonlyArray<{ id: string; filename: string }>;
   pages: Array<{ n: number; text: string }>;
   /** What hidden text the server dropped when it read the file; recorded on the run (decision 13). */
   hiddenText?: { items: number; pages: number[] };
@@ -54,6 +59,8 @@ export interface RunDeps {
 
 export interface UploadPlan {
   newTopics: Topic[];
+  /** Existing topics this upload taught: their source with this file's ranges added. */
+  topicSources: Record<string, TopicPlace[]>;
   newObjectives: Objective[];
   /** Existing objectives this upload covered: this upload's signal. */
   objectiveUpdates: Record<string, { signal: ObjectiveSignal | null }>;
@@ -181,202 +188,265 @@ export function screenMaterial(pages: ReadonlyArray<{ n: number; text: string }>
   return hits;
 }
 
+/** Characters of page text in one part of a file: a batch size, not a limit (a long file is mapped in several parts). */
+export const PART_CHARS = 60_000;
+
+/** Consecutive pages up to `maxChars` of text each; a page is never split, and a page over the budget is a part of its own. */
+export function splitParts<P extends { n: number; text: string }>(pages: readonly P[], maxChars = PART_CHARS): P[][] {
+  const parts: P[][] = [];
+  let current: P[] = [];
+  let size = 0;
+  for (const p of pages) {
+    if (current.length && size + p.text.length > maxChars) {
+      parts.push(current);
+      current = [];
+      size = 0;
+    }
+    current.push(p);
+    size += p.text.length;
+  }
+  if (current.length) parts.push(current);
+  return parts;
+}
+
+const pagesLabel = (from: number, to: number) => (from === to ? `Page ${from}` : `Pages ${from}–${to}`);
+
+/**
+ * Build an upload's structure and questions. The file is read part by part (`splitParts`): each
+ * part's `map` call sees its pages and the course's table of contents (every topic, what it is and
+ * where it's taught), then one `objectives` call per topic the part teaches sees only that topic's
+ * objectives and pages. A later part sees what earlier parts added. Questions are then written from
+ * each objective's own pages (`pagesFor`). A part or a topic whose call fails is listed in `dropped`
+ * and the rest is kept; when no part could be mapped, the upload fails with the last error.
+ */
 export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadPlan> {
   const { call, newId } = deps;
   const progress = deps.onProgress ?? (() => {});
   const dropped: PipelineRun["dropped"] = [];
+  const refuse = (what: string, reason: string) => dropped.push({ prompt: what, reason: `${REFUSED_PREFIX}${reason}` });
   const signalFor = (places: ObjectiveSignal["places"], emphasis: ObjectiveSignal["emphasis"] | null): ObjectiveSignal | null =>
     places.length || emphasis ? { materialId: input.material.id, materialType: input.material.type, places, ...(emphasis ? { emphasis } : {}) } : null;
-
-  const existingTopics = asNamed(input.course.topics);
-  const existingObjectives = asNamed(Object.values(input.objectives));
-  const listed = <T extends Named>(items: T[]) => items.filter((i) => !i.mergedInto).map((i) => ({ id: i.id, name: i.name, description: i.description, rejected: i.review === "archived" }));
-
-  /* 1. Extract */
-  progress({ stage: "mapping" });
+  const course = { name: input.course.name, short: input.course.short };
+  const material = { filename: input.material.filename, type: input.material.type };
+  const filenames = new Map([...input.materials.map((m) => [m.id, m.filename] as const), [input.material.id, input.material.filename] as const]);
   const facts = materialFacts(input.pages);
   // Decision 13: the material is screened for instruction-like text before anything is built from it; a hit never blocks.
   const materialScreen = screenMaterial(input.pages);
-  const extracted: ExtractOutput = await call("extract", {
-    course: { name: input.course.name, short: input.course.short },
-    material: { filename: input.material.filename, type: input.material.type },
-    pages: input.pages,
-    existingTopics: listed(existingTopics),
-    existingObjectives: listed(existingObjectives).map((o) => ({ ...o, topicId: input.objectives[o.id].topicId })),
-  });
-  const instructionsFound = (extracted.instructionsFound ?? []).map((q) => sanitize(q, 240).text).filter((q) => q.length > 0);
-  const refuse = (what: string, reason: string) => dropped.push({ prompt: what, reason: `${REFUSED_PREFIX}${reason}` });
+  const instructionsFound: string[] = [];
 
-  /* 2. Topics */
-  progress({ stage: "matching", candidates: extracted.topics.length + extracted.objectives.length });
-  const topicByRef = new Map<string, { kind: "existing" | "new"; id: string } | { kind: "dropped" }>();
   const newTopics: Topic[] = [];
-  // Validators first (decision 13): a topic whose text holds a URL the material doesn't, HTML, a link or an instruction is refused, never repaired.
-  const topicTexts = extracted.topics.map((t) => validateFields({ name: t.name, summary: t.summary }, EXTRACTED_RULE(facts)));
-  const topicResolutions = await pool(extracted.topics, 4, (t, i) =>
-    topicTexts[i].ok ? resolve("topic", { existingId: t.existingId, name: t.name, description: t.summary }, existingTopics, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
-  );
-  extracted.topics.forEach((t, i) => {
-    const r = topicResolutions[i];
-    const text = topicTexts[i];
-    if (!text.ok) {
-      refuse(`Topic "${sanitize(t.name, 60).text}"`, text.reason);
-      topicByRef.set(t.localId, { kind: "dropped" });
-      return;
-    }
-    if (r.kind === "dropped") {
-      dropped.push({ prompt: `Topic "${t.name}"`, reason: `skipped: ${r.reason}` });
-      topicByRef.set(t.localId, { kind: "dropped" });
-      return;
-    }
-    if (r.kind === "existing") {
-      topicByRef.set(t.localId, { kind: "existing", id: r.id });
-      return;
-    }
-    // Two extracted topics with the same name in one upload are one topic.
-    const twin = exactMatch([t.name], asNamed(newTopics));
-    if (twin) {
-      topicByRef.set(t.localId, { kind: "new", id: twin.id });
-      return;
-    }
-    const topic: Topic = {
-      id: newId(),
-      name: t.name,
-      review: "proposed",
-      materialId: input.material.id,
-      pos: { x: 0, y: 0 },
-      summary: t.summary,
-      source: { filename: input.material.filename, slideStart: t.slideStart, slideEnd: Math.max(t.slideStart, t.slideEnd) },
-      ...(r.uncertain ? { uncertain: r.uncertain } : {}),
-    };
-    newTopics.push(topic);
-    topicByRef.set(t.localId, { kind: "new", id: topic.id });
-  });
-  const liveTopicIds = new Set(input.course.topics.filter((t) => t.review !== "archived").map((t) => t.id));
-  // "dropped": this upload left the topic out (refused or skipped, listed above); "rejected": the student rejected it.
-  const topicIdOf = (ref: string): string | null | "dropped" | "rejected" => {
-    const r = topicByRef.get(ref);
-    if (r) return r.kind === "dropped" ? "dropped" : r.id;
-    const existing = survivor(ref, new Map(input.course.topics.map((t) => [t.id, t])));
-    if (!existing) return null;
-    return liveTopicIds.has(existing.id) ? existing.id : "rejected";
-  };
-  const confirmedTopic = (id: string) => input.course.topics.some((t) => t.id === id && t.review === "confirmed");
-
-  /* 3. Objectives */
-  const objectiveByRef = new Map<string, string>();
+  /** Existing topics this upload taught: their source with this file's ranges added. */
+  const topicSources: Record<string, TopicPlace[]> = {};
   const newObjectives: Objective[] = [];
   const objectiveUpdates: UploadPlan["objectiveUpdates"] = {};
-  const objectiveTexts = extracted.objectives.map((o) =>
-    validateFields(
-      {
-        name: o.name,
-        description: o.description,
-        ...Object.fromEntries(o.places.map((pl, i) => [`place ${i + 1}`, pl.excerpt])),
-        ...(o.emphasis ? { emphasis: o.emphasis.quote } : {}),
-      },
-      EXTRACTED_RULE(facts),
-    ),
-  );
-  const objectiveResolutions = await pool(extracted.objectives, 4, (o, i) =>
-    objectiveTexts[i].ok ? resolve("objective", { existingId: o.existingId, name: o.name, description: o.description }, existingObjectives, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
-  );
-  extracted.objectives.forEach((o, i) => {
-    const r = objectiveResolutions[i];
-    const text = objectiveTexts[i];
-    if (!text.ok) {
-      refuse(`Objective "${sanitize(o.name, 120).text}"`, text.reason);
-      return;
-    }
-    // A place that names slides the material doesn't have is left out (the objective stays).
-    const places = o.places.filter((pl) => {
-      const ok = anchorExists(pl.locator, facts);
-      if (!ok) refuse(`A place of objective "${o.name}"`, `names ${pl.locator}, which this material doesn't have`);
-      return ok;
-    });
-    const signal = o.origin === "material" ? signalFor(places, o.emphasis) : signalFor([], o.emphasis);
-    if (r.kind === "dropped") {
-      dropped.push({ prompt: `Objective "${o.name}"`, reason: `skipped: ${r.reason}` });
-      return;
-    }
-    if (r.kind === "existing") {
-      const update = (objectiveUpdates[r.id] ??= { signal: null });
-      if (signal) update.signal = update.signal ? { ...update.signal, places: [...update.signal.places, ...signal.places], emphasis: signal.emphasis ?? update.signal.emphasis } : signal;
-      objectiveByRef.set(o.localId, r.id);
-      return;
-    }
-    const topicId = topicIdOf(o.topicRef);
-    if (topicId === null || topicId === "dropped" || topicId === "rejected") {
-      const why = topicId === null ? `its topic "${o.topicRef}" doesn't exist` : topicId === "dropped" ? "its topic was left out of this upload (see above)" : "its topic was rejected";
-      dropped.push({ prompt: `Objective "${o.name}"`, reason: `skipped: ${why}` });
-      return;
-    }
-    const twin = exactMatch([o.name], asNamed(newObjectives));
-    if (twin) {
-      const t = newObjectives.find((x) => x.id === twin.id)!;
-      if (signal) t.signals = [...t.signals, signal];
-      objectiveByRef.set(o.localId, twin.id);
-      return;
-    }
-    const objective: Objective = {
-      id: newId(),
-      topicId,
-      name: o.name,
-      description: o.description,
-      origin: o.origin,
-      review: confirmedTopic(topicId) && !r.uncertain ? "confirmed" : "proposed",
-      materialId: input.material.id,
-      runId: input.runId,
-      signals: signal ? [signal] : [],
-      ...(r.uncertain ? { uncertain: r.uncertain } : {}),
-    };
-    newObjectives.push(objective);
-    objectiveByRef.set(o.localId, objective.id);
-  });
-
-  /* 4. Relations between topics (new and existing; a merged topic's links go to its survivor) */
-  const linkTopic = (ref: string) => {
-    const id = topicIdOf(ref);
-    return id === null || id === "dropped" || id === "rejected" ? null : id;
+  const relations: Relation[] = [];
+  const allTopics = () => [...input.course.topics, ...newTopics];
+  const sourceOf = (id: string): TopicPlace[] => newTopics.find((t) => t.id === id)?.source ?? topicSources[id] ?? input.course.topics.find((t) => t.id === id)?.source ?? [];
+  const addSource = (id: string, ranges: readonly PageRange[]) => {
+    const fresh = newTopics.find((t) => t.id === id);
+    if (fresh) fresh.source = addRanges(fresh.source ?? [], input.material.id, ranges);
+    else topicSources[id] = addRanges(sourceOf(id), input.material.id, ranges);
   };
+  const objectivesOf = (topicId: string) => [...Object.values(input.objectives), ...newObjectives].filter((o) => o.topicId === topicId);
+  const listed = <T extends Named>(items: T[]) => items.filter((i) => !i.mergedInto).map((i) => ({ id: i.id, name: i.name, description: i.description, rejected: i.review === "archived" }));
+  const liveTopic = (id: string) => newTopics.some((t) => t.id === id) || input.course.topics.some((t) => t.id === id && t.review !== "archived");
+  const confirmedTopic = (id: string) => input.course.topics.some((t) => t.id === id && t.review === "confirmed");
   // One link per pair of topics: a pair the course links already is skipped; within this upload the most specific kind comes first.
   const linkedPairs = new Set(input.relations.filter((r) => r.review !== "archived").map((r) => pairKey(r.from, r.to)));
-  const relations: Relation[] = [];
-  const directional = liveDirectional(input.relations, [...input.course.topics, ...newTopics]);
-  for (const r of [...extracted.relations].sort((a, b) => KIND_RANK[a.type] - KIND_RANK[b.type])) {
-    const from = linkTopic(r.from);
-    const to = linkTopic(r.to);
-    if (!from || !to || from === to) continue;
-    if (linkedPairs.has(pairKey(from, to))) continue;
-    const reason = linkReason(r.reason);
-    if (!reason.ok) {
-      refuse(`A ${r.type} relation`, reason.reason);
+  const directional = liveDirectional(input.relations, input.course.topics);
+
+  const parts = splitParts(input.pages);
+  let mappedParts = 0;
+  let lastFailure: unknown = null;
+  for (const [i, part] of parts.entries()) {
+    const first = part[0].n;
+    const last = part.at(-1)!.n;
+    progress({ stage: "mapping", part: i + 1, parts: parts.length, from: first, to: last });
+    const toc = allTopics()
+      .filter((t) => !t.mergedInto)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        summary: t.summary ?? "",
+        objectives: objectivesOf(t.id).filter((o) => o.review !== "archived").length,
+        taught: describePlaces(sourceOf(t.id), filenames),
+        rejected: t.review === "archived",
+      }));
+    let mapped: MapOutput;
+    try {
+      mapped = await call("map", { course, material, pages: part, part: { index: i + 1, count: parts.length }, toc });
+    } catch (e) {
+      dropped.push({ prompt: pagesLabel(first, last), reason: `couldn't be mapped: ${errorText(e)}` });
+      lastFailure = e;
       continue;
     }
-    if (DIRECTIONAL.has(r.type) && closesLoop(directional, from, to)) {
-      dropped.push({ prompt: `A ${r.type} relation`, reason: LOOP_REASON });
-      continue;
-    }
-    if (r.anchor) {
-      const v = validateFields({ excerpt: r.anchor.excerpt }, EXTRACTED_RULE(facts));
-      if (!v.ok || !anchorExists(r.anchor.locator, facts)) {
-        refuse(`A ${r.type} relation`, v.ok ? `its anchor names ${r.anchor.locator}, which this material doesn't have` : v.reason);
+    mappedParts++;
+    instructionsFound.push(...mapped.instructionsFound.map((q) => sanitize(q, 240).text).filter((q) => q.length > 0));
+
+    /* Topics: the table of contents first (exact name, then reconciliation with the closest topics) */
+    const topicByRef = new Map<string, { kind: "topic"; id: string } | { kind: "dropped" }>();
+    /** topicId → its pages in this part. */
+    const taught = new Map<string, PageRange[]>();
+    const known = asNamed(allTopics());
+    const topicTexts = mapped.topics.map((t) => validateFields({ name: t.name, summary: t.summary }, EXTRACTED_RULE(facts)));
+    const topicResolutions = await pool(mapped.topics, 4, (t, k) =>
+      topicTexts[k].ok ? resolve("topic", { existingId: t.existingId, name: t.name, description: t.summary }, known, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
+    );
+    mapped.topics.forEach((t, k) => {
+      const r = topicResolutions[k];
+      const text = topicTexts[k];
+      if (!text.ok) {
+        refuse(`Topic "${sanitize(t.name, 60).text}"`, text.reason);
+        topicByRef.set(t.localId, { kind: "dropped" });
+        return;
+      }
+      if (r.kind === "dropped") {
+        dropped.push({ prompt: `Topic "${t.name}"`, reason: `skipped: ${r.reason}` });
+        topicByRef.set(t.localId, { kind: "dropped" });
+        return;
+      }
+      // Ranges are kept to this part's pages; a topic naming none of them is refused, never guessed.
+      const ranges = t.pages.map((p) => ({ from: Math.max(Math.min(p.from, p.to), first), to: Math.min(Math.max(p.from, p.to), last) })).filter((p) => p.from <= p.to);
+      if (!ranges.length) {
+        refuse(`Topic "${sanitize(t.name, 60).text}"`, `names pages this part (${first}–${last}) doesn't have`);
+        topicByRef.set(t.localId, { kind: "dropped" });
+        return;
+      }
+      // Two topics with the same name in one upload are one topic.
+      const id = r.kind === "existing" ? r.id : (exactMatch([t.name], asNamed(newTopics))?.id ?? null);
+      if (id) {
+        addSource(id, ranges);
+        taught.set(id, [...(taught.get(id) ?? []), ...ranges]);
+        topicByRef.set(t.localId, { kind: "topic", id });
+        return;
+      }
+      const topic: Topic = {
+        id: newId(),
+        name: t.name,
+        review: "proposed",
+        materialId: input.material.id,
+        pos: { x: 0, y: 0 },
+        summary: t.summary,
+        source: addRanges([], input.material.id, ranges),
+        ...(r.kind === "new" && r.uncertain ? { uncertain: r.uncertain } : {}),
+      };
+      newTopics.push(topic);
+      taught.set(topic.id, ranges);
+      topicByRef.set(t.localId, { kind: "topic", id: topic.id });
+    });
+
+    /* Relations between topics (new and existing; a merged topic's links go to its survivor) */
+    const linkTopic = (ref: string): string | null => {
+      const r = topicByRef.get(ref);
+      if (r) return r.kind === "topic" ? r.id : null;
+      const s = survivor(ref, new Map(allTopics().map((t) => [t.id, t])));
+      return s && liveTopic(s.id) ? s.id : null;
+    };
+    for (const r of [...mapped.relations].sort((a, b) => KIND_RANK[a.type] - KIND_RANK[b.type])) {
+      const from = linkTopic(r.from);
+      const to = linkTopic(r.to);
+      if (!from || !to || from === to) continue;
+      if (linkedPairs.has(pairKey(from, to))) continue;
+      const reason = linkReason(r.reason);
+      if (!reason.ok) {
+        refuse(`A ${r.type} relation`, reason.reason);
         continue;
       }
+      if (DIRECTIONAL.has(r.type) && closesLoop(directional, from, to)) {
+        dropped.push({ prompt: `A ${r.type} relation`, reason: LOOP_REASON });
+        continue;
+      }
+      if (r.anchor) {
+        const v = validateFields({ excerpt: r.anchor.excerpt }, EXTRACTED_RULE(facts));
+        if (!v.ok || !anchorExists(r.anchor.locator, facts)) {
+          refuse(`A ${r.type} relation`, v.ok ? `its anchor names ${r.anchor.locator}, which this material doesn't have` : v.reason);
+          continue;
+        }
+      }
+      linkedPairs.add(pairKey(from, to));
+      if (DIRECTIONAL.has(r.type)) directional.push({ from, to, type: r.type });
+      relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id, reason: reason.text });
     }
-    linkedPairs.add(pairKey(from, to));
-    if (DIRECTIONAL.has(r.type)) directional.push({ from, to, type: r.type });
-    relations.push({ id: newId(), from, to, type: r.type, anchor: r.anchor, review: "proposed", materialId: input.material.id, reason: reason.text });
+
+    /* Objectives: one topic at a time, against that topic's objectives only */
+    await pool([...taught].filter(([id]) => liveTopic(id)), 4, async ([topicId, ranges]) => {
+      const topic = allTopics().find((t) => t.id === topicId)!;
+      progress({ stage: "objectives", topic: topic.name });
+      const wanted = new Set(ranges.flatMap((r) => Array.from({ length: r.to - r.from + 1 }, (_, k) => r.from + k)));
+      const own = asNamed(objectivesOf(topicId));
+      let found: ObjectivesOutput;
+      try {
+        found = await call("objectives", { course, material, pages: part.filter((p) => wanted.has(p.n)), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own) });
+      } catch (e) {
+        dropped.push({ prompt: `Objectives for "${topic.name}"`, reason: `couldn't be found: ${errorText(e)}` });
+        return;
+      }
+      const texts = found.objectives.map((o) =>
+        validateFields(
+          { name: o.name, description: o.description, ...Object.fromEntries(o.places.map((pl, k) => [`place ${k + 1}`, pl.excerpt])), ...(o.emphasis ? { emphasis: o.emphasis.quote } : {}) },
+          EXTRACTED_RULE(facts),
+        ),
+      );
+      const resolutions = await pool(found.objectives, 4, (o, k) =>
+        texts[k].ok ? resolve("objective", { existingId: o.existingId, name: o.name, description: o.description }, own, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
+      );
+      found.objectives.forEach((o, k) => {
+        const r = resolutions[k];
+        const text = texts[k];
+        if (!text.ok) {
+          refuse(`Objective "${sanitize(o.name, 120).text}"`, text.reason);
+          return;
+        }
+        // A place that names slides the material doesn't have is left out (the objective stays).
+        const places = o.places.filter((pl) => {
+          const ok = anchorExists(pl.locator, facts);
+          if (!ok) refuse(`A place of objective "${o.name}"`, `names ${pl.locator}, which this material doesn't have`);
+          return ok;
+        });
+        const signal = o.origin === "material" ? signalFor(places, o.emphasis) : signalFor([], o.emphasis);
+        if (r.kind === "dropped") {
+          dropped.push({ prompt: `Objective "${o.name}"`, reason: `skipped: ${r.reason}` });
+          return;
+        }
+        const twin = r.kind === "existing" ? null : exactMatch([o.name], asNamed(newObjectives.filter((x) => x.topicId === topicId)));
+        if (r.kind === "existing" && !newObjectives.some((x) => x.id === r.id)) {
+          const update = (objectiveUpdates[r.id] ??= { signal: null });
+          if (signal) update.signal = update.signal ? { ...update.signal, places: [...update.signal.places, ...signal.places], emphasis: signal.emphasis ?? update.signal.emphasis } : signal;
+          return;
+        }
+        // One made earlier in this upload (an earlier part, or the same name twice): it gains this signal.
+        const earlier = newObjectives.find((x) => x.id === (r.kind === "existing" ? r.id : twin?.id));
+        if (earlier) {
+          if (signal) earlier.signals = [...earlier.signals, signal];
+          return;
+        }
+        newObjectives.push({
+          id: newId(),
+          topicId,
+          name: o.name,
+          description: o.description,
+          origin: o.origin,
+          review: confirmedTopic(topicId) && r.kind === "new" && !r.uncertain ? "confirmed" : "proposed",
+          materialId: input.material.id,
+          runId: input.runId,
+          signals: signal ? [signal] : [],
+          ...(r.kind === "new" && r.uncertain ? { uncertain: r.uncertain } : {}),
+        });
+      });
+    });
   }
 
-  /* 5. A focused pass for links (the link step): this upload's new topics against every topic. Extraction
-     links only what the slides spell out; this one may use the subject. A failure costs only the links. */
+  // Nothing could be mapped: the upload fails with why, rather than finishing with nothing in it.
+  if (!mappedParts && lastFailure) throw lastFailure;
+
+  /* The link step: this upload's new topics against every topic. The map calls link only what the
+     pages spell out; this one may use the subject. A failure costs only the links. */
   if (newTopics.length) {
     try {
       const linked = await linkTopics(
         {
           course: input.course,
-          topics: [...input.course.topics, ...newTopics],
+          topics: allTopics(),
           newIds: new Set(newTopics.map((t) => t.id)),
           existing: input.relations,
           fromThisRun: relations,
@@ -413,39 +483,42 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       refusedItems: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).slice(0, 40).map((d) => ({ what: d.prompt.slice(0, 120), reason: d.reason.slice(REFUSED_PREFIX.length, REFUSED_PREFIX.length + 110) })),
     },
   });
-  if (deps.structureOnly) return { newTopics, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
+  if (deps.structureOnly) return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
 
-  /* 5–7. Questions for every objective this upload touched that is short of its stock */
+  /* Questions for every objective this upload touched that is short of its stock, from its own pages */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
   const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => q.objectiveId && survivor(q.objectiveId, objectiveById)?.id === id);
-  const targets = [...new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])]
-    .map((id) => objectiveById.get(id)!)
-    .filter((o) => o.review !== "archived")
-    .map((o) => ({ objective: o, existing: liveQuestions(o.id), need: QUESTIONS_PER_OBJECTIVE - liveQuestions(o.id).length }))
-    .filter((x) => x.need > 0);
-  const written = await writeQuestions(
-    {
-      course: input.course,
-      material: input.material,
-      pages: input.pages,
-      topics: new Map([...input.course.topics, ...newTopics].map((t) => [t.id, t])),
-      targets,
-      bank: input.bank,
-      ...(input.flagged ? { flagged: input.flagged } : {}),
-    },
-    deps,
+  const topicsNow = new Map(allTopics().map((t) => [t.id, { ...t, source: sourceOf(t.id) }]));
+  const byTopic = new Map<string, { targets: WriteTarget[]; pages: Set<number> }>();
+  for (const id of new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])) {
+    const o = objectiveById.get(id)!;
+    if (o.review === "archived") continue;
+    const need = QUESTIONS_PER_OBJECTIVE - liveQuestions(o.id).length;
+    if (need <= 0) continue;
+    const pages = pagesFor(o, topicsNow.get(o.topicId), input.material, input.pages);
+    if (!pages) {
+      dropped.push({ prompt: `Objective "${o.name}"`, reason: `skipped: Orca doesn't know where in ${input.material.filename} it's taught, and the file is too long to send whole` });
+      continue;
+    }
+    const group = byTopic.get(o.topicId) ?? { targets: [], pages: new Set<number>() };
+    group.targets.push({ objective: o, existing: liveQuestions(o.id), need });
+    for (const p of pages) group.pages.add(p.n);
+    byTopic.set(o.topicId, group);
+  }
+  const questions: UploadPlan["questions"] = {};
+  const written = await pool([...byTopic.values()], 2, ({ targets, pages }) =>
+    writeQuestions(
+      // Written from the objectives' own pages, checked against the whole file (an anchor may name a page beside them).
+      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), facts, topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}) },
+      deps,
+    ),
   );
-  dropped.push(...written.dropped);
-  const questions = written.questions;
+  for (const w of written) {
+    dropped.push(...w.dropped);
+    for (const [topicId, qs] of Object.entries(w.questions)) questions[topicId] = [...(questions[topicId] ?? []), ...qs];
+  }
 
-  return {
-    newTopics,
-    newObjectives,
-    objectiveUpdates,
-    relations,
-    questions,
-    run: runRecord(questions),
-  };
+  return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions, run: runRecord(questions) };
 }
 
 export interface WriteTarget {
@@ -467,6 +540,8 @@ export interface WriteInput {
   deep?: boolean;
   /** The course's thumbs-down questions (cleaned, newest first), so new ones avoid their problems. */
   flagged?: readonly FlaggedQuestion[];
+  /** What anchors and URLs are checked against when `pages` is only part of the material (default: `pages`). */
+  facts?: MaterialFacts;
 }
 
 /**
@@ -482,7 +557,7 @@ export async function writeQuestions(
   const { call, newId } = deps;
   const progress = deps.onProgress ?? (() => {});
   const dropped: PipelineRun["dropped"] = [];
-  const facts = materialFacts(input.pages);
+  const facts = input.facts ?? materialFacts(input.pages);
   /* Write */
   const touched = input.targets.map((t) => ({ o: t.objective, asked: t.existing.map((q) => q.prompt), need: t.need }));
   progress({ stage: "writing", objectives: touched.length });

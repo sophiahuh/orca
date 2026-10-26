@@ -433,13 +433,13 @@ isOneToOne: false
                   ]
                 },"topics": {
                   Row: {
-                    "course_id": string,"created_at": string,"id": string,"material_id": string | null,"merged_into": string | null,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review": string,"sort_order": number,"source": Json | null,"summary": string | null,"uncertain": Json | null
+                    "course_id": string,"created_at": string,"id": string,"material_id": string | null,"merged_into": string | null,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review": string,"sort_order": number,"source": NonNullable<Json>,"summary": string | null,"uncertain": Json | null
                   }
                   Insert: {
-                    "course_id": string,"created_at"?: string,"id": string,"material_id"?: string | null,"merged_into"?: string | null,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review": string,"sort_order": number,"source"?: Json | null,"summary"?: string | null,"uncertain"?: Json | null
+                    "course_id": string,"created_at"?: string,"id": string,"material_id"?: string | null,"merged_into"?: string | null,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review": string,"sort_order": number,"source"?: NonNullable<Json>,"summary"?: string | null,"uncertain"?: Json | null
                   }
                   Update: {
-                    "course_id"?: string,"created_at"?: string,"id"?: string,"material_id"?: string | null,"merged_into"?: string | null,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review"?: string,"sort_order"?: number,"source"?: Json | null,"summary"?: string | null,"uncertain"?: Json | null
+                    "course_id"?: string,"created_at"?: string,"id"?: string,"material_id"?: string | null,"merged_into"?: string | null,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review"?: string,"sort_order"?: number,"source"?: NonNullable<Json>,"summary"?: string | null,"uncertain"?: Json | null
                   }
                   Relationships: [
                     {

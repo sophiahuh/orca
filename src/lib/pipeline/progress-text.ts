@@ -13,9 +13,9 @@ export function progressMessage(p: { stage: string; [k: string]: unknown } | nul
     case "figures-reading":
       return `Describing the figures on ${x.slides} slide${x.slides === 1 ? "" : "s"}…`;
     case "mapping":
-      return "Mapping the material onto the course…";
-    case "matching":
-      return `Checking ${x.candidates} topics and objectives against what the course already has…`;
+      return x.part && x.parts && x.parts > 1 ? `Mapping pages ${x.from}–${x.to} (part ${x.part} of ${x.parts})…` : "Mapping the material onto the course…";
+    case "objectives":
+      return `Finding objectives in ${x.topic}…`;
     case "writing":
       return x.objectives ? `Writing questions for ${x.objectives} objective${x.objectives === 1 ? "" : "s"}…` : "Writing questions…";
     case "figures":

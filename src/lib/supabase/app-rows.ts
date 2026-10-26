@@ -85,7 +85,7 @@ export function topicToRow(t: Topic, sortOrder: number): StructureRow<"topics"> 
     pos_x: t.pos.x,
     pos_y: t.pos.y,
     summary: t.summary ?? null,
-    source: json(t.source ?? null),
+    source: jsonValue(t.source ?? []),
   };
 }
 
@@ -99,7 +99,7 @@ export function topicFromRow(r: Row<"topics">): Topic {
     ...(r.uncertain !== null ? { uncertain: r.uncertain as unknown as NonNullable<Topic["uncertain"]> } : {}),
     pos: { x: r.pos_x, y: r.pos_y },
     ...(r.summary !== null ? { summary: r.summary } : {}),
-    ...(r.source !== null ? { source: r.source as unknown as NonNullable<Topic["source"]> } : {}),
+    ...(Array.isArray(r.source) && r.source.length ? { source: r.source as unknown as NonNullable<Topic["source"]> } : {}),
   };
 }
 
