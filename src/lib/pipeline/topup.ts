@@ -8,6 +8,7 @@ import type { FlaggedQuestion, Material, MaterialPages, Objective, PipelineRun, 
 import { locatorPages } from "../course/study.ts";
 import { pagesIn } from "../course/places.ts";
 import { type RunDeps, type WriteTarget, writeQuestions } from "./run.ts";
+import type { OrcaNotes } from "./notes.ts";
 
 export const TOP_UP_RULES = {
   /** Top up an objective the student is still working on (the session sends only those) when it has fewer unseen questions than this... */
@@ -32,6 +33,8 @@ export interface TopUpInput {
   answered: ReadonlySet<string>;
   /** The course's thumbs-down questions (cleaned, newest first), for question writing. */
   flagged?: readonly FlaggedQuestion[];
+  /** Notes for Orca, cleaned (./notes.ts); null or absent when the student has none. */
+  notes?: OrcaNotes | null;
   runId: string;
   model: string;
   /** ISO time. */
@@ -149,7 +152,7 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
     attached.push(...targets.map((t) => t.objective.id));
     let written: Awaited<ReturnType<typeof writeQuestions>>;
     try {
-      written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank, ...(input.flagged ? { flagged: input.flagged } : {}) }, deps);
+      written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank, ...(input.flagged ? { flagged: input.flagged } : {}), ...(input.notes ? { notes: input.notes } : {}) }, deps);
     } catch (e) {
       for (const t of targets) skipped.push({ objectiveId: t.objective.id, reason: `couldn't write questions: ${e instanceof Error ? e.message : String(e)}` });
       continue;
@@ -181,7 +184,7 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
 
 /* ── Deep review: harder questions written when it starts ─────────────── */
 
-export interface DeepInput extends Pick<TopUpInput, "course" | "objectives" | "bank" | "materials" | "materialPages" | "flagged"> {
+export interface DeepInput extends Pick<TopUpInput, "course" | "objectives" | "bank" | "materials" | "materialPages" | "flagged" | "notes"> {
   /** The objectives to cover, most urgent first. */
   objectiveIds: readonly string[];
   /** Questions to write in all. */
@@ -226,7 +229,7 @@ export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call"
   const dropped: PipelineRun["dropped"] = [];
   const written = await Promise.all(
     [...byMaterial.values()].map(({ material, targets, pages }) =>
-      writeQuestions({ course: input.course, material, pages: input.materialPages[material.id].filter((p) => pages.has(p.n)), topics, targets, bank: input.bank, deep: true, ...(input.flagged ? { flagged: input.flagged } : {}) }, deps),
+      writeQuestions({ course: input.course, material, pages: input.materialPages[material.id].filter((p) => pages.has(p.n)), topics, targets, bank: input.bank, deep: true, ...(input.flagged ? { flagged: input.flagged } : {}), ...(input.notes ? { notes: input.notes } : {}) }, deps),
     ),
   );
   for (const w of written) {
