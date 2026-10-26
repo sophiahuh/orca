@@ -508,7 +508,8 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   const questions: UploadPlan["questions"] = {};
   const written = await pool([...byTopic.values()], 2, ({ targets, pages }) =>
     writeQuestions(
-      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}) },
+      // Written from the objectives' own pages, checked against the whole file (an anchor may name a page beside them).
+      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), facts, topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}) },
       deps,
     ),
   );
@@ -539,6 +540,8 @@ export interface WriteInput {
   deep?: boolean;
   /** The course's thumbs-down questions (cleaned, newest first), so new ones avoid their problems. */
   flagged?: readonly FlaggedQuestion[];
+  /** What anchors and URLs are checked against when `pages` is only part of the material (default: `pages`). */
+  facts?: MaterialFacts;
 }
 
 /**
@@ -554,7 +557,7 @@ export async function writeQuestions(
   const { call, newId } = deps;
   const progress = deps.onProgress ?? (() => {});
   const dropped: PipelineRun["dropped"] = [];
-  const facts = materialFacts(input.pages);
+  const facts = input.facts ?? materialFacts(input.pages);
   /* Write */
   const touched = input.targets.map((t) => ({ o: t.objective, asked: t.existing.map((q) => q.prompt), need: t.need }));
   progress({ stage: "writing", objectives: touched.length });

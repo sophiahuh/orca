@@ -68,7 +68,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   // the 27 typed slides with a figure get it described (4 a call). The log can start with calls from
   // the previous test's job still finishing in the background, so this run's are compared from its first.
   const calls = await fakeCalls();
-  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", ...Array(7).fill("describe"), "extract", "link", "generate", "generate"]);
+  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", ...Array(7).fill("describe"), "map", "objectives", "objectives", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -119,7 +119,7 @@ test("handwritten notes: every page is read from its image before the upload is 
   expect(pages!.every((p) => p.source === "vision" && p.text === `Handwritten page ${p.n}: x + xy = x by absorption.`)).toBe(true);
   const calls = await fakeCalls();
   expect(calls.filter((c) => c === "transcribe")).toHaveLength(Math.ceil(pages!.length / 4));
-  expect(calls.indexOf("transcribe")).toBeLessThan(calls.indexOf("extract"));
+  expect(calls.indexOf("transcribe")).toBeLessThan(calls.indexOf("map"));
 });
 
 test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {
@@ -148,7 +148,7 @@ test("re-uploading the same deck is recognised by its content and adds nothing",
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
   await upload(page);
   await expect(page.getByText("Logic already has this file (L02_Combinational.pdf), so there's nothing new to add.")).toBeVisible({ timeout: 30_000 });
-  expect((await fakeCalls()).filter((s) => s === "extract")).toHaveLength(1);
+  expect((await fakeCalls()).filter((s) => s === "map")).toHaveLength(1);
   const state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
   expect(state.runs).toHaveLength(1);
@@ -157,7 +157,7 @@ test("re-uploading the same deck is recognised by its content and adds nothing",
 });
 
 test("a job that fails says why on the review screen, saves nothing, and uploading again retries it", async ({ page, student }) => {
-  await fakeModel({ extract: ONE_TOPIC, fail: { step: "extract", message: "The fake API is having a bad day." } });
+  await fakeModel({ extract: ONE_TOPIC, fail: { step: "map", message: "The fake API is having a bad day." } });
   await createCourse(page, "Logic");
   await upload(page);
   const failed = page.locator("[data-part=run-failed]");
