@@ -4,6 +4,8 @@ import type { Material, PipelineRun } from "@/lib/data";
 import { hiddenNote } from "@/lib/uploads";
 import { progressMessage } from "@/lib/pipeline/progress-text";
 import { isFinished, useRun } from "@/hooks/useRun";
+import { jobAhead } from "@/lib/course/review";
+import { useOrca } from "@/lib/store";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
@@ -27,6 +29,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   // Only an unfinished run is followed (a finished one won't change), and never twice.
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   const run = live ?? stored;
+  const { runs } = useOrca();
   const name = material?.filename ?? "An upload";
   const part = (legacy: string) => (focused ? legacy : "upload-card");
   const head = (
@@ -53,7 +56,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         {head}
         <ProgressBar value={run.status === "running" ? stageShare(run.progress?.stage) : 0.05} height={10} label="Building" />
         <span className="text-[14px] font-semibold text-wisteria-deep">
-          {run.status === "running" ? progressMessage(run.progress) : "Waiting for your other upload to finish; this one starts next."} This takes a few minutes. You can leave this page; it keeps going.
+          {run.status === "running" ? progressMessage(run.progress) : jobAhead(runs, run) ? "Waiting for your other upload to finish; this one starts next." : "Starting…"} This takes a few minutes. You can leave this page; it keeps going.
         </span>
       </Card>
     );

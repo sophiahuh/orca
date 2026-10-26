@@ -8,10 +8,13 @@
  * `started_at`, not from when it was created: a run may legitimately queue for an hour first) is
  * dead (its process was stopped): every start and every `resumeNext` marks the student's dead runs
  * failed first, so a dead run can't hold the one-job-at-a-time place (decision 10) and uploading
- * the file again retries it. Queued and waiting runs are never dead: `resumeNext` starts the oldest
- * one that may run whenever a job finishes, whenever the student starts a job while nothing of
- * theirs is running (so an orphaned queued run, or a run waiting for yesterday's limit, is picked
- * up in inline mode too), and hourly in trigger mode.
+ * the file again retries it. Waiting runs, and queued runs not yet handed to a job, are never dead:
+ * `resumeNext` starts the oldest one that may run whenever a job finishes, whenever the student
+ * starts a job while nothing of theirs is running (so an orphaned queued run, or a run waiting for
+ * yesterday's limit, is picked up in inline mode too), and hourly in trigger mode. A queued run
+ * that was handed to a job (`started_at` set by the hand-off) but never claimed within
+ * `HANDOFF_MS` never will be (the dispatcher dropped it: no Trigger.dev worker, or the process
+ * stopped first), and is failed the same way.
  */
 import type { BudgetVerdict } from "./budget.ts";
 import type { OrcaSupabase } from "../supabase/server.ts";
@@ -55,9 +58,15 @@ export const DEAD_RUN_MS = {
   "deep-review": (JOB_MAX_SECONDS["deep-review"] + 60) * 1000,
 } as const;
 
+/** A queued run handed to a job longer ago than this, and still not claimed, was dropped. Trigger.dev normally claims within seconds. */
+export const HANDOFF_MS = 15 * 60_000;
+
 export const DEAD_RUN_ERROR = "Orca's job stopped without finishing. Upload the file again to retry.";
 const DEAD_TOP_UP_ERROR = "Orca's job stopped without finishing.";
 const DEAD_DEEP_REVIEW_ERROR = "Orca couldn't finish preparing this Dive In. Try again.";
+const DEAD_ERROR = { upload: DEAD_RUN_ERROR, "top-up": DEAD_TOP_UP_ERROR, "deep-review": DEAD_DEEP_REVIEW_ERROR } as const;
+export const NEVER_STARTED_ERROR = "Orca's job never started. Upload the file again to retry.";
+const NEVER_STARTED = { upload: NEVER_STARTED_ERROR, "top-up": "Orca's job never started.", "deep-review": DEAD_DEEP_REVIEW_ERROR } as const;
 
 export interface StartDeps {
   db: OrcaSupabase;
@@ -99,12 +108,21 @@ async function failDeadRuns(deps: StartDeps, ownerId: string): Promise<void> {
   for (const kind of ["upload", "top-up", "deep-review"] as const) {
     const { error } = await deps.db
       .from("pipeline_runs")
-      .update({ status: "failed", error: kind === "upload" ? DEAD_RUN_ERROR : kind === "top-up" ? DEAD_TOP_UP_ERROR : DEAD_DEEP_REVIEW_ERROR, progress: null })
+      .update({ status: "failed", error: DEAD_ERROR[kind], progress: null })
       .eq("owner_id", ownerId)
       .eq("kind", kind)
       .eq("status", "running")
       .lt("started_at", new Date(now - DEAD_RUN_MS[kind]).toISOString());
     if (error) throw new Error(`Couldn't check the student's earlier runs: ${error.message}`);
+    // Handed off but never claimed (a queued run's started_at is when it was handed off; null until then).
+    const { error: dropped } = await deps.db
+      .from("pipeline_runs")
+      .update({ status: "failed", error: NEVER_STARTED[kind], progress: null })
+      .eq("owner_id", ownerId)
+      .eq("kind", kind)
+      .eq("status", "queued")
+      .lt("started_at", new Date(now - HANDOFF_MS).toISOString());
+    if (dropped) throw new Error(`Couldn't check the student's earlier runs: ${dropped.message}`);
   }
 }
 
@@ -225,8 +243,10 @@ export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Disp
         : r.kind === "top-up"
           ? { kind: "top-up", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [] } }
           : { kind: "deep-review", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [], minutes: r.deep_minutes! } };
-    // Back to queued (a waiting run) so the job can claim it; dispatch then runs it.
-    const { error: requeue } = await db.from("pipeline_runs").update({ status: "queued", progress: null }).eq("owner_id", ownerId).eq("id", r.id).in("status", ["queued", "waiting"]);
+    // Back to queued (a waiting run) so the job can claim it, stamped with when it was handed off
+    // (the claim overwrites it); dispatch then runs it.
+    const handedOff = (deps.now?.() ?? new Date()).toISOString();
+    const { error: requeue } = await db.from("pipeline_runs").update({ status: "queued", progress: null, started_at: handedOff }).eq("owner_id", ownerId).eq("id", r.id).in("status", ["queued", "waiting"]);
     if (requeue) throw new Error(`Couldn't queue the run: ${requeue.message}`);
     await handOff(deps, d);
     return d;
@@ -250,15 +270,18 @@ export async function startTopUpJob(deps: StartDeps, ownerId: string, req: { cou
   await failDeadRuns(deps, ownerId);
   const runId = deps.newId?.() ?? crypto.randomUUID();
   const queueBehind = await hasJobInFlight(deps, ownerId);
+  const at = (deps.now?.() ?? new Date()).toISOString();
   const inserted = await db.from("pipeline_runs").insert({
     id: runId,
     owner_id: ownerId,
     course_id: req.courseId,
     material_id: null,
     kind: "top-up",
-    at: (deps.now?.() ?? new Date()).toISOString(),
+    at,
     model,
     status: "queued",
+    // Handed off right below unless it queues behind another job (see HANDOFF_MS).
+    ...(queueBehind ? {} : { started_at: at }),
     // Kept on the run, so a queued or waiting top-up can start later without the browser.
     objective_ids: req.objectiveIds,
   });
@@ -295,15 +318,18 @@ export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: 
   }
   const runId = deps.newId?.() ?? crypto.randomUUID();
   const queueBehind = await hasJobInFlight(deps, ownerId);
+  const at = (deps.now?.() ?? new Date()).toISOString();
   const inserted = await db.from("pipeline_runs").insert({
     id: runId,
     owner_id: ownerId,
     course_id: req.courseId,
     material_id: null,
     kind: "deep-review",
-    at: (deps.now?.() ?? new Date()).toISOString(),
+    at,
     model,
     status: "queued",
+    // Handed off right below unless it queues behind another job (see HANDOFF_MS).
+    ...(queueBehind ? {} : { started_at: at }),
     objective_ids: req.objectiveIds,
     deep_minutes: req.minutes,
   });
