@@ -87,6 +87,9 @@ interface OrcaState {
   configs: Record<string, ReviewConfig>;
   /** Explicit course settings, if any. Null inherits the account default. */
   configOverrides: Record<string, ReviewConfig | null>;
+  /** Notes for Orca for all classes, and per course; null = none. Saved through their routes, then `refresh()`. */
+  accountNotes: string | null;
+  courseNotes: Record<string, string | null>;
   /** Account defaults, used by every course without an explicit override. */
   defaultConfig: ReviewConfig;
   results: QuizResult[];
@@ -127,6 +130,8 @@ const initialState: OrcaState = {
   materials: [],
   configs: {},
   configOverrides: {},
+  accountNotes: null,
+  courseNotes: {},
   defaultConfig: DEFAULT_CONFIG,
   results: [],
   onboarded: false,
@@ -483,6 +488,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         courses: [...s.courses, course],
         configs: { ...s.configs, [id]: s.defaultConfig },
         configOverrides: { ...s.configOverrides, [id]: null },
+        courseNotes: { ...s.courseNotes, [id]: null },
         objectives: { ...s.objectives, [id]: {} },
         relations: { ...s.relations, [id]: [] },
         snapshots: { ...s.snapshots, [id]: {} },

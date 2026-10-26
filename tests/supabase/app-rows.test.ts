@@ -55,7 +55,7 @@ test("a row that disappears is refused: nothing is ever deleted", () => {
 test("loading groups rows by course and puts questions in stock order", () => {
   const data: MyData = {
     profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, default_review_config: null, orca_notes: null, created_at: owned.created_at },
-    courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, orca_notes: null, created_at: owned.created_at }],
+    courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, orca_notes: "No proofs.", created_at: owned.created_at }],
     materials: [],
     runs: [],
     topics: [{ ...topicToRow(topic, 0), ...owned }],
@@ -71,6 +71,8 @@ test("loading groups rows by course and puts questions in stock order", () => {
   const s = loadedState(data);
   assert.equal(s.timezone, "America/New_York");
   assert.equal(s.defaultConfig, null);
+  assert.equal(s.accountNotes, null);
+  assert.equal(s.courseNotes.c, "No proofs.");
   assert.deepEqual(s.courses[0].topics, [topic]);
   assert.deepEqual(s.questionBank.c.t1.map((q) => q.id), ["q1", "q2"]);
   assert.deepEqual(s.relations.c, []);

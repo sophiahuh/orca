@@ -419,6 +419,10 @@ export interface LoadedState {
   courses: Course[];
   configs: Record<string, ReviewConfig>;
   configOverrides: Record<string, ReviewConfig | null>;
+  /** Notes for Orca for all classes; null = none. */
+  accountNotes: string | null;
+  /** Notes for Orca per course; null = none. */
+  courseNotes: Record<string, string | null>;
   objectives: Record<string, Record<string, Objective>>;
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
   relations: Record<string, Relation[]>;
@@ -472,6 +476,8 @@ export function loadedState(d: MyData): LoadedState {
     courses,
     configs: Object.fromEntries(d.courses.map((c) => [c.id, configOverrides[c.id] ?? defaultConfig ?? DEFAULT_CONFIG])),
     configOverrides,
+    accountNotes: d.profile.orca_notes,
+    courseNotes: Object.fromEntries(d.courses.map((c) => [c.id, c.orca_notes])),
     objectives,
     questionBank,
     relations,
