@@ -74,27 +74,6 @@ export interface ReviewConfig {
   exam: ReviewRow;
 }
 
-export type WeightKey = "homework" | "practiceExams" | "practiceProblems" | "lectures";
-/** Built-in keys plus any custom material types the student adds. */
-export type Weights = Record<string, number>;
-
-export const WEIGHT_LABELS: Record<WeightKey, string> = {
-  homework: "Homework",
-  practiceExams: "Practice exams",
-  practiceProblems: "Practice problems",
-  lectures: "Lectures",
-};
-
-export function weightLabel(key: string) {
-  return (WEIGHT_LABELS as Record<string, string>)[key] ?? key;
-}
-
-/** Normalise raw slider values to percentages that sum to ~100. */
-export function weightPercents(w: Weights): Record<string, number> {
-  const sum = Object.values(w).reduce((a, b) => a + b, 0) || 1;
-  return Object.fromEntries(Object.entries(w).map(([k, v]) => [k, Math.round((v / sum) * 100)]));
-}
-
 export type EventKind = "hw" | "lab" | "rev" | "exam";
 
 /** One of a course's exams: its date and, optionally, the topics it covers (ids; ones no longer live are ignored). */
@@ -381,14 +360,6 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   quick: { duration: "10 min", cadence: "Daily" },
   deep: { duration: "30 min", cadence: "Weekly" },
   exam: { duration: "10 hours", cadence: "1 wk before exam" },
-};
-
-/** Every material type counts the same until the student moves a slider in Settings. */
-export const DEFAULT_WEIGHTS: Weights = {
-  homework: 25,
-  practiceExams: 25,
-  practiceProblems: 25,
-  lectures: 25,
 };
 
 export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];

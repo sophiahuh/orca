@@ -71,19 +71,16 @@ test("loading groups rows by course and puts questions in stock order", () => {
   const s = loadedState(data);
   assert.equal(s.timezone, "America/New_York");
   assert.equal(s.defaultConfig, null);
-  assert.deepEqual(s.defaultWeights, { lectures: 40 });
   assert.deepEqual(s.courses[0].topics, [topic]);
   assert.deepEqual(s.questionBank.c.t1.map((q) => q.id), ["q1", "q2"]);
   assert.deepEqual(s.relations.c, []);
   assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], review_config: { quick: "daily" } }] }), "a malformed config is refused, not shown");
 
   // A course's settings: its own override first, else the account default, else Orca's built-in one.
-  const inherit = loadedState({ ...data, courses: [{ ...data.courses[0], review_config: null, weights: null }] });
-  assert.deepEqual(inherit.weights.c, { lectures: 40 }, "no override: the account default");
+  const inherit = loadedState({ ...data, courses: [{ ...data.courses[0], review_config: null }] });
   assert.deepEqual(inherit.configs.c, DEFAULT_CONFIG, "no override and no account default: Orca's");
   assert.equal(inherit.configOverrides.c, null);
-  assert.deepEqual(s.weights.c, { lectures: 25 }, "an override wins over the account default");
-  assert.deepEqual(s.weightOverrides.c, { lectures: 25 });
+  assert.deepEqual(s.configOverrides.c, s.configs.c, "an override wins over the account default");
 
   const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", handwritten: false, status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
   const withFiles = loadedState({ ...data, materials: [material, { ...material, id: "m2", status: "uploaded", hidden_text: null }, { ...material, id: "m3", status: "failed", error: "unreadable" }] });

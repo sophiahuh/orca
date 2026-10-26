@@ -4,7 +4,7 @@ import { type Student, admin, expect, test, stored } from "./fixture";
 import { lines, makePdf } from "../tests/fixtures/pdf";
 import { fakeCalls, fakeModel } from "./fake-model";
 import { LIMITS } from "../src/lib/limits";
-import { DEFAULT_CONFIG, DEFAULT_WEIGHTS } from "../src/lib/data";
+import { DEFAULT_CONFIG } from "../src/lib/data";
 
 /**
  * The cost guard (Phase 4, Task 7c; plan decision 10) end to end, against the fake Anthropic API:
@@ -21,7 +21,7 @@ const ONE_TOPIC = {
 
 async function newCourse(student: Student): Promise<string> {
   const id = crypto.randomUUID();
-  const { error } = await student.db.from("courses").insert({ id, slug: `c-${id.slice(0, 8)}`, name: "Logic", short: "LOG", variant: "circuit", pos_x: 0, pos_y: 0, review_config: DEFAULT_CONFIG, weights: DEFAULT_WEIGHTS });
+  const { error } = await student.db.from("courses").insert({ id, slug: `c-${id.slice(0, 8)}`, name: "Logic", short: "LOG", variant: "circuit", pos_x: 0, pos_y: 0, review_config: DEFAULT_CONFIG });
   if (error) throw new Error(error.message);
   return id;
 }

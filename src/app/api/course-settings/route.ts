@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ReviewConfigSchema, WeightsSchema } from "@/lib/supabase/app-rows";
+import { ReviewConfigSchema } from "@/lib/supabase/app-rows";
 import { forStudent, ownsCourse, reply } from "@/lib/server/student";
 
 export const runtime = "nodejs";
@@ -8,7 +8,6 @@ export const runtime = "nodejs";
 const requestSchema = z.object({
   courseId: z.uuid(),
   reviewConfig: ReviewConfigSchema.nullable(),
-  weights: WeightsSchema.nullable(),
 });
 
 export async function PUT(request: Request) {
@@ -18,10 +17,10 @@ export async function PUT(request: Request) {
     if (!(await ownsCourse(db, student.id, parsed.data.courseId))) return reply(404, { error: "No such course." });
     const { error } = await db
       .from("courses")
-      .update({ review_config: parsed.data.reviewConfig, weights: parsed.data.weights })
+      .update({ review_config: parsed.data.reviewConfig })
       .eq("owner_id", student.id)
       .eq("id", parsed.data.courseId);
     if (error) return reply(500, { error: "Orca couldn't save this course's settings." });
-    return reply(200, { reviewConfig: parsed.data.reviewConfig, weights: parsed.data.weights });
+    return reply(200, { reviewConfig: parsed.data.reviewConfig });
   });
 }

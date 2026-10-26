@@ -1,8 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Objective, ObjectiveSignal, Relation, Topic } from "../../src/lib/data.ts";
-import { DEFAULT_WEIGHTS } from "../../src/lib/data.ts";
-import { WEIGHT_RULES, courseObjectiveWeights, objectiveWeight, placeValue, sliderFor, topicUses, topicWeight } from "../../src/lib/course/weights.ts";
+import { WEIGHT_RULES, courseObjectiveWeights, objectiveWeight, topicUses, topicWeight } from "../../src/lib/course/weights.ts";
 
 const lecture = (places: number, extra: Partial<ObjectiveSignal> = {}): ObjectiveSignal => ({
   materialId: "m",
@@ -25,54 +24,38 @@ const objective = (id: string, signals: ObjectiveSignal[], extra: Partial<Object
 });
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-9, `${a} ≈ ${b}`);
 
-test("material types map onto the Settings sliders; Other is neutral", () => {
-  assert.equal(sliderFor("Lecture"), "lectures");
-  assert.equal(sliderFor("Syllabus"), "lectures");
-  assert.equal(sliderFor("Past exam"), "practiceExams");
-  assert.equal(sliderFor("Other"), null);
-});
-
-test("by default every material type is worth the same", () => {
-  for (const type of ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"] as const) {
-    close(placeValue(type, DEFAULT_WEIGHTS), 1);
-  }
-});
-
-test("a place is worth its slider relative to the course's average slider", () => {
-  const moved = { homework: 30, practiceExams: 35, practiceProblems: 25, lectures: 10 }; // average 25
-  close(placeValue("Lecture", moved), 0.4);
-  close(placeValue("Homework", moved), 1.2);
-  close(placeValue("Practice exam", moved), 1.4);
-  close(placeValue("Other", moved), 1);
+test("every covering place counts the same, whatever its material type", () => {
+  const lectureOnly = objective("o", [lecture(2)]);
+  const examOnly = objective("o", [{ ...lecture(2), materialType: "Past exam" }]);
+  close(objectiveWeight(lectureOnly, 0), objectiveWeight(examOnly, 0));
 });
 
 test("coverage has diminishing returns between 0.75 and 1.5", () => {
-  const w = { a: 1 }; // "Other"-free: one slider, so every typed place is worth 1
   const sig = (n: number): ObjectiveSignal => ({ materialId: "m", materialType: "Other", places: Array.from({ length: n }, () => ({ locator: "", excerpt: "" })) });
-  close(objectiveWeight(objective("o", [sig(0)]), 0, w), 0.75);
-  close(objectiveWeight(objective("o", [sig(1)]), 0, w), 0.75 + 0.75 * (1 - Math.exp(-1 / 1.5)));
-  const many = objectiveWeight(objective("o", [sig(40)]), 0, w);
+  close(objectiveWeight(objective("o", [sig(0)]), 0), 0.75);
+  close(objectiveWeight(objective("o", [sig(1)]), 0), 0.75 + 0.75 * (1 - Math.exp(-1 / 1.5)));
+  const many = objectiveWeight(objective("o", [sig(40)]), 0);
   assert.ok(many > 1.49 && many <= 1.5);
 });
 
 test("objectives that others build on weigh more, up to the cap", () => {
   const o = objective("o", [lecture(5)]);
-  const base = objectiveWeight(o, 0, DEFAULT_WEIGHTS);
-  close(objectiveWeight(o, 2, DEFAULT_WEIGHTS), Math.min(2, base * 1.2));
-  close(objectiveWeight(o, 9, DEFAULT_WEIGHTS), Math.min(2, base * (1 + WEIGHT_RULES.buildsOnStep * WEIGHT_RULES.buildsOnCap)));
+  const base = objectiveWeight(o, 0);
+  close(objectiveWeight(o, 2), Math.min(2, base * 1.2));
+  close(objectiveWeight(o, 9), Math.min(2, base * (1 + WEIGHT_RULES.buildsOnStep * WEIGHT_RULES.buildsOnCap)));
 });
 
 test("explicit emphasis: tested ×1.5, skipped is 0, the latest statement wins, clamped to 0.5–2", () => {
   const tested = objective("o", [lecture(1, { emphasis: { kind: "tested", quote: "on the exam" } })]);
-  close(objectiveWeight(tested, 0, DEFAULT_WEIGHTS), objectiveWeight(objective("o", [lecture(1)]), 0, DEFAULT_WEIGHTS) * 1.5);
+  close(objectiveWeight(tested, 0), objectiveWeight(objective("o", [lecture(1)]), 0) * 1.5);
   const skippedThenTested = objective("o", [lecture(1, { emphasis: { kind: "skipped", quote: "not examinable" } }), lecture(1, { emphasis: { kind: "tested", quote: "on the final" } })]);
-  assert.ok(objectiveWeight(skippedThenTested, 0, DEFAULT_WEIGHTS) > 1);
-  assert.equal(objectiveWeight(objective("o", [lecture(9, { emphasis: { kind: "skipped", quote: "you won't be tested" } })]), 5, DEFAULT_WEIGHTS), 0);
-  assert.equal(objectiveWeight(objective("o", [lecture(40, { emphasis: { kind: "tested", quote: "" } })]), 5, DEFAULT_WEIGHTS), 2);
+  assert.ok(objectiveWeight(skippedThenTested, 0) > 1);
+  assert.equal(objectiveWeight(objective("o", [lecture(9, { emphasis: { kind: "skipped", quote: "you won't be tested" } })]), 5), 0);
+  assert.equal(objectiveWeight(objective("o", [lecture(40, { emphasis: { kind: "tested", quote: "" } })]), 5), 2);
 });
 
 test("inferred objectives sit at 1.0 unless emphasised", () => {
-  close(objectiveWeight(objective("o", [], { origin: "inferred" }), 0, DEFAULT_WEIGHTS), 1);
+  close(objectiveWeight(objective("o", [], { origin: "inferred" }), 0), 1);
 });
 
 test("an objective counts the topics its topic is used in, through merges, leaving out archived topics and other link kinds", () => {
@@ -88,9 +71,9 @@ test("an objective counts the topics its topic is used in, through merges, leavi
     c: objective("c", [lecture(2)]),
     x: objective("x", [lecture(2)], { review: "archived" }),
   };
-  const weights = courseObjectiveWeights(objectives, topics, relations, DEFAULT_WEIGHTS);
+  const weights = courseObjectiveWeights(objectives, topics, relations);
   assert.deepEqual([...weights.keys()].sort(), ["a", "c"]);
-  close(weights.get("a")!, objectiveWeight(objectives.a, 2, DEFAULT_WEIGHTS));
+  close(weights.get("a")!, objectiveWeight(objectives.a, 2));
   close(topicWeight("t", objectives, weights)!, (weights.get("a")! + weights.get("c")!) / 2);
   assert.equal(topicWeight("empty", objectives, weights), null);
 });

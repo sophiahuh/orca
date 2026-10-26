@@ -1,7 +1,7 @@
 import { type Student, admin, expect, test, stored } from "./fixture";
 import { fakeCalls, fakeModel } from "./fake-model";
 import { ATTACKS, visibleInjectionDeck } from "../tests/fixtures/injection/samples";
-import { DEFAULT_CONFIG, DEFAULT_WEIGHTS } from "../src/lib/data";
+import { DEFAULT_CONFIG } from "../src/lib/data";
 import { createHash } from "node:crypto";
 
 /**
@@ -31,7 +31,7 @@ const INJECTED_EXTRACT = {
 async function newCourse(student: Student) {
   const id = crypto.randomUUID();
   const slug = `c-${id.slice(0, 8)}`;
-  const { error } = await student.db.from("courses").insert({ id, slug, name: "Logic", short: "LOG", variant: "circuit", pos_x: 0, pos_y: 0, review_config: DEFAULT_CONFIG, weights: DEFAULT_WEIGHTS });
+  const { error } = await student.db.from("courses").insert({ id, slug, name: "Logic", short: "LOG", variant: "circuit", pos_x: 0, pos_y: 0, review_config: DEFAULT_CONFIG });
   if (error) throw new Error(error.message);
   return { id, slug };
 }
