@@ -17,8 +17,8 @@ create function pg_temp.act_as(uid uuid) returns void language sql as $$
 $$;
 
 insert into auth.users (id, email, raw_user_meta_data) values (:'A', 'a@example.com', '{"timezone": "America/New_York"}'), (:'B', 'b@example.com', '{}');
-insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config, weights) values
-  (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}', '{}');
+insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config) values
+  (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 insert into public.topics (id, owner_id, course_id, sort_order, name, review, pos_x, pos_y) values
   (:'topic', :'A', :'course', 0, 'Boolean algebra', 'confirmed', 0, 0);
 insert into public.objectives (id, owner_id, course_id, topic_id, name, description, origin, review) values

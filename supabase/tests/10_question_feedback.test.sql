@@ -11,8 +11,8 @@ select plan(9);
 \set q 90000000-0000-4000-8000-00000000000a
 
 insert into auth.users (id, email) values (:'A', 'a@example.com'), (:'B', 'b@example.com');
-insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}', '{}');
+insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 insert into public.topics (id, owner_id, course_id, sort_order, name, review, pos_x, pos_y)
   values (:'topic', :'A', :'course', 0, 'Boolean algebra', 'proposed', 0, 0);
 insert into public.questions (id, owner_id, course_id, topic_id, sort_order, kind, topic_name, prompt, options, answer, explanation, anchor)

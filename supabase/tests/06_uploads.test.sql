@@ -15,8 +15,8 @@ create function pg_temp.act_as(uid uuid) returns void language sql as $$
 $$;
 
 insert into auth.users (id, email) values (:'A', 'a@example.com'), (:'B', 'b@example.com');
-insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}', '{}');
+insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 -- As the server leaves it after reading the file.
 insert into public.materials (id, owner_id, course_id, filename, type, storage_path, content_hash, size_bytes, mime, status, hidden_text)
   values (:'material', :'A', :'course', 'L01.pdf', 'Lecture', :'A' || '/' || :'material' || '/L01.pdf', 'abc', 100, 'application/pdf', 'ready', '{"items": 2, "pages": [3]}');

@@ -200,7 +200,7 @@ async function main() {
   try {
     /* ── A builds a course ── */
     const prefer = { Prefer: "return=representation" };
-    const course = await db("/rest/v1/courses", { method: "POST", token: A.token, headers: prefer, body: { id: ids.course, slug: "ald", name: "Advanced Logic Design", short: "ALD", variant: "ald", pos_x: 0, pos_y: 0, review_config: {}, weights: {} } });
+    const course = await db("/rest/v1/courses", { method: "POST", token: A.token, headers: prefer, body: { id: ids.course, slug: "ald", name: "Advanced Logic Design", short: "ALD", variant: "ald", pos_x: 0, pos_y: 0, review_config: {} } });
     const material = await db("/rest/v1/materials", { method: "POST", token: A.token, body: { id: ids.material, course_id: ids.course, filename: "L01.pdf", type: "Lecture" } }); // a record without a file: only the server sets a storage path
     const question = (id: string, objective: string, n: number, tier = "retrieval") => ({
       id, topic_id: ids.topic, sort_order: n, objective_id: objective, kind: "True or false", tier, topic_name: "Boolean algebra",

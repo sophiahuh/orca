@@ -54,7 +54,7 @@ export function defaultsToRow(config: ReviewConfig) {
 
 /* ── Courses ── */
 
-export function courseToRow(c: Course, config: ReviewConfig | null): Omit<Row<"courses">, "owner_id" | "created_at" | "weights"> {
+export function courseToRow(c: Course, config: ReviewConfig | null): Omit<Row<"courses">, "owner_id" | "created_at" | "orca_notes"> {
   return {
     id: c.id,
     slug: c.slug,
