@@ -5,6 +5,9 @@
  */
 const PROVIDERS = new Set(["chatgpt.com", "chat.openai.com", "claude.ai", "gemini.google.com"]);
 
+/** A provider's own host: the link and every redirect while fetching it must stay on one. */
+export const isAIChatHost = (host: string) => PROVIDERS.has(host.toLowerCase());
+
 export function isPublicAIChatUrl(value: string) {
   try {
     const url = new URL(value);
@@ -33,6 +36,17 @@ export function visibleHtmlText(html: string) {
     .replace(/\n\s*\n+/g, "\n")
     .replace(/[ \t]+/g, " ")
     .trim();
+}
+
+/** The first lines of every transcript Orca stores: they tell the model how to weigh each speaker. */
+const TRANSCRIPT_HEADER = ["AI CHAT TRANSCRIPT", "Student messages are the student's own questions or confusion. AI responses are non-authoritative context."];
+
+/** Characters the chat itself contributes: the turns' text, without the header or the role labels. */
+export function spokenChars(transcript: string) {
+  return transcript
+    .split("\n")
+    .slice(TRANSCRIPT_HEADER.length)
+    .reduce((sum, line) => sum + line.replace(/^(?:STUDENT|AI ASSISTANT|CHAT CONTEXT):\s*/, "").trim().length, 0);
 }
 
 const STUDENT = /^(?:#{1,6}\s*|\*{0,2})?(?:user|you|human|student|me)(?:\*{0,2})?\s*(?:message|said)?\s*[:：-]?\s*/i;
@@ -64,11 +78,11 @@ function messagesFromExport(value: unknown) {
 export function normaliseAIChatTranscript(raw: string) {
   try {
     const messages = messagesFromExport(JSON.parse(raw));
-    if (messages.length) return ["AI CHAT TRANSCRIPT", "Student messages are the student's own questions or confusion. AI responses are non-authoritative context.", ...messages.map((m) => `${m.role === "student" ? "STUDENT" : "AI ASSISTANT"}: ${m.text}`)].join("\n").slice(0, 180_000);
+    if (messages.length) return [...TRANSCRIPT_HEADER, ...messages.map((m) => `${m.role === "student" ? "STUDENT" : "AI ASSISTANT"}: ${m.text}`)].join("\n").slice(0, 180_000);
   } catch { /* A normal pasted transcript is not JSON. */ }
   const lines = raw.replace(/\r/g, "").split("\n");
   let role: "student" | "assistant" | "context" = "context";
-  const out: string[] = ["AI CHAT TRANSCRIPT", "Student messages are the student's own questions or confusion. AI responses are non-authoritative context."];
+  const out: string[] = [...TRANSCRIPT_HEADER];
   for (const original of lines) {
     const line = original.trim();
     if (!line) continue;
@@ -92,7 +106,7 @@ export function chatTextFromHtml(html: string) {
   const turns = [...html.matchAll(/<([a-z0-9]+)\b[^>]*data-message-author-role=["'](user|assistant)["'][^>]*>([\s\S]*?)<\/\1>/gi)]
     .map((match) => ({ role: match[2].toLowerCase() === "user" ? "STUDENT" : "AI ASSISTANT", text: visibleHtmlText(match[3]) }))
     .filter((turn) => turn.text);
-  if (turns.length) return ["AI CHAT TRANSCRIPT", "Student messages are the student's own questions or confusion. AI responses are non-authoritative context.", ...turns.map((turn) => `${turn.role}: ${turn.text}`)].join("\n").slice(0, 180_000);
+  if (turns.length) return [...TRANSCRIPT_HEADER, ...turns.map((turn) => `${turn.role}: ${turn.text}`)].join("\n").slice(0, 180_000);
   return normaliseAIChatTranscript(visibleHtmlText(html));
 }
 
