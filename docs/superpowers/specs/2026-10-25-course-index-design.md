@@ -1,6 +1,6 @@
 # Course index: map uploads page by page through a table of contents
 
-Status: design agreed 2026-10-25 (Amanda), not built. Plan to follow in `docs/superpowers/plans/`.
+Status: design agreed 2026-10-25 (Amanda); built on branch `course-index` (plan: `docs/superpowers/plans/2026-10-25-course-index.md`).
 
 ## Why
 
