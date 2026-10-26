@@ -5,7 +5,7 @@ import type { PipelineRun } from "@/lib/data";
 import { runFromRow } from "@/lib/supabase/app-rows";
 import { browserSupabase } from "@/lib/supabase/browser";
 import { useOrca } from "@/lib/store";
-import { DEAD_RUN_MS } from "@/lib/jobs/start";
+import { DEAD_RUN_MS, HANDOFF_MS } from "@/lib/jobs/start";
 
 /** A finished job: its run won't change again. */
 export const isFinished = (run: Pick<PipelineRun, "status"> | null | undefined) => run?.status === "done" || run?.status === "failed";
@@ -75,8 +75,13 @@ export function useRun(runId: string | null | undefined): { run: PipelineRun | n
   return { run: isFinished(stored) ? stored! : (live ?? stored ?? null), missing: missing && !stored };
 }
 
-/** A run still running past its job's limit by this browser's clock, plus a minute of slack (the server decides). */
+/**
+ * A run still running past its job's limit, or handed off and still not claimed past `HANDOFF_MS`,
+ * by this browser's clock, plus a minute of slack (the server decides).
+ */
 function pastLimit(run: PipelineRun): boolean {
-  if (run.status !== "running" || !run.startedAt) return false;
-  return Date.now() - Date.parse(run.startedAt) > DEAD_RUN_MS[run.kind ?? "upload"] + 60_000;
+  if (!run.startedAt) return false;
+  const elapsed = Date.now() - Date.parse(run.startedAt);
+  if (run.status === "running") return elapsed > DEAD_RUN_MS[run.kind ?? "upload"] + 60_000;
+  return run.status === "queued" && elapsed > HANDOFF_MS + 60_000;
 }
