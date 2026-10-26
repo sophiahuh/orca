@@ -158,10 +158,13 @@ async function main() {
 
   let course: CourseStructureWithRelations = { topics: [], objectives: {}, bank: {}, relations: [] };
   const scores: DeckScore[] = [];
+  /** The decks uploaded so far, for the table of contents. */
+  const uploaded: Array<{ id: string; filename: string }> = [];
   for (const lecture of LECTURES) {
     const file = deckFor(lecture);
     const material: Material = { id: `deck-${lecture}`, courseId: "ald", filename: path.basename(file), type: "Lecture", assigned: null, due: null, reflect: false };
     console.log(`Uploading ${material.filename}…`);
+    uploaded.push({ id: material.id, filename: material.filename });
     const plan = await runUpload(
       {
         course: { id: "ald", name: "Advanced Logic Design", short: "ALD", topics: course.topics },
@@ -169,6 +172,7 @@ async function main() {
         bank: course.bank,
         relations: course.relations,
         material,
+        materials: [...uploaded],
         pages: await readDeck(file),
         runId: `run-${lecture}`,
         model: config.model,
@@ -224,6 +228,7 @@ async function main() {
       bank: course.bank,
       relations: course.relations,
       material: { id: "deck-injected", courseId: "ald", filename: "L02_Combinational_injected.pdf", type: "Lecture", assigned: null, due: null, reflect: false },
+      materials: [...uploaded],
       pages: injectDeck(await readDeck(deckFor(2))),
       runId: crypto.randomUUID(),
       model: config.model,

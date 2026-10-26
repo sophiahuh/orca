@@ -96,13 +96,13 @@ test("a second upload queues behind the first and runs when it finishes; one job
 });
 
 test("a spend-limit answer from the API fails the job once with the budget message, with no retry", async ({ page, student }) => {
-  await fakeModel({ extract: ONE_TOPIC, fail: { step: "extract", type: "spend-limit" } });
+  await fakeModel({ extract: ONE_TOPIC, fail: { step: "map", type: "spend-limit" } });
   const courseId = await newCourse(student);
   const { generation } = await sendDeck(page, student, courseId, "deck.pdf", "Absorption");
   await expect.poll(async () => (await runStatus(generation.runId!)).status, { timeout: 30_000 }).toBe("failed");
   const { data } = await admin().from("pipeline_runs").select("error").eq("id", generation.runId!).single();
   expect(data!.error).toContain("Orca's model budget is used up for this month");
-  expect(await fakeCalls()).toEqual(["extract"]);
+  expect(await fakeCalls()).toEqual(["map"]);
 });
 
 test("starting more uploads than the daily rate limit allows answers 429 with retry-after", async ({ page, student }) => {

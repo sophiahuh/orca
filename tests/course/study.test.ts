@@ -24,7 +24,7 @@ const objective = (signals: Objective["signals"]): Objective => ({
   runId: "r",
   signals,
 });
-const topic: Topic = { id: "t", name: "2's complement", review: "confirmed", pos: { x: 0, y: 0 }, source: { filename: "L03.pdf", slideStart: 12, slideEnd: 30 } };
+const topic: Topic = { id: "t", name: "2's complement", review: "confirmed", pos: { x: 0, y: 0 }, source: [{ materialId: "m1", from: 12, to: 30 }] };
 
 test("where an objective is taught, per file", () => {
   const o = objective([
@@ -39,7 +39,7 @@ test("where an objective is taught, per file", () => {
 });
 
 test("no recorded places: the topic's range; nothing at all: empty", () => {
-  assert.deepEqual(whereTaught(objective([]), topic, []), [{ filename: "L03.pdf", where: "slides 12–30" }]);
+  assert.deepEqual(whereTaught(objective([]), topic, [material("m1", "L03.pdf")]), [{ filename: "L03.pdf", where: "slides 12–30" }]);
   assert.deepEqual(whereTaught(objective([]), { ...topic, source: undefined }, []), []);
 });
 

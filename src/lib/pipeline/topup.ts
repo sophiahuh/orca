@@ -6,6 +6,7 @@
  */
 import type { FlaggedQuestion, Material, MaterialPages, Objective, PipelineRun, QuizQuestion, Topic } from "../data.ts";
 import { locatorPages } from "../course/study.ts";
+import { pagesIn } from "../course/places.ts";
 import { type RunDeps, type WriteTarget, writeQuestions } from "./run.ts";
 
 export const TOP_UP_RULES = {
@@ -81,9 +82,7 @@ export function pagesFor(o: Objective, topic: Topic | undefined, material: Mater
     if (s.materialId !== material.id) continue;
     for (const place of s.places) for (const n of locatorPages(place.locator)) for (let d = -TOP_UP_RULES.neighbours; d <= TOP_UP_RULES.neighbours; d++) wanted.add(n + d);
   }
-  if (wanted.size === 0 && topic?.source && topic.source.filename === material.filename) {
-    for (let n = topic.source.slideStart; n <= topic.source.slideEnd; n++) wanted.add(n);
-  }
+  if (wanted.size === 0) for (const n of pagesIn(topic?.source ?? [], material.id)) wanted.add(n);
   if (wanted.size === 0) return pages.length <= TOP_UP_RULES.wholeMaterialMaxPages ? pages : null;
   const picked = pages.filter((p) => wanted.has(p.n));
   return picked.length ? picked : null;
