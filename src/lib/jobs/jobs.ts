@@ -14,6 +14,7 @@ import type { Course, FlaggedQuestion, Material, MaterialPages, PipelineRun } fr
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
+import type { OrcaNotes } from "../pipeline/notes.ts";
 import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
 import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
 import { deepQuestionCount } from "../deep-review.ts";
@@ -23,6 +24,8 @@ import type { BudgetVerdict } from "./budget.ts";
 export interface LoadedCourse {
   course: Pick<Course, "id" | "name" | "short" | "topics">;
   structure: StructureState;
+  /** Notes for Orca (the account's and the course's), cleaned; null when there are none (src/lib/pipeline/notes.ts). */
+  notes: OrcaNotes | null;
 }
 
 /** Everything a job reads and writes, for one student (every method is scoped to them). */
@@ -168,6 +171,7 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         pages,
         ...(material.hiddenText ? { hiddenText: material.hiddenText } : {}),
         flagged: await store.flagged(run.courseId),
+        notes: loaded.notes,
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -220,6 +224,7 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
         objectiveIds,
         answered,
         flagged: await store.flagged(run.courseId),
+        notes: loaded.notes,
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -261,7 +266,7 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
       const materials = await store.materials(run.courseId);
       const materialPages = await store.pages(materials.map((m) => m.id));
       plan = await runDeepReview(
-        { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite, flagged: await store.flagged(run.courseId) },
+        { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite, flagged: await store.flagged(run.courseId), notes: loaded.notes },
         { call: deps.call, newId: deps.newId },
       );
     }

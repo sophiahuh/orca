@@ -8,6 +8,8 @@ import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
 import { checkBudget } from "@/lib/server/usage";
 import { flaggedForWriting } from "@/lib/pipeline/flagged";
+import { notesForPrompts } from "@/lib/pipeline/notes";
+import { recordSecurityEvents } from "@/lib/server/security";
 import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -71,9 +73,14 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
     },
 
     async course(courseId): Promise<LoadedCourse | null> {
-      const { data: course, error } = await db.from("courses").select("id, name, short").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+      const { data: course, error } = await db.from("courses").select("id, name, short, orca_notes").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
       if (error) throw new Error(`Couldn't read the course: ${error.message}`);
       if (!course) return null;
+      const { data: profile, error: profileError } = await db.from("profiles").select("orca_notes").eq("owner_id", ownerId).single();
+      if (profileError) throw new Error(`Couldn't read the student's notes: ${profileError.message}`);
+      // Saved through the routes, notes are already clean; a note written straight through RLS is held to the same rules here.
+      const { notes, refused } = notesForPrompts({ account: profile.orca_notes, course: course.orca_notes });
+      for (const hits of refused) await recordSecurityEvents(db, ownerId, "orca_notes", hits);
       const [topics, objectives, relations, questions] = await Promise.all([
         readAll((a, b) => db.from("topics").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the topics"),
         readAll((a, b) => db.from("objectives").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the objectives"),
@@ -88,7 +95,7 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
         bank,
         relations: relations.map(relationFromRow),
       };
-      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure };
+      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure, notes };
     },
 
     async materials(courseId): Promise<Material[]> {
