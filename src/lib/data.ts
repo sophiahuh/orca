@@ -35,8 +35,15 @@ export interface Topic {
   pos: { x: number; y: number };
   /** One-paragraph summary (from extracted course material). */
   summary?: string;
-  /** Where this topic came from. */
-  source?: { filename: string; slideStart: number; slideEnd: number };
+  /** Every page range it's taught on, across uploads (none recorded when absent). */
+  source?: TopicPlace[];
+}
+
+/** A run of pages in one material that teaches a topic (`topics.source`). */
+export interface TopicPlace {
+  materialId: string;
+  from: number;
+  to: number;
 }
 
 export interface Course {

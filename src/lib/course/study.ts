@@ -1,5 +1,6 @@
 /** Where an objective is taught, as text the student can follow ("L03.pdf, slides 18–20, 24"). */
 import type { Material, Objective, Topic } from "../data.ts";
+import { pagesIn } from "./places.ts";
 
 /** Page or slide numbers a locator points at ("slide 14", "slides 3–5", "p. 212", "pages 40-41"); empty when it names none. */
 export function locatorPages(locator: string): number[] {
@@ -60,9 +61,11 @@ export function whereTaught(objective: Objective, topic: Topic | undefined, mate
     if (!filename) throw new Error(`Objective ${objective.id} points at material ${materialId}, which isn't in the course`);
     out.push({ filename, where: slideRanges(locators) });
   }
-  if (out.length === 0 && topic?.source) {
-    const { filename, slideStart, slideEnd } = topic.source;
-    out.push({ filename, where: slideStart === slideEnd ? `slide ${slideStart}` : `slides ${slideStart}–${slideEnd}` });
+  if (out.length === 0) {
+    for (const m of materials) {
+      const pages = pagesIn(topic?.source ?? [], m.id);
+      if (pages.size) out.push({ filename: m.filename, where: slideRanges([...pages].map((n) => `slide ${n}`)) });
+    }
   }
   return out;
 }

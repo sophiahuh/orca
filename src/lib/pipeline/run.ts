@@ -6,6 +6,7 @@
 import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic } from "../data.ts";
 import { type Named, exactMatch, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
+import { addRanges } from "../course/places.ts";
 import { sanitize } from "../untrusted/sanitize.ts";
 import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
@@ -246,7 +247,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       materialId: input.material.id,
       pos: { x: 0, y: 0 },
       summary: t.summary,
-      source: { filename: input.material.filename, slideStart: t.slideStart, slideEnd: Math.max(t.slideStart, t.slideEnd) },
+      source: addRanges([], input.material.id, [{ from: t.slideStart, to: Math.max(t.slideStart, t.slideEnd) }]),
       ...(r.uncertain ? { uncertain: r.uncertain } : {}),
     };
     newTopics.push(topic);

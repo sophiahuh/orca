@@ -149,7 +149,7 @@ test("a top-up sends only the anchored pages and their neighbours, never a whole
   assert.deepEqual(pagesFor(anchored, topic, material("L1"), book)!.map((p) => p.n), [9, 10, 11, 39, 40, 41, 42]);
 
   const unanchored = objective("a", { signals: [] });
-  const fromTopic = { ...topic, source: { filename: "L1.pdf", slideStart: 20, slideEnd: 22 } };
+  const fromTopic = { ...topic, source: [{ materialId: "L1", from: 20, to: 22 }] };
   assert.deepEqual(pagesFor(unanchored, fromTopic, material("L1"), book)!.map((p) => p.n), [20, 21, 22], "its topic's range in this file");
   assert.equal(pagesFor(unanchored, topic, material("L1"), book), null, "a long file with no anchors is not sent whole");
   assert.equal(pagesFor(unanchored, topic, material("L1"), book.slice(0, 30))!.length, 30, "a short one is");
