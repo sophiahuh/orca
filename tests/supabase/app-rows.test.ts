@@ -55,7 +55,7 @@ test("a row that disappears is refused: nothing is ever deleted", () => {
 test("loading groups rows by course and puts questions in stock order", () => {
   const data: MyData = {
     profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, default_review_config: null, orca_notes: null, created_at: owned.created_at },
-    courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, orca_notes: "No proofs.", created_at: owned.created_at }],
+    courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, schedule: null, orca_notes: "No proofs.", created_at: owned.created_at }],
     materials: [],
     runs: [],
     topics: [{ ...topicToRow(topic, 0), ...owned }],
@@ -88,6 +88,13 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.deepEqual(inherit.configs.c, DEFAULT_CONFIG, "no override and no account default: Orca's");
   assert.equal(inherit.configOverrides.c, null);
   assert.deepEqual(s.configOverrides.c, s.configs.c, "an override wins over the account default");
+
+  // When the class meets: read and checked like the settings; null = not set.
+  assert.equal(s.schedules.c, null);
+  const schedule = { meetings: [{ day: 2, start: "10:10", end: "11:25" }], quickDays: [1], deepDays: null };
+  assert.deepEqual(loadedState({ ...data, courses: [{ ...data.courses[0], schedule }] }).schedules.c, schedule);
+  assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], schedule: { ...schedule, meetings: [{ day: 2, start: "11:25", end: "10:10" }] } }] }), /ends after it starts/);
+  assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], schedule: { ...schedule, quickDays: [1, 1] } }] }), /listed twice/);
 
   const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", handwritten: false, status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
   const withFiles = loadedState({ ...data, materials: [material, { ...material, id: "m2", status: "uploaded", hidden_text: null }, { ...material, id: "m3", status: "failed", error: "unreadable" }] });

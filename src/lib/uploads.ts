@@ -66,6 +66,34 @@ async function sha256(file: File): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Every file in a drop, folders included (their contents, any depth). Browsers hand a dropped folder
+ * over as a directory entry rather than a file; this walks it. Hidden files (`.DS_Store`) are left out.
+ */
+export async function filesFromDataTransfer(dt: DataTransfer): Promise<File[]> {
+  const entries = Array.from(dt.items ?? [], (item) => (typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null));
+  if (!entries.some(Boolean)) return Array.from(dt.files ?? []);
+  const out: File[] = [];
+  const walk = async (entry: FileSystemEntry | null): Promise<void> => {
+    if (!entry || entry.name.startsWith(".")) return;
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((resolve) => (entry as FileSystemFileEntry).file(resolve, () => resolve(null)));
+      if (file) out.push(file);
+      return;
+    }
+    if (!entry.isDirectory) return;
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    // readEntries returns a batch at a time (Chrome: 100); keep reading until it comes back empty.
+    for (;;) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve) => reader.readEntries(resolve, () => resolve([])));
+      if (!batch.length) break;
+      for (const child of batch) await walk(child);
+    }
+  };
+  for (const entry of entries) await walk(entry);
+  return out;
+}
+
 /** What's wrong with a file before it's sent, or null. */
 export function uploadProblem(file: File): string | null {
   if (!uploadKind(file.name, file.type)) return UNSUPPORTED_UPLOAD;

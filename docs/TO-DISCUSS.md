@@ -267,6 +267,21 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 - **Strong injection hits refuse the save** with the quoted span (and are logged); weak ones are
   logged and saved.
 
+### Assumed in class times and review days (2026-10-27): decide or accept
+- **The default days are the day before the week's first classes**, counting Monday first: Weekly
+  uses the first class (Tue/Thu → Monday), and Twice a week uses the first two (Mon/Wed/Fri →
+  Sunday and Tuesday).
+- **A class that meets on fewer days than the cadence needs** (Twice a week, one class a week) has
+  no default days and rolls every 3 days until the student picks days.
+- **Twice a week without class days or picks rolls every 3 days** (Weekly keeps its 7).
+- **Picking more days than the cadence allows drops the earliest pick.** Days picked for Twice a
+  week keep the later one when the cadence becomes Weekly.
+- **The first dive on class days** is due on the first review day after the course's first answer,
+  matching the rolling rule, which waits a week after the first answer.
+- **Meeting times are stored but unused.** Nothing is timed by the hour, and classes don't show on
+  the calendar. Showing them is open.
+- **Daily and the exam cadence ignore class days.** The exam review row has no day picker.
+
 ## Watch
 
 ### Loading all of a student's data at sign-in (revisit)

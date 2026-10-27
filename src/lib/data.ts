@@ -60,7 +60,7 @@ export interface Course {
   trail?: string;
 }
 
-export type Cadence = "Daily" | "Weekly" | "1 wk before exam";
+export type Cadence = "Daily" | "Twice a week" | "Weekly" | "1 wk before exam";
 export type Duration = "5 min" | "10 min" | "15 min" | "30 min" | "1 hour" | "3 hours" | "10 hours";
 
 export interface ReviewRow {
@@ -73,6 +73,28 @@ export interface ReviewConfig {
   deep: ReviewRow;
   exam: ReviewRow;
 }
+
+/** 0 = Sunday … 6 = Saturday, as `Date.getUTCDay()` counts them. */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/** One weekly class meeting: its weekday and local start and end times ("HH:MM", 24-hour). */
+export interface ClassMeeting {
+  day: Weekday;
+  start: string;
+  end: string;
+}
+
+/**
+ * When a course meets, and on which weekdays its "Twice a week" or "Weekly" quick review and dive
+ * fall. Days null: the day before class (see `reviewWeekdays`). Course-only; never inherited.
+ */
+export interface CourseSchedule {
+  meetings: ClassMeeting[];
+  quickDays: Weekday[] | null;
+  deepDays: Weekday[] | null;
+}
+
+export const NO_SCHEDULE: CourseSchedule = { meetings: [], quickDays: null, deepDays: null };
 
 export type EventKind = "hw" | "lab" | "rev" | "exam";
 
@@ -103,6 +125,7 @@ export type MaterialType =
   | "Homework"
   | "Lecture"
   | "Handwritten notes"
+  | "Typed notes"
   | "Other";
 
 export interface Material {
@@ -362,7 +385,10 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   exam: { duration: "10 hours", cadence: "1 wk before exam" },
 };
 
-export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Typed notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
+
+/** What the upload page shows for a type, where it differs from the stored value. */
+export const MATERIAL_TYPE_LABELS: Partial<Record<MaterialType, string>> = { Lecture: "Lecture content" };
 
 /* ── Dates ────────────────────────────────────────────────────────────── */
 export function toISODate(d: Date) {

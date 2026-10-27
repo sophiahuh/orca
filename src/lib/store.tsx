@@ -44,8 +44,10 @@ import {
   type Objective,
   type PipelineRun,
   type Relation,
+  type CourseSchedule,
   type ReviewConfig,
   DEFAULT_CONFIG,
+  NO_SCHEDULE,
   shortName,
   trailTopics,
   slugify,
@@ -86,6 +88,8 @@ interface OrcaState {
   configs: Record<string, ReviewConfig>;
   /** Explicit course settings, if any. Null inherits the account default. */
   configOverrides: Record<string, ReviewConfig | null>;
+  /** When each course meets and its review weekdays (course-only); null = not set. Saved with the course's settings, then `refresh()`. */
+  schedules: Record<string, CourseSchedule | null>;
   /** Notes for Orca for all classes, and per course; null = none. Saved through their routes, then `refresh()`. */
   accountNotes: string | null;
   courseNotes: Record<string, string | null>;
@@ -129,6 +133,7 @@ const initialState: OrcaState = {
   materials: [],
   configs: {},
   configOverrides: {},
+  schedules: {},
   accountNotes: null,
   courseNotes: {},
   defaultConfig: DEFAULT_CONFIG,
@@ -147,7 +152,8 @@ const initialState: OrcaState = {
 };
 
 interface OrcaActions {
-  addCourse: (name: string) => Course;
+  /** A new, empty course; `schedule` is when it meets, if the student said. */
+  addCourse: (name: string, schedule: CourseSchedule | null) => Course;
   /** Rename a course without changing its stable URL slug or compact labels elsewhere. */
   renameCourse: (courseId: string, name: string) => void;
   setConfig: (courseId: string, config: ReviewConfig) => void;
@@ -467,7 +473,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCourse = useCallback<OrcaActions["addCourse"]>(
-    (name) => {
+    (name, schedule) => {
       const s = stateRef.current;
       const n = s.courses.length;
       const newId = crypto.randomUUID();
@@ -487,13 +493,14 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         courses: [...s.courses, course],
         configs: { ...s.configs, [id]: s.defaultConfig },
         configOverrides: { ...s.configOverrides, [id]: null },
+        schedules: { ...s.schedules, [id]: schedule },
         courseNotes: { ...s.courseNotes, [id]: null },
         objectives: { ...s.objectives, [id]: {} },
         relations: { ...s.relations, [id]: [] },
         snapshots: { ...s.snapshots, [id]: {} },
       }));
       save(
-        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, null))),
+        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, null, schedule))),
       );
       return course;
     },
@@ -953,7 +960,7 @@ export function useStreak(): number {
 
 /** What's due, per course: ranked objectives, quick and deep review, review to-dos and re-quizzes. */
 export function useAgenda(): Record<string, CourseAgenda> {
-  const { courses, objectives, relations, configs, results, events, exams } = useOrca();
+  const { courses, objectives, relations, configs, schedules, results, events, exams } = useOrca();
   const mastery = useMasteryByCourse();
   const dayKey = useDayKey();
   const nowMs = useNow();
@@ -969,6 +976,7 @@ export function useAgenda(): Record<string, CourseAgenda> {
             mastery: m,
             weights: agendaWeights(m.objectives.keys(), computed),
             config: configs[c.id] ?? DEFAULT_CONFIG,
+            schedule: schedules[c.id] ?? NO_SCHEDULE,
             results,
             // Exams, and any uploaded exam's due date on the calendar.
             examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
@@ -978,6 +986,6 @@ export function useAgenda(): Record<string, CourseAgenda> {
           return [c.id, agenda];
         }),
       ),
-    [courses, objectives, relations, configs, results, events, exams, mastery, nowMs, dayKey],
+    [courses, objectives, relations, configs, schedules, results, events, exams, mastery, nowMs, dayKey],
   );
 }
