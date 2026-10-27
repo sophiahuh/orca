@@ -347,7 +347,12 @@ All 11 Figma screens are built. Where things live:
   Storage, read on the server into `material_pages`. The upload page takes several files or a whole folder at once
   (`filesFromDataTransfer` walks dropped folders; `src/components/upload/BatchList.tsx` is the per-file list with
   type and dates prefilled from the page's shared defaults; files are sent one after another, each row showing where
-  it is; a file Orca can't read is listed as skipped) (a .pptx: one page per slide, its text, tables and speaker notes; no
+  it is; a file Orca can't read is listed as skipped). Three files or more is a bulk upload (owner, 2026-10-27): the
+  rows' dates hide behind "Add dates", and with no assigned date given the page asks "How far has the class got?":
+  the files after the tapped one are `materials.upcoming` ("the class hasn't reached this yet"; an assigned date in
+  the future sets it too). Their objectives are left out of the due list, quick reviews and dive candidates
+  (`AgendaInput.upcoming`, from `Material.upcoming` via each objective's `materialId`) until the Uploads tab's "Mark
+  covered" clears it; the trail still plays them, and nothing is assumed known (a scheduling signal, never mastery) (a .pptx: one page per slide, its text, tables and speaker notes; no
   pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
   switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
   `transcribe` step at the start of the upload job; typed slides that draw a figure (an image 100 px+ or 25+ paths,

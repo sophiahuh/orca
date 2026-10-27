@@ -136,6 +136,8 @@ export interface Material {
   assigned: string | null;
   due: string | null;
   reflect: boolean;
+  /** The class hasn't reached this material yet: its objectives wait (left out of reviews and due counts) until it's marked covered. */
+  upcoming?: boolean;
   /** The student's reflection, once given: their note and the objectives they confirmed it was about. */
   reflection?: { at: string; note: string; objectiveIds: string[] };
   /** Text hidden in the file (drawn too small to see) that the server dropped when reading it. */
