@@ -344,7 +344,10 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
 - `src/lib/material/read-pdf.ts`, `read-pptx.ts` (+ `unzip.ts`, `kind.ts`), `src/lib/uploads.ts` — PDFs and .pptx decks to
-  Storage, read on the server into `material_pages` (a .pptx: one page per slide, its text, tables and speaker notes; no
+  Storage, read on the server into `material_pages`. The upload page takes several files or a whole folder at once
+  (`filesFromDataTransfer` walks dropped folders; `src/components/upload/BatchList.tsx` is the per-file list with
+  type and dates prefilled from the page's shared defaults; files are sent one after another, each row showing where
+  it is; a file Orca can't read is listed as skipped) (a .pptx: one page per slide, its text, tables and speaker notes; no
   pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
   switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
   `transcribe` step at the start of the upload job; typed slides that draw a figure (an image 100 px+ or 25+ paths,

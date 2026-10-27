@@ -7,7 +7,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, MATERIAL_TYPE_LABELS, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { type UploadStage, importAIChat, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import { type UploadStage, filesFromDataTransfer, importAIChat, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import { type BatchItem, BatchList } from "@/components/upload/BatchList";
 import type { MaterialPages } from "@/lib/data";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
 import { IconCalendar, IconUpload } from "@/components/icons";
@@ -96,7 +97,10 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [assigned, setAssigned] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  /** Several files at once (a folder): one row each; null when a single file is picked. */
+  const [batch, setBatch] = useState<BatchItem[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
 
   if (!course) {
     if (!hydrated) return null;
@@ -120,11 +124,37 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   }
   const filename = aiChatUrl || (aiChatText.trim() ? "AI chat transcript" : websiteUrl || chosenName || "Choose a PDF or .pptx…");
   const busy = phase.kind === "sending" || phase.kind === "working";
+  const sendable = batch?.filter((it) => it.problem === null) ?? [];
+  const batchFailed = sendable.filter((it) => it.status.kind === "failed");
+  const batchPending = sendable.filter((it) => it.status.kind === "waiting" || it.status.kind === "failed");
   const unreadable = file ? uploadProblem(file) : null;
   // Only a PDF can be read as page images (a .pptx has no renderer here).
   const isPdf = file ? uploadKind(file.name, file.type) === "pdf" : false;
 
+  /** Several files at once: a list, each with its own details prefilled from the shared defaults. */
+  const onFiles = (list: File[]) => {
+    const files = list.filter((f) => !f.name.startsWith("."));
+    if (files.length === 0) return;
+    if (files.length === 1) return onFile(files[0]);
+    setFile(null);
+    setDoc(null);
+    setWebsiteUrl("");
+    setAiChatUrl("");
+    setAiChatText("");
+    setChosenName(`${files.length} files`);
+    setPhase({ kind: "idle" });
+    setBatch(files.map((f) => ({ id: crypto.randomUUID(), file: f, type, assigned, due, edited: false, problem: uploadProblem(f), status: { kind: "waiting" } })));
+  };
+  /** A shared default changed: every row that wasn't edited by hand follows it. */
+  const setDefault = (patch: Partial<Pick<BatchItem, "type" | "assigned" | "due">>) => {
+    if ("type" in patch && patch.type) setType(patch.type);
+    if ("assigned" in patch) setAssigned(patch.assigned ?? null);
+    if ("due" in patch) setDue(patch.due ?? null);
+    setBatch((b) => b && b.map((it) => (it.edited || it.status.kind !== "waiting" ? it : { ...it, ...patch })));
+  };
+
   const onFile = (f: File) => {
+    setBatch(null);
     setChosenName(f.name);
     setDoc(null);
     setFile(f);
@@ -136,7 +166,40 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     setPhase(problem ? { kind: "error", message: `${problem} Choose another file.` } : { kind: "idle" });
   };
 
+  /**
+   * The files of a folder, one after another (the server builds one job at a time anyway), each row
+   * showing where it is. Then the review, which lists every upload; a failed row stays on the list
+   * with why, and the button offers to send the failed ones again.
+   */
+  const submitBatch = async () => {
+    if (!batch || batchPending.length === 0) return;
+    setPhase({ kind: "sending", stage: "uploading" });
+    const patch = (id: string, p: Partial<BatchItem>) => setBatch((b) => b && b.map((it) => (it.id === id ? { ...it, ...p } : it)));
+    let firstRun: string | null = null;
+    let failed = 0;
+    for (const it of batchPending) {
+      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf" };
+      try {
+        const outcome = await uploadMaterial(it.file, meta, (stage) => patch(it.id, { status: { kind: "sending", message: STAGE_MESSAGE[stage] } }));
+        if (outcome.kind === "read") addMaterial(outcome.material, { saved: true });
+        const g = outcome.generation;
+        if ("runId" in g && firstRun === null) firstRun = g.runId;
+        patch(it.id, { status: { kind: outcome.kind === "duplicate" ? "duplicate" : "done" } });
+      } catch (error) {
+        failed++;
+        patch(it.id, { status: { kind: "failed", message: error instanceof Error ? error.message : "The upload failed." } });
+      }
+    }
+    if (failed > 0) {
+      setPhase({ kind: "error", message: `${failed} of ${batchPending.length} files didn't go through. Fix what each one says and send them again, or go on to the review.` });
+      return;
+    }
+    setPhase({ kind: "working", message: firstRun ? "Orca is building topics and questions from them." : `Saved to ${course.name}.` });
+    window.setTimeout(() => router.replace(firstRun ? `/course/${course.slug}/review?run=${firstRun}` : `/course/${course.slug}`), 1200);
+  };
+
   const submit = async () => {
+    if (batch) return submitBatch();
     if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
     const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf };
@@ -263,11 +326,26 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           <input
             ref={fileRef}
             type="file"
+            multiple
+            data-part="file-input"
             accept=".pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
             className="hidden"
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onFile(f);
+              onFiles(Array.from(e.target.files ?? []));
+              e.target.value = "";
+            }}
+          />
+          {/* A whole folder (every PDF and .pptx in it, subfolders included). */}
+          <input
+            ref={folderRef}
+            type="file"
+            multiple
+            aria-label="Choose a folder"
+            className="hidden"
+            {...{ webkitdirectory: "" }}
+            onChange={(e) => {
+              onFiles(Array.from(e.target.files ?? []));
+              e.target.value = "";
             }}
           />
           <Card
@@ -277,12 +355,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             tabIndex={0}
             aria-label="Choose a file"
             onClick={() => !busy && fileRef.current?.click()}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
+            onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
-              const f = e.dataTransfer.files?.[0];
-              if (f) onFile(f);
+              if (busy) return;
+              void filesFromDataTransfer(e.dataTransfer).then(onFiles);
             }}
             className="pressable flex aspect-[8.5/11] cursor-pointer flex-col gap-[14px] overflow-hidden px-[28px] pb-[28px] pt-[22px]"
           >
@@ -303,7 +381,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
               <span className="text-[11px] leading-snug text-wisteria-deep">Your questions tell Orca what to prioritize. AI answers are treated as context, not course authority.</span>
             </div>
 
-            {phase.kind === "sending" && (
+            {phase.kind === "sending" && !batch && (
               <div className="flex flex-col gap-[8px]" role="status">
                 <ProgressBar value={phase.stage === "hashing" ? 0.1 : phase.stage === "uploading" ? 0.4 : 0.8} height={10} label="Uploading" />
                 <span className="text-[13px] font-semibold text-wisteria-deep">{STAGE_MESSAGE[phase.stage]}</span>
@@ -316,7 +394,19 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
               </span>
             )}
 
-            {doc ? (
+            {batch ? (
+              <div className="mt-[4px] flex min-h-0 flex-1 flex-col gap-[8px] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <span className="text-[12px] font-semibold uppercase tracking-[1.2px] text-wisteria-deep">
+                  {sendable.length} file{sendable.length === 1 ? "" : "s"} to add{batch.length > sendable.length ? ` · ${batch.length - sendable.length} skipped` : ""}
+                </span>
+                <BatchList
+                  items={batch}
+                  busy={busy}
+                  onChange={(id, p) => setBatch((b) => b && b.map((it) => (it.id === id ? { ...it, ...p, edited: true } : it)))}
+                  onRemove={(id) => setBatch((b) => (b && b.length > 1 ? b.filter((it) => it.id !== id) : null))}
+                />
+              </div>
+            ) : doc ? (
               <div className="mt-[4px] flex flex-col gap-[6px]">
                 <span className="text-[12px] font-semibold uppercase tracking-[1.2px] text-wisteria-deep">
                   {doc.length} slides · read by Orca
@@ -332,8 +422,18 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                 {SKELETON.slice(0, 5).map((w, i) => (
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
                 ))}
-                <span className="my-[6px] flex h-[120px] items-center justify-center rounded-[12px] bg-alice text-[14px] font-semibold text-wisteria-deep">
-                  Drop a PDF or .pptx, choose one, paste a course URL, or add an AI chat
+                <span className="my-[6px] flex h-[120px] flex-col items-center justify-center gap-[6px] rounded-[12px] bg-alice px-[16px] text-center text-[14px] font-semibold text-wisteria-deep">
+                  Drop PDFs, .pptx decks or a whole folder, choose files, paste a course URL, or add an AI chat
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!busy) folderRef.current?.click();
+                    }}
+                    className="pointer-events-auto text-[13px] font-bold text-wisteria-deep underline underline-offset-2"
+                  >
+                    Choose a folder
+                  </button>
                 </span>
                 {SKELETON.slice(6).map((w, i) => (
                   <span key={i} className="block h-[8px] rounded-pill bg-alice-deep" style={{ width: `${w}%`, opacity: w ? 1 : 0 }} />
@@ -347,21 +447,22 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         <div className="flex w-[520px] max-w-full flex-col gap-[28px]">
           <motion.section variants={fadeUp} className="flex flex-col gap-[14px]">
             <h2 className="text-[17px] font-bold text-prussian">What kind of material is this?</h2>
-            <Select label="What kind of material is this?" value={type} options={MATERIAL_TYPES} labels={MATERIAL_TYPE_LABELS} onChange={setType} className="self-start" />
+            <Select label="What kind of material is this?" value={type} options={MATERIAL_TYPES} labels={MATERIAL_TYPE_LABELS} onChange={(t) => setDefault({ type: t })} className="self-start" />
+            {batch && <span className="text-[13px] font-medium text-wisteria-deep">Applies to every file on the list; change any one of them on its row.</span>}
           </motion.section>
 
           <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
             <h2 className="text-[17px] font-bold text-prussian">When was it assigned?</h2>
-            <DateField label="Assigned date" value={assigned} onChange={setAssigned} noneLabel="Not assigned" />
+            <DateField label="Assigned date" value={assigned} onChange={(v) => setDefault({ assigned: v })} noneLabel="Not assigned" />
           </motion.section>
 
           <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
             <h2 className="text-[17px] font-bold text-prussian">When is it due?</h2>
-            <DateField label="Due date" value={due} onChange={setDue} noneLabel="No due date" />
+            <DateField label="Due date" value={due} onChange={(v) => setDefault({ due: v })} noneLabel="No due date" />
           </motion.section>
 
 
-          {type === "Homework" && (
+          {type === "Homework" && !batch && (
             <motion.label variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[8px]">
               <span className="text-[17px] font-bold text-prussian">Reflection</span>
               <span className="text-[13px] font-medium text-wisteria-deep">What tripped you up? Give us your honest thoughts so we can best tailor your studying.</span>
@@ -378,9 +479,20 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button onClick={submit} className={DATE_ROW} disabled={busy || Boolean(file && unreadable) || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
-              {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
+            <Button onClick={submit} className={DATE_ROW} disabled={busy || Boolean(file && unreadable) || (batch ? batchPending.length === 0 : !chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
+              {phase.kind === "working"
+                ? `Building ${course.name}…`
+                : batch
+                  ? batchFailed.length > 0 && batchFailed.length === batchPending.length
+                    ? `Send ${batchFailed.length} failed file${batchFailed.length === 1 ? "" : "s"} again`
+                    : `Add ${batchPending.length} file${batchPending.length === 1 ? "" : "s"} to course`
+                  : "Add to course"}
             </Button>
+            {batch && phase.kind === "error" && batchFailed.length > 0 && (
+              <Link href={`/course/${course.slug}/review`} className="text-center text-[14px] font-bold text-wisteria-deep hover:underline">
+                Go on to the review
+              </Link>
+            )}
 
             <AnimatePresence mode="wait">
               {phase.kind === "working" && (

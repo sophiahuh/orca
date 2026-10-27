@@ -41,7 +41,7 @@ test("a homework upload's reflection sends the objectives Orca is sure of back t
   await expect(page.locator('[data-objective="Convert to 2\'s complement"]')).toContainText("Mastered");
 
   await page.goto("/add-material");
-  await page.locator('input[type="file"]').setInputFiles(DECK);
+  await page.locator('[data-part=file-input]').setInputFiles(DECK);
   // The reflection is asked for homework only.
   await expect(page.getByPlaceholder(/K-map groups/)).toHaveCount(0);
   await page.getByLabel("What kind of material is this?").selectOption("Homework");
@@ -65,7 +65,7 @@ test("a reflection Orca can't match is still saved, and says why", async ({ page
   await fakeModel({ fail: { step: "reflect", status: 400, message: "bad request" } });
 
   await page.goto("/add-material");
-  await page.locator('input[type="file"]').setInputFiles(DECK);
+  await page.locator('[data-part=file-input]').setInputFiles(DECK);
   await page.getByLabel("What kind of material is this?").selectOption("Homework");
   await page.getByPlaceholder(/K-map groups/).fill(NOTE);
   await page.getByRole("button", { name: "Add to course" }).click();
