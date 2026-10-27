@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { addDays, agendaWeights, courseAgenda } from "../../src/lib/mastery/agenda.ts";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { AnswerEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
-import { DEFAULT_CONFIG, type QuizResult, type ReviewConfig } from "../../src/lib/data.ts";
+import { reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
+import { DEFAULT_CONFIG, NO_SCHEDULE, type CourseSchedule, type QuizResult, type ReviewConfig } from "../../src/lib/data.ts";
 
 const utcDay = (iso: string) => iso.slice(0, 10);
 const catalogue = {
@@ -31,10 +32,10 @@ const ans = (questionId: string, at: string, outcome: AnswerEvent["outcome"] = "
 };
 const finished = (sessionId: string, finishedAt: string, mode: QuizResult["mode"] = "quick"): QuizResult => ({ courseId: "k", topicId: null, mode, sessionId, correct: 0, total: 0, seconds: 0, finishedAt });
 
-function agenda(evidence: EvidenceEvent[], now: string, opts: { results?: QuizResult[]; config?: ReviewConfig; examDays?: string[]; weights?: Record<string, number> } = {}) {
+function agenda(evidence: EvidenceEvent[], now: string, opts: { results?: QuizResult[]; config?: ReviewConfig; examDays?: string[]; weights?: Record<string, number>; schedule?: CourseSchedule } = {}) {
   const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence, now: new Date(now), dayKey: utcDay });
   const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1, ...opts.weights })));
-  return courseAgenda({ courseId: "k", mastery, weights, config: opts.config ?? DEFAULT_CONFIG, results: opts.results ?? [], examDays: opts.examDays ?? [], now: new Date(now), dayKey: utcDay });
+  return courseAgenda({ courseId: "k", mastery, weights, config: opts.config ?? DEFAULT_CONFIG, schedule: opts.schedule ?? NO_SCHEDULE, results: opts.results ?? [], examDays: opts.examDays ?? [], now: new Date(now), dayKey: utcDay });
 }
 
 test("addDays is plain calendar arithmetic", () => {
@@ -123,4 +124,56 @@ test("the next quick review follows the cadence: weekly after the last one, exam
 
 test("a missing weight is a bug", () => {
   assert.throws(() => agendaWeights(["a", "x"], new Map([["a", 1]])), /No weight computed for objective x/);
+});
+
+/* Class meetings: 2026-10-05 is a Monday; this class meets Tuesday and Thursday. */
+const tueThu: CourseSchedule = { meetings: [{ day: 4, start: "10:10", end: "11:25" }, { day: 2, start: "10:10", end: "11:25" }], quickDays: null, deepDays: null };
+const quickOn = (cadence: ReviewConfig["quick"]["cadence"]): ReviewConfig => ({ ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence } });
+
+test("review days default to the day before the week's first classes; a pick wins; too few meetings rolls", () => {
+  assert.deepEqual(reviewWeekdays("Weekly", null, tueThu.meetings), [1]);
+  assert.deepEqual(reviewWeekdays("Twice a week", null, tueThu.meetings), [1, 3]);
+  assert.deepEqual(reviewWeekdays("Twice a week", [0, 5], tueThu.meetings), [5, 0], "the student's pick, Monday first");
+  assert.equal(reviewWeekdays("Twice a week", null, [{ day: 1, start: "09:00", end: "10:00" }]), null, "a once-a-week class has no second day before class");
+  assert.equal(reviewWeekdays("Weekly", null, []), null);
+  assert.equal(reviewWeekdays("Daily", [1], tueThu.meetings), null, "daily isn't on weekdays");
+});
+
+test("weekly quick review on class days: due the day before class until done, then the next week", () => {
+  const config = quickOn("Weekly");
+  const monday = agenda([], "2026-10-05T18:00:00Z", { config, schedule: tueThu });
+  assert.equal(monday.quickReviewDue, true);
+  assert.equal(monday.nextQuickDay, "2026-10-12");
+  const done = [finished("q", "2026-10-05T08:00:00Z")];
+  assert.equal(agenda([], "2026-10-05T18:00:00Z", { config, schedule: tueThu, results: done }).quickReviewDue, false);
+  assert.equal(agenda([], "2026-10-08T18:00:00Z", { config, schedule: tueThu, results: done }).quickReviewDue, false);
+  assert.equal(agenda([], "2026-10-12T18:00:00Z", { config, schedule: tueThu, results: done }).quickReviewDue, true);
+  assert.equal(agenda([], "2026-10-07T18:00:00Z", { config, schedule: tueThu, results: [finished("q", "2026-10-02T08:00:00Z")] }).quickReviewDue, true, "missed Monday, still due");
+});
+
+test("twice a week falls before each of the two classes; the student's own days override", () => {
+  const config = quickOn("Twice a week");
+  const done = [finished("q", "2026-10-05T08:00:00Z")];
+  assert.equal(agenda([], "2026-10-05T18:00:00Z", { config, schedule: tueThu, results: done }).nextQuickDay, "2026-10-07");
+  assert.equal(agenda([], "2026-10-07T18:00:00Z", { config, schedule: tueThu, results: done }).quickReviewDue, true);
+  const fridays: CourseSchedule = { ...tueThu, quickDays: [5] };
+  const weekly = quickOn("Weekly");
+  assert.equal(agenda([], "2026-10-08T18:00:00Z", { config: weekly, schedule: fridays, results: [finished("q", "2026-10-02T08:00:00Z")] }).quickReviewDue, false);
+  assert.equal(agenda([], "2026-10-08T18:00:00Z", { config: weekly, schedule: fridays }).nextQuickDay, "2026-10-09");
+});
+
+test("twice a week without class days rolls every 3 days", () => {
+  const config = quickOn("Twice a week");
+  const done = [finished("q", "2026-10-03T08:00:00Z")];
+  assert.equal(agenda([], "2026-10-05T18:00:00Z", { config, results: done }).quickReviewDue, false);
+  assert.equal(agenda([], "2026-10-05T18:00:00Z", { config, results: done }).nextQuickDay, "2026-10-06");
+  assert.equal(agenda([], "2026-10-06T18:00:00Z", { config, results: done }).quickReviewDue, true);
+});
+
+test("a weekly dive on class days: first due the day before class after the first answer, then weekly; stays due", () => {
+  const evidence = [ans("a1", "2026-10-01T10:00:00Z")];
+  assert.deepEqual(agenda(evidence, "2026-10-04T09:00:00Z", { schedule: tueThu }).deepReview, { due: false, dueDay: "2026-10-05", tomorrow: true, candidates: 1 });
+  assert.deepEqual(agenda(evidence, "2026-10-06T09:00:00Z", { schedule: tueThu }).deepReview, { due: true, dueDay: "2026-10-05", tomorrow: false, candidates: 1 });
+  assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { schedule: tueThu, results: [finished("d", "2026-10-06T10:00:00Z", "deep")] }).deepReview.dueDay, "2026-10-12");
+  assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { schedule: { ...tueThu, deepDays: [3] } }).deepReview.dueDay, "2026-10-07", "the student's day");
 });

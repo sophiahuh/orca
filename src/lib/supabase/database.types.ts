@@ -32,13 +32,13 @@ isOneToOne: false
                   ]
                 },"courses": {
                   Row: {
-                    "created_at": string,"id": string,"name": string,"orca_notes": string | null,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string
+                    "created_at": string,"id": string,"name": string,"orca_notes": string | null,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"schedule": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string
                   }
                   Insert: {
-                    "created_at"?: string,"id": string,"name": string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config"?: Json | null,"short": string,"slug": string,"trail"?: string | null,"variant": string
+                    "created_at"?: string,"id": string,"name": string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config"?: Json | null,"schedule"?: Json | null,"short": string,"slug": string,"trail"?: string | null,"variant": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"name"?: string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: Json | null,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string
+                    "created_at"?: string,"id"?: string,"name"?: string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: Json | null,"schedule"?: Json | null,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string
                   }
                   Relationships: [
                     

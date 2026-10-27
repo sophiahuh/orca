@@ -5,10 +5,11 @@
  * course's next quick review, never the same day (anything practiced today waits until a later day).
  * Derived from evidence, finished sessions and the clock; nothing here is stored.
  */
-import type { QuizResult, ReviewConfig } from "../data.ts";
+import type { CourseSchedule, QuizResult, ReviewConfig, Weekday } from "../data.ts";
 import type { CourseMastery } from "./course-mastery.ts";
 import { localDayKey } from "./objective-state.ts";
 import { type Priority, objectivePriority, openConfusion } from "./priority.ts";
+import { reviewWeekdays, weekdayOf } from "./review-days.ts";
 import type { AnswerEvent, ObjectiveStatus } from "./types.ts";
 
 export const AGENDA_RULES = {
@@ -59,6 +60,8 @@ export interface AgendaInput {
   /** objectiveId → weight for every objective in `mastery` (see `agendaWeights`). */
   weights: ReadonlyMap<string, number>;
   config: ReviewConfig;
+  /** When the class meets and the student's review days: "Twice a week" and "Weekly" fall on those weekdays (`reviewWeekdays`). */
+  schedule: CourseSchedule;
   /** Finished sessions (any course; filtered here). */
   results: readonly QuizResult[];
   /** Local days (YYYY-MM-DD) of this course's exams on the calendar. */
@@ -84,10 +87,23 @@ export function agendaWeights(objectiveIds: Iterable<string>, computed: Readonly
   return out;
 }
 
-const CADENCE_DAYS = { Daily: 1, Weekly: 7 } as const;
+/** Without review weekdays, a cadence rolls on this many days from the last review finished. */
+const CADENCE_DAYS = { Daily: 1, "Twice a week": 3, Weekly: 7 } as const;
+
+/** The latest day on or before `day` that falls on one of `weekdays`. */
+function onOrBefore(day: string, weekdays: readonly Weekday[]): string {
+  for (let i = 0; i < 7; i++) if (weekdays.includes(weekdayOf(addDays(day, -i)))) return addDays(day, -i);
+  throw new Error("No review weekdays");
+}
+
+/** The first day after `day` that falls on one of `weekdays`. */
+function nextAfter(day: string, weekdays: readonly Weekday[]): string {
+  for (let i = 1; i <= 7; i++) if (weekdays.includes(weekdayOf(addDays(day, i)))) return addDays(day, i);
+  throw new Error("No review weekdays");
+}
 
 export function courseAgenda(input: AgendaInput): CourseAgenda {
-  const { courseId, mastery, weights, config, now } = input;
+  const { courseId, mastery, weights, config, schedule, now } = input;
   const dayKey = input.dayKey ?? localDayKey;
   const today = dayKey(now.toISOString());
   const tomorrow = addDays(today, 1);
@@ -122,20 +138,12 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const finishedOn = (mode: QuizResult["mode"]) => results.filter((r) => r.mode === mode).map((r) => dayKey(r.finishedAt));
   const quickDays = finishedOn("quick");
   const inExamWindow = (day: string) => input.examDays.some((e) => e >= day && addDays(e, -AGENDA_RULES.examWindowDays) <= day);
-  const quickCadenceDue =
-    config.quick.cadence === "Daily"
-      ? !quickDays.includes(today)
-      : config.quick.cadence === "Weekly"
-        ? !quickDays.some((d) => d > addDays(today, -CADENCE_DAYS.Weekly))
-        : inExamWindow(today) && !quickDays.includes(today);
-  const quickReviewDue = dueToday.length > 0 && quickCadenceDue;
+  const quickOn = reviewWeekdays(config.quick.cadence, schedule.quickDays, schedule.meetings);
+  const quick = config.quick.cadence;
+  let quickCadenceDue: boolean;
   let nextQuickDay: string | null = null;
-  if (config.quick.cadence === "Daily") nextQuickDay = tomorrow;
-  else if (config.quick.cadence === "Weekly") {
-    const last = [...quickDays].sort().at(-1);
-    const afterLast = last ? addDays(last, CADENCE_DAYS.Weekly) : tomorrow;
-    nextQuickDay = afterLast > tomorrow ? afterLast : tomorrow;
-  } else {
+  if (quick === "1 wk before exam") {
+    quickCadenceDue = inExamWindow(today) && !quickDays.includes(today);
     for (let d = tomorrow; d <= addDays(tomorrow, 366); d = addDays(d, 1)) {
       if (inExamWindow(d)) {
         nextQuickDay = d;
@@ -143,7 +151,19 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
       }
       if (!input.examDays.some((e) => e >= d)) break;
     }
+  } else if (quickOn) {
+    // Due from the latest review day until one is finished; stays due if missed.
+    const since = onOrBefore(today, quickOn);
+    quickCadenceDue = !quickDays.some((d) => d >= since);
+    nextQuickDay = nextAfter(today, quickOn);
+  } else {
+    const every = CADENCE_DAYS[quick];
+    quickCadenceDue = !quickDays.some((d) => d > addDays(today, -every));
+    const last = [...quickDays].sort().at(-1);
+    const afterLast = last ? addDays(last, every) : tomorrow;
+    nextQuickDay = afterLast > tomorrow ? afterLast : tomorrow;
   }
+  const quickReviewDue = dueToday.length > 0 && quickCadenceDue;
 
   /* Deep review cadence: one cadence after the last finished one (or the course's first answer); stays due if missed */
   const candidates = ranked.filter((r) => r.status !== "unseen" && r.status !== "retired").length;
@@ -157,8 +177,15 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
       if (dueDay && lastDeep && lastDeep >= dueDay) dueDay = null;
     } else {
       const firstAnswer = answers.map((e) => dayKey(e.at)).sort()[0];
-      const anchor = lastDeep ?? firstAnswer;
-      if (anchor) dueDay = addDays(anchor, CADENCE_DAYS[config.deep.cadence]);
+      const deepOn = reviewWeekdays(config.deep.cadence, schedule.deepDays, schedule.meetings);
+      if (deepOn && firstAnswer) {
+        // The latest review day after the first answer, until a dive is finished on or after it; else the next one.
+        const latest = onOrBefore(today, deepOn);
+        dueDay = latest > firstAnswer && !(lastDeep && lastDeep >= latest) ? latest : nextAfter(today, deepOn);
+      } else {
+        const anchor = lastDeep ?? firstAnswer;
+        if (anchor) dueDay = addDays(anchor, CADENCE_DAYS[config.deep.cadence]);
+      }
     }
   }
   const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, tomorrow: dueDay === tomorrow, candidates };

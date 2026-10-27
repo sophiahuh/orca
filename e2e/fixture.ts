@@ -13,6 +13,7 @@ import {
   type QuizQuestion,
   type QuizResult,
   type Relation,
+  type CourseSchedule,
   type ReviewConfig,
   type Topic,
   DEFAULT_CONFIG,
@@ -109,6 +110,7 @@ export async function stored(page: Page, student: Student): Promise<LoadedState>
 export interface SeedState {
   courses: Course[];
   configs?: Record<string, ReviewConfig>;
+  schedules?: Record<string, CourseSchedule>;
   objectives?: Record<string, Record<string, Objective>>;
   questionBank?: Record<string, Record<string, QuizQuestion[]>>;
   relations?: Record<string, Relation[]>;
@@ -132,7 +134,7 @@ const check = (what: string, r: { error: { message: string } | null }) => {
 export async function seedState(student: Student, s: SeedState) {
   const db = admin();
   const owner = { owner_id: student.id };
-  for (const c of s.courses) check("a course", await db.from("courses").insert({ ...courseToRow(c, s.configs?.[c.id] ?? DEFAULT_CONFIG), ...owner }));
+  for (const c of s.courses) check("a course", await db.from("courses").insert({ ...courseToRow(c, s.configs?.[c.id] ?? DEFAULT_CONFIG, s.schedules?.[c.id] ?? null), ...owner }));
   for (const m of s.materials ?? []) check("a material", await db.from("materials").insert({ ...materialToRow(m), ...owner }));
   for (const c of s.courses) {
     const after = { topics: c.topics, objectives: s.objectives?.[c.id] ?? {}, bank: s.questionBank?.[c.id] ?? {}, relations: s.relations?.[c.id] ?? [] };

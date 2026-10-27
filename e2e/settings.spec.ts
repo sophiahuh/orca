@@ -36,3 +36,34 @@ test("a note that tries to instruct Orca's AI is refused with the reason, and no
   const s = await stored(page, student);
   expect(s.accountNotes).toBeNull();
 });
+
+/** When a class meets: asked (optionally) on a new course, edited in the course's settings, where the review days can be picked too. */
+test("a new course can say when it meets", async ({ page, student }) => {
+  await page.goto("/new-course");
+  await page.getByPlaceholder("Advanced Logic Design").fill("Data Structures");
+  await page.getByRole("button", { name: "Add a class time" }).click();
+  await page.getByRole("button", { name: "Add a class time" }).click();
+  await page.getByRole("button", { name: "Create Course" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  const s = await stored(page, student);
+  const course = s.courses.find((c) => c.name === "Data Structures")!;
+  expect(s.schedules[course.id]).toEqual({ meetings: [{ day: 1, start: "10:00", end: "11:15" }, { day: 3, start: "10:00", end: "11:15" }], quickDays: null, deepDays: null });
+});
+
+test("a weekly dive lands the day before class until the student picks its day", async ({ page, student }) => {
+  await seedFixtureCourse(student);
+  await page.goto("/course/logic-e2e/settings");
+  const diveDays = page.getByRole("group", { name: "Dive in days" });
+  await expect(diveDays.getByRole("button", { name: "Monday" })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Add a class time" }).click();
+  await page.getByRole("combobox", { name: "Class 1 day" }).selectOption({ label: "Tuesday" });
+  await expect(diveDays.getByRole("button", { name: "Monday" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("The day before class.")).toBeVisible();
+  await diveDays.getByRole("button", { name: "Friday" }).click();
+  await expect(diveDays.getByRole("button", { name: "Friday" })).toHaveAttribute("aria-pressed", "true");
+  await expect(diveDays.getByRole("button", { name: "Monday" })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("status", { name: "Saved" })).toBeVisible();
+  const s = await stored(page, student);
+  expect(s.schedules[F.course]).toEqual({ meetings: [{ day: 2, start: "10:00", end: "11:15" }], quickDays: null, deepDays: [5] });
+});
