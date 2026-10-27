@@ -12,6 +12,7 @@ import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
 import { ClassMeetings, meetingProblem } from "@/components/config/ClassMeetings";
 import { ReviewDays } from "@/components/config/ReviewDays";
+import { classCadence } from "@/lib/mastery/review-days";
 import { fadeUp, stagger } from "@/lib/motion";
 
 type Draft = { config: ReviewConfig | null; notes: string; schedule: CourseSchedule };
@@ -34,6 +35,8 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** The student changed the quick review's cadence by hand on this page: class times stop moving it. */
+  const [quickSetByHand, setQuickSetByHand] = useState(false);
 
   if (!course) {
     return (
@@ -58,6 +61,15 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
     setSaved(false);
   };
   const changeConfig = (next: ReviewConfig) => change({ config: next });
+  // A saved daily quick review follows the class times as they're edited (owner, 2026-10-27): twice a
+  // week with any class time, back to daily without one.
+  const followsClass = !quickSetByHand && (configs[course.id] ?? defaultConfig).quick.cadence === "Daily";
+  const changeMeetings = (meetings: CourseSchedule["meetings"]) => {
+    const next = { ...schedule, meetings };
+    if (!followsClass) return change({ schedule: next });
+    const cadence = classCadence(meetings) ?? "Daily";
+    change({ schedule: next, config: cadence === config.quick.cadence ? (draft ? draft.config : storedConfig) : { ...config, quick: { ...config.quick, cadence } } });
+  };
   const save = async () => {
     const next = draft ?? { config: storedConfig, notes: storedNotes, schedule: stored };
     setSaving(true);
@@ -85,7 +97,7 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
         </div>
       </header>
 
-      <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex min-w-[940px] items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]">
+      <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex min-w-[1102px] items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]">
         <div className="flex w-[600px] flex-col gap-[12px]">
           <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]">
@@ -96,7 +108,22 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
               <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[10px]">
                 {(["quick", "deep", "exam"] as const).map((key) => (
                   <div key={key} className="flex flex-col gap-[8px]">
-                    <ConfigRow label={REVIEW_LABELS[key]} row={config[key]} onChange={(row) => changeConfig({ ...config, [key]: row })} />
+                    <ConfigRow
+                      label={REVIEW_LABELS[key]}
+                      row={config[key]}
+                      onChange={(row) => {
+                        if (key === "quick" && row.cadence !== config.quick.cadence) setQuickSetByHand(true);
+                        changeConfig({ ...config, [key]: row });
+                      }}
+                    />
+                    {key === "quick" && config.quick.cadence === "Daily" && classCadence(schedule.meetings) && (
+                      <p className="pl-[180px] text-[13px] font-medium text-wisteria-deep">
+                        Every day.
+                        <button type="button" onClick={() => changeConfig({ ...config, quick: { ...config.quick, cadence: classCadence(schedule.meetings)! } })} className="ml-[8px] font-bold underline">
+                          Review the day before class instead
+                        </button>
+                      </p>
+                    )}
                     {key !== "exam" && (
                       <ReviewDays
                         label={REVIEW_LABELS[key]}
@@ -113,15 +140,6 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
             </Card>
           </motion.div>
           <motion.div variants={fadeUp}>
-            <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]">
-              <div className="flex flex-col gap-[4px]">
-                <h2 className="text-[22px] font-bold text-prussian">Class times</h2>
-                <p className="text-[14px] font-medium text-wisteria-deep">When this class meets each week. A twice-a-week or weekly review lands the day before class unless you pick its days above.</p>
-              </div>
-              <ClassMeetings meetings={schedule.meetings} onChange={(meetings) => change({ schedule: { ...schedule, meetings } })} />
-            </Card>
-          </motion.div>
-          <motion.div variants={fadeUp}>
             <NotesForOrca scope="course" value={notes} onChange={(v) => change({ notes: v })} />
           </motion.div>
           <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
@@ -130,11 +148,18 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
             <Button size="sm" onClick={() => void save()} disabled={saving || problemWithTimes !== null}>{saving ? "Saving…" : "Save"}</Button>
           </motion.div>
         </div>
-        <motion.aside variants={fadeUp} className="w-[328px]">
+        <motion.aside variants={fadeUp} className="flex w-[490px] flex-col gap-[12px]">
           <Card className="flex flex-col gap-[8px] px-[20px] py-[20px]" tone="alice" lip={4}>
             <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course override</p>
             <h2 className="text-[22px] font-bold leading-tight text-prussian">{course.name}</h2>
             <p className="pt-[4px] text-[14px] font-medium leading-relaxed text-wisteria-deep">Review settings: {inheritsConfig ? "inheriting master settings" : "course override"}. Notes for Orca: {notes.trim() ? "set for this class" : "none for this class"}; your notes for all classes apply too.</p>
+          </Card>
+          <Card className="flex flex-col gap-[12px] px-[20px] pb-[22px] pt-[20px]">
+            <div className="flex flex-col gap-[4px]">
+              <h2 className="text-[22px] font-bold text-prussian">Class times</h2>
+              <p className="text-[14px] font-medium text-wisteria-deep">When this class meets each week. A twice-a-week or weekly review lands the day before class unless you pick its days in the review settings.</p>
+            </div>
+            <ClassMeetings meetings={schedule.meetings} onChange={changeMeetings} />
           </Card>
         </motion.aside>
       </motion.div>

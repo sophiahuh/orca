@@ -25,7 +25,9 @@ export function ReviewDays({ label, cadence, picked, meetings, onChange }: { lab
   const note = mine
     ? "On the days you picked."
     : days
-      ? "The day before class."
+      ? per > 1 && new Set(meetings.map((m) => m.day)).size < per
+        ? "The day before class, and 3 days later."
+        : "The day before class."
       : `Every ${cadence === "Weekly" ? 7 : 3} days after your last one. Add class times, or pick ${per === 1 ? "a day" : "days"}.`;
   return (
     <div className="flex flex-col gap-[6px] pl-[46px]" data-part="review-days" data-review={label}>

@@ -22,17 +22,22 @@ export function meetingDays(meetings: readonly ClassMeeting[]): Weekday[] {
   return MONDAY_FIRST.filter((d) => meetings.some((m) => m.day === d));
 }
 
-/** The day before each of the week's first classes, one per review; null when the class meets on fewer days than that. */
+/**
+ * The day before each of the week's first classes, one per review. A class that meets on one day a
+ * week reviewed twice a week: the day before class and 3 days later (owner, 2026-10-27). Null
+ * without meetings.
+ */
 export function defaultReviewDays(cadence: keyof typeof PER_WEEK, meetings: readonly ClassMeeting[]): Weekday[] | null {
-  const days = meetingDays(meetings).slice(0, PER_WEEK[cadence]);
-  if (days.length < PER_WEEK[cadence]) return null;
-  return days.map((d) => ((d + 6) % 7) as Weekday);
+  const before = meetingDays(meetings).map((d) => ((d + 6) % 7) as Weekday);
+  if (before.length === 0) return null;
+  const days = before.length >= PER_WEEK[cadence] ? before.slice(0, PER_WEEK[cadence]) : [before[0], ((before[0] + 3) % 7) as Weekday];
+  return MONDAY_FIRST.filter((d) => days.includes(d));
 }
 
 /**
  * The weekdays a review on this cadence falls on: the student's pick, else the day before class.
  * Null when the cadence doesn't sit on weekdays (Daily, the exam cadence), or there's neither a pick
- * nor enough meetings; then the review rolls on from the last one finished.
+ * nor a meeting; then the review rolls on from the last one finished.
  */
 export function reviewWeekdays(cadence: Cadence, picked: readonly Weekday[] | null, meetings: readonly ClassMeeting[]): Weekday[] | null {
   if (cadence !== "Twice a week" && cadence !== "Weekly") return null;
@@ -42,4 +47,9 @@ export function reviewWeekdays(cadence: Cadence, picked: readonly Weekday[] | nu
     return MONDAY_FIRST.filter((d) => kept.includes(d));
   }
   return defaultReviewDays(cadence, meetings);
+}
+
+/** The quick-review cadence that follows a class (owner, 2026-10-27): twice a week whenever it meets; null without meetings. */
+export function classCadence(meetings: readonly ClassMeeting[]): keyof typeof PER_WEEK | null {
+  return meetings.length > 0 ? "Twice a week" : null;
 }

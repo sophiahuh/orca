@@ -271,9 +271,15 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 - **The default days are the day before the week's first classes**, counting Monday first: Weekly
   uses the first class (Tue/Thu → Monday), and Twice a week uses the first two (Mon/Wed/Fri →
   Sunday and Tuesday).
-- **A class that meets on fewer days than the cadence needs** (Twice a week, one class a week) has
-  no default days and rolls every 3 days until the student picks days.
-- **Twice a week without class days or picks rolls every 3 days** (Weekly keeps its 7).
+- **A class that meets once a week, reviewed twice a week** (owner, 2026-10-27): the day before
+  class and 3 days later.
+- **With class times, a daily quick review becomes Twice a week** (owner, 2026-10-27): set as the
+  course's own review setting when the course is created with class times, and in the course's
+  settings while class times are edited and the student hasn't changed the cadence by hand
+  (back to Daily if every class time is removed). A course that already has class times and a daily
+  quick review shows "Review the day before class instead". Assumed: the course then has its own
+  override, so later changes to the account's defaults don't reach it.
+- **Twice a week without class times or picks rolls every 3 days** (Weekly keeps its 7).
 - **Picking more days than the cadence allows drops the earliest pick.** Days picked for Twice a
   week keep the later one when the cadence becomes Weekly.
 - **The first dive on class days** is due on the first review day after the course's first answer,
