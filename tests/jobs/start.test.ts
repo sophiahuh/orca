@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, type StartDeps, resumeNext, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
+import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, type StartDeps, resumeNext, startDeepReviewJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
 
 type Row = Record<string, unknown>;
 
@@ -315,4 +315,33 @@ test("a top-up handed off at once is stamped; one queued behind another job isn'
   const { deps: e } = deps(g.db, "claude-opus-5-5");
   await startTopUpJob(e, OWNER, { courseId: "c1", sessionId: "sess-1", objectiveIds: ["o1"] });
   assert.equal(g.tables.pipeline_runs.find((r) => r.kind === "top-up")!.started_at, undefined);
+});
+
+test("a Dive In starts at once beside a running upload, never queued behind it", async () => {
+  const course = { id: "c1", owner_id: OWNER };
+  const upload = { id: "run-up", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at: now.toISOString(), started_at: now.toISOString() };
+  const f = fakeDb({ courses: [course], pipeline_runs: [upload] });
+  const { deps: d, sent } = deps(f.db, "gpt-6.1-sol");
+  assert.deepEqual(await startDeepReviewJob(d, OWNER, { courseId: "c1", minutes: 10, objectiveIds: ["o1"] }), { state: "started", runId: "run-new" });
+  assert.deepEqual(sent, [{ kind: "deep-review", job: { ownerId: OWNER, runId: "run-new", objectiveIds: ["o1"], minutes: 10 } }]);
+  assert.ok(f.tables.pipeline_runs.find((r) => r.id === "run-new")!.started_at, "handed off, so a dropped hand-off is caught by HANDOFF_MS");
+});
+
+test("a Dive In queued behind an upload before the fix is handed off when the student starts it again", async () => {
+  const course = { id: "c1", owner_id: OWNER };
+  const upload = { id: "run-up", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at: now.toISOString(), started_at: now.toISOString() };
+  const stuck = { id: "run-dive", owner_id: OWNER, course_id: "c1", material_id: null, kind: "deep-review", status: "queued", at: now.toISOString(), started_at: null, objective_ids: ["o1"], deep_minutes: 10 };
+  const f = fakeDb({ courses: [course], pipeline_runs: [upload, stuck] });
+  const { deps: d, sent } = deps(f.db, "gpt-6.1-sol");
+  assert.deepEqual(await startDeepReviewJob(d, OWNER, { courseId: "c1", minutes: 10, objectiveIds: ["o1"] }), { state: "started", runId: "run-dive" });
+  assert.deepEqual(sent, [{ kind: "deep-review", job: { ownerId: OWNER, runId: "run-dive", objectiveIds: ["o1"], minutes: 10 } }]);
+});
+
+test("a running Dive In doesn't hold back the student's queued upload", async () => {
+  const dive = { id: "run-dive", owner_id: OWNER, course_id: "c1", material_id: null, kind: "deep-review", status: "running", at: now.toISOString(), started_at: now.toISOString(), objective_ids: ["o1"], deep_minutes: 10 };
+  const queued = { id: "run-up", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "queued", at: now.toISOString(), started_at: null };
+  const f = fakeDb({ pipeline_runs: [dive, queued] });
+  const { deps: d, sent } = deps(f.db, "gpt-6.1-sol");
+  assert.deepEqual(await resumeNext(d, OWNER), { kind: "material", job: { ownerId: OWNER, runId: "run-up", materialId: "m1" } });
+  assert.deepEqual(sent.map((s) => s.kind), ["material"]);
 });

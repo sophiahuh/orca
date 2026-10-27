@@ -33,13 +33,14 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   it: it carries other people's commits). `backend-implementation` is the **production branch**:
   Vercel (project `orca`, https://orca-lake-omega.vercel.app) builds every push to it, so a push
   there is a deploy and is the owner's call. Merges go one way, `phase-4` → `backend-implementation`
-  (merge commit, no rebase of either branch), after the merge gate below. Vercel refuses to build a
-  commit whose author email isn't on the owner's GitHub account, so commits that will reach
-  `backend-implementation` are authored as `Sophia Huh <sophiahuh@gmail.com>` (agents: pass
-  `-c user.name=… -c user.email=…` to `git commit`; a merge commit by another author blocks the
-  deploy until an empty commit by the owner follows). Since 2026-10-24 the team merges `phase-4`
-  into `main` by pull request, and `main` is deployed automatically (Deploy, below); nobody needs
-  to touch `backend-implementation`.
+  (merge commit, no rebase of either branch), after the merge gate below. Since 2026-10-24 the team
+  merges `phase-4` into `main` by pull request, and `main` is deployed automatically (Deploy,
+  below); nobody needs to touch `backend-implementation`. **Commit as whoever is running you**
+  (the machine's git config; never pass `-c user.name/user.email`). Vercel refuses to build a
+  commit whose author email isn't on the owner's GitHub account, but it only checks the commit at
+  the top of `backend-implementation`, and the Deploy workflow authors that merge commit as the
+  owner itself (`.github/workflows/deploy.yml`), so teammates' commits below it never block a
+  deploy.
 - Phases 1–4 are built (mastery core, uploads build the course, scheduling and sessions, Supabase
   with auth, RLS, Storage, server jobs, cost guard, injection defences, CI). See
   `docs/BACKEND-ROADMAP.md` and the Phase 4 plan's status notes for what each contains.
@@ -112,8 +113,9 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Confirm production has `20261019090000` (link to `fbbimuspcsytjhbqlzzc`, `migration list`), and
-   set the Deploy workflow's two secrets so later migrations push themselves.
+1. Done 2026-10-27: the Deploy workflow's secrets are set, and merging PR #18 pushed every
+   migration through `20261029090100` to production. Later ones push themselves on merge to `main`;
+   a new migration must be numbered after the newest one already applied, or `db push` refuses it.
 2. Optional CI hardening offered to the owner, not decided: run the browser tests against
    `next build` + `next start` instead of `next dev`, and serve Gabarito from the repo.
 3. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
@@ -342,7 +344,10 @@ All 11 Figma screens are built. Where things live:
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
 - `src/lib/material/read-pdf.ts`, `read-pptx.ts` (+ `unzip.ts`, `kind.ts`), `src/lib/uploads.ts` — PDFs and .pptx decks to
-  Storage, read on the server into `material_pages` (a .pptx: one page per slide, its text, tables and speaker notes; no
+  Storage, read on the server into `material_pages`. The upload page takes several files or a whole folder at once
+  (`filesFromDataTransfer` walks dropped folders; `src/components/upload/BatchList.tsx` is the per-file list with
+  type and dates prefilled from the page's shared defaults; files are sent one after another, each row showing where
+  it is; a file Orca can't read is listed as skipped) (a .pptx: one page per slide, its text, tables and speaker notes; no
   pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
   switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
   `transcribe` step at the start of the upload job; typed slides that draw a figure (an image 100 px+ or 25+ paths,

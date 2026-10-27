@@ -126,11 +126,43 @@ async function failDeadRuns(deps: StartDeps, ownerId: string): Promise<void> {
   }
 }
 
-/** Whether the student already has a job in flight (queued, waiting or running): a new one queues behind it. */
+/**
+ * Whether the student already has a job in flight (queued, waiting or running): a new one queues
+ * behind it. Dives don't count: they run beside the queue (`startDeepReviewJob`).
+ */
 async function hasJobInFlight(deps: StartDeps, ownerId: string): Promise<boolean> {
-  const { count, error } = await deps.db.from("pipeline_runs").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).in("status", [...LIVE]);
+  const { count, error } = await deps.db.from("pipeline_runs").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).neq("kind", "deep-review").in("status", [...LIVE]);
   if (error) throw new Error(`Couldn't read the student's jobs: ${error.message}`);
   return (count ?? 0) > 0;
+}
+
+type LiveRun = { id: string; kind: string; status: string; material_id: string | null; objective_ids: string[] | null; deep_minutes: number | null; started_at?: string | null };
+
+/** Whether a live run may be handed to a job now: a waiting run only once its student's budget allows it. */
+async function mayRun(deps: StartDeps, ownerId: string, r: LiveRun): Promise<boolean> {
+  if (r.status !== "waiting" || !deps.budget) return true;
+  let pages = 0;
+  if (r.kind === "upload" && r.material_id) {
+    const { count, error } = await deps.db.from("material_pages").select("n", { count: "exact", head: true }).eq("owner_id", ownerId).eq("material_id", r.material_id);
+    if (error) throw new Error(`Couldn't count the material's pages: ${error.message}`);
+    pages = count ?? 0;
+  }
+  return (await deps.budget(ownerId, pages)).ok;
+}
+
+/** Hand a queued or waiting run to its job: back to queued (a waiting run) so the job can claim it, stamped with when it was handed off (the claim overwrites it). */
+async function dispatchRun(deps: StartDeps, ownerId: string, r: LiveRun): Promise<Dispatch> {
+  const d: Dispatch =
+    r.kind === "upload"
+      ? { kind: "material", job: { ownerId, runId: r.id, materialId: r.material_id! } }
+      : r.kind === "top-up"
+        ? { kind: "top-up", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [] } }
+        : { kind: "deep-review", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [], minutes: r.deep_minutes! } };
+  const handedOff = (deps.now?.() ?? new Date()).toISOString();
+  const { error } = await deps.db.from("pipeline_runs").update({ status: "queued", progress: null, started_at: handedOff }).eq("owner_id", ownerId).eq("id", r.id).in("status", ["queued", "waiting"]);
+  if (error) throw new Error(`Couldn't queue the run: ${error.message}`);
+  await handOff(deps, d);
+  return d;
 }
 
 /**
@@ -214,42 +246,28 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
  * oldest waiting run whose budget now allows it. Called when a job finishes, when the student
  * starts a job behind others, and by a schedule in trigger mode (for the day change). Dead runs
  * are failed first, so one can't block the student for good. Returns what it started, or null.
+ * Dives aren't in the queue (they run beside it): a dive waiting for its budget is handed off here
+ * once the budget allows, and so is one never handed off (queued behind a job before 2026-10-26).
  */
 export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Dispatch | null> {
   const { db } = deps;
   await failDeadRuns(deps, ownerId);
   const { data: runs, error } = await db
     .from("pipeline_runs")
-    .select("id, kind, status, material_id, objective_ids, deep_minutes")
+    .select("id, kind, status, material_id, objective_ids, deep_minutes, started_at")
     .eq("owner_id", ownerId)
     .in("status", [...LIVE])
     .order("at", { ascending: true });
   if (error) throw new Error(`Couldn't read the student's jobs: ${error.message}`);
-  if (runs.some((r) => r.status === "running")) return null;
   for (const r of runs) {
-    if (r.status === "waiting" && deps.budget) {
-      let pages = 0;
-      if (r.kind === "upload" && r.material_id) {
-        const { count, error: pagesError } = await db.from("material_pages").select("n", { count: "exact", head: true }).eq("owner_id", ownerId).eq("material_id", r.material_id);
-        if (pagesError) throw new Error(`Couldn't count the material's pages: ${pagesError.message}`);
-        pages = count ?? 0;
-      }
-      const verdict = await deps.budget(ownerId, pages);
-      if (!verdict.ok) continue; // still held; a later one may be a top-up that fits, so keep looking
-    }
-    const d: Dispatch =
-      r.kind === "upload"
-        ? { kind: "material", job: { ownerId, runId: r.id, materialId: r.material_id! } }
-        : r.kind === "top-up"
-          ? { kind: "top-up", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [] } }
-          : { kind: "deep-review", job: { ownerId, runId: r.id, objectiveIds: r.objective_ids ?? [], minutes: r.deep_minutes! } };
-    // Back to queued (a waiting run) so the job can claim it, stamped with when it was handed off
-    // (the claim overwrites it); dispatch then runs it.
-    const handedOff = (deps.now?.() ?? new Date()).toISOString();
-    const { error: requeue } = await db.from("pipeline_runs").update({ status: "queued", progress: null, started_at: handedOff }).eq("owner_id", ownerId).eq("id", r.id).in("status", ["queued", "waiting"]);
-    if (requeue) throw new Error(`Couldn't queue the run: ${requeue.message}`);
-    await handOff(deps, d);
-    return d;
+    if (r.kind !== "deep-review" || r.status === "running" || (r.status === "queued" && r.started_at)) continue;
+    if (await mayRun(deps, ownerId, r)) await dispatchRun(deps, ownerId, r);
+  }
+  const queue = runs.filter((r) => r.kind !== "deep-review");
+  if (queue.some((r) => r.status === "running")) return null;
+  for (const r of queue) {
+    if (!(await mayRun(deps, ownerId, r))) continue; // still held; a later one may be a top-up that fits, so keep looking
+    return dispatchRun(deps, ownerId, r);
   }
   return null;
 }
@@ -292,7 +310,11 @@ export async function startTopUpJob(deps: StartDeps, ownerId: string, req: { cou
   return { state: "started", runId };
 }
 
-/** Queue a Dive In. Its targets and duration live on the run so the browser may leave safely. */
+/**
+ * Start a Dive In. Its targets and duration live on the run so the browser may leave safely. It
+ * runs beside the student's other job rather than behind it (the student is waiting on it, and an
+ * upload can run for half an hour): it reads the course when it starts and only adds questions.
+ */
 export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: { courseId: string; minutes: number; objectiveIds: string[] }): Promise<DeepReviewStart> {
   const { db, model } = deps;
   if (!model) return { state: "no-model" };
@@ -302,7 +324,7 @@ export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: 
   await failDeadRuns(deps, ownerId);
   const { data: prior, error: priorError } = await db
     .from("pipeline_runs")
-    .select("id, status")
+    .select("id, kind, status, material_id, objective_ids, deep_minutes, started_at")
     .eq("owner_id", ownerId)
     .eq("course_id", req.courseId)
     .eq("kind", "deep-review")
@@ -313,11 +335,13 @@ export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: 
   const live = prior[0];
   if (live) {
     if (live.status === "running") return { state: "running", runId: live.id };
-    const next = await resumeNext(deps, ownerId);
-    return { state: next?.job.runId === live.id ? "started" : live.status === "waiting" ? "waiting" : "queued", runId: live.id };
+    // Handed off and not claimed yet: its job is on the way (HANDOFF_MS fails it if it never comes).
+    if (live.status === "queued" && live.started_at) return { state: "queued", runId: live.id };
+    if (!(await mayRun(deps, ownerId, live))) return { state: "waiting", runId: live.id };
+    await dispatchRun(deps, ownerId, live);
+    return { state: "started", runId: live.id };
   }
   const runId = deps.newId?.() ?? crypto.randomUUID();
-  const queueBehind = await hasJobInFlight(deps, ownerId);
   const at = (deps.now?.() ?? new Date()).toISOString();
   const inserted = await db.from("pipeline_runs").insert({
     id: runId,
@@ -328,14 +352,13 @@ export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: 
     at,
     model,
     status: "queued",
-    // Handed off right below unless it queues behind another job (see HANDOFF_MS).
-    ...(queueBehind ? {} : { started_at: at }),
+    // Handed off right below (see HANDOFF_MS).
+    started_at: at,
     objective_ids: req.objectiveIds,
     deep_minutes: req.minutes,
   });
   if (inserted.error?.code === UNIQUE_VIOLATION) return startDeepReviewJob(deps, ownerId, req);
   if (inserted.error) throw new Error(`Couldn't record the Dive In: ${inserted.error.message}`);
-  if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
   await handOff(deps, { kind: "deep-review", job: { ownerId, runId, objectiveIds: req.objectiveIds, minutes: req.minutes } });
   return { state: "started", runId };
 }

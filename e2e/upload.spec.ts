@@ -47,9 +47,9 @@ async function createCourse(page: Page, name: string) {
 
 async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
-  await page.locator('input[type="file"]').setInputFiles(DECK);
+  await page.locator('[data-part=file-input]').setInputFiles(DECK);
   await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
-  await page.getByRole("button", { name: type, exact: true }).click();
+  await page.getByLabel("What kind of material is this?").selectOption(type);
   await page.getByRole("button", { name: "Add to course" }).click();
 }
 
@@ -109,8 +109,8 @@ test("handwritten notes: every page is read from its image before the upload is 
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");
   await page.goto("/add-material");
-  await page.locator('input[type="file"]').setInputFiles(DECK);
-  await page.getByRole("button", { name: "Handwritten notes", exact: true }).click();
+  await page.locator('[data-part=file-input]').setInputFiles(DECK);
+  await page.getByLabel("What kind of material is this?").selectOption("Handwritten notes");
   await page.getByRole("button", { name: "Add to course" }).click();
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 90_000 });
   const { data: pages, error } = await student.db.from("material_pages").select("n, text, source").order("n");
@@ -120,6 +120,40 @@ test("handwritten notes: every page is read from its image before the upload is 
   const calls = await fakeCalls();
   expect(calls.filter((c) => c === "transcribe")).toHaveLength(Math.ceil(pages!.length / 4));
   expect(calls.indexOf("transcribe")).toBeLessThan(calls.indexOf("map"));
+});
+
+test("a folder of files: one row each with its own type, prefilled from the shared default; sent one after another; a file Orca can't read is listed as skipped", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await page.goto("/add-material");
+  const homework = makePdf([lines("Homework 1", "Simplify x + xy.")]);
+  await page.locator('[data-part=file-input]').setInputFiles([{ name: "L02_Combinational.pdf", mimeType: "application/pdf", buffer: await readFile(DECK) }, { name: "hw1.pdf", mimeType: "application/pdf", buffer: Buffer.from(homework) }, { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") }]);
+  const rows = page.locator("[data-part=batch-item]");
+  await expect(rows).toHaveCount(3);
+  await expect(page.getByText("2 files to add · 1 skipped")).toBeVisible();
+  await expect(rows.nth(2)).toHaveAttribute("data-status", "skipped");
+  await expect(rows.nth(2)).toContainText("Orca can read PDFs and PowerPoint (.pptx) decks.");
+
+  // The shared default reaches every row; a row changed by hand keeps its own choice after that.
+  await page.getByLabel("What kind of material is this?").selectOption("Syllabus");
+  await expect(page.getByRole("combobox", { name: "Type for L02_Combinational.pdf" })).toHaveValue("Syllabus");
+  await page.getByRole("combobox", { name: "Type for hw1.pdf" }).selectOption("Homework");
+  await page.getByLabel("What kind of material is this?").selectOption("Lecture");
+  await expect(page.getByRole("combobox", { name: "Type for L02_Combinational.pdf" })).toHaveValue("Lecture");
+  await expect(page.getByRole("combobox", { name: "Type for hw1.pdf" })).toHaveValue("Homework");
+  await page.getByLabel("Due date for hw1.pdf").fill("2026-11-03");
+
+  await page.getByRole("button", { name: "Add 2 files to course" }).click();
+  await expect(rows.nth(0)).toHaveAttribute("data-status", "done", { timeout: 60_000 });
+  await expect(rows.nth(1)).toHaveAttribute("data-status", "done", { timeout: 60_000 });
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 15_000 });
+
+  const state = await stored(page, student);
+  expect(state.materials.map((m) => [m.filename, m.type, m.due]).sort()).toEqual([
+    ["L02_Combinational.pdf", "Lecture", null],
+    ["hw1.pdf", "Homework", "2026-11-03"],
+  ]);
+  expect(state.runs).toHaveLength(2);
 });
 
 test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {
@@ -211,7 +245,7 @@ async function sendFile(api: APIRequestContext, student: Student, courseId: stri
 test("a file Orca can't take is refused on the page: it says why and nothing can be added", async ({ page, student }) => {
   await createCourse(page, "Logic");
   await page.goto("/add-material");
-  await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
+  await page.locator('[data-part=file-input]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") });
   await expect(page.getByText("Choose another file.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add to course" })).toBeDisabled();
   const { count } = await student.db.from("materials").select("id", { count: "exact", head: true });

@@ -78,7 +78,7 @@ function messagesFromExport(value: unknown) {
 export function normaliseAIChatTranscript(raw: string) {
   try {
     const messages = messagesFromExport(JSON.parse(raw));
-    if (messages.length) return [...TRANSCRIPT_HEADER, ...messages.map((m) => `${m.role === "student" ? "STUDENT" : "AI ASSISTANT"}: ${m.text}`)].join("\n").slice(0, 180_000);
+    if (messages.length) return [...TRANSCRIPT_HEADER, ...messages.map((m) => `${m.role === "student" ? "STUDENT" : "AI ASSISTANT"}: ${m.text}`)].join("\n");
   } catch { /* A normal pasted transcript is not JSON. */ }
   const lines = raw.replace(/\r/g, "").split("\n");
   let role: "student" | "assistant" | "context" = "context";
@@ -98,7 +98,7 @@ export function normaliseAIChatTranscript(raw: string) {
     }
     out.push(`${role === "student" ? "STUDENT" : role === "assistant" ? "AI ASSISTANT" : "CHAT CONTEXT"}: ${line}`);
   }
-  return out.join("\n").slice(0, 180_000);
+  return out.join("\n");
 }
 
 /** A best-effort fallback for public shares whose server HTML has no accessible role attributes. */
@@ -106,10 +106,41 @@ export function chatTextFromHtml(html: string) {
   const turns = [...html.matchAll(/<([a-z0-9]+)\b[^>]*data-message-author-role=["'](user|assistant)["'][^>]*>([\s\S]*?)<\/\1>/gi)]
     .map((match) => ({ role: match[2].toLowerCase() === "user" ? "STUDENT" : "AI ASSISTANT", text: visibleHtmlText(match[3]) }))
     .filter((turn) => turn.text);
-  if (turns.length) return [...TRANSCRIPT_HEADER, ...turns.map((turn) => `${turn.role}: ${turn.text}`)].join("\n").slice(0, 180_000);
+  if (turns.length) return [...TRANSCRIPT_HEADER, ...turns.map((turn) => `${turn.role}: ${turn.text}`)].join("\n");
   return normaliseAIChatTranscript(visibleHtmlText(html));
 }
 
 export function isAIChatMaterial(filename: string) {
   return filename.toLowerCase().startsWith("ai chat —");
+}
+
+/**
+ * Characters of chat in one stored page. A transcript has no pages of its own, and the pipeline
+ * never splits a page (`splitParts`), so a long chat is cut here at line breaks into pages of about
+ * this size; each repeats the header, so every part the model maps knows how to weigh the speakers.
+ */
+export const CHAT_PAGE_CHARS = 12_000;
+
+/** A labelled transcript as material pages: whole lines where they fit, a line longer than a page cut into page-sized pieces. */
+export function chatPages(transcript: string, maxChars = CHAT_PAGE_CHARS): string[] {
+  const header = TRANSCRIPT_HEADER.join("\n");
+  const lines = transcript.split("\n").slice(TRANSCRIPT_HEADER.length);
+  const pages: string[] = [];
+  let current: string[] = [];
+  let size = 0;
+  const flush = () => {
+    if (current.length) pages.push([header, ...current].join("\n"));
+    current = [];
+    size = 0;
+  };
+  for (const line of lines) {
+    for (let i = 0; i < Math.max(line.length, 1); i += maxChars) {
+      const piece = line.slice(i, i + maxChars);
+      if (size && size + piece.length > maxChars) flush();
+      current.push(piece);
+      size += piece.length + 1;
+    }
+  }
+  flush();
+  return pages;
 }

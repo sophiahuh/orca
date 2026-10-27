@@ -53,12 +53,25 @@ function normaliseResponse(s: string): string {
   return normaliseExact(bare || s);
 }
 
+/** Words and marks that join a hedged answer's candidates ("A or B", "either A or B", "A / B"). Only spaced slashes, so "1/2" stays one answer. */
+const HEDGE = /\s+or\s+|\s+\/\s+|\s*;\s*/i;
+
 export function gradeExact(response: string, accepted: string[]): GradeResult {
-  const r = normaliseResponse(response);
-  const ok = accepted.some((a) => normaliseExact(a) === r || normaliseResponse(a) === r);
-  return ok
-    ? { outcome: "correct", feedback: "Right." }
-    : { outcome: "incorrect", feedback: `Not quite. Expected ${accepted[0]}.` };
+  const matches = (s: string) => {
+    const r = normaliseResponse(s);
+    return accepted.some((a) => normaliseExact(a) === r || normaliseResponse(a) === r);
+  };
+  if (matches(response)) return { outcome: "correct", feedback: "Right." };
+  // A hedge that includes the right answer is partly right (owner, 2026-10-25), never full marks.
+  const candidates = response.trim().replace(/^either\s+/i, "").split(HEDGE).map((c) => c.trim()).filter(Boolean);
+  if (candidates.length > 1) {
+    const wrong = candidates.filter((c) => !matches(c));
+    if (wrong.length === 0) return { outcome: "correct", feedback: "Right." };
+    if (wrong.length < candidates.length) {
+      return { outcome: "partial", feedback: `Partly. ${accepted[0]} is right, but you also answered ${wrong.join(", ")}. Commit to one answer.` };
+    }
+  }
+  return { outcome: "incorrect", feedback: `Not quite. Expected ${accepted[0]}.` };
 }
 
 /** A stored rubric, as `questions.rubric` holds it; older rows may lack the optional lists. */
@@ -85,6 +98,8 @@ Grade understanding, not wording (owner, 2026-10-20):
 - "correct" when a fair teaching assistant would give full marks for the answer as written: the core reasoning the question asks for is there and nothing in it is wrong. Short is fine; a missing detail the question didn't ask about is fine; extra correct detail never costs marks.
 - "partial" only when a substantive part of the reasoning the question asks for is missing or wrong, and "incorrect" when the core idea is missing or wrong.
 - Never mark an answer down for leaving out a detail beyond what the question asks; mark it down for anything it states that is wrong.
+- An answer that hedges between candidates ("A or B", "either X or Y", "maybe X, maybe Y") where one of them is right is "partial", never "incorrect" and never "correct": the feedback names the right one and says to commit to it.
+- When unsure between two outcomes, choose the more generous one; "incorrect" is only for an answer with no correct core idea at all.
 - For a "correct" answer, the feedback says what was right, without asking for more. For "partial", it names the one substantive thing that was missing.
 - Feedback is one or two sentences, under 300 characters.
 

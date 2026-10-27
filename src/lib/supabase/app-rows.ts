@@ -13,6 +13,7 @@ import type {
   AnswerRubric,
   CalendarEvent,
   Course,
+  CourseSchedule,
   Exam,
   IslandVariant,
   Material,
@@ -29,6 +30,7 @@ import type {
   Topic,
 } from "../data.ts";
 import { DEFAULT_CONFIG } from "../data.ts";
+import { LIMITS } from "../limits.ts";
 import { fileQuestions, withCurrentTopics } from "../mastery/catalogue.ts";
 import type { EvidenceEvent } from "../mastery/types.ts";
 import type { Database, Json } from "./database.types.ts";
@@ -45,8 +47,25 @@ const jsonValue = (v: object) => v as NonNullable<Json>;
 
 /* ── Course settings (read and written whole; checked on both sides) ── */
 
-const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Weekly", "1 wk before exam"]) });
+const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Twice a week", "Weekly", "1 wk before exam"]) });
 export const ReviewConfigSchema = z.object({ quick: ReviewRowSchema, deep: ReviewRowSchema, exam: ReviewRowSchema });
+
+const WeekdaySchema = z.literal([0, 1, 2, 3, 4, 5, 6]);
+const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const ReviewDaysSchema = z
+  .array(WeekdaySchema)
+  .min(1)
+  .max(7)
+  .refine((days) => new Set(days).size === days.length, "A weekday is listed twice")
+  .nullable();
+/** A course's meetings and review weekdays (`CourseSchedule`); checked when saved and when read. */
+export const CourseScheduleSchema = z.object({
+  meetings: z
+    .array(z.object({ day: WeekdaySchema, start: TimeSchema, end: TimeSchema }).refine((m) => m.start < m.end, "A class ends after it starts"))
+    .max(LIMITS.classMeetings),
+  quickDays: ReviewDaysSchema,
+  deepDays: ReviewDaysSchema,
+});
 
 /** The profile's defaults for new courses, as written to `profiles`. */
 export function defaultsToRow(config: ReviewConfig) {
@@ -55,7 +74,7 @@ export function defaultsToRow(config: ReviewConfig) {
 
 /* ── Courses ── */
 
-export function courseToRow(c: Course, config: ReviewConfig | null): Omit<Row<"courses">, "owner_id" | "created_at" | "orca_notes"> {
+export function courseToRow(c: Course, config: ReviewConfig | null, schedule: CourseSchedule | null): Omit<Row<"courses">, "owner_id" | "created_at" | "orca_notes"> {
   return {
     id: c.id,
     slug: c.slug,
@@ -66,6 +85,7 @@ export function courseToRow(c: Course, config: ReviewConfig | null): Omit<Row<"c
     pos_y: c.pos.y,
     trail: c.trail ?? null,
     review_config: config === null ? null : jsonValue(ReviewConfigSchema.parse(config)),
+    schedule: schedule === null ? null : jsonValue(CourseScheduleSchema.parse(schedule)),
   };
 }
 
@@ -420,6 +440,8 @@ export interface LoadedState {
   courses: Course[];
   configs: Record<string, ReviewConfig>;
   configOverrides: Record<string, ReviewConfig | null>;
+  /** When each course meets and its review weekdays; null = not set. */
+  schedules: Record<string, CourseSchedule | null>;
   /** Notes for Orca for all classes; null = none. */
   accountNotes: string | null;
   /** Notes for Orca per course; null = none. */
@@ -482,6 +504,7 @@ export function loadedState(d: MyData): LoadedState {
     courses,
     configs: Object.fromEntries(d.courses.map((c) => [c.id, configOverrides[c.id] ?? defaultConfig ?? DEFAULT_CONFIG])),
     configOverrides,
+    schedules: Object.fromEntries(d.courses.map((c) => [c.id, c.schedule === null ? null : CourseScheduleSchema.parse(c.schedule)])),
     accountNotes: d.profile.orca_notes,
     courseNotes: Object.fromEntries(d.courses.map((c) => [c.id, c.orca_notes])),
     objectives,

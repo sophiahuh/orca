@@ -342,7 +342,8 @@ production project), custom SMTP for emails, the dead-run cron (`vercel.json` wa
   day) and `ORCA_DAILY_BUDGET_USD` for everyone, checked when a job claims its run (`waiting` with
   why, resumed by `resumeNext` when the student's jobs finish, when they start one while nothing of
   theirs runs, and hourly on Trigger.dev), one job at a time per student (a unique index on running
-  runs; dead runs judged from `started_at`), bounded calls (timeout, 2 retries of transient failures
+  runs; dead runs judged from `started_at`; since 2026-10-26 a Dive In runs beside the queue, not
+  behind an upload, because the student is waiting on it and it only adds questions), bounded calls (timeout, 2 retries of transient failures
   only, spend-limit answers never retried, a cut-off reply still metered). Both tables are
   service-role only. No new dependency: the SDK's own retries are off and `completeJson` retries
   itself. The whole-branch review (2026-10-06) fixed the page budget counting the running job twice
@@ -413,6 +414,17 @@ for the whole course. Merges no longer move questions; they re-file the bank. Ev
 an objective (`questions.objective_id` not null; both hosted projects had none without one) and the
 "unsorted" bucket is gone. `questions.topic_id` is still written but never read for filing;
 dropping it is a follow-up (plan: `docs/superpowers/plans/2026-10-26-questions-by-objective.md`).
+
+**Class times and review days (2026-10-27).** A course can say when it meets (weekday, start and
+end; asked optionally on the new-course page, edited under "Class times" in its settings), stored
+in `courses.schedule` with the student's own review weekdays (`quickDays`, `deepDays`). It's
+course-only and never inherited from the account. The new "Twice a week" cadence joins Daily,
+Weekly and "1 wk before exam". A "Twice a week" or "Weekly" quick review or dive falls on the day
+before the week's first one or two classes (owner's choice), or on the days the student picks in
+the course's settings. It's due from that day until one is finished, so a missed one stays due.
+Without class days or picks it rolls on from the last one finished (7 days, or 3 for twice a week).
+The rule is `reviewWeekdays` (`src/lib/mastery/review-days.ts`), used by `courseAgenda`, so the
+calendar follows. Meeting times are stored and shown but don't schedule anything yet.
 
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not
