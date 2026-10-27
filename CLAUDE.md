@@ -33,13 +33,14 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   it: it carries other people's commits). `backend-implementation` is the **production branch**:
   Vercel (project `orca`, https://orca-lake-omega.vercel.app) builds every push to it, so a push
   there is a deploy and is the owner's call. Merges go one way, `phase-4` → `backend-implementation`
-  (merge commit, no rebase of either branch), after the merge gate below. Vercel refuses to build a
-  commit whose author email isn't on the owner's GitHub account, so commits that will reach
-  `backend-implementation` are authored as `Sophia Huh <sophiahuh@gmail.com>` (agents: pass
-  `-c user.name=… -c user.email=…` to `git commit`; a merge commit by another author blocks the
-  deploy until an empty commit by the owner follows). Since 2026-10-24 the team merges `phase-4`
-  into `main` by pull request, and `main` is deployed automatically (Deploy, below); nobody needs
-  to touch `backend-implementation`.
+  (merge commit, no rebase of either branch), after the merge gate below. Since 2026-10-24 the team
+  merges `phase-4` into `main` by pull request, and `main` is deployed automatically (Deploy,
+  below); nobody needs to touch `backend-implementation`. **Commit as whoever is running you**
+  (the machine's git config; never pass `-c user.name/user.email`). Vercel refuses to build a
+  commit whose author email isn't on the owner's GitHub account, but it only checks the commit at
+  the top of `backend-implementation`, and the Deploy workflow authors that merge commit as the
+  owner itself (`.github/workflows/deploy.yml`), so teammates' commits below it never block a
+  deploy.
 - Phases 1–4 are built (mastery core, uploads build the course, scheduling and sessions, Supabase
   with auth, RLS, Storage, server jobs, cost guard, injection defences, CI). See
   `docs/BACKEND-ROADMAP.md` and the Phase 4 plan's status notes for what each contains.
