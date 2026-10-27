@@ -81,7 +81,7 @@ async function main() {
   const prefer = { Prefer: "return=representation" };
   try {
     /* ── A builds a course through the paths the app uses ── */
-    const course = await call("/rest/v1/courses", { method: "POST", token: A.token, headers: prefer, body: { id: ids.course, slug: "ald", name: "Advanced Logic Design", short: "ALD", variant: "ald", pos_x: 0, pos_y: 0, review_config: {}, weights: {} } });
+    const course = await call("/rest/v1/courses", { method: "POST", token: A.token, headers: prefer, body: { id: ids.course, slug: "ald", name: "Advanced Logic Design", short: "ALD", variant: "ald", pos_x: 0, pos_y: 0, review_config: {} } });
     check("A adds a course", course.status === 201, course);
     const material = await call("/rest/v1/materials", { method: "POST", token: A.token, body: { id: ids.material, course_id: ids.course, filename: "L01.pdf", type: "Lecture" } });
     check("A adds a material", material.status === 201, material);

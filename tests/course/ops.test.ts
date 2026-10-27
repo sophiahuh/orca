@@ -92,6 +92,14 @@ test("undoing a merge restores the objective and its questions", () => {
   assert.deepEqual(s.bank.t3.map((q) => q.id), ["q4"]);
 });
 
+test("a merge files every question by its objective, including one the browser had under a stale topic; questions in place keep their positions", () => {
+  // A job's question for "a" arrived under t3 while the student was merging elsewhere.
+  const s = { ...base(), bank: { ...base().bank, t3: [question("q4", "c"), question("stray", "a")] } };
+  const merged = mergeObjectives(s, "c", "a");
+  assert.deepEqual(merged.bank.t1.map((q) => q.id), ["q1", "q2", "q4", "stray"], "q1 and q2 stay first; the moved ones follow");
+  assert.deepEqual(merged.bank.t3, []);
+});
+
 test("merges can't make a cycle or target an archived objective", () => {
   const s = mergeObjectives(base(), "a", "b");
   assert.throws(() => mergeObjectives(s, "b", "a"), /archived|cycle/);

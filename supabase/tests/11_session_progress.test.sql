@@ -8,8 +8,8 @@ select plan(5);
 \set course c0000000-0000-4000-8000-00000000000a
 
 insert into auth.users (id, email) values (:'A', 'a@example.com'), (:'B', 'b@example.com');
-insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}', '{}');
+insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 
 create function pg_temp.act_as(uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, true);

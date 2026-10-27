@@ -32,7 +32,7 @@ const ExtractedObjective = z.object({
   emphasis: z
     .object({ kind: z.enum(["tested", "skipped"]), quote: z.string() })
     .nullable()
-    .describe("Only when the material explicitly says it will or won't be examined, quoted; else null"),
+    .describe("Only when the material, or the student's notes, explicitly say it will or won't be examined, quoted; else null"),
 });
 
 const TopicRelations = z
@@ -136,6 +136,8 @@ const Page = z.object({ n: z.number().int().min(1), text: z.string() });
 const Named = z.object({ id: z.string(), name: z.string(), description: z.string().optional(), rejected: z.boolean() });
 // The short label is display text (often the whole name for courses made before initials), not a ref.
 const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
+/** Notes for Orca as the writing steps take them (src/lib/pipeline/notes.ts); absent when the student has none. */
+const Notes = z.object({ forAllClasses: z.string().max(1000).nullable(), forThisClass: z.string().max(1000).nullable() });
 const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
 
 
@@ -149,6 +151,7 @@ export const MapInput = z.object({
   pages: z.array(Page).min(1),
   part: z.object({ index: z.number().int().min(1), count: z.number().int().min(1) }),
   toc: z.array(TocEntry),
+  notes: Notes.optional(),
 });
 export type MapInput = z.infer<typeof MapInput>;
 
@@ -160,6 +163,7 @@ export const ObjectivesInput = z.object({
   topic: z.object({ id: z.string(), name: z.string(), summary: z.string() }),
   /** This topic's objectives only. */
   existingObjectives: z.array(Named),
+  notes: Notes.optional(),
 });
 export type ObjectivesInput = z.infer<typeof ObjectivesInput>;
 
@@ -194,6 +198,7 @@ export const GenerateInput = z.object({
     .min(1)
     .max(12),
   flagged: Flagged.optional(),
+  notes: Notes.optional(),
 });
 export type GenerateInput = z.infer<typeof GenerateInput>;
 

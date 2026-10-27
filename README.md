@@ -66,10 +66,10 @@ No test calls a real model. CI (`.github/workflows/ci.yml`) runs all of the abov
 | `/course/[slug]/review` | After an upload: confirm, rename or reject new topics; settle possible duplicates |
 | `/course/[slug]/objectives` | Every objective: review status, origin, mastery, weight; reject, restore, merge |
 | `/course/[slug]/atlas` | Concept Atlas: the course's topics and how they connect |
-| `/course/[slug]/settings` | The course's own review settings and weights (overriding the account defaults) |
+| `/course/[slug]/settings` | The course's own review settings (overriding the account defaults) and its Notes for Orca |
 | `/session/[slug]?kind=quick\|deep` | A quick review (sized to the course's time budget) or a dive (harder questions written when it starts) |
 | `/quiz/[slug]/[topic]` | The older single-topic quiz |
-| `/settings` | Account, default review settings and material-type weights |
+| `/settings` | Account, default review settings and Notes for Orca for all classes |
 | `/calendar` | Scheduled reviews and exams, filterable by course |
 
 Design source: Figma "Orca – Study App Mockups" (`docs/figma/screens.png`, `docs/figma/styleguide.png`).

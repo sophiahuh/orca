@@ -24,7 +24,6 @@ const STATE: SeedState = {
     },
   ],
   configs: { [ID]: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "3 hours", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } } },
-  weights: { [ID]: { homework: 25, practiceExams: 25, practiceProblems: 25, lectures: 25 } },
   materials: [fixtureMaterial(ID)],
   objectives: {
     [ID]: {

@@ -17,6 +17,8 @@ export const LIMITS = {
   /** Longest reflection note and prose answer sent to the model. */
   noteChars: 2000,
   answerChars: 2000,
+  /** Longest Notes for Orca, per account and per course (the columns' check says the same). */
+  notesChars: 1000,
 
   /** Pages of material one student may put through the model in one of their days (uploads). */
   pagesPerDay: 300,

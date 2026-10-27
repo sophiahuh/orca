@@ -13,6 +13,7 @@ import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
 import { linkReason, linkTopics, liveDirectional } from "./link.ts";
 import { flaggedFor } from "./flagged.ts";
+import type { OrcaNotes } from "./notes.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
 import { DEEP_TEXT, type GeneratedQuestion, type MapOutput, type ObjectivesOutput, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
@@ -41,6 +42,8 @@ export interface RunInput {
   hiddenText?: { items: number; pages: number[] };
   /** The course's thumbs-down questions (cleaned, newest first), for question writing. */
   flagged?: readonly FlaggedQuestion[];
+  /** Notes for Orca, cleaned (./notes.ts); null or absent when the student has none. */
+  notes?: OrcaNotes | null;
   runId: string;
   model: string;
   /** ISO time of the run. */
@@ -228,6 +231,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     places.length || emphasis ? { materialId: input.material.id, materialType: input.material.type, places, ...(emphasis ? { emphasis } : {}) } : null;
   const course = { name: input.course.name, short: input.course.short };
   const material = { filename: input.material.filename, type: input.material.type };
+  const notes = input.notes ? { notes: input.notes } : {};
   const filenames = new Map([...input.materials.map((m) => [m.id, m.filename] as const), [input.material.id, input.material.filename] as const]);
   const facts = materialFacts(input.pages);
   // Decision 13: the material is screened for instruction-like text before anything is built from it; a hit never blocks.
@@ -274,7 +278,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       }));
     let mapped: MapOutput;
     try {
-      mapped = await call("map", { course, material, pages: part, part: { index: i + 1, count: parts.length }, toc });
+      mapped = await call("map", { course, material, pages: part, part: { index: i + 1, count: parts.length }, toc, ...notes });
     } catch (e) {
       dropped.push({ prompt: pagesLabel(first, last), reason: `couldn't be mapped: ${errorText(e)}` });
       lastFailure = e;
@@ -376,7 +380,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       const own = asNamed(objectivesOf(topicId));
       let found: ObjectivesOutput;
       try {
-        found = await call("objectives", { course, material, pages: part.filter((p) => wanted.has(p.n)), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own) });
+        found = await call("objectives", { course, material, pages: part.filter((p) => wanted.has(p.n)), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own), ...notes });
       } catch (e) {
         dropped.push({ prompt: `Objectives for "${topic.name}"`, reason: `couldn't be found: ${errorText(e)}` });
         return;
@@ -487,7 +491,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
 
   /* Questions for every objective this upload touched that is short of its stock, from its own pages */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
-  const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => q.objectiveId && survivor(q.objectiveId, objectiveById)?.id === id);
+  const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => survivor(q.objectiveId, objectiveById)?.id === id);
   const topicsNow = new Map(allTopics().map((t) => [t.id, { ...t, source: sourceOf(t.id) }]));
   const byTopic = new Map<string, { targets: WriteTarget[]; pages: Set<number> }>();
   for (const id of new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])) {
@@ -509,7 +513,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   const written = await pool([...byTopic.values()], 2, ({ targets, pages }) =>
     writeQuestions(
       // Written from the objectives' own pages, checked against the whole file (an anchor may name a page beside them).
-      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), facts, topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}) },
+      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), facts, topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}), ...notes },
       deps,
     ),
   );
@@ -542,6 +546,8 @@ export interface WriteInput {
   flagged?: readonly FlaggedQuestion[];
   /** What anchors and URLs are checked against when `pages` is only part of the material (default: `pages`). */
   facts?: MaterialFacts;
+  /** Notes for Orca, cleaned (./notes.ts); null or absent when the student has none. */
+  notes?: OrcaNotes | null;
 }
 
 /**
@@ -595,6 +601,7 @@ export async function writeQuestions(
             topic: { name: topic.name, summary: topic.summary ?? "" },
             objectives: xs.map(({ o, asked, need }) => ({ id: o.id, name: o.name, description: o.description, origin: o.origin, need, existingPrompts: asked })),
             ...(input.flagged?.length ? { flagged: flaggedFor(input.flagged, new Set(xs.map((x) => x.o.id))) } : {}),
+            ...(input.notes ? { notes: input.notes } : {}),
           });
           const wanted = new Map(xs.map((x) => [x.o.id, x]));
           const kept: Array<{ topicId: string; q: QuizQuestion; figureSlide: number | null }> = [];

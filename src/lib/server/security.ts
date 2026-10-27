@@ -7,7 +7,7 @@
 import type { OrcaSupabase } from "@/lib/supabase/server";
 import type { ScreenHit, Severity } from "@/lib/untrusted/screen";
 
-export type SecurityKind = "upload" | "reflection_note" | "student_answer" | "generated";
+export type SecurityKind = "upload" | "reflection_note" | "student_answer" | "generated" | "orca_notes";
 
 export interface SecurityRef {
   runId?: string;

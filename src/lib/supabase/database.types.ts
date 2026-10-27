@@ -32,13 +32,13 @@ isOneToOne: false
                   ]
                 },"courses": {
                   Row: {
-                    "created_at": string,"id": string,"name": string,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string,"weights": Json | null
+                    "created_at": string,"id": string,"name": string,"orca_notes": string | null,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string
                   }
                   Insert: {
-                    "created_at"?: string,"id": string,"name": string,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config"?: Json | null,"short": string,"slug": string,"trail"?: string | null,"variant": string,"weights"?: Json | null
+                    "created_at"?: string,"id": string,"name": string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config"?: Json | null,"short": string,"slug": string,"trail"?: string | null,"variant": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"name"?: string,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: Json | null,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string,"weights"?: Json | null
+                    "created_at"?: string,"id"?: string,"name"?: string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: Json | null,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string
                   }
                   Relationships: [
                     
@@ -251,13 +251,13 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "avatar": string,"created_at": string,"default_review_config": Json | null,"default_weights": Json | null,"name": string | null,"onboarded": boolean,"owner_id": string,"timezone": string
+                    "avatar": string,"created_at": string,"default_review_config": Json | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
                   }
                   Insert: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"default_weights"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"owner_id": string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
                   }
                   Update: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"default_weights"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"owner_id"?: string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
                     
@@ -289,13 +289,13 @@ isOneToOne: false
                   ]
                 },"questions": {
                   Row: {
-                    "anchor": Json | null,"answer": number,"course_id": string,"created_at": string,"deep": boolean,"exact": (string)[] | null,"explanation": string,"figure": Json | null,"id": string,"kind": string,"material_id": string | null,"objective_id": string | null,"options": (string)[],"owner_id": string,"prompt": string,"rubric": Json | null,"sort_order": number,"table": Json | null,"tier": string | null,"topic_id": string,"topic_name": string
+                    "anchor": Json | null,"answer": number,"course_id": string,"created_at": string,"deep": boolean,"exact": (string)[] | null,"explanation": string,"figure": Json | null,"id": string,"kind": string,"material_id": string | null,"objective_id": string,"options": (string)[],"owner_id": string,"prompt": string,"rubric": Json | null,"sort_order": number,"table": Json | null,"tier": string | null,"topic_id": string,"topic_name": string
                   }
                   Insert: {
-                    "anchor"?: Json | null,"answer": number,"course_id": string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation": string,"figure"?: Json | null,"id": string,"kind": string,"material_id"?: string | null,"objective_id"?: string | null,"options"?: (string)[],"owner_id"?: string,"prompt": string,"rubric"?: Json | null,"sort_order": number,"table"?: Json | null,"tier"?: string | null,"topic_id": string,"topic_name": string
+                    "anchor"?: Json | null,"answer": number,"course_id": string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation": string,"figure"?: Json | null,"id": string,"kind": string,"material_id"?: string | null,"objective_id": string,"options"?: (string)[],"owner_id"?: string,"prompt": string,"rubric"?: Json | null,"sort_order": number,"table"?: Json | null,"tier"?: string | null,"topic_id": string,"topic_name": string
                   }
                   Update: {
-                    "anchor"?: Json | null,"answer"?: number,"course_id"?: string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation"?: string,"figure"?: Json | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"objective_id"?: string | null,"options"?: (string)[],"owner_id"?: string,"prompt"?: string,"rubric"?: Json | null,"sort_order"?: number,"table"?: Json | null,"tier"?: string | null,"topic_id"?: string,"topic_name"?: string
+                    "anchor"?: Json | null,"answer"?: number,"course_id"?: string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation"?: string,"figure"?: Json | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"objective_id"?: string,"options"?: (string)[],"owner_id"?: string,"prompt"?: string,"rubric"?: Json | null,"sort_order"?: number,"table"?: Json | null,"tier"?: string | null,"topic_id"?: string,"topic_name"?: string
                   }
                   Relationships: [
                     {

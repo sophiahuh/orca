@@ -170,8 +170,8 @@ from public.rate_limits
 where count > case action when 'upload' then 20 when 'reflect' then 10 when 'grade' then 60 when 'topUp' then 30 end
 group by owner_id, action order by windows_over_limit desc;
 
--- Security events this week: uploads with text aimed at an AI, flagged notes and answers, refused
--- generated items. Strong student_answer rows are what turn a student's model grading off (3 in 7 days).
+-- Security events this week: uploads with text aimed at an AI, flagged reflection notes and
+-- answers, refused generated items, and Notes for Orca that tried to instruct the model (orca_notes). Strong student_answer rows are what turn a student's model grading off (3 in 7 days).
 select kind, "check", severity, count(*) from public.security_events
 where at >= now() - interval '7 days' group by 1, 2, 3 order by 4 desc;
 select owner_id, count(*) as flagged_answers from public.security_events
