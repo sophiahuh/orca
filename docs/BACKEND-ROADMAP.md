@@ -342,7 +342,8 @@ production project), custom SMTP for emails, the dead-run cron (`vercel.json` wa
   day) and `ORCA_DAILY_BUDGET_USD` for everyone, checked when a job claims its run (`waiting` with
   why, resumed by `resumeNext` when the student's jobs finish, when they start one while nothing of
   theirs runs, and hourly on Trigger.dev), one job at a time per student (a unique index on running
-  runs; dead runs judged from `started_at`), bounded calls (timeout, 2 retries of transient failures
+  runs; dead runs judged from `started_at`; since 2026-10-26 a Dive In runs beside the queue, not
+  behind an upload, because the student is waiting on it and it only adds questions), bounded calls (timeout, 2 retries of transient failures
   only, spend-limit answers never retried, a cut-off reply still metered). Both tables are
   service-role only. No new dependency: the SDK's own retries are off and `completeJson` retries
   itself. The whole-branch review (2026-10-06) fixed the page budget counting the running job twice

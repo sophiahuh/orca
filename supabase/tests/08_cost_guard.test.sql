@@ -2,7 +2,7 @@
 -- is atomic and only the server may call it; one job runs at a time per student.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(14);
+select plan(15);
 
 \set A aaaaaaaa-0000-4000-8000-000000000081
 \set B bbbbbbbb-0000-4000-8000-000000000082
@@ -54,6 +54,8 @@ insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at
   values (gen_random_uuid(), :'A', :'course', :'m1', 'upload', now(), 'claude-opus-5-5', 'running');
 select throws_ok(format($$insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at, model, status) values (gen_random_uuid(), %L, %L, %L, 'upload', now(), 'x', 'running')$$, :'A', :'course', :'m2'),
   '23505', null, 'a second running run for the same student is refused (it stays queued)');
+select lives_ok(format($$insert into public.pipeline_runs (id, owner_id, course_id, material_id, kind, at, model, status, deep_minutes) values (gen_random_uuid(), %L, %L, null, 'deep-review', now(), 'x', 'running', 10)$$, :'A', :'course'),
+  'a Dive In runs beside the running upload');
 
 select * from finish();
 rollback;

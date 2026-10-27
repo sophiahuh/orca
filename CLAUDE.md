@@ -112,8 +112,9 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Confirm production has `20261019090000` (link to `fbbimuspcsytjhbqlzzc`, `migration list`), and
-   set the Deploy workflow's two secrets so later migrations push themselves.
+1. Done 2026-10-27: the Deploy workflow's secrets are set, and merging PR #18 pushed every
+   migration through `20261029090100` to production. Later ones push themselves on merge to `main`;
+   a new migration must be numbered after the newest one already applied, or `db push` refuses it.
 2. Optional CI hardening offered to the owner, not decided: run the browser tests against
    `next build` + `next start` instead of `next dev`, and serve Gabarito from the repo.
 3. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
