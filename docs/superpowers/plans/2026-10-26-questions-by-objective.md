@@ -8,6 +8,14 @@
 
 **Tech Stack:** TypeScript (Node type stripping for pure modules), `node:test`, Supabase Postgres migrations, pgTAP.
 
+## Status (2026-10-26)
+
+- Tasks 1–4 done on `questions-by-objective` (unit suite 348/348, `test:db` and `check:evidence` 44/44 pass).
+- Deviation from Task 2: objectives have the same stale-copy problem (an upload can create an
+  objective in a topic the student merges meanwhile), so the loaders also pass objectives through
+  `withCurrentTopics` (catalogue.ts) before filing questions. Covered by the `courseView` test.
+- Task 5 waits on the owner's hosted check; Tasks 6–7 wait on Task 5.
+
 ## Background (read first)
 
 - Course → topic → objective → questions (CLAUDE.md, "Product model"). Every generation path writes questions only for objectives it was given: the upload's questions step drops any question "written for an objective it wasn't asked about" (`src/lib/pipeline/run.ts:610`); top-ups and dives write for named objective ids. The browser never creates questions. So a question without an objective can only be an old row.
