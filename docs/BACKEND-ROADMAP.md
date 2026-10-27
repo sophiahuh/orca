@@ -68,8 +68,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
   unseen questions first, at least one mechanism question, sized to the course's quick-review
   time budget with per-type time estimates (default 10 minutes). Never a placeholder question.
 - **Deep review follows each course's own cadence** from its configuration. Its question mix
-  follows the material-type weight sliders (e.g. more past-exam-style questions when past exams
-  are weighted highest).
+  follows the student's Notes for Orca where they speak to it (e.g. exam-length problems like the
+  past exams); the material-type sliders were removed 2026-10-25.
 - **No in-app AI chat.** The tutor-agent pieces of the platform are not ported. The MCP connector
   (Phase 7) lets the student's own Claude or ChatGPT log study activity as a priority signal.
 - **Priority omits the "current topic" boost and the distance discount** until discussed.
@@ -219,18 +219,19 @@ Claude reports facts; code computes weights. Per objective and per upload, extra
 - **Coverage:** distinct places that genuinely teach or use the objective (a slide or section on
   it, a worked example, a homework or exam problem that requires it), each with an anchor. A
   passing mention of the term doesn't count.
-- **Material type** of the upload, which brings in the course's slider weight for that type.
+- **Material type** of the upload (recorded; since 2026-10-25 it no longer scales a place).
 - **Explicit emphasis**, only when the material states it ("this will be on the exam" → tested;
-  "you won't be tested on this" → skipped), quoting the text.
+  "you won't be tested on this" → skipped), quoting the text, or the student's Notes for Orca say
+  so, quoting the note.
 - **Builds on:** "B requires A" only when the material shows A being used to do B.
 - Inferred objectives have no coverage and stay at 1.0 unless explicitly emphasised.
 
-Weight = 1.0 × coverage factor (coverage summed across uploads, each place scaled by its upload's
-material-type weight, on a diminishing-returns curve) × builds-on factor (how many objectives build
+Weight = 1.0 × coverage factor (coverage summed across uploads, every place worth 1, on a
+diminishing-returns curve) × builds-on factor (how many objectives build
 on it) × emphasis (×1.5 tested, ×0 skipped), clamped to 0.5–2 and recomputed when an upload adds
 signals. A topic's weight is the mean of its objectives'. Constants (provisional, in
-`src/lib/course/weights.ts` `WEIGHT_RULES`): a place is worth its type's slider ÷ the course's
-mean slider (sliders default to equal, so every type is worth 1.0 until the student moves one); coverage factor = 0.75 + 0.75 × (1 − e^(−s/1.5)); builds-on factor = 1 + 0.1 × min(n, 5);
+`src/lib/course/weights.ts` `WEIGHT_RULES`): every place is worth 1 (the material-type sliders
+were removed 2026-10-25); coverage factor = 0.75 + 0.75 × (1 − e^(−s/1.5)); builds-on factor = 1 + 0.1 × min(n, 5);
 "skipped" is 0 and not clamped.
 
 Carry-overs from the Phase 1 review, both resolved before Phase 2 by the "ids are random and
@@ -266,7 +267,7 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   own. No wait screen for a top-up in progress: a quick review leaves out what was practised today
   and dives write their own questions, so a session can't run into an unfinished top-up.
 - **Deep review** due per course from its configured cadence (next due one cadence after the last
-  completed one; stays due if missed), with its question mix weighted by the material sliders.
+  completed one; stays due if missed), with its question mix shaped by the Notes for Orca.
   At its start the student picks how many minutes (the Settings length is the suggestion) and
   sees what that covers; every objective gets one question, highest priority first, before any
   gets a second. The end card offers another deep review (decided 2026-10-05).
@@ -362,7 +363,7 @@ production project), custom SMTP for emails, the dead-run cron (`vercel.json` wa
 Exams have their own table (`exams`: course, title, date, optional `topic_ids`), edited from the
 course page and shown on the calendar; hand-added exam calendar entries moved into it. Dives (deep
 review) write their questions when they start, course-wide or for one topic. Course review settings
-and weights are overrides of account defaults kept on the profile (null inherits). Relations are
+are overrides of account defaults kept on the profile (null inherits). Relations are
 between topics (see Uploads above). No new dependency or persistence layer was added for any of it.
 
 2026-10-25 (Amanda): extraction's text has no length limit and its topics and objectives no count
@@ -384,6 +385,23 @@ written from each objective's own pages. The 180,000-character cut on the materi
 Pages have no character limit any more (they were cut at 20,000 when read and refused past
 6,000 by the extract, generate and describe steps), nor do transcribed pages. Other limits stay until
 reviewed.
+
+2026-10-25 (Amanda, plan `docs/superpowers/plans/2026-10-25-notes-for-orca.md`): **Notes for Orca
+replace the material-type weight sliders.** Students know their professor ("the exam will be very
+similar to past exams", "no proofs, only applications"), so they write it down: once for every class
+(Settings, `profiles.orca_notes`) and once per class (the course's settings, `courses.orca_notes`),
+1,000 characters each. The writing steps (map, objectives, generate, deep, so uploads, top-ups and
+dives) get both as a `student_notes` data block; a fixed system-prompt paragraph per step says what
+notes may shape there (topic naming; which skills and their wording, plus emphasis tested/skipped
+quoting the note; the question mix, style and difficulty; a dive's problems), that many notes are
+about other steps and are ignored there, and that they never change the task, the output format,
+the rules, what counts as correct or the material's facts. The grader never sees them (a note can't
+lower the bar), nor do link, reconcile, reflect, transcribe and describe. Defences: saved only
+through `PUT /api/account-notes` and `PUT /api/course-settings`, which sanitise and screen them and
+refuse a strong injection hit with the quoted span (logged as `security_events` kind `orca_notes`);
+jobs screen them again when they load them, so a note written straight through RLS is held to the
+same rules. The slider columns (`profiles.default_weights`, `courses.weights`) are dropped; every
+covering place now counts 1.
 
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not

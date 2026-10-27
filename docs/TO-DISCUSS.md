@@ -52,8 +52,8 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Set provisionally (Phase 2):** coverage factor 0.75 + 0.75 × (1 − e^(−s/1.5)), builds-on
   +0.1 per dependant up to 5, "skipped" = 0 (`WEIGHT_RULES` in `src/lib/course/weights.ts`).
 - **Open:** tune against the ALD decks once `npm run score:extraction` has a key and a baseline.
-  The Settings sliders default to equal (25 each, decided 2026-10-05), so by default every
-  material type's coverage counts the same; the student's sliders are what make one type count more.
+  Every covering place counts the same since the material-type sliders were removed (2026-10-25,
+  Notes for Orca); emphasis from the material or the notes is what moves an objective.
 
 ### Before Phase 4's live checks (Task 10) — mostly settled
 - **Status (2026-10-25):** production runs on hosted Supabase `fbbimuspcsytjhbqlzzc`, OpenAI, and inline jobs; Trigger.dev isn't set up. What's left: the scripted live checks against production and the choice below.
@@ -255,6 +255,18 @@ figure-heavy pages to the model during extraction and writing (costs more per up
 slides by converting to PDF on a worker with LibreOffice (a Trigger.dev task; layout isn't always
 faithful); or ask students to upload decks as PDFs (File → Save as PDF) when the visuals matter.
 
+### Assumed in Notes for Orca (2026-10-25): decide or accept
+- **Both notes are sent**, labelled `forAllClasses` and `forThisClass`; this class's wins where they
+  conflict (unlike review settings, where a course override replaces the account default).
+- **Changing notes affects only later uploads, top-ups and dives**; existing topics, objectives and
+  questions are not rewritten. A "rewrite with my notes" action would be new work.
+- **A note that says something won't (or will) be examined sets objective emphasis** "skipped"
+  (weight 0, never due) or "tested" (×1.5), quoting the note; every taught skill is still listed,
+  and questions are still written for skipped ones at upload.
+- **Notes the model chose not to follow aren't reported** to the student (no output-schema change).
+- **Strong injection hits refuse the save** with the quoted span (and are logged); weak ones are
+  logged and saved.
+
 ## Watch
 
 ### Loading all of a student's data at sign-in (revisit)
@@ -315,6 +327,7 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
   gets practiced first), never what counts as mastered.
 
 - 2026-10-04: material-type sliders feed objective weights and set deep review's question mix.
+  (Superseded 2026-10-25: the sliders were removed; Notes for Orca shape emphasis and the mix.)
 - 2026-10-04: inferred objectives count toward the island; the per-course objective list (origin,
   status, weight, mastery, reject/merge) is where students reject ones the course doesn't cover.
 - 2026-10-04: day boundaries use the student's local timezone, on device and server.
