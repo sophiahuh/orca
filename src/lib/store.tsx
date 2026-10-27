@@ -152,8 +152,8 @@ const initialState: OrcaState = {
 };
 
 interface OrcaActions {
-  /** A new, empty course; `schedule` is when it meets, if the student said. */
-  addCourse: (name: string, schedule: CourseSchedule | null) => Course;
+  /** A new, empty course; `schedule` is when it meets, if the student said; `config` its own review settings (null inherits the account's). */
+  addCourse: (name: string, schedule: CourseSchedule | null, config: ReviewConfig | null) => Course;
   /** Rename a course without changing its stable URL slug or compact labels elsewhere. */
   renameCourse: (courseId: string, name: string) => void;
   setConfig: (courseId: string, config: ReviewConfig) => void;
@@ -473,7 +473,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCourse = useCallback<OrcaActions["addCourse"]>(
-    (name, schedule) => {
+    (name, schedule, config) => {
       const s = stateRef.current;
       const n = s.courses.length;
       const newId = crypto.randomUUID();
@@ -491,8 +491,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       setState((s) => ({
         ...s,
         courses: [...s.courses, course],
-        configs: { ...s.configs, [id]: s.defaultConfig },
-        configOverrides: { ...s.configOverrides, [id]: null },
+        configs: { ...s.configs, [id]: config ?? s.defaultConfig },
+        configOverrides: { ...s.configOverrides, [id]: config },
         schedules: { ...s.schedules, [id]: schedule },
         courseNotes: { ...s.courseNotes, [id]: null },
         objectives: { ...s.objectives, [id]: {} },
@@ -500,7 +500,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         snapshots: { ...s.snapshots, [id]: {} },
       }));
       save(
-        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, null, schedule))),
+        async () => void must(await browserSupabase().from("courses").insert(courseToRow(course, config, schedule))),
       );
       return course;
     },

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, agendaWeights, courseAgenda } from "../../src/lib/mastery/agenda.ts";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { AnswerEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
-import { reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
+import { classCadence, reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
 import { DEFAULT_CONFIG, NO_SCHEDULE, type CourseSchedule, type QuizResult, type ReviewConfig } from "../../src/lib/data.ts";
 
 const utcDay = (iso: string) => iso.slice(0, 10);
@@ -134,9 +134,17 @@ test("review days default to the day before the week's first classes; a pick win
   assert.deepEqual(reviewWeekdays("Weekly", null, tueThu.meetings), [1]);
   assert.deepEqual(reviewWeekdays("Twice a week", null, tueThu.meetings), [1, 3]);
   assert.deepEqual(reviewWeekdays("Twice a week", [0, 5], tueThu.meetings), [5, 0], "the student's pick, Monday first");
-  assert.equal(reviewWeekdays("Twice a week", null, [{ day: 1, start: "09:00", end: "10:00" }]), null, "a once-a-week class has no second day before class");
+  assert.deepEqual(reviewWeekdays("Twice a week", null, [{ day: 2, start: "09:00", end: "10:00" }]), [1, 4], "a once-a-week class: the day before and 3 days later");
+  assert.deepEqual(reviewWeekdays("Twice a week", null, [{ day: 0, start: "09:00", end: "10:00" }]), [2, 6], "Monday first, across the week's end");
+  assert.deepEqual(reviewWeekdays("Weekly", null, [{ day: 2, start: "09:00", end: "10:00" }]), [1]);
   assert.equal(reviewWeekdays("Weekly", null, []), null);
   assert.equal(reviewWeekdays("Daily", [1], tueThu.meetings), null, "daily isn't on weekdays");
+});
+
+test("a quick review following the class is twice a week, however often it meets", () => {
+  assert.equal(classCadence(tueThu.meetings), "Twice a week");
+  assert.equal(classCadence([{ day: 2, start: "09:00", end: "10:00" }]), "Twice a week");
+  assert.equal(classCadence([]), null);
 });
 
 test("weekly quick review on class days: due the day before class until done, then the next week", () => {

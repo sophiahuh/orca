@@ -12,6 +12,7 @@ import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
 import { ClassMeetings, meetingProblem } from "@/components/config/ClassMeetings";
 import { ReviewDays } from "@/components/config/ReviewDays";
+import { classCadence } from "@/lib/mastery/review-days";
 import { fadeUp, stagger } from "@/lib/motion";
 
 type Draft = { config: ReviewConfig | null; notes: string; schedule: CourseSchedule };
@@ -34,6 +35,8 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** The student changed the quick review's cadence by hand on this page: class times stop moving it. */
+  const [quickSetByHand, setQuickSetByHand] = useState(false);
 
   if (!course) {
     return (
@@ -58,6 +61,15 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
     setSaved(false);
   };
   const changeConfig = (next: ReviewConfig) => change({ config: next });
+  // A saved daily quick review follows the class times as they're edited (owner, 2026-10-27): twice a
+  // week with any class time, back to daily without one.
+  const followsClass = !quickSetByHand && (configs[course.id] ?? defaultConfig).quick.cadence === "Daily";
+  const changeMeetings = (meetings: CourseSchedule["meetings"]) => {
+    const next = { ...schedule, meetings };
+    if (!followsClass) return change({ schedule: next });
+    const cadence = classCadence(meetings) ?? "Daily";
+    change({ schedule: next, config: cadence === config.quick.cadence ? (draft ? draft.config : storedConfig) : { ...config, quick: { ...config.quick, cadence } } });
+  };
   const save = async () => {
     const next = draft ?? { config: storedConfig, notes: storedNotes, schedule: stored };
     setSaving(true);
@@ -96,7 +108,22 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
               <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[10px]">
                 {(["quick", "deep", "exam"] as const).map((key) => (
                   <div key={key} className="flex flex-col gap-[8px]">
-                    <ConfigRow label={REVIEW_LABELS[key]} row={config[key]} onChange={(row) => changeConfig({ ...config, [key]: row })} />
+                    <ConfigRow
+                      label={REVIEW_LABELS[key]}
+                      row={config[key]}
+                      onChange={(row) => {
+                        if (key === "quick" && row.cadence !== config.quick.cadence) setQuickSetByHand(true);
+                        changeConfig({ ...config, [key]: row });
+                      }}
+                    />
+                    {key === "quick" && config.quick.cadence === "Daily" && classCadence(schedule.meetings) && (
+                      <p className="pl-[180px] text-[13px] font-medium text-wisteria-deep">
+                        Every day.
+                        <button type="button" onClick={() => changeConfig({ ...config, quick: { ...config.quick, cadence: classCadence(schedule.meetings)! } })} className="ml-[8px] font-bold underline">
+                          Review the day before class instead
+                        </button>
+                      </p>
+                    )}
                     {key !== "exam" && (
                       <ReviewDays
                         label={REVIEW_LABELS[key]}
@@ -132,7 +159,7 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
               <h2 className="text-[22px] font-bold text-prussian">Class times</h2>
               <p className="text-[14px] font-medium text-wisteria-deep">When this class meets each week. A twice-a-week or weekly review lands the day before class unless you pick its days in the review settings.</p>
             </div>
-            <ClassMeetings meetings={schedule.meetings} onChange={(meetings) => change({ schedule: { ...schedule, meetings } })} />
+            <ClassMeetings meetings={schedule.meetings} onChange={changeMeetings} />
           </Card>
         </motion.aside>
       </motion.div>

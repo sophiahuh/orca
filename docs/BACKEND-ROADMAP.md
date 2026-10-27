@@ -420,8 +420,9 @@ end; asked optionally on the new-course page, edited under "Class times" in its 
 in `courses.schedule` with the student's own review weekdays (`quickDays`, `deepDays`). It's
 course-only and never inherited from the account. The new "Twice a week" cadence joins Daily,
 Weekly and "1 wk before exam". A "Twice a week" or "Weekly" quick review or dive falls on the day
-before the week's first one or two classes (owner's choice), or on the days the student picks in
-the course's settings. It's due from that day until one is finished, so a missed one stays due.
+before the week's first one or two classes (a once-a-week class: the day before and 3 days later),
+or on the days the student picks in the course's settings. With class times, a daily quick review
+becomes Twice a week (the course's own setting). It's due from that day until one is finished, so a missed one stays due.
 Without class days or picks it rolls on from the last one finished (7 days, or 3 for twice a week).
 The rule is `reviewWeekdays` (`src/lib/mastery/review-days.ts`), used by `courseAgenda`, so the
 calendar follows. Meeting times are stored and shown but don't schedule anything yet.
