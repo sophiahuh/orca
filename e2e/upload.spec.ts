@@ -49,7 +49,7 @@ async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
   await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
-  await page.getByRole("button", { name: type, exact: true }).click();
+  await page.getByLabel("What kind of material is this?").selectOption(type);
   await page.getByRole("button", { name: "Add to course" }).click();
 }
 
@@ -110,7 +110,7 @@ test("handwritten notes: every page is read from its image before the upload is 
   await createCourse(page, "Logic");
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
-  await page.getByRole("button", { name: "Handwritten notes", exact: true }).click();
+  await page.getByLabel("What kind of material is this?").selectOption("Handwritten notes");
   await page.getByRole("button", { name: "Add to course" }).click();
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 90_000 });
   const { data: pages, error } = await student.db.from("material_pages").select("n, text, source").order("n");

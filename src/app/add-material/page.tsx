@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { MATERIAL_TYPES, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
+import { MATERIAL_TYPES, MATERIAL_TYPE_LABELS, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
 import { type UploadStage, importAIChat, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
@@ -344,13 +344,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         <div className="flex w-[520px] max-w-full flex-col gap-[28px]">
           <motion.section variants={fadeUp} className="flex flex-col gap-[14px]">
             <h2 className="text-[17px] font-bold text-prussian">What kind of material is this?</h2>
-            <div className="flex flex-wrap gap-[10px]">
-              {MATERIAL_TYPES.map((t) => (
-                <Chip key={t} tone="outline" size="sm" selected={type === t} onClick={() => setType(t)}>
-                  {t}
-                </Chip>
-              ))}
-            </div>
+            <Select label="What kind of material is this?" value={type} options={MATERIAL_TYPES} labels={MATERIAL_TYPE_LABELS} onChange={setType} className="self-start" />
           </motion.section>
 
           <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">

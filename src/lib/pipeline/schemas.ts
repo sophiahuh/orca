@@ -138,7 +138,7 @@ const Named = z.object({ id: z.string(), name: z.string(), description: z.string
 const Course = z.object({ name: z.string().max(120), short: z.string().max(120) });
 /** Notes for Orca as the writing steps take them (src/lib/pipeline/notes.ts); absent when the student has none. */
 const Notes = z.object({ forAllClasses: z.string().max(1000).nullable(), forThisClass: z.string().max(1000).nullable() });
-const MaterialType = z.enum(["Lecture", "Handwritten notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
+const MaterialType = z.enum(["Lecture", "Handwritten notes", "Typed notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]);
 
 
 /** A topic as the table of contents lists it: what it is and where the course teaches it (file names, never ids). */

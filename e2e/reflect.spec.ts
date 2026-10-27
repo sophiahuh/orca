@@ -44,7 +44,7 @@ test("a homework upload's reflection sends the objectives Orca is sure of back t
   await page.locator('input[type="file"]').setInputFiles(DECK);
   // The reflection is asked for homework only.
   await expect(page.getByPlaceholder(/K-map groups/)).toHaveCount(0);
-  await page.getByRole("button", { name: "Homework", exact: true }).click();
+  await page.getByLabel("What kind of material is this?").selectOption("Homework");
   await page.getByPlaceholder(/K-map groups/).fill(NOTE);
   await page.getByRole("button", { name: "Add to course" }).click();
   await expect(page).toHaveURL(/\/review\?run=/, { timeout: 30_000 });
@@ -66,7 +66,7 @@ test("a reflection Orca can't match is still saved, and says why", async ({ page
 
   await page.goto("/add-material");
   await page.locator('input[type="file"]').setInputFiles(DECK);
-  await page.getByRole("button", { name: "Homework", exact: true }).click();
+  await page.getByLabel("What kind of material is this?").selectOption("Homework");
   await page.getByPlaceholder(/K-map groups/).fill(NOTE);
   await page.getByRole("button", { name: "Add to course" }).click();
   await expect(page.getByText(/Saved your reflection, but Orca couldn't match it to objectives/)).toBeVisible({ timeout: 30_000 });
