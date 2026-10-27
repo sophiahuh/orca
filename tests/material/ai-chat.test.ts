@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiChatFilename, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "../../src/lib/material/ai-chat.ts";
+import { aiChatFilename, chatPages, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "../../src/lib/material/ai-chat.ts";
 
 test("AI-chat intake accepts only supported public-share providers", () => {
   assert.equal(isPublicAIChatUrl("https://chatgpt.com/share/abc"), true);
@@ -31,4 +31,22 @@ test("AI-chat public-share HTML retains provider role attributes", () => {
   const text = chatTextFromHtml('<div data-message-author-role="user"><p>What is a hash collision?</p></div><div data-message-author-role="assistant"><p>Two keys map to the same slot.</p></div>');
   assert.match(text, /STUDENT: What is a hash collision/);
   assert.match(text, /AI ASSISTANT: Two keys map/);
+});
+
+test("a long pasted chat is kept whole, split into pages at line breaks, each with the header", () => {
+  const turns = Array.from({ length: 4000 }, (_, i) => `${i % 2 ? "ChatGPT" : "You"}: turn ${i} ${"x".repeat(60)}`).join("\n");
+  const transcript = normaliseAIChatTranscript(turns);
+  assert.ok(transcript.length > 180_000);
+  assert.match(transcript, /turn 3999 /);
+  const pages = chatPages(transcript, 12_000);
+  assert.ok(pages.length > 1);
+  for (const page of pages) {
+    assert.ok(page.startsWith("AI CHAT TRANSCRIPT\n"));
+    assert.ok(page.length <= 12_000 + 200);
+  }
+  assert.equal(pages.reduce((sum, page) => sum + spokenChars(page), 0), spokenChars(transcript));
+  // One line longer than a page is cut into pieces, not dropped.
+  const long = chatPages(normaliseAIChatTranscript(`You: ${"y".repeat(30_000)}`), 12_000);
+  assert.equal(long.length, 3);
+  assert.equal(long.reduce((sum, page) => sum + spokenChars(page), 0), 30_000);
 });

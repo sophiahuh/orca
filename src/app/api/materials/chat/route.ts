@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { aiChatFilename, chatTextFromHtml, isAIChatHost, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "@/lib/material/ai-chat";
+import { aiChatFilename, chatPages, chatTextFromHtml, isAIChatHost, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "@/lib/material/ai-chat";
+import { LIMITS } from "@/lib/limits";
 import { sanitize } from "@/lib/untrusted/sanitize";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import { startUploadJob } from "@/lib/server/jobs/start";
@@ -13,7 +14,7 @@ export const maxDuration = 300;
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const requestSchema = z.object({
   courseId: z.uuid(), type: z.enum(["Syllabus", "Lecture", "Handwritten notes", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"]),
-  assigned: date, due: date, text: z.string().trim().max(180_000).optional(), url: z.string().trim().max(2048).optional(),
+  assigned: date, due: date, text: z.string().trim().optional(), url: z.string().trim().max(2048).optional(),
 }).refine((value) => Boolean(value.text || value.url), { message: "Paste a chat transcript or enter a public AI chat link." });
 
 export async function POST(request: Request) {
@@ -34,8 +35,11 @@ export async function POST(request: Request) {
       text = normaliseAIChatTranscript(parsed.data.text!);
     }
     // Stored as the model will see it (decision 13): invisible and control characters removed.
-    text = sanitize(text, 180_000).text;
+    text = sanitize(text).text;
     if (spokenChars(text) < 80) return reply(422, { error: "Orca couldn't find enough readable chat text. Paste the conversation transcript instead." });
+    const pages = chatPages(text).map((pageText, i) => ({ n: i + 1, text: pageText }));
+    // Jobs read at most this many pages of any material, so a longer chat is refused, never cut.
+    if (pages.length > LIMITS.pagesPerFile) return reply(413, { error: `This chat is too long to read in one go (${pages.length} pages; Orca reads at most ${LIMITS.pagesPerFile}). Paste it in parts.` });
     const filename = aiChatFilename(sourceUrl);
     const hash = createHash("sha256").update(text).digest("hex");
     const { data: same, error: sameError } = await db.from("materials").select("id, filename").eq("owner_id", student.id).eq("course_id", parsed.data.courseId).eq("content_hash", hash).maybeSingle();
@@ -44,8 +48,8 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/plain" }).select().single();
     if (error) return reply(500, { error: "Orca couldn't save that AI chat." });
-    const saved = await db.from("material_pages").insert({ owner_id: student.id, material_id: id, n: 1, text });
+    const saved = await db.from("material_pages").insert(pages.map((p) => ({ owner_id: student.id, material_id: id, ...p })));
     if (saved.error) return reply(500, { error: "Orca saved that AI chat but couldn't read it." });
-    return reply(201, { material: materialFromRow(data), pages: [{ n: 1, text }], generation: await startUploadJob(db, student.id, id) });
+    return reply(201, { material: materialFromRow(data), pages, generation: await startUploadJob(db, student.id, id) });
   });
 }
