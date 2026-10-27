@@ -1,11 +1,9 @@
 import type { APIRequestContext, Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { execFileSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { createHash } from "node:crypto";
 import { type Student, admin, expect, test, stored } from "./fixture";
-import { lines, makePdf } from "../tests/fixtures/pdf";
+import { DECK_NAME, lines, makeDeck, makePdf } from "../tests/fixtures/pdf";
 import { fakeCalls, fakeModel } from "./fake-model";
 
 /**
@@ -16,13 +14,14 @@ import { fakeCalls, fakeModel } from "./fake-model";
  * judgement (scripts/score-extraction.ts covers that with a key). The limits and isolation are
  * checked against the routes directly.
  */
-const DECK = path.join(process.cwd(), "docs/samples/ald/L02_Combinational.pdf");
+/** The stand-in lecture deck (tests/fixtures/pdf.ts), as a file the page can be given. */
+const DECK = { name: DECK_NAME, mimeType: "application/pdf", buffer: Buffer.from(makeDeck()) };
 const anchor = { locator: "slide 12", excerpt: "x + xy = x" };
 
 const LECTURE = {
   topics: [
-    { localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 10, slideEnd: 20 },
-    { localId: "t2", existingId: null, name: "Karnaugh Maps", summary: "Grouping.", slideStart: 30, slideEnd: 40 },
+    { localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 2, slideEnd: 12 },
+    { localId: "t2", existingId: null, name: "Karnaugh Maps", summary: "Grouping.", slideStart: 13, slideEnd: 18 },
   ],
   objectives: [
     { localId: "o1", existingId: null, topicRef: "t1", name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null },
@@ -48,7 +47,7 @@ async function createCourse(page: Page, name: string) {
 async function upload(page: Page, type = "Lecture") {
   await page.goto("/add-material");
   await page.locator('[data-part=file-input]').setInputFiles(DECK);
-  await expect(page.locator("[data-part=file-size]")).toHaveText("1.7 MB · Orca reads it when you add it");
+  await expect(page.locator("[data-part=file-size]")).toHaveText(/^\d+\.\d MB · Orca reads it when you add it$/);
   await page.getByLabel("What kind of material is this?").selectOption(type);
   await page.getByRole("button", { name: "Add to course" }).click();
 }
@@ -65,10 +64,10 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
   // Slides 3 and 4 are pictures with only a slide number: they're read from their images first; then
-  // the 27 typed slides with a figure get it described (4 a call). The log can start with calls from
+  // the 8 typed slides with a figure get it described (4 a call). The log can start with calls from
   // the previous test's job still finishing in the background, so this run's are compared from its first.
   const calls = await fakeCalls();
-  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", ...Array(7).fill("describe"), "map", "objectives", "objectives", "link", "generate", "generate"]);
+  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", "describe", "describe", "map", "objectives", "objectives", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -79,11 +78,11 @@ test("a lecture upload is built by a job on the server; the review screen follow
   expect(Object.values(state.objectives[course.id]).map((o) => (o as { review: string }).review)).toEqual(["proposed", "proposed", "proposed"]);
   expect(state.relations[course.id]).toHaveLength(1);
   expect(state.runs).toEqual([expect.objectContaining({ kind: "upload", status: "done", model: "claude-opus-5-5", questionsAdded: 6 })]);
-  expect(state.materials[0].filename).toBe("L02_Combinational.pdf");
+  expect(state.materials[0].filename).toBe(DECK_NAME);
 
   // The file is in the student's folder in Storage, and its pages were read on the server.
   const { data: row } = await student.db.from("materials").select("storage_path, content_hash, status, hidden_text").single();
-  const bytes = await readFile(DECK);
+  const bytes = DECK.buffer;
   expect(row).toEqual({
     storage_path: `${student.id}/${state.materials[0].id}`,
     content_hash: createHash("sha256").update(bytes).digest("hex"),
@@ -127,7 +126,7 @@ test("a folder of files: one row each with its own type, prefilled from the shar
   await createCourse(page, "Logic");
   await page.goto("/add-material");
   const homework = makePdf([lines("Homework 1", "Simplify x + xy.")]);
-  await page.locator('[data-part=file-input]').setInputFiles([{ name: "L02_Combinational.pdf", mimeType: "application/pdf", buffer: await readFile(DECK) }, { name: "hw1.pdf", mimeType: "application/pdf", buffer: Buffer.from(homework) }, { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") }]);
+  await page.locator('[data-part=file-input]').setInputFiles([DECK, { name: "hw1.pdf", mimeType: "application/pdf", buffer: Buffer.from(homework) }, { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("plain text") }]);
   const rows = page.locator("[data-part=batch-item]");
   await expect(rows).toHaveCount(3);
   await expect(page.getByText("2 files to add · 1 skipped")).toBeVisible();
@@ -136,10 +135,10 @@ test("a folder of files: one row each with its own type, prefilled from the shar
 
   // The shared default reaches every row; a row changed by hand keeps its own choice after that.
   await page.getByLabel("What kind of material is this?").selectOption("Syllabus");
-  await expect(page.getByRole("combobox", { name: "Type for L02_Combinational.pdf" })).toHaveValue("Syllabus");
+  await expect(page.getByRole("combobox", { name: `Type for ${DECK_NAME}` })).toHaveValue("Syllabus");
   await page.getByRole("combobox", { name: "Type for hw1.pdf" }).selectOption("Homework");
   await page.getByLabel("What kind of material is this?").selectOption("Lecture");
-  await expect(page.getByRole("combobox", { name: "Type for L02_Combinational.pdf" })).toHaveValue("Lecture");
+  await expect(page.getByRole("combobox", { name: `Type for ${DECK_NAME}` })).toHaveValue("Lecture");
   await expect(page.getByRole("combobox", { name: "Type for hw1.pdf" })).toHaveValue("Homework");
   await page.getByLabel("Due date for hw1.pdf").fill("2026-11-03");
 
@@ -150,7 +149,7 @@ test("a folder of files: one row each with its own type, prefilled from the shar
 
   const state = await stored(page, student);
   expect(state.materials.map((m) => [m.filename, m.type, m.due]).sort()).toEqual([
-    ["L02_Combinational.pdf", "Lecture", null],
+    [DECK_NAME, "Lecture", null],
     ["hw1.pdf", "Homework", "2026-11-03"],
   ]);
   expect(state.runs).toHaveLength(2);
@@ -217,7 +216,7 @@ test("re-uploading the same deck is recognised by its content and adds nothing",
   await upload(page);
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
   await upload(page);
-  await expect(page.getByText("Logic already has this file (L02_Combinational.pdf), so there's nothing new to add.")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so there's nothing new to add.`)).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "map")).toHaveLength(1);
   const state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
@@ -231,7 +230,7 @@ test("a job that fails says why on the review screen, saves nothing, and uploadi
   await createCourse(page, "Logic");
   await upload(page);
   const failed = page.locator("[data-part=run-failed]");
-  await expect(failed).toContainText("Nothing was added from L02_Combinational.pdf.", { timeout: 60_000 });
+  await expect(failed).toContainText(`Nothing was added from ${DECK_NAME}.`, { timeout: 60_000 });
   await expect(failed).toContainText("Orca couldn't build this upload: Anthropic rejected the request");
   await expect(failed).toContainText("The fake API is having a bad day.");
   let state = await stored(page, student);

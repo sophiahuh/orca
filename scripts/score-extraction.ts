@@ -34,6 +34,7 @@ import { STEPS, type StepName } from "../src/lib/pipeline/schemas.ts";
 import { ATTACKS } from "../tests/fixtures/injection/samples.ts";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** The real ALD decks, kept out of the repo (course material isn't ours to publish): put them here locally, see docs/samples/README.md. */
 const DECKS_DIR = path.join(ROOT, "docs/samples/ald");
 const BENCHMARK = path.join(ROOT, "docs/OBJECTIVES-ALD.md");
 const BASELINE = path.join(ROOT, "scripts/extraction-baseline.json");

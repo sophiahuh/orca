@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { likelyHeadings, pageText } from "../../src/lib/material/page-text.ts";
 import { readPdf } from "../../src/lib/material/read-pdf.ts";
+import { makeDeck } from "../fixtures/pdf.ts";
 
 /** A pdf.js-like text item: size and baseline from the transform. */
 const run = (str: string, size: number, y: number, hasEOL = false) => ({ str, hasEOL, transform: [size, 0, 0, size, 100, y], width: str.length * size * 0.5, height: size });
@@ -30,11 +30,11 @@ test("larger text supplies conservative heading hints", () => {
   assert.deepEqual(likelyHeadings([run("Body text", 12, 700, true), run("More body text", 12, 680, true)]), []);
 });
 
-test("the ALD decks read their exponents and indices unambiguously", async () => {
-  const l03 = await readPdf(new Uint8Array(await readFile("docs/samples/ald/L03_Arithmetic.pdf")));
-  assert.match(l03.pages[16].text, /\(1\/2\^\{16\}\)/);
-  assert.match(l03.pages[16].text, /\(1\/2\^\{4\}\)/);
-  const l02 = await readPdf(new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf")));
-  assert.match(l02.pages[14].text, /x_\{1\} x_\{2\}/);
-  assert.doesNotMatch(l02.pages[14].text, /\bx 1 x 2\b/);
+test("a deck's exponents and indices (smaller glyphs, shifted, as slides set them) read unambiguously", async () => {
+  // The stand-in deck sets them the way the real ALD decks did (slide 17 of L03 read (1/2^{16}), slide 15 of L02 x_{1} x_{2}).
+  const deck = await readPdf(makeDeck());
+  assert.match(deck.pages[16].text, /\(1\/2\^\{16\}\)/);
+  assert.match(deck.pages[16].text, /\(1\/2\^\{4\}\)/);
+  assert.match(deck.pages[14].text, /x_\{1\} x_\{2\}/);
+  assert.doesNotMatch(deck.pages[14].text, /\bx 1 x 2\b/);
 });
