@@ -1,9 +1,10 @@
 /**
  * Review operations on one course's structure. Pure: each takes the structure and returns a new
  * one. Nothing is deleted: rejecting archives, merging points the loser at the survivor, and
- * both can be undone (except a topic merge, which moves questions).
+ * both can be undone (except a topic merge). Questions follow their objectives (`refiled`).
  */
 import type { Objective, QuizQuestion, Topic } from "../data.ts";
+import { currentTopicOf, fileQuestions } from "../mastery/catalogue.ts";
 import { unionPlaces } from "./places.ts";
 
 export interface CourseStructure {
@@ -64,16 +65,17 @@ function mergedFamily(s: CourseStructure, id: string): Set<string> {
   return family;
 }
 
-/** Move the questions of `family` from one topic's bank to another's. */
-function moveQuestions(s: CourseStructure, family: Set<string>, fromTopic: string, toTopic: string): CourseStructure {
-  if (fromTopic === toTopic) return s;
-  const from = s.bank[fromTopic] ?? [];
-  const moving = from.filter((q) => q.objectiveId && family.has(q.objectiveId));
-  if (!moving.length) return s;
-  return {
-    ...s,
-    bank: { ...s.bank, [fromTopic]: from.filter((q) => !moving.includes(q)), [toTopic]: [...(s.bank[toTopic] ?? []), ...moving] },
-  };
+/**
+ * File every question under its objective's current topic (`fileQuestions`), including ones the
+ * browser holds under a stale topic. Questions already in place keep their positions and moved
+ * ones follow them, so a save sends only the moved rows; a topic left empty keeps an empty list.
+ */
+function refiled(s: CourseStructure): CourseStructure {
+  const topicMergedInto = new Map(s.topics.flatMap((t) => (t.mergedInto ? [[t.id, t.mergedInto] as const] : [])));
+  const stored = Object.entries(s.bank).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+  const staysPut = (x: { topicId: string; question: QuizQuestion }) => !x.question.objectiveId || currentTopicOf(x.question.objectiveId, s.objectives, topicMergedInto) === x.topicId;
+  const filed = fileQuestions([...stored.filter(staysPut), ...stored.filter((x) => !staysPut(x))], s.objectives, topicMergedInto);
+  return { ...s, bank: { ...Object.fromEntries(Object.keys(s.bank).map((t) => [t, []])), ...filed } };
 }
 
 /** Confirm a topic. Its proposed objectives are confirmed too, except ones reconciliation was unsure about. */
@@ -118,8 +120,7 @@ export function mergeTopics(s: CourseStructure, loserId: string, survivorId: str
   let next = withTopic(s, survivorId, (t) => ({ ...t, source: unionPlaces(t.source ?? [], loser.source ?? []) }));
   next = withTopic(next, loserId, (t) => ({ ...t, review: "archived", mergedInto: survivorId }));
   next = withObjectives(next, objectiveIdsIn(next, loserId), (o) => ({ ...o, topicId: survivorId }));
-  const bank = { ...next.bank, [survivorId]: [...(next.bank[survivorId] ?? []), ...(next.bank[loserId] ?? [])], [loserId]: [] };
-  return { ...next, bank };
+  return refiled(next);
 }
 
 export function confirmObjective(s: CourseStructure, id: string): CourseStructure {
@@ -134,13 +135,8 @@ export function rejectObjective(s: CourseStructure, id: string): CourseStructure
 /** Undo a rejection or a merge. The student chose to keep it, so it comes back confirmed. */
 export function restoreObjective(s: CourseStructure, id: string): CourseStructure {
   const o = objectiveOf(s, id);
-  let next = s;
-  if (o.mergedInto) {
-    const survivor = objectiveOf(next, o.mergedInto);
-    next = moveQuestions(next, mergedFamily(next, id), survivor.topicId, o.topicId);
-  }
-  if (topicOf(next, o.topicId).review === "archived") throw new Error(`Restore topic ${o.topicId} first`);
-  return withObjectives(next, [id], (x) => ({ ...without(x, "mergedInto", "archivedWithTopic", "uncertain"), review: "confirmed" }));
+  if (topicOf(s, o.topicId).review === "archived") throw new Error(`Restore topic ${o.topicId} first`);
+  return refiled(withObjectives(s, [id], (x) => ({ ...without(x, "mergedInto", "archivedWithTopic", "uncertain"), review: "confirmed" })));
 }
 
 /**
@@ -150,12 +146,11 @@ export function restoreObjective(s: CourseStructure, id: string): CourseStructur
  */
 export function mergeObjectives(s: CourseStructure, loserId: string, survivorId: string): CourseStructure {
   if (loserId === survivorId) throw new Error("Can't merge an objective into itself");
-  const loser = objectiveOf(s, loserId);
+  objectiveOf(s, loserId);
   const survivor = objectiveOf(s, survivorId);
   if (survivor.review === "archived") throw new Error(`Objective ${survivorId} is archived`);
   if (mergedFamily(s, loserId).has(survivorId)) throw new Error("That merge would make a cycle");
-  const next = moveQuestions(s, mergedFamily(s, loserId), loser.topicId, survivor.topicId);
-  return withObjectives(next, [loserId], (o) => ({ ...without(o, "uncertain"), review: "archived", mergedInto: survivorId }));
+  return refiled(withObjectives(s, [loserId], (o) => ({ ...without(o, "uncertain"), review: "archived", mergedInto: survivorId })));
 }
 
 /** Answer reconciliation's "uncertain": the same as its candidate (merge) or a separate objective. */
