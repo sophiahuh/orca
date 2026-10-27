@@ -40,11 +40,14 @@ type Phase =
   | { kind: "error"; message: string };
 
 
+/** The date rows and the Add button share one width, so the button lines up with the rows above it. */
+const DATE_ROW = "w-[320px] max-w-full";
+
 function DateField({ label, value, onChange, noneLabel }: { label: string; value: string | null; onChange: (v: string | null) => void; noneLabel: string }) {
   const [last, setLast] = useState(value ?? toISODate(new Date()));
   const none = value === null;
   return (
-    <div className="flex items-center gap-[12px]">
+    <div className={cn("grid grid-cols-[1fr_auto] items-center gap-[12px]", DATE_ROW)}>
       <label
         className={cn(
           "pressable relative inline-flex h-[44px] items-center gap-[10px] rounded-[14px] border-[2.5px] px-[14px] text-[15px] font-bold lip-4",
@@ -375,7 +378,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button full onClick={submit} disabled={busy || Boolean(file && unreadable) || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
+            <Button onClick={submit} className={DATE_ROW} disabled={busy || Boolean(file && unreadable) || (!chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
               {phase.kind === "working" ? `Building ${course.name}…` : "Add to course"}
             </Button>
 
