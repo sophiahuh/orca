@@ -92,7 +92,7 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       // not the rows' own topic_id (either can be stale when a job wrote while the student merged).
       const topicMergedInto = new Map(topics.flatMap((t) => (t.merged_into ? [[t.id, t.merged_into] as const] : [])));
       const objectiveMap = withCurrentTopics(Object.fromEntries(objectives.map((o) => [o.id, objectiveFromRow(o)])), topicMergedInto);
-      const bank = fileQuestions(questions.map((q) => ({ topicId: q.topic_id, question: questionFromRow(q) })), objectiveMap, topicMergedInto);
+      const bank = fileQuestions(questions.map(questionFromRow), objectiveMap, topicMergedInto);
       const structure = {
         topics: topics.map(topicFromRow),
         objectives: objectiveMap,

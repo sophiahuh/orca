@@ -9,19 +9,6 @@ export interface TopicObjective extends ObjectiveInfo {
   questionIds: string[];
 }
 
-/** The explicit bucket for questions extraction hasn't assigned to an objective yet. */
-export function unsortedObjectiveId(topicId: string) {
-  return `${topicId}#unsorted`;
-}
-
-export function isUnsortedObjectiveId(id: string) {
-  return id.endsWith("#unsorted");
-}
-
-export function objectiveIdOf(q: { objectiveId?: string }, topicId: string) {
-  return q.objectiveId ?? unsortedObjectiveId(topicId);
-}
-
 /**
  * Follow `mergedInto` to the objective that now stands for `id`. Returns the id unchanged when
  * it isn't in the catalogue (callers decide whether that's an error).
@@ -71,23 +58,12 @@ export function withCurrentTopics<O extends { topicId: string }>(objectives: Rea
   return out;
 }
 
-/**
- * Group questions by topic, each under its objective's current topic (`currentTopicOf`), in the
- * order given. `topicId` is where the row says it is: used only for a question with no objective.
- */
-export function fileQuestions<Q extends { id: string; objectiveId?: string }>(
-  stored: ReadonlyArray<{ topicId: string; question: Q }>,
-  catalogue: Filing,
-  topicMergedInto: ReadonlyMap<string, string>,
-): Record<string, Q[]> {
+/** Group questions by topic, each under its objective's current topic (`currentTopicOf`), in the order given. */
+export function fileQuestions<Q extends { id: string; objectiveId: string }>(questions: readonly Q[], catalogue: Filing, topicMergedInto: ReadonlyMap<string, string>): Record<string, Q[]> {
   const bank: Record<string, Q[]> = {};
-  for (const { topicId, question } of stored) {
-    let topic = topicId;
-    if (question.objectiveId) {
-      if (!catalogue[question.objectiveId]) throw new Error(`Question ${question.id} points at objective "${question.objectiveId}", which isn't in the course`);
-      topic = currentTopicOf(question.objectiveId, catalogue, topicMergedInto);
-    }
-    (bank[topic] ??= []).push(question);
+  for (const question of questions) {
+    if (!catalogue[question.objectiveId]) throw new Error(`Question ${question.id} points at objective "${question.objectiveId}", which isn't in the course`);
+    (bank[currentTopicOf(question.objectiveId, catalogue, topicMergedInto)] ??= []).push(question);
   }
   return bank;
 }
@@ -103,23 +79,16 @@ export function objectivesForTopic(
 ): TopicObjective[] {
   const byId = new Map<string, TopicObjective>();
   for (const q of questions) {
-    const raw = objectiveIdOf(q, topicId);
-    const id = raw === unsortedObjectiveId(topicId) ? raw : resolveObjectiveId(raw, catalogue);
+    const id = resolveObjectiveId(q.objectiveId, catalogue);
     let objective = byId.get(id);
     if (!objective) {
-      let info: ObjectiveInfo;
-      if (id === unsortedObjectiveId(topicId)) {
-        info = { id, topicId, name: "Questions not yet sorted into objectives", review: "confirmed" };
-      } else {
-        const found = catalogue[id];
-        if (!found) throw new Error(`Question ${q.id} points at objective "${id}", which is not in the catalogue`);
-        if (found.review === "archived") continue;
-        if (found.topicId !== topicId) {
-          throw new Error(`Question ${q.id} is in topic "${topicId}" but its objective "${id}" belongs to "${found.topicId}"`);
-        }
-        info = found;
+      const found = catalogue[id];
+      if (!found) throw new Error(`Question ${q.id} points at objective "${id}", which is not in the catalogue`);
+      if (found.review === "archived") continue;
+      if (found.topicId !== topicId) {
+        throw new Error(`Question ${q.id} is in topic "${topicId}" but its objective "${id}" belongs to "${found.topicId}"`);
       }
-      objective = { ...info, hasMechanismQuestions: false, questionIds: [] };
+      objective = { ...found, hasMechanismQuestions: false, questionIds: [] };
       byId.set(id, objective);
     }
     objective.questionIds.push(q.id);
@@ -129,14 +98,8 @@ export function objectivesForTopic(
 }
 
 /** The objective a question counts for now (after merges), or null if that objective is archived. */
-export function liveObjectiveOf(
-  q: { objectiveId?: string },
-  topicId: string,
-  catalogue: Readonly<Record<string, ObjectiveInfo>>,
-): ObjectiveInfo | null {
-  const raw = objectiveIdOf(q, topicId);
-  if (raw === unsortedObjectiveId(topicId)) return { id: raw, topicId, name: "Questions not yet sorted into objectives", review: "confirmed" };
-  const found = catalogue[resolveObjectiveId(raw, catalogue)];
-  if (!found) throw new Error(`Objective "${raw}" is not in the catalogue`);
+export function liveObjectiveOf(q: { objectiveId: string }, catalogue: Readonly<Record<string, ObjectiveInfo>>): ObjectiveInfo | null {
+  const found = catalogue[resolveObjectiveId(q.objectiveId, catalogue)];
+  if (!found) throw new Error(`Objective "${q.objectiveId}" is not in the catalogue`);
   return found.review === "archived" ? null : found;
 }

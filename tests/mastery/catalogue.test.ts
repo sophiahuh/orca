@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentTopicOf, fileQuestions, liveObjectiveOf, objectiveIdOf, objectivesForTopic, resolveObjectiveId, unsortedObjectiveId, withCurrentTopics } from "../../src/lib/mastery/catalogue.ts";
+import { currentTopicOf, fileQuestions, liveObjectiveOf, objectivesForTopic, resolveObjectiveId, withCurrentTopics } from "../../src/lib/mastery/catalogue.ts";
 
 const catalogue = {
   "t/a": { id: "t/a", topicId: "t", name: "Do A", review: "confirmed" as const },
@@ -25,14 +25,6 @@ test("groups questions by objective in first-seen order and notes mechanism ques
   assert.equal(list[1].name, "Do A");
 });
 
-test("a question without an objective lands in the topic's explicit unsorted objective", () => {
-  const [o] = objectivesForTopic("t", [{ id: "q1" }], catalogue);
-  assert.equal(o.id, unsortedObjectiveId("t"));
-  assert.equal(o.id, "t#unsorted");
-  assert.equal(o.name, "Questions not yet sorted into objectives");
-  assert.equal(objectiveIdOf({}, "t"), "t#unsorted");
-});
-
 test("an objective missing from the catalogue throws instead of guessing", () => {
   assert.throws(() => objectivesForTopic("t", [{ id: "q1", objectiveId: "t/zzz" }], catalogue), /not in the catalogue/);
 });
@@ -55,8 +47,8 @@ test("questions of an archived objective are left out", () => {
   const archived = { ...catalogue, "t/a": { ...catalogue["t/a"], review: "archived" as const } };
   const list = objectivesForTopic("t", [{ id: "q1", objectiveId: "t/a" }, { id: "q2", objectiveId: "t/b" }], archived);
   assert.deepEqual(list.map((o) => o.id), ["t/b"]);
-  assert.equal(liveObjectiveOf({ objectiveId: "t/a" }, "t", archived), null);
-  assert.equal(liveObjectiveOf({ objectiveId: "t/b" }, "t", archived)?.id, "t/b");
+  assert.equal(liveObjectiveOf({ objectiveId: "t/a" }, archived), null);
+  assert.equal(liveObjectiveOf({ objectiveId: "t/b" }, archived)?.id, "t/b");
 });
 
 test("merge chains resolve to the end and cycles throw", () => {
@@ -81,9 +73,9 @@ test("a question is filed under its objective's current topic, following objecti
   assert.equal(currentTopicOf("Z", filing, topicMerges), "T2", "Z's topic T3 was merged into T2");
   const bank = fileQuestions(
     [
-      { topicId: "T1", question: { id: "dive-q", objectiveId: "X" } }, // saved by a dive after the merge, under the old topic
-      { topicId: "T2", question: { id: "q2", objectiveId: "Y" } },
-      { topicId: "T3", question: { id: "q3", objectiveId: "Z" } },
+      { id: "dive-q", objectiveId: "X" }, // saved by a dive after X was merged into Y
+      { id: "q2", objectiveId: "Y" },
+      { id: "q3", objectiveId: "Z" },
     ],
     filing,
     topicMerges,
@@ -92,9 +84,8 @@ test("a question is filed under its objective's current topic, following objecti
   assert.deepEqual(bank.T2.map((q) => q.id), ["dive-q", "q2", "q3"], "order is kept");
 });
 
-test("a question with no objective stays under its stored topic; one naming an unknown objective throws", () => {
-  assert.deepEqual(fileQuestions([{ topicId: "T1", question: { id: "old" } }], filing, topicMerges), { T1: [{ id: "old" }] });
-  assert.throws(() => fileQuestions([{ topicId: "T1", question: { id: "q", objectiveId: "nope" } }], filing, topicMerges), /Question q points at objective "nope", which isn't in the course/);
+test("a question naming an objective the course doesn't have throws instead of being filed somewhere", () => {
+  assert.throws(() => fileQuestions([{ id: "q", objectiveId: "nope" }], filing, topicMerges), /Question q points at objective "nope", which isn't in the course/);
 });
 
 test("objectives follow topic merges; nothing moves when no topic was merged", () => {

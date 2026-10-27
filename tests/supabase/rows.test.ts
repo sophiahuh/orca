@@ -44,9 +44,9 @@ test("courseView orders the trail, leaves archived topics off it and uses the st
       { id: "c", topic_id: "t3", name: "C", review: "confirmed", merged_into: null },
     ],
     questions: [
-      { id: "q2", topic_id: "t1", objective_id: "b", tier: "mechanism", sort_order: 1 },
-      { id: "q1", topic_id: "t1", objective_id: "a", tier: null, sort_order: 0 },
-      { id: "q3", topic_id: "t3", objective_id: "c", tier: null, sort_order: 0 },
+      { id: "q2", objective_id: "b", tier: "mechanism", sort_order: 1 },
+      { id: "q1", objective_id: "a", tier: null, sort_order: 0 },
+      { id: "q3", objective_id: "c", tier: null, sort_order: 0 },
     ],
     timezone: "America/New_York",
   });
@@ -71,9 +71,9 @@ test("the server's view files a question saved under a stale topic by its object
       { id: "Z", topic_id: "T3", name: "Z", review: "confirmed", merged_into: null },
     ],
     questions: [
-      { id: "q-y", topic_id: "T2", objective_id: "Y", tier: null, sort_order: 0 },
-      { id: "dive-q", topic_id: "T1", objective_id: "X", tier: null, sort_order: 1 },
-      { id: "q-z", topic_id: "T3", objective_id: "Z", tier: null, sort_order: 2 },
+      { id: "q-y", objective_id: "Y", tier: null, sort_order: 0 },
+      { id: "dive-q", objective_id: "X", tier: null, sort_order: 1 },
+      { id: "q-z", objective_id: "Z", tier: null, sort_order: 2 },
     ],
   });
   assert.deepEqual(view.attribution.objectives.get("Y")?.questionIds, ["q-y", "dive-q"], "X was merged into Y while a dive wrote for X");

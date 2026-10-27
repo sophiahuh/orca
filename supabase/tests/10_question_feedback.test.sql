@@ -15,8 +15,10 @@ insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos
   values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 insert into public.topics (id, owner_id, course_id, sort_order, name, review, pos_x, pos_y)
   values (:'topic', :'A', :'course', 0, 'Boolean algebra', 'proposed', 0, 0);
-insert into public.questions (id, owner_id, course_id, topic_id, sort_order, kind, topic_name, prompt, options, answer, explanation, anchor)
-  values (:'q', :'A', :'course', :'topic', 0, 'True or false', 'Boolean algebra', 'p', '{True,False}', 0, 'e', '{"locator": "slide 3", "excerpt": "x"}');
+insert into public.objectives (id, owner_id, course_id, topic_id, name, description, origin, review)
+  values ('10000000-0000-4000-8000-00000000000a', :'A', :'course', :'topic', 'Simplify', 'd', 'material', 'proposed');
+insert into public.questions (id, owner_id, course_id, topic_id, sort_order, objective_id, kind, topic_name, prompt, options, answer, explanation, anchor)
+  values (:'q', :'A', :'course', :'topic', 0, '10000000-0000-4000-8000-00000000000a', 'True or false', 'Boolean algebra', 'p', '{True,False}', 0, 'e', '{"locator": "slide 3", "excerpt": "x"}');
 
 create function pg_temp.act_as(uid uuid) returns void language sql as $$
   select set_config('request.jwt.claims', json_build_object('sub', uid::text, 'role', 'authenticated')::text, true);

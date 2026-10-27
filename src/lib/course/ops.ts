@@ -72,9 +72,9 @@ function mergedFamily(s: CourseStructure, id: string): Set<string> {
  */
 function refiled(s: CourseStructure): CourseStructure {
   const topicMergedInto = new Map(s.topics.flatMap((t) => (t.mergedInto ? [[t.id, t.mergedInto] as const] : [])));
-  const stored = Object.entries(s.bank).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
-  const staysPut = (x: { topicId: string; question: QuizQuestion }) => !x.question.objectiveId || currentTopicOf(x.question.objectiveId, s.objectives, topicMergedInto) === x.topicId;
-  const filed = fileQuestions([...stored.filter(staysPut), ...stored.filter((x) => !staysPut(x))], s.objectives, topicMergedInto);
+  const held = Object.entries(s.bank).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+  const staysPut = (x: { topicId: string; question: QuizQuestion }) => currentTopicOf(x.question.objectiveId, s.objectives, topicMergedInto) === x.topicId;
+  const filed = fileQuestions([...held.filter(staysPut), ...held.filter((x) => !staysPut(x))].map((x) => x.question), s.objectives, topicMergedInto);
   return { ...s, bank: { ...Object.fromEntries(Object.keys(s.bank).map((t) => [t, []])), ...filed } };
 }
 

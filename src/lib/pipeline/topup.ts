@@ -251,7 +251,7 @@ export function unansweredDeepQuestions(
   const byObjective = new Map<string, Array<{ topicId: string; question: QuizQuestion }>>();
   for (const [topicId, questions] of Object.entries(input.bank)) {
     for (const question of questions) {
-      if (!question.deep || !question.objectiveId || answered.has(question.id)) continue;
+      if (!question.deep || answered.has(question.id)) continue;
       const id = survivorId(question.objectiveId, input.objectives);
       byObjective.set(id, [...(byObjective.get(id) ?? []), { topicId, question }]);
     }

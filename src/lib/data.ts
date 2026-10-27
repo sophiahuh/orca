@@ -348,8 +348,8 @@ export interface QuizQuestion {
   figure?: { src: string; alt: string };
   /** The upload this question was extracted from; absent for hand-written questions. */
   materialId?: string;
-  /** The objective this question tests. Missing on generated questions until extraction assigns one. */
-  objectiveId?: string;
+  /** The objective this question tests; every question has one. Its topic is that objective's current topic. */
+  objectiveId: string;
   /** A deep-review question (written when a deep review starts): longer and harder; only deep reviews ask it. */
   deep?: boolean;
 }

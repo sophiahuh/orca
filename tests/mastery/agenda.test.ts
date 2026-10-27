@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, courseAgenda, withNeutralWeights } from "../../src/lib/mastery/agenda.ts";
+import { addDays, agendaWeights, courseAgenda } from "../../src/lib/mastery/agenda.ts";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { AnswerEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
 import { DEFAULT_CONFIG, type QuizResult, type ReviewConfig } from "../../src/lib/data.ts";
@@ -33,7 +33,7 @@ const finished = (sessionId: string, finishedAt: string, mode: QuizResult["mode"
 
 function agenda(evidence: EvidenceEvent[], now: string, opts: { results?: QuizResult[]; config?: ReviewConfig; examDays?: string[]; weights?: Record<string, number> } = {}) {
   const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence, now: new Date(now), dayKey: utcDay });
-  const weights = withNeutralWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1, ...opts.weights })), () => false);
+  const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1, ...opts.weights })));
   return courseAgenda({ courseId: "k", mastery, weights, config: opts.config ?? DEFAULT_CONFIG, results: opts.results ?? [], examDays: opts.examDays ?? [], now: new Date(now), dayKey: utcDay });
 }
 
@@ -122,6 +122,5 @@ test("the next quick review follows the cadence: weekly after the last one, exam
 });
 
 test("a missing weight is a bug", () => {
-  assert.throws(() => withNeutralWeights(["a", "x"], new Map([["a", 1]]), () => false), /No weight computed for objective x/);
-  assert.deepEqual([...withNeutralWeights(["a", "t1#unsorted"], new Map([["a", 1.2]]), (id) => id.endsWith("#unsorted"))], [["a", 1.2], ["t1#unsorted", 1]]);
+  assert.throws(() => agendaWeights(["a", "x"], new Map([["a", 1]])), /No weight computed for objective x/);
 });

@@ -31,7 +31,7 @@ select lives_ok(format($$select pg_temp.add_question(%L, '{"locator": "slide 3",
 select throws_ok(format($$select pg_temp.add_question(%L, null)$$, :'obj'), '23514', null, 'a material objective''s question without an anchor is refused');
 select lives_ok(format($$select pg_temp.add_question(%L, null)$$, :'inferred'), 'an inferred objective''s question without an anchor is accepted');
 select throws_ok(format($$select pg_temp.add_question(%L, '{"locator": "slide 3", "excerpt": "x"}')$$, :'inferred'), '23514', null, 'an inferred objective''s question with an anchor is refused');
-select throws_ok($$select pg_temp.add_question(null, null)$$, '23514', null, 'a question with no objective needs an anchor');
+select throws_ok($$select pg_temp.add_question(null, '{"locator": "slide 3", "excerpt": "x"}')$$, '23502', null, 'a question needs an objective');
 select throws_ok(format($$update public.questions set anchor = null where objective_id = %L$$, :'obj'), '23514', null, 'removing an anchor later is refused too');
 
 select * from finish();

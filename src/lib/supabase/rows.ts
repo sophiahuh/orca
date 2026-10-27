@@ -61,7 +61,7 @@ export function snapshotFromRow(r: SnapshotRow): Snapshot {
 export function courseView(rows: {
   topics: ReadonlyArray<Pick<Tables["topics"]["Row"], "id" | "review" | "sort_order" | "merged_into">>;
   objectives: ReadonlyArray<Pick<Tables["objectives"]["Row"], "id" | "topic_id" | "name" | "review" | "merged_into">>;
-  questions: ReadonlyArray<Pick<Tables["questions"]["Row"], "id" | "topic_id" | "objective_id" | "tier" | "sort_order">>;
+  questions: ReadonlyArray<Pick<Tables["questions"]["Row"], "id" | "objective_id" | "tier" | "sort_order">>;
   timezone: string;
 }): CourseView {
   const rowCatalogue: Record<string, ObjectiveInfo> = {};
@@ -75,10 +75,7 @@ export function courseView(rows: {
   const bank = fileQuestions(
     [...rows.questions]
       .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))
-      .map((q) => ({
-        topicId: q.topic_id,
-        question: { id: q.id, ...(q.objective_id ? { objectiveId: q.objective_id } : {}), ...(q.tier ? { tier: q.tier as QuestionRef["tier"] } : {}) } as QuestionRef,
-      })),
+      .map((q): QuestionRef => ({ id: q.id, objectiveId: q.objective_id, ...(q.tier ? { tier: q.tier as QuestionRef["tier"] } : {}) })),
     catalogue,
     topicMergedInto,
   );

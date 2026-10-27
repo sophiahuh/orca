@@ -67,7 +67,6 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (error) throw new Error(`Couldn't read the question: ${error.message}`);
       if (!q) return reply(404, { error: "No such question in this course." });
-      if (!q.objective_id) return reply(422, { error: "This question isn't sorted into an objective yet, so its answer can't be recorded." });
       // The question's topic is its objective's (the question row's own topic_id can be stale: 2026-10-26).
       const { data: objective, error: objectiveError } = await db.from("objectives").select("topic_id").eq("owner_id", student.id).eq("course_id", body.courseId).eq("id", q.objective_id).maybeSingle();
       if (objectiveError) throw new Error(`Couldn't read the question's objective: ${objectiveError.message}`);

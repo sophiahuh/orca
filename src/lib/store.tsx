@@ -59,8 +59,7 @@ import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { type TodoCard, todoCards } from "./mastery/todo";
 import { assembleQuickReview, durationSeconds, lastSeenOf, sessionCandidates } from "./mastery/session";
 import { askableQuestions } from "./askable";
-import { type CourseAgenda, courseAgenda, withNeutralWeights } from "./mastery/agenda";
-import { isUnsortedObjectiveId } from "./mastery/catalogue";
+import { type CourseAgenda, agendaWeights, courseAgenda } from "./mastery/agenda";
 import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
@@ -929,7 +928,6 @@ export function useTodos(): TodoCard[] {
         }
         return todoCards(a, config, {
           objective: (id) => {
-            if (isUnsortedObjectiveId(id)) return "Questions not yet sorted into objectives";
             const o = catalogue[id];
             if (!o) throw new Error(`Objective ${id} is not in course ${c.id}`);
             return o.name;
@@ -969,7 +967,7 @@ export function useAgenda(): Record<string, CourseAgenda> {
           const agenda = courseAgenda({
             courseId: c.id,
             mastery: m,
-            weights: withNeutralWeights(m.objectives.keys(), computed, isUnsortedObjectiveId),
+            weights: agendaWeights(m.objectives.keys(), computed),
             config: configs[c.id] ?? DEFAULT_CONFIG,
             results,
             // Exams, and any uploaded exam's due date on the calendar.

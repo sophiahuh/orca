@@ -157,7 +157,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     id: q.id,
     topic_id: topicId,
     sort_order: sortOrder,
-    objective_id: q.objectiveId ?? null,
+    objective_id: q.objectiveId,
     kind: q.kind,
     tier: q.tier ?? null,
     topic_name: q.topic,
@@ -191,7 +191,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     ...(r.anchor !== null ? { anchor: r.anchor as unknown as NonNullable<QuizQuestion["anchor"]> } : {}),
     ...(r.figure !== null ? { figure: r.figure as unknown as NonNullable<QuizQuestion["figure"]> } : {}),
     ...(r.material_id !== null ? { materialId: r.material_id } : {}),
-    ...(r.objective_id !== null ? { objectiveId: r.objective_id } : {}),
+    objectiveId: r.objective_id,
     ...(r.deep ? { deep: true } : {}),
   };
 }
@@ -466,8 +466,7 @@ export function loadedState(d: MyData): LoadedState {
   for (const c of courses) {
     const topicMergedInto = new Map(c.topics.flatMap((t) => (t.mergedInto ? [[t.id, t.mergedInto] as const] : [])));
     objectives[c.id] = withCurrentTopics(objectives[c.id], topicMergedInto);
-    const stored = sortedQuestions.filter((q) => q.course_id === c.id).map((q) => ({ topicId: q.topic_id, question: questionFromRow(q) }));
-    questionBank[c.id] = fileQuestions(stored, objectives[c.id], topicMergedInto);
+    questionBank[c.id] = fileQuestions(sortedQuestions.filter((q) => q.course_id === c.id).map(questionFromRow), objectives[c.id], topicMergedInto);
   }
   const relations = byCourse<Relation[]>(() => []);
   for (const r of d.relations) relations[r.course_id].push(relationFromRow(r));

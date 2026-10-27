@@ -283,7 +283,7 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
     const seen = new Map<string, number>();
     const orderedIds = added
       .map(({ question }) => {
-        const objectiveId = question.objectiveId!;
+        const objectiveId = question.objectiveId;
         const round = seen.get(objectiveId) ?? 0;
         seen.set(objectiveId, round + 1);
         return { id: question.id, round, priority: priority.get(objectiveId) ?? priority.size };

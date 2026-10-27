@@ -491,7 +491,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
 
   /* Questions for every objective this upload touched that is short of its stock, from its own pages */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
-  const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => q.objectiveId && survivor(q.objectiveId, objectiveById)?.id === id);
+  const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => survivor(q.objectiveId, objectiveById)?.id === id);
   const topicsNow = new Map(allTopics().map((t) => [t.id, { ...t, source: sourceOf(t.id) }]));
   const byTopic = new Map<string, { targets: WriteTarget[]; pages: Set<number> }>();
   for (const id of new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])) {

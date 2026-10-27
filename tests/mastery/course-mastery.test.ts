@@ -47,11 +47,11 @@ test("rolls evidence up into objectives, topics and an island level", () => {
 test("answers follow their question's current objective, not the one recorded", () => {
   const filedUnderOldId = ["q1", "q2", "q3"].map((q, i) => ({
     ...ev(q, i < 2 ? "2026-10-01T12:00:00Z" : "2026-10-02T12:00:00Z"),
-    objectiveId: "t1#unsorted",
+    objectiveId: "an-old-objective-id",
   }));
   const m = courseMastery({ ...base, evidence: filedUnderOldId, now: new Date("2026-10-02T13:00:00Z") });
   assert.equal(m.objectives.get("t1/a")!.status, "mastered");
-  assert.equal(m.objectives.has("t1#unsorted"), false);
+  assert.equal(m.objectives.has("an-old-objective-id"), false);
 });
 
 test("evidence from another course is ignored", () => {

@@ -56,7 +56,7 @@ export interface CourseAgenda {
 export interface AgendaInput {
   courseId: string;
   mastery: Pick<CourseMastery, "objectives" | "topicObjectives" | "events">;
-  /** objectiveId → weight for every objective in `mastery` (see `withNeutralWeights`). */
+  /** objectiveId → weight for every objective in `mastery` (see `agendaWeights`). */
   weights: ReadonlyMap<string, number>;
   config: ReviewConfig;
   /** Finished sessions (any course; filtered here). */
@@ -73,14 +73,13 @@ export function addDays(day: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-/** Weights for the agenda: computed weights, with the neutral 1.0 for the explicit "unsorted" buckets (they have no signals). */
-export function withNeutralWeights(objectiveIds: Iterable<string>, computed: ReadonlyMap<string, number>, isUnsorted: (id: string) => boolean): Map<string, number> {
+/** Weights for the agenda: the computed weight of every objective, or a throw for one without. */
+export function agendaWeights(objectiveIds: Iterable<string>, computed: ReadonlyMap<string, number>): Map<string, number> {
   const out = new Map<string, number>();
   for (const id of objectiveIds) {
     const w = computed.get(id);
-    if (w !== undefined) out.set(id, w);
-    else if (isUnsorted(id)) out.set(id, 1);
-    else throw new Error(`No weight computed for objective ${id}`);
+    if (w === undefined) throw new Error(`No weight computed for objective ${id}`);
+    out.set(id, w);
   }
   return out;
 }
