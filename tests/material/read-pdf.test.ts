@@ -1,14 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { LIMITS } from "../../src/lib/limits.ts";
 import { type ReadPage, UnreadablePdfError, markFigures, readPdf } from "../../src/lib/material/read-pdf.ts";
 import { renderSlide } from "../../src/lib/material/render-slide.ts";
 import { isHidden, visibleItems } from "../../src/lib/untrusted/hidden-text.ts";
-import { lines, makePdf } from "../fixtures/pdf.ts";
+import { lines, makeDeck, makePdf } from "../fixtures/pdf.ts";
 
-test("the ALD deck reads into numbered, non-empty pages with nothing hidden", async () => {
-  const out = await readPdf(new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf")));
+test("the stand-in lecture deck reads into numbered, non-empty pages with nothing hidden", async () => {
+  const out = await readPdf(makeDeck());
   assert.ok(out.pages.length > 20);
   assert.deepEqual(out.pages.map((p) => p.n), out.pages.map((_, i) => i + 1));
   assert.ok(out.pages.some((p) => /Boolean/i.test(p.text)));
@@ -54,7 +53,7 @@ test("too many pages, non-PDFs and oversize files are refused before reading", a
 });
 
 test("a file that takes longer than the time budget is refused as unreadable", async () => {
-  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const deck = makeDeck();
   await assert.rejects(readPdf(deck, { timeoutMs: 1 }), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422 && /gave up/.test(e.message));
 });
 
@@ -65,7 +64,7 @@ test("the budget stops a parser that never yields: the thread is terminated and 
     const { workerData } = require("node:worker_threads");
     workerData.port.on("message", () => { for (;;) {} });
   `;
-  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const deck = makeDeck();
   const started = Date.now();
   await assert.rejects(readPdf(deck, { timeoutMs: 400, workerSource: spinning }), (e: unknown) => e instanceof UnreadablePdfError && /gave up/.test(e.message));
   assert.ok(Date.now() - started < 3000, "refused soon after the budget, not when the platform killed the request");
@@ -73,7 +72,7 @@ test("the budget stops a parser that never yields: the thread is terminated and 
 });
 
 test("a parser thread that dies before opening the file is replaced by a read on this thread", async () => {
-  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const deck = makeDeck();
   const out = await readPdf(deck, { workerSource: "process.exit(3)" });
   assert.equal(out.engine, "main-thread");
   assert.ok(out.pages.length > 20);
@@ -83,7 +82,8 @@ test("a parser thread that dies before opening the file is replaced by a read on
 });
 
 test("a parser thread that dies with the file open makes the file unreadable, not a retry here", async () => {
-  const deck = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  // Long enough to still be reading when the thread dies (the stand-in deck alone reads in under the 150 ms).
+  const deck = makePdf(Array.from({ length: LIMITS.pagesPerFile }, (_, i) => ({ runs: lines(`Slide ${i + 1}`, "A circuit, drawn."), paths: 60 })));
   // Answers pdf.js's first message (so the document opens), then dies.
   const dying = `
     const { workerData } = require("node:worker_threads");
@@ -96,7 +96,7 @@ test("a parser thread that dies with the file open makes the file unreadable, no
 });
 
 test("a slide renders on the server as a JPEG figure", async () => {
-  const bytes = new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf"));
+  const bytes = makeDeck();
   const src = await renderSlide(bytes, 12);
   assert.match(src, /^data:image\/jpeg;base64,/);
   assert.ok(src.length > 5000);
@@ -141,7 +141,7 @@ test("pages are marked to be read from their images: a notes app's PDF, the stud
 });
 
 test("typed slides that draw a figure are marked to have it described; template artwork doesn't count", async () => {
-  const read = await readPdf(new Uint8Array(await readFile("docs/samples/ald/L02_Combinational.pdf")));
+  const read = await readPdf(makeDeck());
   const source = (n: number) => read.pages.find((p) => p.n === n)?.source;
   assert.equal(source(1), undefined, "the title slide: text only");
   assert.equal(source(5), "needs-figure", "58 drawn paths: a circuit");

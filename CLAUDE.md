@@ -24,7 +24,7 @@ question directly first, then stop.
 create a course, upload its material (lecture decks, syllabus, homework, past exams), and Orca
 turns it into topics and objectives ("can do X") with quiz questions, then tracks mastery per
 objective from their answers and spaces reviews (FSRS) until each one sticks. The first test course
-was Advanced Logic Design (ALD, Columbia ELEN; `docs/samples/ald/`); the owner now tests with their
+was Advanced Logic Design (ALD, Columbia ELEN; its decks are local-only, `docs/samples/README.md`); the owner now tests with their
 own courses (Data Structures, Fundamentals of Computer Systems) on the hosted project.
 
 **Where things stand.**
@@ -347,7 +347,12 @@ All 11 Figma screens are built. Where things live:
   Storage, read on the server into `material_pages`. The upload page takes several files or a whole folder at once
   (`filesFromDataTransfer` walks dropped folders; `src/components/upload/BatchList.tsx` is the per-file list with
   type and dates prefilled from the page's shared defaults; files are sent one after another, each row showing where
-  it is; a file Orca can't read is listed as skipped) (a .pptx: one page per slide, its text, tables and speaker notes; no
+  it is; a file Orca can't read is listed as skipped). Three files or more is a bulk upload (owner, 2026-10-27): the
+  rows' dates hide behind "Add dates", and with no assigned date given the page asks "How far has the class got?":
+  the files after the tapped one are `materials.upcoming` ("the class hasn't reached this yet"; an assigned date in
+  the future sets it too). Their objectives are left out of the due list, quick reviews and dive candidates
+  (`AgendaInput.upcoming`, from `Material.upcoming` via each objective's `materialId`) until the Uploads tab's "Mark
+  covered" clears it; the trail still plays them, and nothing is assumed known (a scheduling signal, never mastery) (a .pptx: one page per slide, its text, tables and speaker notes; no
   pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
   switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
   `transcribe` step at the start of the upload job; typed slides that draw a figure (an image 100 px+ or 25+ paths,
@@ -362,7 +367,9 @@ All 11 Figma screens are built. Where things live:
   `npx next typegen` before `tsc` after adding a route.
 - `e2e/` — Playwright specs, one per area; `fixture.ts` signs in a throwaway student. Tests find
   things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
-- `docs/samples/ald/` — real ALD decks for trying uploads; `docs/OBJECTIVES-ALD.md` the benchmark.
+- `docs/samples/ald/` — the real ALD decks for the extraction scorer, **not committed** (gitignored; removed from the
+  history 2026-10-27 before the repo went public: course material isn't ours to publish; `docs/samples/README.md`).
+  Tests use the generated stand-in deck `makeDeck()` in `tests/fixtures/pdf.ts`. `docs/OBJECTIVES-ALD.md` is the benchmark.
 - Deploy: Vercel (https://orca-lake-omega.vercel.app) builds `backend-implementation` (Production);
   pushes to other branches get Preview deploys at most. **Nobody pushes there by hand any more:**
   `.github/workflows/deploy.yml` merges `main` into it (after pushing new migrations) whenever CI

@@ -337,6 +337,7 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     assigned: m.assigned,
     due: m.due,
     reflect: m.reflect,
+    upcoming: m.upcoming ?? false,
     reflection: json(m.reflection ?? null),
     // A material saved from the browser is a record without a file (a file Orca can't read yet).
     // Uploaded PDFs are inserted by POST /api/materials and read on the server.
@@ -357,8 +358,8 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
  * is a record without a file, which the database marks ready.
  */
 export function materialInsertRow(m: Material) {
-  const { id, course_id, filename, type, assigned, due, reflect, reflection } = materialToRow(m);
-  return { id, course_id, filename, type, assigned, due, reflect, reflection };
+  const { id, course_id, filename, type, assigned, due, reflect, upcoming, reflection } = materialToRow(m);
+  return { id, course_id, filename, type, assigned, due, reflect, upcoming, reflection };
 }
 
 export function materialFromRow(r: Row<"materials">): Material {
@@ -370,6 +371,7 @@ export function materialFromRow(r: Row<"materials">): Material {
     assigned: r.assigned,
     due: r.due,
     reflect: r.reflect,
+    ...(r.upcoming ? { upcoming: true } : {}),
     ...(r.reflection !== null ? { reflection: r.reflection as unknown as NonNullable<Material["reflection"]> } : {}),
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<Material["hiddenText"]> } : {}),
   };

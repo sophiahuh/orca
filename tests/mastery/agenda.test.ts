@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { addDays, agendaWeights, courseAgenda } from "../../src/lib/mastery/agenda.ts";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { AnswerEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
-import { reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
+import { classCadence, reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
 import { DEFAULT_CONFIG, NO_SCHEDULE, type CourseSchedule, type QuizResult, type ReviewConfig } from "../../src/lib/data.ts";
 
 const utcDay = (iso: string) => iso.slice(0, 10);
@@ -134,9 +134,17 @@ test("review days default to the day before the week's first classes; a pick win
   assert.deepEqual(reviewWeekdays("Weekly", null, tueThu.meetings), [1]);
   assert.deepEqual(reviewWeekdays("Twice a week", null, tueThu.meetings), [1, 3]);
   assert.deepEqual(reviewWeekdays("Twice a week", [0, 5], tueThu.meetings), [5, 0], "the student's pick, Monday first");
-  assert.equal(reviewWeekdays("Twice a week", null, [{ day: 1, start: "09:00", end: "10:00" }]), null, "a once-a-week class has no second day before class");
+  assert.deepEqual(reviewWeekdays("Twice a week", null, [{ day: 2, start: "09:00", end: "10:00" }]), [1, 4], "a once-a-week class: the day before and 3 days later");
+  assert.deepEqual(reviewWeekdays("Twice a week", null, [{ day: 0, start: "09:00", end: "10:00" }]), [2, 6], "Monday first, across the week's end");
+  assert.deepEqual(reviewWeekdays("Weekly", null, [{ day: 2, start: "09:00", end: "10:00" }]), [1]);
   assert.equal(reviewWeekdays("Weekly", null, []), null);
   assert.equal(reviewWeekdays("Daily", [1], tueThu.meetings), null, "daily isn't on weekdays");
+});
+
+test("a quick review following the class is twice a week, however often it meets", () => {
+  assert.equal(classCadence(tueThu.meetings), "Twice a week");
+  assert.equal(classCadence([{ day: 2, start: "09:00", end: "10:00" }]), "Twice a week");
+  assert.equal(classCadence([]), null);
 });
 
 test("weekly quick review on class days: due the day before class until done, then the next week", () => {
@@ -176,4 +184,22 @@ test("a weekly dive on class days: first due the day before class after the firs
   assert.deepEqual(agenda(evidence, "2026-10-06T09:00:00Z", { schedule: tueThu }).deepReview, { due: true, dueDay: "2026-10-05", tomorrow: false, candidates: 1 });
   assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { schedule: tueThu, results: [finished("d", "2026-10-06T10:00:00Z", "deep")] }).deepReview.dueDay, "2026-10-12");
   assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { schedule: { ...tueThu, deepDays: [3] } }).deepReview.dueDay, "2026-10-07", "the student's day");
+});
+
+test("objectives from material the class hasn't reached yet wait: not due, not in tomorrow's list, not dive candidates", () => {
+  const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence: [], now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
+  const g = courseAgenda({ courseId: "k", mastery, weights, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["c"]), now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  assert.deepEqual(g.dueToday.map((r) => r.objectiveId), ["a", "b"]);
+  // Still ranked (the trail can play it); only the schedule leaves it out.
+  assert.ok(g.ranked.some((r) => r.objectiveId === "c"));
+
+  // Answered before the class got there (played from the trail): it's still no dive candidate while upcoming.
+  const evidence = [ans("c1", "2026-10-01T10:00:00Z")];
+  const m2 = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence, now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  const w2 = agendaWeights(m2.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
+  const waiting = courseAgenda({ courseId: "k", mastery: m2, weights: w2, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["c"]), now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  assert.equal(waiting.deepReview.candidates, 0);
+  const covered = courseAgenda({ courseId: "k", mastery: m2, weights: w2, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  assert.equal(covered.deepReview.candidates, 1);
 });

@@ -48,3 +48,6 @@ next-env.d.ts
 
 # Trigger.dev CLI build output
 .trigger/
+
+# real course decks for the extraction scorer (not ours to publish; see docs/samples/README.md)
+docs/samples/ald/

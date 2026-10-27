@@ -66,6 +66,12 @@ export interface AgendaInput {
   results: readonly QuizResult[];
   /** Local days (YYYY-MM-DD) of this course's exams on the calendar. */
   examDays: readonly string[];
+  /**
+   * Objectives from material the class hasn't reached yet (`Material.upcoming`): still playable
+   * from the trail, but not due, not drawn into quick reviews or dives, until the material is
+   * marked covered. A scheduling signal, never mastery.
+   */
+  upcoming?: ReadonlySet<string>;
   now: Date;
   dayKey?: (iso: string) => string;
 }
@@ -124,13 +130,14 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const byPriority = (a: RankedObjective, b: RankedObjective) => b.priority.score - a.priority.score || a.objectiveId.localeCompare(b.objectiveId);
   ranked.sort(byPriority);
   const practicedToday = new Set(answers.filter((e) => dayKey(e.at) === today).map((e) => e.objectiveId));
-  const due = ranked.filter((r) => DUE_TODAY.includes(r.status) && weights.get(r.objectiveId)! > 0);
+  const reached = (r: RankedObjective) => !input.upcoming?.has(r.objectiveId);
+  const due = ranked.filter((r) => DUE_TODAY.includes(r.status) && weights.get(r.objectiveId)! > 0 && reached(r));
   const dueToday = due.filter((r) => !practicedToday.has(r.objectiveId));
   const heldForNext = due.filter((r) => practicedToday.has(r.objectiveId));
   const dueTomorrow = ranked
     .filter((r) => {
       const dueAt = mastery.objectives.get(r.objectiveId)!.dueAt;
-      return r.status === "mastered" && dueAt !== null && dayKey(dueAt) === tomorrow && weights.get(r.objectiveId)! > 0;
+      return r.status === "mastered" && dueAt !== null && dayKey(dueAt) === tomorrow && weights.get(r.objectiveId)! > 0 && reached(r);
     })
     .sort(byPriority);
 
@@ -166,7 +173,7 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const quickReviewDue = dueToday.length > 0 && quickCadenceDue;
 
   /* Deep review cadence: one cadence after the last finished one (or the course's first answer); stays due if missed */
-  const candidates = ranked.filter((r) => r.status !== "unseen" && r.status !== "retired").length;
+  const candidates = ranked.filter((r) => r.status !== "unseen" && r.status !== "retired" && reached(r)).length;
   const deepDays = finishedOn("deep").sort();
   const lastDeep = deepDays.at(-1) ?? null;
   let dueDay: string | null = null;

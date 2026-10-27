@@ -27,10 +27,11 @@ export function courseUploads(runs: readonly PipelineRun[], courseId: string): P
 
 /**
  * Whether a queued run is behind another of the student's jobs (one runs at a time, any course or
- * kind): one running, or one queued before it. A run waiting on a limit doesn't hold others back.
+ * kind): one running, or one queued before it. A run waiting on a limit doesn't hold others back,
+ * and neither does a Dive In (it runs beside the queue: `startDeepReviewJob`).
  */
 export function jobAhead(runs: readonly PipelineRun[], run: PipelineRun): boolean {
-  return runs.some((r) => r.id !== run.id && (r.status === "running" || (r.status === "queued" && r.at < run.at)));
+  return runs.some((r) => r.id !== run.id && r.kind !== "deep-review" && (r.status === "running" || (r.status === "queued" && r.at < run.at)));
 }
 
 /** Uploads still being built (queued, running or waiting on a limit). */

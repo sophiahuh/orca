@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { useOrca } from "@/lib/store";
 import { COURSE_NAME_MAX, type ClassMeeting } from "@/lib/data";
 import { ClassMeetings, meetingProblem } from "@/components/config/ClassMeetings";
+import { classCadence } from "@/lib/mastery/review-days";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +17,7 @@ import { fadeUp, popIn, stagger } from "@/lib/motion";
 
 export default function NewCoursePage() {
   const router = useRouter();
-  const { addCourse } = useOrca();
+  const { addCourse, defaultConfig } = useOrca();
   const [name, setName] = useState("");
   const [meetings, setMeetings] = useState<ClassMeeting[]>([]);
   const trimmed = name.trim();
@@ -24,7 +25,10 @@ export default function NewCoursePage() {
 
   const create = () => {
     if (!trimmed || timesProblem) return;
-    addCourse(trimmed, meetings.length > 0 ? { meetings, quickDays: null, deepDays: null } : null);
+    // With class times, a daily quick review becomes one the day before class (owner, 2026-10-27), as the course's own setting.
+    const follows = classCadence(meetings);
+    const config = follows && defaultConfig.quick.cadence === "Daily" ? { ...defaultConfig, quick: { ...defaultConfig.quick, cadence: follows } } : null;
+    addCourse(trimmed, meetings.length > 0 ? { meetings, quickDays: null, deepDays: null } : null, config);
     router.push("/");
   };
 
@@ -68,7 +72,7 @@ export default function NewCoursePage() {
 
           <motion.div variants={fadeUp} className="mt-[28px] flex w-[560px] max-w-full flex-col gap-[10px]">
             <span className="text-[14px] font-semibold text-wisteria-deep">When does it meet? (optional)</span>
-            <p className="text-[14px] text-prussian">Twice-a-week and weekly reviews land the day before class. You can change this in the course&apos;s settings.</p>
+            <p className="text-[14px] text-prussian">Quick reviews and dives land the day before class. You can change this in the course&apos;s settings.</p>
             <ClassMeetings meetings={meetings} onChange={setMeetings} />
             {timesProblem && <span role="alert" className="text-[14px] font-semibold text-bad-text">{timesProblem}</span>}
           </motion.div>

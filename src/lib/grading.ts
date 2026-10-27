@@ -43,9 +43,10 @@ export function normaliseExact(s: string) {
 
 /**
  * A typed answer's lead-in words, which say nothing ("is valid", "it's 1010", "the answer is x"):
- * dropped before comparing. Only whole leading words, so a negation ("not valid") is never dropped.
+ * dropped before comparing. Only whole leading words followed by a space, so a negation ("not valid")
+ * is never dropped and neither is the start of an expression ("AB" isn't "a" + "B").
  */
-const LEAD_IN = /^(?:(?:the\s+answer\s+is|answer\s*:|it\s+is|it's|its|that\s+is|this\s+is|they\s+are|is|are|=|a|an|the)\s*)+/i;
+const LEAD_IN = /^(?:(?:the\s+answer\s+is|it\s+is|it's|its|that\s+is|this\s+is|they\s+are|is|are|a|an|the|either)\s+|(?:answer\s*:|=)\s*)+/i;
 
 /** The answer without its lead-in words or a final period, then normalised. */
 function normaliseResponse(s: string): string {

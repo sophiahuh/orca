@@ -29,6 +29,8 @@ export interface UploadMeta {
   reflect: boolean;
   /** The file is handwritten notes (a PDF): the server reads every page from its image. */
   handwritten?: boolean;
+  /** The class hasn't reached this file yet: its objectives wait until it's marked covered. */
+  upcoming?: boolean;
 }
 
 /** What happens to an upload's questions (`Generation` in src/lib/server/jobs/start.ts). */

@@ -58,6 +58,8 @@ export const UploadRequest = z.object({
   reflect: z.boolean(),
   /** The student says the file is handwritten notes: every page is read from its image. */
   handwritten: z.boolean().default(false),
+  /** The class hasn't reached this file yet: its objectives wait until it's marked covered. */
+  upcoming: z.boolean().default(false),
 });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 
@@ -104,6 +106,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
       due: body.due,
       reflect: body.reflect,
       handwritten: body.handwritten,
+      upcoming: body.upcoming,
       storage_path: path,
       size_bytes: body.size,
       mime: UPLOAD_MIMES[kind],

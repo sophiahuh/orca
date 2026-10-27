@@ -29,7 +29,11 @@ test("gradeExact marks a hedge that includes the right answer partial, and a hed
   assert.match(hedge.feedback, /B is right, but you also answered A/);
   assert.equal(gradeExact("either 1010 or 1011", ["1011"]).outcome, "partial");
   assert.equal(gradeExact("mealy / moore", ["Moore"]).outcome, "partial");
+  assert.equal(gradeExact("it's either B or A", ["B"]).outcome, "partial", "lead-in words before \"either\"");
   assert.equal(gradeExact("A or C", ["B"]).outcome, "incorrect");
+  assert.equal(gradeExact("AB", ["B"]).outcome, "incorrect", "a product isn't the article \"a\" before B");
+  assert.equal(gradeExact("isolation", ["olation"]).outcome, "incorrect");
+  assert.equal(gradeExact("=1010", ["1010"]).outcome, "correct");
   assert.equal(gradeExact("1/2", ["2"]).outcome, "incorrect", "an unspaced slash is one answer");
   assert.equal(gradeExact("B or b", ["B"]).outcome, "correct", "every candidate right is right");
   assert.equal(gradeExact("AND or OR", ["AND or OR"]).outcome, "correct", "an accepted answer containing \"or\" still matches whole");
