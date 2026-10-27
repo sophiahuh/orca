@@ -29,6 +29,7 @@ import type {
   Topic,
 } from "../data.ts";
 import { DEFAULT_CONFIG } from "../data.ts";
+import { fileQuestions, withCurrentTopics } from "../mastery/catalogue.ts";
 import type { EvidenceEvent } from "../mastery/types.ts";
 import type { Database, Json } from "./database.types.ts";
 import { type EvidenceRow, type SnapshotRow, eventFromRow } from "./rows.ts";
@@ -458,9 +459,15 @@ export function loadedState(d: MyData): LoadedState {
   const byCourse = <T>(make: () => T) => Object.fromEntries(courses.map((c) => [c.id, make()])) as Record<string, T>;
   const objectives = byCourse<Record<string, Objective>>(() => ({}));
   for (const o of d.objectives) objectives[o.course_id][o.id] = objectiveFromRow(o);
+  // Objectives under their topic's survivor, and each question under its objective's current topic,
+  // not the rows' own topic_id (either can be stale when a job wrote while the student merged).
   const questionBank = byCourse<Record<string, QuizQuestion[]>>(() => ({}));
-  for (const q of [...d.questions].sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))) {
-    (questionBank[q.course_id][q.topic_id] ??= []).push(questionFromRow(q));
+  const sortedQuestions = [...d.questions].sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id));
+  for (const c of courses) {
+    const topicMergedInto = new Map(c.topics.flatMap((t) => (t.mergedInto ? [[t.id, t.mergedInto] as const] : [])));
+    objectives[c.id] = withCurrentTopics(objectives[c.id], topicMergedInto);
+    const stored = sortedQuestions.filter((q) => q.course_id === c.id).map((q) => ({ topicId: q.topic_id, question: questionFromRow(q) }));
+    questionBank[c.id] = fileQuestions(stored, objectives[c.id], topicMergedInto);
   }
   const relations = byCourse<Relation[]>(() => []);
   for (const r of d.relations) relations[r.course_id].push(relationFromRow(r));

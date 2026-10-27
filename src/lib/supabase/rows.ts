@@ -3,7 +3,7 @@
  * reads. Pure (loads under plain Node), so the server and the HTTP check script share it.
  */
 import { attribution } from "../mastery/attribution.ts";
-import type { QuestionRef } from "../mastery/catalogue.ts";
+import { type QuestionRef, fileQuestions, withCurrentTopics } from "../mastery/catalogue.ts";
 import { type ObjectiveAccumulator, dayKeyIn } from "../mastery/objective-state.ts";
 import type { CourseView, Snapshot } from "../mastery/snapshots.ts";
 import type { AnswerEvent, EvidenceEvent, ObjectiveInfo } from "../mastery/types.ts";
@@ -59,23 +59,29 @@ export function snapshotFromRow(r: SnapshotRow): Snapshot {
  * (archived ones left out, as trailTopics does); questions in stock order.
  */
 export function courseView(rows: {
-  topics: ReadonlyArray<Pick<Tables["topics"]["Row"], "id" | "review" | "sort_order">>;
+  topics: ReadonlyArray<Pick<Tables["topics"]["Row"], "id" | "review" | "sort_order" | "merged_into">>;
   objectives: ReadonlyArray<Pick<Tables["objectives"]["Row"], "id" | "topic_id" | "name" | "review" | "merged_into">>;
   questions: ReadonlyArray<Pick<Tables["questions"]["Row"], "id" | "topic_id" | "objective_id" | "tier" | "sort_order">>;
   timezone: string;
 }): CourseView {
-  const catalogue: Record<string, ObjectiveInfo> = {};
+  const rowCatalogue: Record<string, ObjectiveInfo> = {};
   for (const o of rows.objectives) {
-    catalogue[o.id] = { id: o.id, topicId: o.topic_id, name: o.name, review: o.review as ObjectiveInfo["review"], ...(o.merged_into ? { mergedInto: o.merged_into } : {}) };
+    rowCatalogue[o.id] = { id: o.id, topicId: o.topic_id, name: o.name, review: o.review as ObjectiveInfo["review"], ...(o.merged_into ? { mergedInto: o.merged_into } : {}) };
   }
-  const bank: Record<string, QuestionRef[]> = {};
-  for (const q of [...rows.questions].sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))) {
-    (bank[q.topic_id] ??= []).push({
-      id: q.id,
-      ...(q.objective_id ? { objectiveId: q.objective_id } : {}),
-      ...(q.tier ? { tier: q.tier as QuestionRef["tier"] } : {}),
-    });
-  }
+  // Objectives under their topic's survivor, and each question under its objective's current topic,
+  // not the rows' own topic_id (either can be stale when a job wrote while the student merged).
+  const topicMergedInto = new Map(rows.topics.flatMap((t) => (t.merged_into ? [[t.id, t.merged_into] as const] : [])));
+  const catalogue = withCurrentTopics(rowCatalogue, topicMergedInto);
+  const bank = fileQuestions(
+    [...rows.questions]
+      .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))
+      .map((q) => ({
+        topicId: q.topic_id,
+        question: { id: q.id, ...(q.objective_id ? { objectiveId: q.objective_id } : {}), ...(q.tier ? { tier: q.tier as QuestionRef["tier"] } : {}) } as QuestionRef,
+      })),
+    catalogue,
+    topicMergedInto,
+  );
   const topicIds = [...rows.topics]
     .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))
     .filter((t) => t.review !== "archived")

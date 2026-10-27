@@ -3,9 +3,10 @@
  * every query names the owner: the owner is the user a route verified when it started the job,
  * carried in the job's payload, never anything the browser sent.
  */
-import type { Material, MaterialPages, QuizQuestion } from "@/lib/data";
+import type { Material, MaterialPages } from "@/lib/data";
 import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
+import { fileQuestions, withCurrentTopics } from "@/lib/mastery/catalogue";
 import { checkBudget } from "@/lib/server/usage";
 import { flaggedForWriting } from "@/lib/pipeline/flagged";
 import { notesForPrompts } from "@/lib/pipeline/notes";
@@ -87,11 +88,14 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
         readAll((a, b) => db.from("relations").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the relations"),
         readAll((a, b) => db.from("questions").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the questions"),
       ]);
-      const bank: Record<string, QuizQuestion[]> = {};
-      for (const q of questions) (bank[q.topic_id] ??= []).push(questionFromRow(q));
+      // Objectives under their topic's survivor, and each question under its objective's current topic,
+      // not the rows' own topic_id (either can be stale when a job wrote while the student merged).
+      const topicMergedInto = new Map(topics.flatMap((t) => (t.merged_into ? [[t.id, t.merged_into] as const] : [])));
+      const objectiveMap = withCurrentTopics(Object.fromEntries(objectives.map((o) => [o.id, objectiveFromRow(o)])), topicMergedInto);
+      const bank = fileQuestions(questions.map((q) => ({ topicId: q.topic_id, question: questionFromRow(q) })), objectiveMap, topicMergedInto);
       const structure = {
         topics: topics.map(topicFromRow),
-        objectives: Object.fromEntries(objectives.map((o) => [o.id, objectiveFromRow(o)])),
+        objectives: objectiveMap,
         bank,
         relations: relations.map(relationFromRow),
       };

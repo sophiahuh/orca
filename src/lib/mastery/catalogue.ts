@@ -58,6 +58,20 @@ export function currentTopicOf(objectiveId: string, catalogue: Filing, topicMerg
 }
 
 /**
+ * Objectives with their topic followed through topic merges. An upload can create an objective in
+ * a topic the student merges meanwhile; the merge only moved the objectives the browser knew of.
+ * Returns the same record when nothing moves.
+ */
+export function withCurrentTopics<O extends { topicId: string }>(objectives: Readonly<Record<string, O>>, topicMergedInto: ReadonlyMap<string, string>): Record<string, O> {
+  if (!topicMergedInto.size || !Object.values(objectives).some((o) => topicMergedInto.has(o.topicId))) return objectives as Record<string, O>;
+  const out: Record<string, O> = {};
+  for (const [id, o] of Object.entries(objectives)) {
+    out[id] = topicMergedInto.has(o.topicId) ? { ...o, topicId: currentTopicOf(id, { [id]: { topicId: o.topicId } }, topicMergedInto) } : o;
+  }
+  return out;
+}
+
+/**
  * Group questions by topic, each under its objective's current topic (`currentTopicOf`), in the
  * order given. `topicId` is where the row says it is: used only for a question with no objective.
  */

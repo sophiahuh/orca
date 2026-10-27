@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentTopicOf, fileQuestions, liveObjectiveOf, objectiveIdOf, objectivesForTopic, resolveObjectiveId, unsortedObjectiveId } from "../../src/lib/mastery/catalogue.ts";
+import { currentTopicOf, fileQuestions, liveObjectiveOf, objectiveIdOf, objectivesForTopic, resolveObjectiveId, unsortedObjectiveId, withCurrentTopics } from "../../src/lib/mastery/catalogue.ts";
 
 const catalogue = {
   "t/a": { id: "t/a", topicId: "t", name: "Do A", review: "confirmed" as const },
@@ -95,6 +95,12 @@ test("a question is filed under its objective's current topic, following objecti
 test("a question with no objective stays under its stored topic; one naming an unknown objective throws", () => {
   assert.deepEqual(fileQuestions([{ topicId: "T1", question: { id: "old" } }], filing, topicMerges), { T1: [{ id: "old" }] });
   assert.throws(() => fileQuestions([{ topicId: "T1", question: { id: "q", objectiveId: "nope" } }], filing, topicMerges), /Question q points at objective "nope", which isn't in the course/);
+});
+
+test("objectives follow topic merges; nothing moves when no topic was merged", () => {
+  const objectives = { Z: { id: "Z", topicId: "T3" }, Y: { id: "Y", topicId: "T2" } };
+  assert.deepEqual(withCurrentTopics(objectives, topicMerges), { Z: { id: "Z", topicId: "T2" }, Y: objectives.Y });
+  assert.equal(withCurrentTopics(objectives, new Map()), objectives);
 });
 
 test("a topic merge cycle throws instead of looping", () => {

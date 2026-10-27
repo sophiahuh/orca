@@ -76,6 +76,11 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.deepEqual(s.courses[0].topics, [topic]);
   assert.deepEqual(s.questionBank.c.t1.map((q) => q.id), ["q1", "q2"]);
   assert.deepEqual(s.relations.c, []);
+
+  // A question saved under a stale topic (a job wrote it while the student merged) loads under its objective's topic.
+  const stale = loadedState({ ...data, questions: [...data.questions, { ...questionToRow({ ...question, id: "q3" }, "t-old", 2), ...owned }] });
+  assert.deepEqual(stale.questionBank.c, { t1: stale.questionBank.c.t1 });
+  assert.deepEqual(stale.questionBank.c.t1.map((q) => q.id), ["q1", "q2", "q3"]);
   assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], review_config: { quick: "daily" } }] }), "a malformed config is refused, not shown");
 
   // A course's settings: its own override first, else the account default, else Orca's built-in one.

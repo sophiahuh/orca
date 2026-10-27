@@ -2,7 +2,7 @@
 -- objective's first mechanism-tier question leaves a stale placeholder when it has no snapshot yet.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(10);
 
 \set A aaaaaaaa-0000-4000-8000-000000000001
 \set B bbbbbbbb-0000-4000-8000-000000000002
@@ -29,6 +29,7 @@ insert into public.objectives (id, owner_id, course_id, topic_id, name, descript
 select pg_temp.act_as(:'A');
 select is(public.course_structure(:'course', :'A') -> 'timezone', '"America/New_York"'::jsonb, 'the structure carries the owner''s timezone');
 select is(jsonb_array_length(public.course_structure(:'course', :'A') -> 'objectives'), 1, 'and the course''s objectives');
+select ok(public.course_structure(:'course', :'A') -> 'topics' -> 0 ? 'merged_into', 'each topic says what it was merged into');
 select is(public.course_structure(:'course', :'B'), null, 'naming another owner returns nothing');
 select pg_temp.act_as(:'B');
 select is(public.course_structure(:'course', :'A'), null, 'nor can B read A''s course under RLS');
