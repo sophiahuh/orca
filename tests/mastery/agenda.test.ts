@@ -185,3 +185,21 @@ test("a weekly dive on class days: first due the day before class after the firs
   assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { schedule: tueThu, results: [finished("d", "2026-10-06T10:00:00Z", "deep")] }).deepReview.dueDay, "2026-10-12");
   assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { schedule: { ...tueThu, deepDays: [3] } }).deepReview.dueDay, "2026-10-07", "the student's day");
 });
+
+test("objectives from material the class hasn't reached yet wait: not due, not in tomorrow's list, not dive candidates", () => {
+  const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence: [], now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
+  const g = courseAgenda({ courseId: "k", mastery, weights, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["c"]), now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  assert.deepEqual(g.dueToday.map((r) => r.objectiveId), ["a", "b"]);
+  // Still ranked (the trail can play it); only the schedule leaves it out.
+  assert.ok(g.ranked.some((r) => r.objectiveId === "c"));
+
+  // Answered before the class got there (played from the trail): it's still no dive candidate while upcoming.
+  const evidence = [ans("c1", "2026-10-01T10:00:00Z")];
+  const m2 = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence, now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  const w2 = agendaWeights(m2.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
+  const waiting = courseAgenda({ courseId: "k", mastery: m2, weights: w2, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["c"]), now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  assert.equal(waiting.deepReview.candidates, 0);
+  const covered = courseAgenda({ courseId: "k", mastery: m2, weights: w2, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
+  assert.equal(covered.deepReview.candidates, 1);
+});

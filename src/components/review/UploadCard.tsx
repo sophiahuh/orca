@@ -29,8 +29,17 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   // Only an unfinished run is followed (a finished one won't change), and never twice.
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   const run = live ?? stored;
-  const { runs } = useOrca();
+  const { runs, setMaterialUpcoming } = useOrca();
   const name = material?.filename ?? "An upload";
+  // "The class hasn't reached this yet": its objectives wait until it's marked covered.
+  const coverage = material && (
+    <span className="flex flex-wrap items-center gap-[8px] text-[13px] font-semibold text-wisteria-deep" data-part="upload-coverage" data-upcoming={material.upcoming ? "1" : "0"}>
+      {material.upcoming ? "Not covered in class yet: its objectives wait until it is." : "Covered in class."}
+      <button type="button" onClick={() => setMaterialUpcoming(material.id, !material.upcoming)} className="font-bold text-prussian underline underline-offset-2">
+        {material.upcoming ? "Mark covered" : "Mark as not covered yet"}
+      </button>
+    </span>
+  );
   const part = (legacy: string) => (focused ? legacy : "upload-card");
   const head = (
     <span className="flex flex-wrap items-center gap-[8px]">
@@ -81,6 +90,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         {plural(run.topicsCreated.length, "new topic")}, {plural(run.objectivesCreated.length, "new objective")}, {run.objectivesAttached.length} existing objective
         {run.objectivesAttached.length === 1 ? "" : "s"} covered again, {plural(run.questionsAdded, "question")} added.
       </span>
+      {coverage}
       {hidden && (
         <span className="text-[14px] font-semibold text-prussian" data-part="hidden-text">
           {hidden} Check what this upload added.

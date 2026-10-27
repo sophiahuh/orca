@@ -156,6 +156,42 @@ test("a folder of files: one row each with its own type, prefilled from the shar
   expect(state.runs).toHaveLength(2);
 });
 
+test("a bulk upload (3+ files) hides dates and asks how far the class has got: the files after that wait, until marked covered on the Uploads tab", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await page.goto("/add-material");
+  const deck = (n: number) => ({ name: `L0${n} Topic.pdf`, mimeType: "application/pdf", buffer: Buffer.from(makePdf([lines(`Lecture ${n}`, "Simplify x + xy.")])) });
+  // Out of order on purpose: the question lists them in filename order.
+  await page.locator('[data-part=file-input]').setInputFiles([deck(3), deck(1), deck(2)]);
+  const rows = page.locator("[data-part=batch-item]");
+  await expect(rows).toHaveCount(3);
+  // Bulk: no date boxes on the rows until asked for.
+  await expect(page.getByLabel("Due date for L01 Topic.pdf")).toHaveCount(0);
+  await expect(rows.first().getByRole("button", { name: "Add dates" })).toBeVisible();
+  const choices = page.locator("[data-part=covered-up-to]");
+  await expect(choices).toHaveText([/L01 Topic\.pdf/, /L02 Topic\.pdf/, /L03 Topic\.pdf/]);
+  // Every file counts as covered until the student says otherwise.
+  await expect(choices.nth(2)).toHaveAttribute("data-covered", "1");
+  await choices.nth(1).click();
+  await expect(choices.nth(2)).toHaveAttribute("data-covered", "0");
+
+  await page.getByRole("button", { name: "Add 3 files to course" }).click();
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 90_000 });
+  await expect.poll(async () => (await stored(page, student)).materials.map((m) => [m.filename, m.upcoming ?? false]).sort()).toEqual([
+    ["L01 Topic.pdf", false],
+    ["L02 Topic.pdf", false],
+    ["L03 Topic.pdf", true],
+  ]);
+
+  // The Uploads tab says so, and one click marks it covered.
+  await page.goto("/course/logic/review?tab=uploads");
+  const waiting = page.locator("[data-part=upload-card]").filter({ hasText: "L03 Topic.pdf" });
+  await expect(waiting.locator("[data-part=upload-coverage]")).toHaveAttribute("data-upcoming", "1", { timeout: 60_000 });
+  await waiting.getByRole("button", { name: "Mark covered" }).click();
+  await expect(waiting.locator("[data-part=upload-coverage]")).toHaveAttribute("data-upcoming", "0");
+  await expect.poll(async () => (await stored(page, student)).materials.filter((m) => m.upcoming).length).toBe(0);
+});
+
 test("an upload keeps its place in the URL: a reload follows it to its review, or says the file never arrived", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");
