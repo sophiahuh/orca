@@ -22,7 +22,7 @@ function TimeInput({ label, value, onChange }: { label: string; value: string; o
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-[40px] rounded-[12px] border-2 border-periwinkle-deep bg-parchment px-[10px] text-[15px] font-bold text-prussian lip-3 lip-periwinkle focus:outline-none"
+      className="h-[40px] shrink-0 rounded-[12px] border-2 border-periwinkle-deep bg-parchment px-[8px] text-[15px] font-bold text-prussian lip-3 lip-periwinkle focus:outline-none"
     />
   );
 }
@@ -34,8 +34,8 @@ export function ClassMeetings({ meetings, onChange }: { meetings: ClassMeeting[]
   return (
     <div className="flex flex-col gap-[10px]" data-part="class-meetings">
       {meetings.map((m, i) => (
-        <div key={i} className="flex items-center gap-[10px]">
-          <Select label={`Class ${i + 1} day`} value={String(m.day) as (typeof DAY_OPTIONS)[number]} options={DAY_OPTIONS} labels={DAY_LABELS} onChange={(d) => set(i, { ...m, day: Number(d) as Weekday })} className="w-[150px]" />
+        <div key={i} className="flex items-center gap-[8px]">
+          <Select label={`Class ${i + 1} day`} value={String(m.day) as (typeof DAY_OPTIONS)[number]} options={DAY_OPTIONS} labels={DAY_LABELS} onChange={(d) => set(i, { ...m, day: Number(d) as Weekday })} className="w-[132px] shrink-0" />
           <TimeInput label={`Class ${i + 1} starts`} value={m.start} onChange={(start) => set(i, { ...m, start })} />
           <span className="text-[14px] font-semibold text-wisteria-deep">to</span>
           <TimeInput label={`Class ${i + 1} ends`} value={m.end} onChange={(end) => set(i, { ...m, end })} />

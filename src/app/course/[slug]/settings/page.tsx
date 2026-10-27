@@ -85,7 +85,7 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
         </div>
       </header>
 
-      <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex min-w-[940px] items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]">
+      <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex min-w-[1102px] items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]">
         <div className="flex w-[600px] flex-col gap-[12px]">
           <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]">
@@ -113,15 +113,6 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
             </Card>
           </motion.div>
           <motion.div variants={fadeUp}>
-            <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]">
-              <div className="flex flex-col gap-[4px]">
-                <h2 className="text-[22px] font-bold text-prussian">Class times</h2>
-                <p className="text-[14px] font-medium text-wisteria-deep">When this class meets each week. A twice-a-week or weekly review lands the day before class unless you pick its days above.</p>
-              </div>
-              <ClassMeetings meetings={schedule.meetings} onChange={(meetings) => change({ schedule: { ...schedule, meetings } })} />
-            </Card>
-          </motion.div>
-          <motion.div variants={fadeUp}>
             <NotesForOrca scope="course" value={notes} onChange={(v) => change({ notes: v })} />
           </motion.div>
           <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
@@ -130,7 +121,14 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
             <Button size="sm" onClick={() => void save()} disabled={saving || problemWithTimes !== null}>{saving ? "Saving…" : "Save"}</Button>
           </motion.div>
         </div>
-        <motion.aside variants={fadeUp} className="w-[328px]">
+        <motion.aside variants={fadeUp} className="flex w-[490px] flex-col gap-[12px]">
+          <Card className="flex flex-col gap-[12px] px-[20px] pb-[22px] pt-[20px]">
+            <div className="flex flex-col gap-[4px]">
+              <h2 className="text-[22px] font-bold text-prussian">Class times</h2>
+              <p className="text-[14px] font-medium text-wisteria-deep">When this class meets each week. A twice-a-week or weekly review lands the day before class unless you pick its days in the review settings.</p>
+            </div>
+            <ClassMeetings meetings={schedule.meetings} onChange={(meetings) => change({ schedule: { ...schedule, meetings } })} />
+          </Card>
           <Card className="flex flex-col gap-[8px] px-[20px] py-[20px]" tone="alice" lip={4}>
             <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course override</p>
             <h2 className="text-[22px] font-bold leading-tight text-prussian">{course.name}</h2>
