@@ -7,9 +7,10 @@ description: Use when building or changing question generation, question validat
 
 ## Rules
 
-- Every question belongs to one objective (`objectiveId`), recorded in the course's objective
-  catalogue (`objectives[courseId]` in the store); a question with no objective
-  falls into its topic's explicit "unsorted" objective, never a guessed one.
+- Every question belongs to one objective (`objectiveId`, required; `questions.objective_id` is
+  not null), recorded in the course's objective catalogue (`objectives[courseId]` in the store).
+  Its topic is that objective's current topic, following merges (`fileQuestions` in
+  `src/lib/mastery/catalogue.ts`); the row's own `topic_id` is never read for filing.
 - A question's id is `crypto.randomUUID()` at creation, never built from its text, position or
   filename; where it came from goes in `materialId`. Before adding, skip prompts the course
   already has (`promptKey` in `src/lib/pipeline/questions.ts`). Never delete a question or objective:

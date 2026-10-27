@@ -403,6 +403,17 @@ jobs screen them again when they load them, so a note written straight through R
 same rules. The slider columns (`profiles.default_weights`, `courses.weights`) are dropped; every
 covering place now counts 1.
 
+**Questions filed by objective (2026-10-26).** A question's topic is its objective's current topic,
+following objective and topic merges, and an objective's topic follows topic merges; both are
+worked out when a course loads (`fileQuestions`, `withCurrentTopics` in
+`src/lib/mastery/catalogue.ts`: the browser, the server's fold and the jobs). Why: a job (a dive,
+an upload, a top-up) writes rows from the structure it read when it started, so a merge the student
+made meanwhile left questions and objectives under the old topic, and `objectivesForTopic` threw
+for the whole course. Merges no longer move questions; they re-file the bank. Every question has
+an objective (`questions.objective_id` not null; both hosted projects had none without one) and the
+"unsorted" bucket is gone. `questions.topic_id` is still written but never read for filing;
+dropping it is a follow-up (plan: `docs/superpowers/plans/2026-10-26-questions-by-objective.md`).
+
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not
 built: everything below, and the exam review itself (the "Exam review" setting is stored, but no

@@ -194,7 +194,8 @@ Full detail: `docs/BACKEND-ROADMAP.md` (decisions and phases), `docs/MASTERY-PLA
 model), `docs/TO-DISCUSS.md` (open questions). In short:
 
 - **Course → topic → objective → questions.** An objective is a "can do X" statement and the unit
-  of mastery. Every question belongs to one objective.
+  of mastery. Every question belongs to one objective, and its topic is that objective's current
+  topic (followed through merges when the course loads; a question's stored `topic_id` can be stale).
 - **Objectives are created once per course**, when material is uploaded. The file is read part by
   part (about 60,000 characters each): a `map` call sees the part and the course's table of contents
   (every topic, its summary and where it's taught), then an `objectives` call per topic touched sees
