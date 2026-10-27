@@ -26,7 +26,7 @@ export function objectiveIdOf(q: { objectiveId?: string }, topicId: string) {
  * Follow `mergedInto` to the objective that now stands for `id`. Returns the id unchanged when
  * it isn't in the catalogue (callers decide whether that's an error).
  */
-export function resolveObjectiveId(id: string, catalogue: Readonly<Record<string, ObjectiveInfo>>): string {
+export function resolveObjectiveId(id: string, catalogue: Readonly<Record<string, Pick<ObjectiveInfo, "topicId" | "mergedInto">>>): string {
   const seen = new Set<string>();
   let current = id;
   while (catalogue[current]?.mergedInto) {
@@ -35,6 +35,47 @@ export function resolveObjectiveId(id: string, catalogue: Readonly<Record<string
     current = catalogue[current].mergedInto!;
   }
   return current;
+}
+
+type Filing = Readonly<Record<string, Pick<ObjectiveInfo, "topicId" | "mergedInto">>>;
+
+/**
+ * The topic an objective lives in now: follow the objective's merges to its survivor, then that
+ * survivor's topic's merges. A question's topic is always this, never a stored copy (2026-10-26:
+ * questions saved by a job while the student merged kept the old topic and broke the course).
+ */
+export function currentTopicOf(objectiveId: string, catalogue: Filing, topicMergedInto: ReadonlyMap<string, string>): string {
+  const objective = catalogue[resolveObjectiveId(objectiveId, catalogue)];
+  if (!objective) throw new Error(`Objective "${objectiveId}" isn't in the course`);
+  const seen = new Set<string>();
+  let topic = objective.topicId;
+  while (topicMergedInto.has(topic)) {
+    if (seen.has(topic)) throw new Error(`Topic merge cycle through "${topic}"`);
+    seen.add(topic);
+    topic = topicMergedInto.get(topic)!;
+  }
+  return topic;
+}
+
+/**
+ * Group questions by topic, each under its objective's current topic (`currentTopicOf`), in the
+ * order given. `topicId` is where the row says it is: used only for a question with no objective.
+ */
+export function fileQuestions<Q extends { id: string; objectiveId?: string }>(
+  stored: ReadonlyArray<{ topicId: string; question: Q }>,
+  catalogue: Filing,
+  topicMergedInto: ReadonlyMap<string, string>,
+): Record<string, Q[]> {
+  const bank: Record<string, Q[]> = {};
+  for (const { topicId, question } of stored) {
+    let topic = topicId;
+    if (question.objectiveId) {
+      if (!catalogue[question.objectiveId]) throw new Error(`Question ${question.id} points at objective "${question.objectiveId}", which isn't in the course`);
+      topic = currentTopicOf(question.objectiveId, catalogue, topicMergedInto);
+    }
+    (bank[topic] ??= []).push(question);
+  }
+  return bank;
 }
 
 /**

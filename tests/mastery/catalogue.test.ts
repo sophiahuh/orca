@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { liveObjectiveOf, objectiveIdOf, objectivesForTopic, resolveObjectiveId, unsortedObjectiveId } from "../../src/lib/mastery/catalogue.ts";
+import { currentTopicOf, fileQuestions, liveObjectiveOf, objectiveIdOf, objectivesForTopic, resolveObjectiveId, unsortedObjectiveId } from "../../src/lib/mastery/catalogue.ts";
 
 const catalogue = {
   "t/a": { id: "t/a", topicId: "t", name: "Do A", review: "confirmed" as const },
@@ -67,4 +67,36 @@ test("merge chains resolve to the end and cycles throw", () => {
   };
   assert.equal(resolveObjectiveId("x", chain), "z");
   assert.throws(() => resolveObjectiveId("x", { ...chain, z: { ...chain.z, mergedInto: "x" } }), /cycle/);
+});
+
+const filing = {
+  X: { topicId: "T1", mergedInto: "Y" },
+  Y: { topicId: "T2" },
+  Z: { topicId: "T3" },
+};
+const topicMerges = new Map([["T3", "T2"]]);
+
+test("a question is filed under its objective's current topic, following objective and topic merges", () => {
+  assert.equal(currentTopicOf("X", filing, topicMerges), "T2", "X was merged into Y, which lives in T2");
+  assert.equal(currentTopicOf("Z", filing, topicMerges), "T2", "Z's topic T3 was merged into T2");
+  const bank = fileQuestions(
+    [
+      { topicId: "T1", question: { id: "dive-q", objectiveId: "X" } }, // saved by a dive after the merge, under the old topic
+      { topicId: "T2", question: { id: "q2", objectiveId: "Y" } },
+      { topicId: "T3", question: { id: "q3", objectiveId: "Z" } },
+    ],
+    filing,
+    topicMerges,
+  );
+  assert.deepEqual(Object.keys(bank), ["T2"]);
+  assert.deepEqual(bank.T2.map((q) => q.id), ["dive-q", "q2", "q3"], "order is kept");
+});
+
+test("a question with no objective stays under its stored topic; one naming an unknown objective throws", () => {
+  assert.deepEqual(fileQuestions([{ topicId: "T1", question: { id: "old" } }], filing, topicMerges), { T1: [{ id: "old" }] });
+  assert.throws(() => fileQuestions([{ topicId: "T1", question: { id: "q", objectiveId: "nope" } }], filing, topicMerges), /Question q points at objective "nope", which isn't in the course/);
+});
+
+test("a topic merge cycle throws instead of looping", () => {
+  assert.throws(() => currentTopicOf("Y", filing, new Map([["T2", "T4"], ["T4", "T2"]])), /Topic merge cycle/);
 });

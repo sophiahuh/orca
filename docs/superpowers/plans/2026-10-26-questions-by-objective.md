@@ -329,11 +329,15 @@ Expected: FAIL: `stray` stays under T2 (or ordering differs).
 In `src/lib/course/ops.ts`: delete `moveQuestions` and `mergedFamily`'s use in it (keep `mergedFamily`: the cycle check uses it). Add:
 
 ```ts
-/** File every question under its objective's current topic (`fileQuestions`), keeping each topic's order. */
+/**
+ * File every question under its objective's current topic (`fileQuestions`). Questions already in
+ * place keep their positions and moved ones follow them, so a save sends only the moved rows.
+ */
 function refiled(s: CourseStructure): CourseStructure {
   const topicMergedInto = new Map(s.topics.flatMap((t) => (t.mergedInto ? [[t.id, t.mergedInto] as const] : [])));
-  const stored = s.topics.flatMap((t) => (s.bank[t.id] ?? []).map((question) => ({ topicId: t.id, question })));
-  return { ...s, bank: fileQuestions(stored, s.objectives, topicMergedInto) };
+  const stored = Object.entries(s.bank).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));
+  const staysPut = (x: { topicId: string; question: QuizQuestion }) => !x.question.objectiveId || currentTopicOf(x.question.objectiveId, s.objectives, topicMergedInto) === x.topicId;
+  return { ...s, bank: fileQuestions([...stored.filter(staysPut), ...stored.filter((x) => !staysPut(x))], s.objectives, topicMergedInto) };
 }
 ```
 
