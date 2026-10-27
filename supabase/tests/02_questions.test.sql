@@ -12,8 +12,8 @@ select plan(6);
 \set inferred 10000000-0000-4000-8000-00000000000b
 
 insert into auth.users (id, email) values (:'A', 'a@example.com');
-insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}', '{}');
+insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 insert into public.topics (id, owner_id, course_id, sort_order, name, review, pos_x, pos_y)
   values (:'topic', :'A', :'course', 0, 'Boolean algebra', 'proposed', 0, 0);
 insert into public.objectives (id, owner_id, course_id, topic_id, name, description, origin, review) values
@@ -31,7 +31,7 @@ select lives_ok(format($$select pg_temp.add_question(%L, '{"locator": "slide 3",
 select throws_ok(format($$select pg_temp.add_question(%L, null)$$, :'obj'), '23514', null, 'a material objective''s question without an anchor is refused');
 select lives_ok(format($$select pg_temp.add_question(%L, null)$$, :'inferred'), 'an inferred objective''s question without an anchor is accepted');
 select throws_ok(format($$select pg_temp.add_question(%L, '{"locator": "slide 3", "excerpt": "x"}')$$, :'inferred'), '23514', null, 'an inferred objective''s question with an anchor is refused');
-select throws_ok($$select pg_temp.add_question(null, null)$$, '23514', null, 'a question with no objective needs an anchor');
+select throws_ok($$select pg_temp.add_question(null, '{"locator": "slide 3", "excerpt": "x"}')$$, '23502', null, 'a question needs an objective');
 select throws_ok(format($$update public.questions set anchor = null where objective_id = %L$$, :'obj'), '23514', null, 'removing an anchor later is refused too');
 
 select * from finish();

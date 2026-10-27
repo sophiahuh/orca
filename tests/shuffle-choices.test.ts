@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { QuizQuestion } from "../src/lib/data.ts";
 import { shuffleChoices } from "../src/lib/shuffle-choices.ts";
 
-const mc = (answer: number): QuizQuestion => ({ id: "q", kind: "Multiple choice", tier: "retrieval", topic: "t", prompt: "p", options: ["right", "w1", "w2", "w3"].map((o, i) => (i === answer ? "right" : o === "right" ? "w0" : o)), answer, explanation: "" });
+const mc = (answer: number): QuizQuestion => ({ id: "q", kind: "Multiple choice", tier: "retrieval", topic: "t", prompt: "p", options: ["right", "w1", "w2", "w3"].map((o, i) => (i === answer ? "right" : o === "right" ? "w0" : o)), answer, explanation: "", objectiveId: "o" });
 
 test("the options are reordered and the answer follows its option", () => {
   let seed = 0.37;

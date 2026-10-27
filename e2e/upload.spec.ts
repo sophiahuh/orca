@@ -181,7 +181,7 @@ test("a job that fails says why on the review screen, saves nothing, and uploadi
 
 async function newCourse(student: Student): Promise<string> {
   const id = crypto.randomUUID();
-  const { error } = await student.db.from("courses").insert({ id, slug: `c-${id.slice(0, 8)}`, name: "Logic", short: "LOG", variant: "circuit", pos_x: 0, pos_y: 0, review_config: {}, weights: {} });
+  const { error } = await student.db.from("courses").insert({ id, slug: `c-${id.slice(0, 8)}`, name: "Logic", short: "LOG", variant: "circuit", pos_x: 0, pos_y: 0, review_config: {} });
   if (error) throw new Error(error.message);
   return id;
 }

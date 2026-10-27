@@ -16,7 +16,6 @@ const bank = {
     { id: "q2", objectiveId: "b", tier: "mechanism" as const },
     { id: "q3", objectiveId: "c" },
     { id: "q4", objectiveId: "gone" },
-    { id: "q5" },
   ],
   t2: [{ id: "q6", objectiveId: "d" }],
 };
@@ -49,7 +48,7 @@ const confusion = (objectiveId: string): ConfusionEvent => ({
 const att = attribution({ topicIds: ["t1"], bank, catalogue });
 
 test("lists the objectives that can hold state now, with whether they have mechanism questions", () => {
-  assert.deepEqual([...att.objectives.keys()].sort(), ["a", "c", "t1#unsorted"]);
+  assert.deepEqual([...att.objectives.keys()].sort(), ["a", "c"]);
   assert.equal(att.objectives.get("c")!.hasMechanismQuestions, true, "q2 came with the merge");
   assert.equal(att.objectives.get("a")!.hasMechanismQuestions, false);
 });
@@ -57,7 +56,6 @@ test("lists the objectives that can hold state now, with whether they have mecha
 test("an answer counts for its question's current objective, whatever was recorded", () => {
   assert.equal(att.countsFor(answer("q1", "c")), "a");
   assert.equal(att.countsFor(answer("q2", "b")), "c");
-  assert.equal(att.countsFor(answer("q5", "a")), "t1#unsorted");
 });
 
 test("otherwise an event counts for its recorded objective, following merges", () => {

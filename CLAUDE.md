@@ -56,9 +56,17 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
     upload and from "Find connections" on the Atlas (`POST /api/relink`).
   - **Concept Atlas** is a topic graph (`src/lib/course/topic-graph.ts`, `src/components/atlas/`):
     foundations on top, nodes sized by how many topics they're used in, strength glyphs.
-  - **Course settings are overrides**: a course's `review_config` / `weights` are null to inherit the
-    account defaults on the profile (Settings page), set to override (the course's settings popup,
-    the gear on its page).
+  - **Course settings are overrides**: a course's `review_config` is null to inherit the account
+    default on the profile (Settings page), set to override (the course's settings page, the gear on
+    its page).
+  - **Notes for Orca** (2026-10-25, replacing the material-type weight sliders): free text, one for
+    all classes (`profiles.orca_notes`, Settings) and one per class (`courses.orca_notes`, the
+    course's settings), at most 1,000 characters. The writing steps (map, objectives, generate,
+    deep) get both as a `student_notes` data block with rules scoped to the step
+    (`src/lib/pipeline/prompts.ts` `notesRules`); the grader, link, reconcile, reflect, transcribe
+    and describe steps never see them. Saved only through `PUT /api/account-notes` and
+    `PUT /api/course-settings`, which refuse a strong injection hit (`src/lib/pipeline/notes.ts`,
+    `src/lib/server/notes.ts`); jobs screen them again when they load them.
   - **Exams** have their own table (each course's exams, dates, optional topics), edited with
     "Edit Exams" on the course page; they show on the calendar and drive the exam cadences.
   - Homework reflection is a text box on the upload page; the calendar shows scheduled reviews,
@@ -86,7 +94,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   the owner's step (the agent's auto mode blocks `db push`); the Deploy workflow pushes pending
   migrations itself once its two secrets are set. A migration the code needs but the database
   lacks shows as "Could not find the table … in the schema cache". Check with
-  `npx supabase migration list --linked` (read-only).
+  `npx supabase migration list --linked` (read-only). `20261027090000_orca_notes` (Notes for Orca)
+  **drops** `profiles.default_weights` and `courses.weights`: between it landing and the new code
+  going live, the old code's course creation and course-settings save fail, so push it right before
+  deploying (the Deploy workflow does).
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
@@ -183,7 +194,8 @@ Full detail: `docs/BACKEND-ROADMAP.md` (decisions and phases), `docs/MASTERY-PLA
 model), `docs/TO-DISCUSS.md` (open questions). In short:
 
 - **Course → topic → objective → questions.** An objective is a "can do X" statement and the unit
-  of mastery. Every question belongs to one objective.
+  of mastery. Every question belongs to one objective, and its topic is that objective's current
+  topic (followed through merges when the course loads; a question's stored `topic_id` can be stale).
 - **Objectives are created once per course**, when material is uploaded. The file is read part by
   part (about 60,000 characters each): a `map` call sees the part and the course's table of contents
   (every topic, its summary and where it's taught), then an `objectives` call per topic touched sees
@@ -201,8 +213,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   replaying the log.
 - **Weights.** Every topic and objective has a weight (neutral 1.0). The model records signals from
   the material (coverage, material type, explicit emphasis); code computes the weight, and an
-  objective gains weight for each topic its topic is used in. The material-type sliders (account
-  defaults in Settings, a course's override in its popup) feed it.
+  objective gains weight for each topic its topic is used in. Every covering place counts the same;
+  Notes for Orca can set an objective's emphasis (tested or skipped).
 - **Topic links.** Relations connect topics: used-in (a prerequisite), has-a-kind, alternative-to,
   related (one works around the other's limitation, or a deliberate contrast). Each carries a one-
   sentence reason shown on hover in the Atlas; used-in/has-a-kind never form a loop. They are the
@@ -215,8 +227,9 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   topic, at the length the student picks; its cadence is the course's setting.
 - **Exams.** Each course's exams (date, optional topics) are their own table; they show on the
   calendar and set the "1 wk before exam" cadences. A dedicated exam review is Phase 5.
-- **Settings.** The account holds default review settings and weights; a course inherits them until
-  its own settings popup overrides them.
+- **Settings.** The account holds default review settings; a course inherits them until its own
+  settings page overrides them. Notes for Orca are sent from both: the account's for every class and
+  the course's (which wins on a conflict).
 - **Self-reported confusion** in a homework reflection resets the matching objectives to learning.
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
 - **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
@@ -260,8 +273,9 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   (pure) maps the app's types to rows and back, and computes the changed rows a structure save sends.
   Tables added in Phase 4's second half: `model_usage` and `rate_limits` (7c) and `security_events`
   (7b), all service-role only; `pipeline_runs` gained `objective_ids` and `security`. Since:
-  `profiles.default_review_config` / `default_weights` (account defaults), `courses.review_config` /
-  `weights` nullable (null inherits), `questions.deep`, `relations` rebuilt between topics
+  `profiles.default_review_config` (account default), `courses.review_config` nullable (null
+  inherits), `profiles.orca_notes` / `courses.orca_notes` (Notes for Orca; the slider columns
+  `default_weights` / `weights` were dropped 2026-10-25), `security_events.kind` `orca_notes`, `questions.deep`, `relations` rebuilt between topics
   (`from_topic`, `to_topic`, four types, `material_id` nullable), and `exams` (owner-only, in
   `my_data`).
   Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`

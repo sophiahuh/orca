@@ -15,9 +15,7 @@ import {
   type Relation,
   type ReviewConfig,
   type Topic,
-  type Weights,
   DEFAULT_CONFIG,
-  DEFAULT_WEIGHTS,
   defaultTopicPositions,
 } from "../src/lib/data";
 import type { EvidenceEvent } from "../src/lib/mastery/types";
@@ -111,7 +109,6 @@ export async function stored(page: Page, student: Student): Promise<LoadedState>
 export interface SeedState {
   courses: Course[];
   configs?: Record<string, ReviewConfig>;
-  weights?: Record<string, Weights>;
   objectives?: Record<string, Record<string, Objective>>;
   questionBank?: Record<string, Record<string, QuizQuestion[]>>;
   relations?: Record<string, Relation[]>;
@@ -135,7 +132,7 @@ const check = (what: string, r: { error: { message: string } | null }) => {
 export async function seedState(student: Student, s: SeedState) {
   const db = admin();
   const owner = { owner_id: student.id };
-  for (const c of s.courses) check("a course", await db.from("courses").insert({ ...courseToRow(c, s.configs?.[c.id] ?? DEFAULT_CONFIG, s.weights?.[c.id] ?? DEFAULT_WEIGHTS), ...owner }));
+  for (const c of s.courses) check("a course", await db.from("courses").insert({ ...courseToRow(c, s.configs?.[c.id] ?? DEFAULT_CONFIG), ...owner }));
   for (const m of s.materials ?? []) check("a material", await db.from("materials").insert({ ...materialToRow(m), ...owner }));
   for (const c of s.courses) {
     const after = { topics: c.topics, objectives: s.objectives?.[c.id] ?? {}, bank: s.questionBank?.[c.id] ?? {}, relations: s.relations?.[c.id] ?? [] };
@@ -228,7 +225,6 @@ export const FIXTURE_STATE = {
     },
   ] satisfies Course[],
   configs: { [F.course]: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "3 hours", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } } } satisfies Record<string, ReviewConfig>,
-  weights: { [F.course]: { homework: 25, practiceExams: 25, practiceProblems: 25, lectures: 25 } },
   materials: [fixtureMaterial(F.course)],
   objectives: {
     [F.course]: {

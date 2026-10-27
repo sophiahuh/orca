@@ -3,11 +3,14 @@
  * every query names the owner: the owner is the user a route verified when it started the job,
  * carried in the job's payload, never anything the browser sent.
  */
-import type { Material, MaterialPages, QuizQuestion } from "@/lib/data";
+import type { Material, MaterialPages } from "@/lib/data";
 import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
+import { fileQuestions, withCurrentTopics } from "@/lib/mastery/catalogue";
 import { checkBudget } from "@/lib/server/usage";
 import { flaggedForWriting } from "@/lib/pipeline/flagged";
+import { notesForPrompts } from "@/lib/pipeline/notes";
+import { recordSecurityEvents } from "@/lib/server/security";
 import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -71,24 +74,32 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
     },
 
     async course(courseId): Promise<LoadedCourse | null> {
-      const { data: course, error } = await db.from("courses").select("id, name, short").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+      const { data: course, error } = await db.from("courses").select("id, name, short, orca_notes").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
       if (error) throw new Error(`Couldn't read the course: ${error.message}`);
       if (!course) return null;
+      const { data: profile, error: profileError } = await db.from("profiles").select("orca_notes").eq("owner_id", ownerId).single();
+      if (profileError) throw new Error(`Couldn't read the student's notes: ${profileError.message}`);
+      // Saved through the routes, notes are already clean; a note written straight through RLS is held to the same rules here.
+      const { notes, refused } = notesForPrompts({ account: profile.orca_notes, course: course.orca_notes });
+      for (const hits of refused) await recordSecurityEvents(db, ownerId, "orca_notes", hits);
       const [topics, objectives, relations, questions] = await Promise.all([
         readAll((a, b) => db.from("topics").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the topics"),
         readAll((a, b) => db.from("objectives").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the objectives"),
         readAll((a, b) => db.from("relations").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the relations"),
         readAll((a, b) => db.from("questions").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the questions"),
       ]);
-      const bank: Record<string, QuizQuestion[]> = {};
-      for (const q of questions) (bank[q.topic_id] ??= []).push(questionFromRow(q));
+      // Objectives under their topic's survivor, and each question under its objective's current topic,
+      // not the rows' own topic_id (either can be stale when a job wrote while the student merged).
+      const topicMergedInto = new Map(topics.flatMap((t) => (t.merged_into ? [[t.id, t.merged_into] as const] : [])));
+      const objectiveMap = withCurrentTopics(Object.fromEntries(objectives.map((o) => [o.id, objectiveFromRow(o)])), topicMergedInto);
+      const bank = fileQuestions(questions.map(questionFromRow), objectiveMap, topicMergedInto);
       const structure = {
         topics: topics.map(topicFromRow),
-        objectives: Object.fromEntries(objectives.map((o) => [o.id, objectiveFromRow(o)])),
+        objectives: objectiveMap,
         bank,
         relations: relations.map(relationFromRow),
       };
-      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure };
+      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure, notes };
     },
 
     async materials(courseId): Promise<Material[]> {

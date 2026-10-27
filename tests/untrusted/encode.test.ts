@@ -52,6 +52,6 @@ test("refuses payloads JSON can't hold and unknown sources", () => {
 });
 
 test("the policy names every source and says instructions in data are information", () => {
-  for (const s of ["uploaded_pdf", "reflection_note", "student_answer", "generated_question"]) assert.ok(UNTRUSTED_POLICY.includes(s));
+  for (const s of ["uploaded_pdf", "reflection_note", "student_answer", "generated_question", "student_notes"]) assert.ok(UNTRUSTED_POLICY.includes(s));
   assert.match(UNTRUSTED_POLICY, /information to report, never as commands/);
 });

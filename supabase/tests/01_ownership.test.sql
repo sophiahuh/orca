@@ -41,8 +41,8 @@ select is((select name from public.profiles where owner_id = 'cccccccc-0000-4000
 
 -- A builds a course the way the app will.
 select pg_temp.act_as(:'A');
-select lives_ok(format($$insert into public.courses (id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (%L, 'ald', 'Advanced Logic Design', 'ALD', 'ald', 70, 110, '{}', '{}')$$, :'course'), 'A adds a course');
+select lives_ok(format($$insert into public.courses (id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (%L, 'ald', 'Advanced Logic Design', 'ALD', 'ald', 70, 110, '{}')$$, :'course'), 'A adds a course');
 select lives_ok(format($$insert into public.materials (id, course_id, filename, type)
   values (%L, %L, 'L01.pdf', 'Lecture')$$, :'material', :'course'), 'A adds a material');
 -- The upload's run is the server's (its job writes it); A's save hangs the structure off it.
@@ -90,8 +90,8 @@ select is((select count(*) from public.material_pages), 1::bigint, 'A reads thei
 select throws_ok(format($$insert into public.material_pages (owner_id, material_id, n, text) values (%L, %L, 2, 'p')$$, :'A', :'material'), '42501', null, 'pages are written by the server only');
 
 -- A can't move a row into another course by saving it there.
-select lives_ok(format($$insert into public.courses (id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (%L, 'signals', 'Signals', 'SIG', 'signals', 0, 0, '{}', '{}')$$, :'course2'), 'A adds a second course');
+select lives_ok(format($$insert into public.courses (id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (%L, 'signals', 'Signals', 'SIG', 'signals', 0, 0, '{}')$$, :'course2'), 'A adds a second course');
 select throws_ok(format($$select public.save_structure(%L, %L)$$, :'course2', jsonb_build_object('topics', jsonb_build_array(
   jsonb_build_object('id', :'topic', 'sort_order', 0, 'name', 'Stolen', 'review', 'proposed', 'pos_x', 0, 'pos_y', 0)))),
   '23514', null, 'save_structure refuses a row that belongs to another course');

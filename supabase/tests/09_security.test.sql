@@ -17,8 +17,8 @@ create function pg_temp.act_as(uid uuid) returns void language sql as $$
 $$;
 
 insert into auth.users (id, email) values (:'A', 'a9@example.com'), (:'B', 'b9@example.com');
-insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config, weights)
-  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}', '{}');
+insert into public.courses (id, owner_id, slug, name, short, variant, pos_x, pos_y, review_config)
+  values (:'course', :'A', 'ald', 'ALD', 'ALD', 'ald', 0, 0, '{}');
 insert into public.materials (id, owner_id, course_id, filename, type) values (:'material', :'A', :'course', 'L01.pdf', 'Lecture');
 
 -- The job saves its run with what the checks found.

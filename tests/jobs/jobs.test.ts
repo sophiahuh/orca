@@ -6,6 +6,7 @@ import type { CallStep, Progress } from "../../src/lib/pipeline/run.ts";
 import type { StepInput } from "../../src/lib/pipeline/schemas.ts";
 import type { StructureRows, StructureState } from "../../src/lib/supabase/app-rows.ts";
 import type { BudgetVerdict } from "../../src/lib/jobs/budget.ts";
+import type { OrcaNotes } from "../../src/lib/pipeline/notes.ts";
 
 const anchor = { locator: "slide 2", excerpt: "x + xy = x" };
 const material: Material = { id: "m1", courseId: "c", filename: "L02.pdf", type: "Lecture", assigned: null, due: null, reflect: false };
@@ -26,7 +27,7 @@ const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
 });
 
 /** An in-memory JobStore for one student: what the jobs saved, the progress they wrote, the run's state. */
-function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; lostReply?: boolean; budget?: BudgetVerdict }) {
+function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; notes?: OrcaNotes | null; lostReply?: boolean; budget?: BudgetVerdict }) {
   const run = { ...init.run };
   const structure: StructureState = init.structure ?? { topics: [], objectives: {}, bank: {}, relations: [] };
   const saves: StructureRows[] = [];
@@ -56,7 +57,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
       run.status = "waiting";
       run.progress = { stage: "waiting", reason: verdict.reason, message: verdict.message };
     },
-    course: async (id) => (id === "c" ? { course: { id: "c", name: "Logic", short: "LOG", topics: structure.topics }, structure } : null),
+    course: async (id) => (id === "c" ? { course: { id: "c", name: "Logic", short: "LOG", topics: structure.topics }, structure, notes: init.notes ?? null } : null),
     materials: async () => [material],
     pages: async (ids) => Object.fromEntries(ids.flatMap((id) => (init.pages?.[id] ? [[id, init.pages[id]]] : []))),
     savePages: async (_id, read, source) => void savedPages.push(...read.map((p) => ({ ...p, source }))),
@@ -300,4 +301,22 @@ test("a Dive In is as long as picked, whatever its objectives: 20 minutes on one
   assert.equal(out.status, "done");
   assert.deepEqual(model.steps, [], "20 minutes is 5 questions, all from the stock");
   assert.deepEqual(mem.saves[0].runs![0].question_ids, ["d1", "d2", "d3", "d4", "d5"]);
+});
+
+test("the course's Notes for Orca reach every writing call of an upload", async () => {
+  const notes = { forAllClasses: null, forThisClass: "No proofs." };
+  const mem = memoryStore({ run: queued(), pages, notes });
+  const model = honestModel();
+  const seen: Array<{ step: string; notes: unknown }> = [];
+  const call = (async (step: string, input: unknown) => {
+    seen.push({ step, notes: (input as { notes?: unknown }).notes });
+    return model.call(step as never, input as never);
+  }) as CallStep;
+  const out = await processMaterial({ store: mem.store, call, newId }, { runId: "run1", materialId: "m1" });
+  assert.equal(out.status, "done");
+  for (const step of ["map", "objectives", "generate"]) {
+    const calls = seen.filter((c) => c.step === step);
+    assert.ok(calls.length > 0, step);
+    for (const c of calls) assert.deepEqual(c.notes, notes, step);
+  }
 });

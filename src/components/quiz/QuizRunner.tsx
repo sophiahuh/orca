@@ -163,7 +163,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
     if (!finished) return;
     const states = masteryByCourse[course.id]?.objectives;
     const ids = allItems.flatMap((i) => {
-      const o = liveObjectiveOf(i.question, i.topicId, catalogue ?? {});
+      const o = liveObjectiveOf(i.question, catalogue ?? {});
       const status = o ? states?.get(o.id)?.status : undefined;
       return o && status !== "mastered" && status !== "retired" ? [o.id] : [];
     });
@@ -174,7 +174,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   const item = items[index];
   const q = item?.question;
   const total = questions.length;
-  const objective = q ? liveObjectiveOf(q, item.topicId, catalogue ?? {}) : null;
+  const objective = q ? liveObjectiveOf(q, catalogue ?? {}) : null;
   const objectiveState = objective ? masteryByCourse[course.id]?.objectives.get(objective.id) : undefined;
   const showResult = useCallback(
     (outcome: Outcome, line: string | null) => {
@@ -189,7 +189,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
     (at: RunnerItem, outcome: Outcome, grader: Grader) => {
       // One id per run; the "review missed" restart stays in the same session.
       sessionId.current ??= crypto.randomUUID();
-      const objective = liveObjectiveOf(at.question, at.topicId, catalogue ?? {});
+      const objective = liveObjectiveOf(at.question, catalogue ?? {});
       if (!objective) throw new Error(`Question ${at.question.id} belongs to an archived objective and should not have been asked`);
       recordEvidence({
         sessionId: sessionId.current,
@@ -425,7 +425,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
       <div ref={bodyRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-[100px] pb-[24px] pt-[32px]">
         <AnimatePresence mode="wait">
           <motion.div key={q.id} variants={stagger(0.05, 0.07)} initial="hidden" animate="show" exit="exit" className="flex max-w-[800px] flex-col">
-            {liveObjectiveOf(q, item.topicId, catalogue ?? {})?.review === "proposed" && (
+            {liveObjectiveOf(q, catalogue ?? {})?.review === "proposed" && (
               <motion.div variants={fadeUp} className="mb-[10px] flex">
                 <Pill tone="strong" className="normal-case">
                   Unreviewed

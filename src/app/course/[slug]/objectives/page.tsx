@@ -2,7 +2,7 @@
 
 import { use, useMemo } from "react";
 import { motion } from "motion/react";
-import { DEFAULT_WEIGHTS, type Objective, type Topic } from "@/lib/data";
+import { type Objective, type Topic } from "@/lib/data";
 import { useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { courseObjectiveWeights, topicWeight } from "@/lib/course/weights";
 import { confirmObjective, mergeObjectives, rejectObjective, restoreObjective, restoreTopic } from "@/lib/course/ops";
@@ -17,13 +17,13 @@ const weightText = (w: number | null | undefined) => (w === null || w === undefi
 /** Every objective in a course: where it came from, its review status, weight and mastery, with reject, restore and merge. */
 export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/objectives">) {
   const { slug } = use(params);
-  const { hydrated, objectives, relations, weights, editStructure } = useOrca();
+  const { hydrated, objectives, relations, editStructure } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const catalogue = useMemo(() => (course ? (objectives[course.id] ?? {}) : {}), [course, objectives]);
   const objectiveWeights = useMemo(
-    () => (course ? courseObjectiveWeights(catalogue, course.topics, relations[course.id] ?? [], weights[course.id] ?? DEFAULT_WEIGHTS) : new Map<string, number>()),
-    [course, catalogue, relations, weights],
+    () => (course ? courseObjectiveWeights(catalogue, course.topics, relations[course.id] ?? []) : new Map<string, number>()),
+    [course, catalogue, relations],
   );
 
   if (!course) {

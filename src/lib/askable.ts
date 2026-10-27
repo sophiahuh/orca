@@ -12,7 +12,7 @@ export function askableQuestions(course: Course, bank: Record<string, QuizQuesti
   const placeOf = new Map<string, { objectiveId: string; topicId: string }>();
   for (const t of trailTopics(course)) {
     for (const q of bank?.[t.id] ?? []) {
-      const o = liveObjectiveOf(q, t.id, catalogue);
+      const o = liveObjectiveOf(q, catalogue);
       if (!o || q.deep || feedback[q.id]?.rating === "down") continue;
       byId.set(q.id, q);
       byObjective.set(o.id, [...(byObjective.get(o.id) ?? []), q]);

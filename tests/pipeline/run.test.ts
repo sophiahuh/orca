@@ -349,3 +349,28 @@ test("upload questions are written from each objective's own pages", async () =>
   await runUpload(input({ pages: ten }), { call: model.call, newId });
   assert.deepEqual(written, [[6, 7, 8]]);
 });
+
+test("the student's notes reach the map, objectives and generate calls, and never the link call", async () => {
+  const notes = { forAllClasses: null, forThisClass: "No proofs." };
+  const model = fakeModel({
+    map: () => ({
+      topics: [
+        { localId: "t1", existingId: null, name: "Negation", summary: "s", pages: [{ from: 1, to: 2 }] },
+        { localId: "t2", existingId: null, name: "Overflow", summary: "s", pages: [{ from: 3, to: 4 }] },
+      ],
+      relations: [],
+      instructionsFound: [],
+    }),
+    objectives: (i) => ({ objectives: [{ localId: `o-${i.topic.id}`, existingId: null, name: `Skill of ${i.topic.name}`, description: "", origin: "material", places: [{ locator: "slide 2", excerpt: "x" }], emphasis: null }] }),
+    generate: () => ({ questions: [] }),
+  });
+  await runUpload(input({ notes }), { call: model.call, newId });
+  for (const step of ["map", "objectives", "generate"] as const) {
+    const calls = model.calls.filter((c) => c.step === step);
+    assert.ok(calls.length > 0, step);
+    for (const c of calls) assert.deepEqual((c.input as { notes?: unknown }).notes, notes, step);
+  }
+  const links = model.calls.filter((c) => c.step === "link");
+  assert.ok(links.length > 0, "two new topics are linked");
+  for (const c of links) assert.equal((c.input as { notes?: unknown }).notes, undefined);
+});

@@ -27,9 +27,9 @@ import type {
   Relation,
   ReviewConfig,
   Topic,
-  Weights,
 } from "../data.ts";
-import { DEFAULT_CONFIG, DEFAULT_WEIGHTS } from "../data.ts";
+import { DEFAULT_CONFIG } from "../data.ts";
+import { fileQuestions, withCurrentTopics } from "../mastery/catalogue.ts";
 import type { EvidenceEvent } from "../mastery/types.ts";
 import type { Database, Json } from "./database.types.ts";
 import { type EvidenceRow, type SnapshotRow, eventFromRow } from "./rows.ts";
@@ -47,16 +47,15 @@ const jsonValue = (v: object) => v as NonNullable<Json>;
 
 const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Weekly", "1 wk before exam"]) });
 export const ReviewConfigSchema = z.object({ quick: ReviewRowSchema, deep: ReviewRowSchema, exam: ReviewRowSchema });
-export const WeightsSchema = z.record(z.string(), z.number().min(0));
 
 /** The profile's defaults for new courses, as written to `profiles`. */
-export function defaultsToRow(config: ReviewConfig, weights: Weights) {
-  return { default_review_config: jsonValue(ReviewConfigSchema.parse(config)), default_weights: jsonValue(WeightsSchema.parse(weights)) };
+export function defaultsToRow(config: ReviewConfig) {
+  return { default_review_config: jsonValue(ReviewConfigSchema.parse(config)) };
 }
 
 /* ── Courses ── */
 
-export function courseToRow(c: Course, config: ReviewConfig | null, weights: Weights | null): Omit<Row<"courses">, "owner_id" | "created_at"> {
+export function courseToRow(c: Course, config: ReviewConfig | null): Omit<Row<"courses">, "owner_id" | "created_at" | "orca_notes"> {
   return {
     id: c.id,
     slug: c.slug,
@@ -67,7 +66,6 @@ export function courseToRow(c: Course, config: ReviewConfig | null, weights: Wei
     pos_y: c.pos.y,
     trail: c.trail ?? null,
     review_config: config === null ? null : jsonValue(ReviewConfigSchema.parse(config)),
-    weights: weights === null ? null : jsonValue(WeightsSchema.parse(weights)),
   };
 }
 
@@ -159,7 +157,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     id: q.id,
     topic_id: topicId,
     sort_order: sortOrder,
-    objective_id: q.objectiveId ?? null,
+    objective_id: q.objectiveId,
     kind: q.kind,
     tier: q.tier ?? null,
     topic_name: q.topic,
@@ -193,7 +191,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     ...(r.anchor !== null ? { anchor: r.anchor as unknown as NonNullable<QuizQuestion["anchor"]> } : {}),
     ...(r.figure !== null ? { figure: r.figure as unknown as NonNullable<QuizQuestion["figure"]> } : {}),
     ...(r.material_id !== null ? { materialId: r.material_id } : {}),
-    ...(r.objective_id !== null ? { objectiveId: r.objective_id } : {}),
+    objectiveId: r.objective_id,
     ...(r.deep ? { deep: true } : {}),
   };
 }
@@ -419,12 +417,13 @@ export interface LoadedState {
   name: string | null;
   /** Settings' defaults for new courses; null = Orca's built-in ones. */
   defaultConfig: ReviewConfig | null;
-  defaultWeights: Weights | null;
   courses: Course[];
   configs: Record<string, ReviewConfig>;
-  weights: Record<string, Weights>;
   configOverrides: Record<string, ReviewConfig | null>;
-  weightOverrides: Record<string, Weights | null>;
+  /** Notes for Orca for all classes; null = none. */
+  accountNotes: string | null;
+  /** Notes for Orca per course; null = none. */
+  courseNotes: Record<string, string | null>;
   objectives: Record<string, Record<string, Objective>>;
   questionBank: Record<string, Record<string, QuizQuestion[]>>;
   relations: Record<string, Relation[]>;
@@ -460,29 +459,31 @@ export function loadedState(d: MyData): LoadedState {
   const byCourse = <T>(make: () => T) => Object.fromEntries(courses.map((c) => [c.id, make()])) as Record<string, T>;
   const objectives = byCourse<Record<string, Objective>>(() => ({}));
   for (const o of d.objectives) objectives[o.course_id][o.id] = objectiveFromRow(o);
+  // Objectives under their topic's survivor, and each question under its objective's current topic,
+  // not the rows' own topic_id (either can be stale when a job wrote while the student merged).
   const questionBank = byCourse<Record<string, QuizQuestion[]>>(() => ({}));
-  for (const q of [...d.questions].sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id))) {
-    (questionBank[q.course_id][q.topic_id] ??= []).push(questionFromRow(q));
+  const sortedQuestions = [...d.questions].sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id));
+  for (const c of courses) {
+    const topicMergedInto = new Map(c.topics.flatMap((t) => (t.mergedInto ? [[t.id, t.mergedInto] as const] : [])));
+    objectives[c.id] = withCurrentTopics(objectives[c.id], topicMergedInto);
+    questionBank[c.id] = fileQuestions(sortedQuestions.filter((q) => q.course_id === c.id).map(questionFromRow), objectives[c.id], topicMergedInto);
   }
   const relations = byCourse<Relation[]>(() => []);
   for (const r of d.relations) relations[r.course_id].push(relationFromRow(r));
   if (!isAvatar(d.profile.avatar)) throw new Error(`Your profile's avatar "${d.profile.avatar}" isn't one Orca knows`);
   const defaultConfig = d.profile.default_review_config === null ? null : ReviewConfigSchema.parse(d.profile.default_review_config);
-  const defaultWeights = d.profile.default_weights === null ? null : WeightsSchema.parse(d.profile.default_weights);
   const configOverrides = Object.fromEntries(d.courses.map((c) => [c.id, c.review_config === null ? null : ReviewConfigSchema.parse(c.review_config)]));
-  const weightOverrides = Object.fromEntries(d.courses.map((c) => [c.id, c.weights === null ? null : WeightsSchema.parse(c.weights)]));
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
     avatar: d.profile.avatar,
     name: d.profile.name,
     defaultConfig,
-    defaultWeights,
     courses,
     configs: Object.fromEntries(d.courses.map((c) => [c.id, configOverrides[c.id] ?? defaultConfig ?? DEFAULT_CONFIG])),
-    weights: Object.fromEntries(d.courses.map((c) => [c.id, weightOverrides[c.id] ?? defaultWeights ?? DEFAULT_WEIGHTS])),
     configOverrides,
-    weightOverrides,
+    accountNotes: d.profile.orca_notes,
+    courseNotes: Object.fromEntries(d.courses.map((c) => [c.id, c.orca_notes])),
     objectives,
     questionBank,
     relations,
