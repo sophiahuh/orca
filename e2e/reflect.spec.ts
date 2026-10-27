@@ -1,10 +1,10 @@
-import path from "node:path";
 import type { AnswerEvent } from "../src/lib/mastery/types";
 import { expect, test, F, FIXTURE_STATE, daysAgo, seedState, stored } from "./fixture";
 import { fakeCalls, fakeModel } from "./fake-model";
+import { DECK_NAME, makeDeck } from "../tests/fixtures/pdf";
 
 const COURSE = "logic-e2e";
-const DECK = path.join(process.cwd(), "docs/samples/ald/L02_Combinational.pdf");
+const DECK = { name: DECK_NAME, mimeType: "application/pdf", buffer: Buffer.from(makeDeck()) };
 const NOTE = "Converting negatives kept going wrong, and the sign stuff.";
 const answer = (questionId: string, at: string): AnswerEvent => ({
   kind: "answer",
