@@ -105,6 +105,13 @@ export async function pauseRuns(db: OrcaSupabase, ownerId: string, target: core.
   return changed;
 }
 
+/** Stop an upload's run now (POST /api/runs/stop) and start the student's next job after the response. */
+export async function stopRun(db: OrcaSupabase, ownerId: string, runId: string): Promise<boolean> {
+  const stopped = await core.stopRun(deps(db, "after-response"), ownerId, runId);
+  if (stopped) await core.resumeNext(deps(db, "after-response"), ownerId);
+  return stopped;
+}
+
 /** Every student with a live run (queued, waiting or running: a running one may have died), for the scheduled sweeps. */
 export async function ownersWithPendingRuns(db: OrcaSupabase): Promise<string[]> {
   const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting", "running"]);

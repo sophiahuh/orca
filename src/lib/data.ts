@@ -27,6 +27,8 @@ export interface Topic {
   review: Review;
   /** Set when this topic was merged into another; it is then also archived. */
   mergedInto?: string;
+  /** Archived because the material that created it was removed, not rejected: a later upload may create it afresh. */
+  archivedWithMaterial?: true;
   /** The upload that created it. */
   materialId?: string;
   /** Reconciliation couldn't tell whether this duplicates topic `candidateId`; the student decides. */
@@ -264,6 +266,8 @@ export interface Objective {
   runId: string | null;
   /** Archived because its topic was rejected; restoring the topic brings it back. */
   archivedWithTopic?: true;
+  /** Archived because its material was removed, not rejected by the student: a later upload may create it afresh. */
+  archivedWithMaterial?: true;
   /** Reconciliation couldn't tell whether this duplicates `candidateId`; the student decides. */
   uncertain?: { candidateId: string; reasoning: string };
   signals: ObjectiveSignal[];

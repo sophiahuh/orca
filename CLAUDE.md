@@ -343,6 +343,13 @@ All 11 Figma screens are built. Where things live:
   upload can be **paused** from the Uploads tab (`POST /api/runs/pause`, one run or a whole course's; run status `paused`,
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and
   Resume puts it back in line by upload time; re-uploading a paused file resumes its run instead of starting a second.
+  A running upload can be **stopped** (`POST /api/runs/stop`, `stopRun`: failed with `STOPPED_ERROR`, the queue moves
+  on; a job still alive can't revive it, its final save checks the run is still running). Material can be **removed**
+  from a course (`DELETE /api/materials/:id`, `removeMaterial`): file, pages and calendar entry go, the row stays with
+  status `removed` (not loaded; hash cleared so the file can be uploaded again), the objectives only it taught and a
+  topic it created that has no live objective left are archived with `archived_with_material` (migrations
+  `20261031110000`, `20261031120000`), which the pipeline's matching leaves out so they aren't read as rejections;
+  restoring or confirming by hand clears the flag.
 - `src/lib/server/` — route helpers, model step caller (`model.ts`), grading, usage metering, rate limits.
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.
