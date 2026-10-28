@@ -155,7 +155,7 @@ test("a running upload can be stopped from the Uploads tab: it fails with the st
   await card("first.pdf").locator("[data-part=stop-confirm]").click();
   await expect.poll(async () => (await runStatus(first.generation.runId!)).status, { timeout: 15_000 }).toBe("failed");
   const { data: stopped } = await admin().from("pipeline_runs").select("error").eq("id", first.generation.runId!).single();
-  expect(stopped!.error).toBe("Stopped by you. Upload the file again to run it.");
+  expect(stopped!.error).toBe("Stopped by you. Try again from the Uploads tab when you want it built.");
   await expect(card("first.pdf")).toContainText("Stopped by you");
 
   // The second runs on its own; the first's job, still alive behind the scenes, can't land its work.
@@ -163,6 +163,13 @@ test("a running upload can be stopped from the Uploads tab: it fails with the st
   expect((await runStatus(first.generation.runId!)).status).toBe("failed");
   const { data: objectives } = await student.db.from("objectives").select("material_id").eq("course_id", courseId);
   expect(objectives!.every((o) => o.material_id === second.materialId)).toBe(true);
+
+  // Try again starts a new job for the saved file: no re-upload, no second material.
+  await card("first.pdf").locator("[data-part=retry-upload]").click();
+  await expect(page.locator("[data-part=upload-card]").filter({ hasText: "first.pdf" })).toHaveCount(2, { timeout: 15_000 });
+  await expect.poll(async () => (await admin().from("pipeline_runs").select("status").eq("material_id", first.materialId).order("at")).data!.map((r) => r.status), { timeout: 60_000 }).toEqual(["failed", "done"]);
+  const { count } = await student.db.from("materials").select("id", { count: "exact", head: true }).eq("course_id", courseId);
+  expect(count).toBe(2);
 });
 
 test("a spend-limit answer from the API fails the job once with the budget message, with no retry", async ({ page, student }) => {
