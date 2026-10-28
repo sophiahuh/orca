@@ -201,6 +201,13 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
     .eq("kind", "upload")
     .order("at", { ascending: false });
   if (error) throw new Error(`Couldn't read the material's runs: ${error.message}`);
+  // A paused run is the material's run: uploading the file again resumes it (back in line by its time).
+  const paused = runs.find((r) => r.status === "paused");
+  if (paused) {
+    const { error: resumed } = await db.from("pipeline_runs").update({ status: "queued", started_at: null }).eq("owner_id", ownerId).eq("id", paused.id).eq("status", "paused");
+    if (resumed) throw new Error(`Couldn't resume the run: ${resumed.message}`);
+    return { state: (await startBehind(deps, ownerId, paused.id)) ? "started" : "queued", runId: paused.id };
+  }
   const live = runs.find((r) => (LIVE as readonly string[]).includes(r.status));
   if (live) {
     if (live.status === "running") return { state: "running", runId: live.id };
@@ -270,6 +277,28 @@ export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Disp
     return dispatchRun(deps, ownerId, r);
   }
   return null;
+}
+
+/** Which uploads to pause or resume: one run, or every one of a course's. */
+export type PauseTarget = { runId: string } | { courseId: string };
+
+/**
+ * Pause queued uploads (they leave the queue: nothing waits behind them, they are never taken for
+ * dead) or resume paused ones (back to queued, in line by their upload time; the caller then runs
+ * `resumeNext` so one starts if nothing is running). A run that is already running can't be
+ * paused: the job has it. Returns how many runs changed.
+ */
+export async function pauseUploadRuns(deps: StartDeps, ownerId: string, target: PauseTarget, paused: boolean): Promise<number> {
+  let q = deps.db
+    .from("pipeline_runs")
+    .update(paused ? { status: "paused", started_at: null, progress: null } : { status: "queued", started_at: null })
+    .eq("owner_id", ownerId)
+    .eq("kind", "upload")
+    .eq("status", paused ? "queued" : "paused");
+  q = "runId" in target ? q.eq("id", target.runId) : q.eq("course_id", target.courseId);
+  const { data, error } = await q.select("id");
+  if (error) throw new Error(`Couldn't ${paused ? "pause" : "resume"} the upload${"courseId" in target ? "s" : ""}: ${error.message}`);
+  return data.length;
 }
 
 /** Top up the stock after a finished session (it must be the student's, in that course). */

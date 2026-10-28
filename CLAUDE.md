@@ -339,7 +339,10 @@ All 11 Figma screens are built. Where things live:
   `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there);
   `link.ts` is the link step (topic links from names and summaries, after each upload and from
   "Find connections" on the Atlas, `POST /api/relink`).
-- `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`).
+- `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`). A queued
+  upload can be **paused** from the Uploads tab (`POST /api/runs/pause`, one run or a whole course's; run status `paused`,
+  uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and
+  Resume puts it back in line by upload time; re-uploading a paused file resumes its run instead of starting a second.
 - `src/lib/server/` — route helpers, model step caller (`model.ts`), grading, usage metering, rate limits.
 - `src/lib/model-config.ts`, `llm-server.ts`, `pricing.ts`, `limits.ts` — provider choice, model calls, prices, every limit.
 - `src/lib/untrusted/` — sanitising, prompt data blocks, injection screen, output validation.

@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import type { Material, PipelineRun } from "@/lib/data";
-import { hiddenNote } from "@/lib/uploads";
+import { hiddenNote, pauseUploads } from "@/lib/uploads";
 import { progressMessage } from "@/lib/pipeline/progress-text";
 import { isFinished, useRun } from "@/hooks/useRun";
 import { jobAhead } from "@/lib/course/review";
@@ -29,8 +30,19 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   // Only an unfinished run is followed (a finished one won't change), and never twice.
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   const run = live ?? stored;
-  const { runs, setMaterialUpcoming } = useOrca();
+  const { runs, setMaterialUpcoming, refresh } = useOrca();
   const name = material?.filename ?? "An upload";
+  // Pause a queued upload (it leaves the queue) or put a paused one back in line.
+  const [pausing, setPausing] = useState<string | null>(null);
+  const setPaused = async (paused: boolean) => {
+    setPausing(null);
+    try {
+      await pauseUploads({ runId: run.id }, paused);
+      await refresh();
+    } catch (e) {
+      setPausing(e instanceof Error ? e.message : "Couldn't change the upload.");
+    }
+  };
   // "The class hasn't reached this yet": its objectives wait until it's marked covered.
   const coverage = material && (
     <span className="flex flex-wrap items-center gap-[8px] text-[13px] font-semibold text-wisteria-deep" data-part="upload-coverage" data-upcoming={material.upcoming ? "1" : "0"}>
@@ -59,14 +71,36 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
       </Card>
     );
   }
+  if (run.status === "paused") {
+    return (
+      <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-paused")} data-status={run.status} role="status">
+        {head}
+        <span className="flex flex-wrap items-center gap-[10px] text-[14px] font-semibold text-wisteria-deep">
+          Paused: Orca won&apos;t build from it until you resume it. Later uploads go ahead of it meanwhile.
+          <button type="button" onClick={() => void setPaused(false)} className="font-bold text-prussian underline underline-offset-2" data-part="resume-upload">
+            Resume
+          </button>
+        </span>
+        {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
+      </Card>
+    );
+  }
   if (run.status === "queued" || run.status === "running") {
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-progress")} data-status={run.status} role="status">
         {head}
         <ProgressBar value={run.status === "running" ? stageShare(run.progress?.stage) : 0.05} height={10} label="Building" />
-        <span className="text-[14px] font-semibold text-wisteria-deep">
-          {run.status === "running" ? progressMessage(run.progress) : jobAhead(runs, run) ? "Waiting for your other upload to finish; this one starts next." : "Starting…"} This takes a few minutes. You can leave this page; it keeps going.
+        <span className="flex flex-wrap items-center gap-[10px] text-[14px] font-semibold text-wisteria-deep">
+          <span>
+            {run.status === "running" ? progressMessage(run.progress) : jobAhead(runs, run) ? "Waiting for your other upload to finish; this one starts next." : "Starting…"} This takes a few minutes. You can leave this page; it keeps going.
+          </span>
+          {run.status === "queued" && (
+            <button type="button" onClick={() => void setPaused(true)} className="font-bold text-prussian underline underline-offset-2" data-part="pause-upload">
+              Pause
+            </button>
+          )}
         </span>
+        {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
   }
@@ -120,6 +154,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
 
 const STATUS: Record<PipelineRun["status"], { label: string; look: string }> = {
   queued: { label: "Queued", look: "bg-alice text-prussian" },
+  paused: { label: "Paused", look: "bg-alice text-prussian" },
   running: { label: "Building", look: "bg-wisteria text-parchment" },
   waiting: { label: "Waiting", look: "bg-warn-tint text-warn-text" },
   done: { label: "Added", look: "bg-good-tint text-good-text" },

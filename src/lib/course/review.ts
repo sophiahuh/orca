@@ -36,5 +36,5 @@ export function jobAhead(runs: readonly PipelineRun[], run: PipelineRun): boolea
 
 /** Uploads still being built (queued, running or waiting on a limit). */
 export function uploadsInProgress(runs: readonly PipelineRun[], courseId: string): number {
-  return courseUploads(runs, courseId).filter((r) => r.status !== "done" && r.status !== "failed").length;
+  return courseUploads(runs, courseId).filter((r) => r.status !== "done" && r.status !== "failed" && r.status !== "paused").length;
 }
