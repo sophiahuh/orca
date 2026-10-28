@@ -61,11 +61,11 @@ export const DEAD_RUN_MS = {
 /** A queued run handed to a job longer ago than this, and still not claimed, was dropped. Trigger.dev normally claims within seconds. */
 export const HANDOFF_MS = 15 * 60_000;
 
-export const DEAD_RUN_ERROR = "Orca's job stopped without finishing. Upload the file again to retry.";
+export const DEAD_RUN_ERROR = "Orca's job stopped without finishing. Try again from the Uploads tab.";
 const DEAD_TOP_UP_ERROR = "Orca's job stopped without finishing.";
 const DEAD_DEEP_REVIEW_ERROR = "Orca couldn't finish preparing this Dive In. Try again.";
 const DEAD_ERROR = { upload: DEAD_RUN_ERROR, "top-up": DEAD_TOP_UP_ERROR, "deep-review": DEAD_DEEP_REVIEW_ERROR } as const;
-export const NEVER_STARTED_ERROR = "Orca's job never started. Upload the file again to retry.";
+export const NEVER_STARTED_ERROR = "Orca's job never started. Try again from the Uploads tab.";
 const NEVER_STARTED = { upload: NEVER_STARTED_ERROR, "top-up": "Orca's job never started.", "deep-review": DEAD_DEEP_REVIEW_ERROR } as const;
 
 export interface StartDeps {
@@ -279,7 +279,7 @@ export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Disp
   return null;
 }
 
-export const STOPPED_ERROR = "Stopped by you. Upload the file again to run it.";
+export const STOPPED_ERROR = "Stopped by you. Try again from the Uploads tab when you want it built.";
 
 /**
  * Stop an upload's run at the student's request: queued, waiting, paused or running, it is marked

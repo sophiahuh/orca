@@ -54,6 +54,15 @@ export async function importAIChat(input: { text?: string; url?: string }, meta:
   return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/chat", { ...meta, ...input });
 }
 
+/**
+ * Run a failed upload's job again. The file and its pages are kept on the server, so this only
+ * starts a new job for them (the same call a re-upload of the file would end in).
+ */
+export async function retryUpload(materialId: string): Promise<Generation> {
+  const out = await post<{ generation: Generation }>(`/api/materials/${materialId}/process`);
+  return out.generation;
+}
+
 /** Stop an upload's run now (queued, paused or running): it's marked failed and the queue moves on. */
 export async function stopUpload(runId: string): Promise<boolean> {
   const out = await post<{ stopped: boolean }>("/api/runs/stop", { runId });

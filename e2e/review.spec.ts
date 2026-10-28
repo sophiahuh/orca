@@ -104,7 +104,7 @@ test("the course's uploads: one still running past its 40-minute limit is marked
   await page.goto(`/course/${SLUG}/review?tab=uploads`);
   const card = page.locator("[data-part=upload-card]");
   await expect(card.locator("[data-part=upload-status]")).toHaveText("Failed", { timeout: 15_000 });
-  await expect(card).toContainText("Orca's job stopped without finishing. Upload the file again to retry.");
+  await expect(card).toContainText("Orca's job stopped without finishing. Try again from the Uploads tab.");
   expect((await stored(page, student)).runs.map((r) => r.status)).toEqual(["failed"]);
 });
 
