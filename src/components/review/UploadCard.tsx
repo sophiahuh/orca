@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Material, PipelineRun } from "@/lib/data";
-import { hiddenNote, pauseUploads, removeMaterial, stopUpload } from "@/lib/uploads";
+import { hiddenNote, pauseUploads, removeMaterial, retryUpload, stopUpload } from "@/lib/uploads";
 import { progressMessage } from "@/lib/pipeline/progress-text";
 import { isFinished, useRun } from "@/hooks/useRun";
 import { jobAhead } from "@/lib/course/review";
@@ -37,11 +37,12 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   // or remove the material. Stop and Remove ask once more before acting.
   const [pausing, setPausing] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<"stop" | "remove" | null>(null);
-  const act = async (what: "stop" | "remove") => {
+  const act = async (what: "stop" | "remove" | "retry") => {
     setConfirming(null);
     setPausing(null);
     try {
       if (what === "stop") await stopUpload(run.id);
+      else if (what === "retry" && material) await retryUpload(material.id);
       else if (material) await removeMaterial(material.id);
       await refresh();
     } catch (e) {
@@ -159,7 +160,14 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         {head}
         <span className="text-[15px] font-semibold text-prussian">Nothing was added from {material?.filename ?? "this upload"}.</span>
         <span className="text-[15px] text-prussian/80">{run.error}</span>
-        <span className="text-[14px] text-prussian/70">The file is saved. Upload it again to try again.</span>
+        <span className="flex flex-wrap items-center gap-[10px] text-[14px] text-prussian/70">
+          The file is saved.
+          {material && (
+            <button type="button" onClick={() => void act("retry")} className="font-bold text-prussian underline underline-offset-2" data-part="retry-upload">
+              Try again
+            </button>
+          )}
+        </span>
         {removeOffer}
         {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
