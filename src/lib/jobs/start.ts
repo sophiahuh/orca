@@ -279,6 +279,28 @@ export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Disp
   return null;
 }
 
+export const STOPPED_ERROR = "Stopped by you. Upload the file again to run it.";
+
+/**
+ * Stop an upload's run at the student's request: queued, waiting, paused or running, it is marked
+ * failed now with `STOPPED_ERROR`, so the queue moves on (the caller runs `resumeNext`). A job
+ * still alive can't revive it: its progress, hold and fail writes only touch a running run, and its
+ * final save checks the run is still running first (src/lib/server/job-store.ts). False when the
+ * run wasn't the student's, wasn't an upload, or had already finished.
+ */
+export async function stopRun(deps: StartDeps, ownerId: string, runId: string): Promise<boolean> {
+  const { data, error } = await deps.db
+    .from("pipeline_runs")
+    .update({ status: "failed", error: STOPPED_ERROR, progress: null })
+    .eq("owner_id", ownerId)
+    .eq("id", runId)
+    .eq("kind", "upload")
+    .in("status", ["queued", "waiting", "running", "paused"])
+    .select("id");
+  if (error) throw new Error(`Couldn't stop the upload: ${error.message}`);
+  return data.length > 0;
+}
+
 /** Which uploads to pause or resume: one run, or every one of a course's. */
 export type PauseTarget = { runId: string } | { courseId: string };
 

@@ -104,6 +104,7 @@ export function topicToRow(t: Topic, sortOrder: number): StructureRow<"topics"> 
     pos_y: t.pos.y,
     summary: t.summary ?? null,
     source: jsonValue(t.source ?? []),
+    archived_with_material: t.archivedWithMaterial === true,
   };
 }
 
@@ -118,6 +119,7 @@ export function topicFromRow(r: Row<"topics">): Topic {
     pos: { x: r.pos_x, y: r.pos_y },
     ...(r.summary !== null ? { summary: r.summary } : {}),
     ...(Array.isArray(r.source) && r.source.length ? { source: r.source as unknown as NonNullable<Topic["source"]> } : {}),
+    ...(r.archived_with_material ? { archivedWithMaterial: true as const } : {}),
   };
 }
 
@@ -133,6 +135,7 @@ export function objectiveToRow(o: Objective): StructureRow<"objectives"> {
     material_id: o.materialId,
     run_id: o.runId,
     archived_with_topic: o.archivedWithTopic === true,
+    archived_with_material: o.archivedWithMaterial === true,
     uncertain: json(o.uncertain ?? null),
     signals: jsonValue(o.signals),
   };
@@ -150,6 +153,7 @@ export function objectiveFromRow(r: Row<"objectives">): Objective {
     materialId: r.material_id,
     runId: r.run_id,
     ...(r.archived_with_topic ? { archivedWithTopic: true as const } : {}),
+    ...(r.archived_with_material ? { archivedWithMaterial: true as const } : {}),
     ...(r.uncertain !== null ? { uncertain: r.uncertain as unknown as NonNullable<Objective["uncertain"]> } : {}),
     signals: r.signals as unknown as ObjectiveSignal[],
   };
@@ -466,6 +470,7 @@ export interface LoadedState {
 
 /** The store's state from `my_data()`. Throws on a row it can't read rather than showing something else. */
 export function loadedState(d: MyData): LoadedState {
+  const removed = new Set(d.materials.filter((m) => m.status === "removed").map((m) => m.id));
   if (!d.profile) throw new Error("Your profile is missing");
   const courses: Course[] = d.courses.map((c) => ({
     id: c.id,
@@ -512,7 +517,8 @@ export function loadedState(d: MyData): LoadedState {
     objectives,
     questionBank,
     relations,
-    runs: d.runs.map(runFromRow),
+    // Runs of removed material go with it (their rows stay in the database for provenance).
+    runs: d.runs.filter((r) => !r.material_id || !removed.has(r.material_id)).map(runFromRow),
     // An upload still on its way (or one whose file couldn't be read) isn't part of the course yet.
     materials: d.materials.filter((m) => m.status === "ready").map(materialFromRow),
     results: d.sessions.map(sessionFromRow),

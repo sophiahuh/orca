@@ -104,6 +104,40 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
 });
 
+test("removing material: its file, pages and calendar entry go, the objectives only it taught are archived, and the same file can be uploaded again", async ({ page, student }) => {
+  await fakeModel({ extract: LECTURE, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await upload(page);
+  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives", { timeout: 60_000 });
+  const before = await stored(page, student);
+  expect(before.materials).toHaveLength(1);
+
+  await page.goto("/course/logic/review?tab=uploads");
+  const card = page.locator("[data-part=upload-card]").filter({ hasText: DECK_NAME });
+  await card.locator("[data-part=remove-material]").click();
+  await expect(card.locator("[data-part=remove-offer]")).toContainText("the objectives only it taught are archived");
+  await card.locator("[data-part=remove-confirm]").click();
+  await expect(page.locator("[data-part=upload-card]")).toHaveCount(0);
+
+  const after = await stored(page, student);
+  expect(after.materials).toHaveLength(0);
+  expect(after.runs).toHaveLength(0);
+  const course = after.courses[0];
+  expect(course.topics.map((t) => t.review)).toEqual(["archived", "archived"]);
+  expect(Object.values(after.objectives[course.id]).map((o) => (o as { review: string }).review)).toEqual(["archived", "archived", "archived"]);
+  const { count: pages } = await student.db.from("material_pages").select("n", { count: "exact", head: true });
+  expect(pages).toBe(0);
+  const { data: row } = await admin().from("materials").select("status, storage_path, content_hash").eq("id", before.materials[0].id).single();
+  expect(row).toEqual({ status: "removed", storage_path: null, content_hash: null });
+  const { data: files } = await student.db.storage.from("materials").list(student.id);
+  expect(files ?? []).toEqual([]);
+
+  // Not a duplicate any more: the same deck uploads and builds again.
+  await upload(page);
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives", { timeout: 60_000 });
+});
+
 test("handwritten notes: every page is read from its image before the upload is built, and the clean text is stored", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");

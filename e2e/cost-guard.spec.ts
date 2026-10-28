@@ -140,6 +140,31 @@ test("a queued upload can be paused from the Uploads tab: it sits out while the 
   expect((await runStatus(fifth.generation.runId!)).status).toBe("done");
 });
 
+test("a running upload can be stopped from the Uploads tab: it fails with the stopped message, the queue moves on, and the job can't revive it", async ({ page, student }) => {
+  test.setTimeout(120_000);
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 4000 });
+  const courseId = await newCourse(student);
+  const first = await sendDeck(page, student, courseId, "first.pdf", "Absorption");
+  const second = await sendDeck(page, student, courseId, "second.pdf", "Consensus");
+  expect([first.generation.state, second.generation.state]).toEqual(["started", "queued"]);
+
+  const course = (await student.db.from("courses").select("slug").eq("id", courseId).single()).data!;
+  await page.goto(`/course/${course.slug}/review?tab=uploads`);
+  const card = (name: string) => page.locator("[data-part=upload-card]").filter({ hasText: name });
+  await card("first.pdf").locator("[data-part=stop-upload]").click();
+  await card("first.pdf").locator("[data-part=stop-confirm]").click();
+  await expect.poll(async () => (await runStatus(first.generation.runId!)).status, { timeout: 15_000 }).toBe("failed");
+  const { data: stopped } = await admin().from("pipeline_runs").select("error").eq("id", first.generation.runId!).single();
+  expect(stopped!.error).toBe("Stopped by you. Upload the file again to run it.");
+  await expect(card("first.pdf")).toContainText("Stopped by you");
+
+  // The second runs on its own; the first's job, still alive behind the scenes, can't land its work.
+  await expect.poll(async () => (await runStatus(second.generation.runId!)).status, { timeout: 60_000 }).toBe("done");
+  expect((await runStatus(first.generation.runId!)).status).toBe("failed");
+  const { data: objectives } = await student.db.from("objectives").select("material_id").eq("course_id", courseId);
+  expect(objectives!.every((o) => o.material_id === second.materialId)).toBe(true);
+});
+
 test("a spend-limit answer from the API fails the job once with the budget message, with no retry", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, fail: { step: "map", type: "spend-limit" } });
   const courseId = await newCourse(student);
