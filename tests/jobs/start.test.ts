@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, type StartDeps, resumeNext, startDeepReviewJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
+import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, type StartDeps, pauseUploadRuns, resumeNext, startDeepReviewJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
 
 type Row = Record<string, unknown>;
 
@@ -344,4 +344,43 @@ test("a running Dive In doesn't hold back the student's queued upload", async ()
   const { deps: d, sent } = deps(f.db, "gpt-6.1-sol");
   assert.deepEqual(await resumeNext(d, OWNER), { kind: "material", job: { ownerId: OWNER, runId: "run-up", materialId: "m1" } });
   assert.deepEqual(sent.map((s) => s.kind), ["material"]);
+});
+
+test("a queued upload can be paused: it leaves the queue (never taken for dead, nothing waits behind it) and uploading its file again resumes it in line", async () => {
+  const running = { id: "run-a", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: "2026-10-05T10:00:00.000Z", started_at: "2026-10-05T11:59:00.000Z" };
+  const queued = { id: "run-b", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "queued", at: "2026-10-05T10:01:00.000Z", started_at: null };
+  const { db, tables } = fakeDb({ pipeline_runs: [running, queued], materials: [material], material_pages: [page] });
+  const { deps: d, sent } = deps(db, "claude");
+  // Only queued runs pause; the running one is the job's.
+  assert.equal(await pauseUploadRuns(d, OWNER, { courseId: "c1" }, true), 1);
+  assert.deepEqual(tables.pipeline_runs.map((r) => r.status), ["running", "paused"]);
+  // The running job finishes: resumeNext skips the paused run (nothing to start).
+  tables.pipeline_runs[0].status = "done";
+  assert.equal(await resumeNext(d, OWNER), null);
+  assert.equal(sent.length, 0);
+  // A new upload doesn't wait behind a paused one: it starts at once.
+  tables.materials.push({ id: "m2", owner_id: OWNER, course_id: "c1", status: "ready" });
+  tables.material_pages.push({ owner_id: OWNER, material_id: "m2", n: 1 });
+  assert.deepEqual(await startUploadJob(d, OWNER, "m2"), { state: "started", runId: "run-new" });
+  tables.pipeline_runs.find((r) => r.id === "run-new")!.status = "done";
+  // Re-uploading the paused file resumes its run (no second run) and, with nothing running, starts it.
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-b" });
+  assert.equal(tables.pipeline_runs.filter((r) => r.material_id === "m1").length, 1);
+  assert.deepEqual(sent.map((s) => s.job.runId), ["run-new", "run-b"]);
+});
+
+test("resuming puts paused uploads back in the queue, oldest first; a resumed run only starts when nothing is running", async () => {
+  const running = { id: "run-a", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: "2026-10-05T10:00:00.000Z", started_at: "2026-10-05T11:59:00.000Z" };
+  const p1 = { id: "run-b", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "paused", at: "2026-10-05T10:01:00.000Z", started_at: null };
+  const p2 = { id: "run-c", owner_id: OWNER, course_id: "c1", material_id: "m2", kind: "upload", status: "paused", at: "2026-10-05T10:02:00.000Z", started_at: null };
+  const { db, tables } = fakeDb({ pipeline_runs: [running, p1, p2] });
+  const { deps: d, sent } = deps(db, "claude");
+  assert.equal(await pauseUploadRuns(d, OWNER, { runId: "run-c" }, false), 1);
+  assert.deepEqual(tables.pipeline_runs.map((r) => r.status), ["running", "paused", "queued"]);
+  assert.equal(await resumeNext(d, OWNER), null, "still running: the resumed run waits its turn");
+  tables.pipeline_runs[0].status = "done";
+  assert.equal(await pauseUploadRuns(d, OWNER, { courseId: "c1" }, false), 1);
+  const next = await resumeNext(d, OWNER);
+  assert.equal(next?.job.runId, "run-b", "oldest first, by upload time");
+  assert.deepEqual(sent.map((s) => s.job.runId), ["run-b"]);
 });

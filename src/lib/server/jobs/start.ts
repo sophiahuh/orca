@@ -95,6 +95,16 @@ export function checkRuns(db: OrcaSupabase, ownerId: string): Promise<Dispatch |
   return core.resumeNext(deps(db, "after-response"), ownerId);
 }
 
+/**
+ * Pause the student's queued uploads, or resume paused ones and start the next job after the
+ * response if nothing of theirs is running (POST /api/runs/pause). Returns how many runs changed.
+ */
+export async function pauseRuns(db: OrcaSupabase, ownerId: string, target: core.PauseTarget, paused: boolean): Promise<number> {
+  const changed = await core.pauseUploadRuns(deps(db, "after-response"), ownerId, target, paused);
+  if (!paused && changed > 0) await core.resumeNext(deps(db, "after-response"), ownerId);
+  return changed;
+}
+
 /** Every student with a live run (queued, waiting or running: a running one may have died), for the scheduled sweeps. */
 export async function ownersWithPendingRuns(db: OrcaSupabase): Promise<string[]> {
   const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting", "running"]);

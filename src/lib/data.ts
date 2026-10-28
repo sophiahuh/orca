@@ -294,7 +294,8 @@ export interface Relation {
 
 /** One upload's pass through the pipeline: what it made and what it threw away. */
 /** A pipeline run's job: waiting is held back by a limit (Task 7c). */
-export type RunStatus = "queued" | "waiting" | "running" | "done" | "failed";
+/** `paused`: an upload the student set aside from the queue (the Uploads tab); it waits until they resume it. */
+export type RunStatus = "queued" | "waiting" | "running" | "paused" | "done" | "failed";
 
 export interface PipelineRun {
   id: string;

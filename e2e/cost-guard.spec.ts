@@ -95,6 +95,51 @@ test("a second upload queues behind the first and runs when it finishes; one job
   expect(usage!.every((u) => u.kind === "upload" && u.model === "claude-opus-5-5" && u.input_tokens === 100 && u.output_tokens === 100 && Number(u.cost_usd) > 0)).toBe(true);
 });
 
+test("a queued upload can be paused from the Uploads tab: it sits out while the others finish, and Resume puts it back in line", async ({ page, student }) => {
+  test.setTimeout(240_000); // six uploads, each a few slow fake model calls
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 1500 });
+  const courseId = await newCourse(student);
+  const first = await sendDeck(page, student, courseId, "first.pdf", "Absorption");
+  expect(first.generation.state).toBe("started");
+  const second = await sendDeck(page, student, courseId, "second.pdf", "Consensus");
+  const third = await sendDeck(page, student, courseId, "third.pdf", "Distribution");
+  expect([second.generation.state, third.generation.state]).toEqual(["queued", "queued"]);
+
+  const course = (await student.db.from("courses").select("slug").eq("id", courseId).single()).data!;
+  await page.goto(`/course/${course.slug}/review?tab=uploads`);
+  const card = (name: string) => page.locator("[data-part=upload-card]").filter({ hasText: name });
+  await expect(page.locator("[data-part=queue-controls]")).toContainText("2 queued");
+  await card("third.pdf").locator("[data-part=pause-upload]").click();
+  await expect(card("third.pdf")).toHaveAttribute("data-status", "paused");
+  expect((await runStatus(third.generation.runId!)).status).toBe("paused");
+
+  // The first finishes, the second runs on its own, the paused one is skipped.
+  await expect.poll(async () => (await runStatus(second.generation.runId!)).status, { timeout: 60_000 }).toBe("done");
+  expect((await runStatus(third.generation.runId!)).status).toBe("paused");
+  await expect(page.locator("[data-part=queue-controls]")).toContainText("1 paused");
+
+  // Resume: back in the queue and, with nothing running, started at once.
+  await card("third.pdf").locator("[data-part=resume-upload]").click();
+  await expect.poll(async () => (await runStatus(third.generation.runId!)).status, { timeout: 60_000 }).toBe("done");
+  const { data: runs } = await admin().from("pipeline_runs").select("status").eq("owner_id", student.id);
+  expect(runs!.map((r) => r.status)).toEqual(["done", "done", "done"]);
+
+  // Pause all / Resume all act on every queued or paused upload of the course.
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 2500 });
+  const fourth = await sendDeck(page, student, courseId, "fourth.pdf", "Idempotence");
+  const fifth = await sendDeck(page, student, courseId, "fifth.pdf", "Involution");
+  const sixth = await sendDeck(page, student, courseId, "sixth.pdf", "Commutativity");
+  expect([fifth.generation.state, sixth.generation.state]).toEqual(["queued", "queued"]);
+  await page.reload();
+  await page.locator("[data-part=pause-all]").click();
+  await expect(page.locator("[data-part=queue-controls]")).toContainText("2 paused");
+  await expect.poll(async () => (await runStatus(fourth.generation.runId!)).status, { timeout: 60_000 }).toBe("done");
+  expect([(await runStatus(fifth.generation.runId!)).status, (await runStatus(sixth.generation.runId!)).status]).toEqual(["paused", "paused"]);
+  await page.locator("[data-part=resume-all]").click();
+  await expect.poll(async () => (await runStatus(sixth.generation.runId!)).status, { timeout: 90_000 }).toBe("done");
+  expect((await runStatus(fifth.generation.runId!)).status).toBe("done");
+});
+
 test("a spend-limit answer from the API fails the job once with the budget message, with no retry", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, fail: { step: "map", type: "spend-limit" } });
   const courseId = await newCourse(student);

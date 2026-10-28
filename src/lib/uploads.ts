@@ -54,6 +54,12 @@ export async function importAIChat(input: { text?: string; url?: string }, meta:
   return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/chat", { ...meta, ...input });
 }
 
+/** Pause queued uploads (one run, or a whole course's) or resume paused ones; how many changed. */
+export async function pauseUploads(target: { runId: string } | { courseId: string }, paused: boolean): Promise<number> {
+  const out = await post<{ changed: number }>("/api/runs/pause", { ...target, paused });
+  return out.changed;
+}
+
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const out = (await res.json().catch(() => null)) as (T & { error?: string }) | null;
