@@ -9,6 +9,7 @@ import { courseUploads, pendingReview, uploadsInProgress } from "@/lib/course/re
 import { isFinished, useRun } from "@/hooks/useRun";
 import { ReviewTabs, type ReviewTab } from "@/components/review/ReviewTabs";
 import { UploadCard } from "@/components/review/UploadCard";
+import { QueueControls } from "@/components/review/QueueControls";
 import { IconUpload } from "@/components/icons";
 import { confirmTopic, rejectObjective, rejectTopic, renameTopic, resolveUncertain, resolveUncertainTopic } from "@/lib/course/ops";
 import { Screen } from "@/components/layout/Screen";
@@ -104,6 +105,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
         {tab === "uploads" ? (
           <motion.section variants={fadeUp} className="flex flex-col gap-[14px]" data-part="uploads-list">
+            <QueueControls courseId={course.id} uploads={uploads} />
             {uploads.length === 0 ? (
               <p className="text-[17px] font-semibold text-prussian">
                 No uploads yet.{" "}
