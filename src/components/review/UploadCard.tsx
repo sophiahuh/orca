@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Material, PipelineRun } from "@/lib/data";
-import { hiddenNote, pauseUploads } from "@/lib/uploads";
+import { hiddenNote, pauseUploads, removeMaterial, stopUpload } from "@/lib/uploads";
 import { progressMessage } from "@/lib/pipeline/progress-text";
 import { isFinished, useRun } from "@/hooks/useRun";
 import { jobAhead } from "@/lib/course/review";
@@ -29,11 +29,44 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "
 export function UploadCard({ run: stored, material, focused = false }: { run: PipelineRun; material: Material | undefined; focused?: boolean }) {
   // Only an unfinished run is followed (a finished one won't change), and never twice.
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
-  const run = live ?? stored;
+  // A finished stored row wins: useRun keeps its last live row when it stops following, which would show a stopped run as still building.
+  const run = isFinished(stored) ? stored : (live ?? stored);
   const { runs, setMaterialUpcoming, refresh } = useOrca();
   const name = material?.filename ?? "An upload";
-  // Pause a queued upload (it leaves the queue) or put a paused one back in line.
+  // Pause a queued upload (it leaves the queue), put a paused one back in line, stop a running one,
+  // or remove the material. Stop and Remove ask once more before acting.
   const [pausing, setPausing] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<"stop" | "remove" | null>(null);
+  const act = async (what: "stop" | "remove") => {
+    setConfirming(null);
+    setPausing(null);
+    try {
+      if (what === "stop") await stopUpload(run.id);
+      else if (material) await removeMaterial(material.id);
+      await refresh();
+    } catch (e) {
+      setPausing(e instanceof Error ? e.message : "Couldn't change the upload.");
+    }
+  };
+  const removeOffer = material && (
+    <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep" data-part="remove-offer">
+      {confirming === "remove" ? (
+        <>
+          <span className="text-prussian">Remove {material.filename} from the course? Its file and pages go; the objectives only it taught are archived.</span>
+          <button type="button" onClick={() => void act("remove")} className="font-bold text-bad-text underline underline-offset-2" data-part="remove-confirm">
+            Remove
+          </button>
+          <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
+            Keep
+          </button>
+        </>
+      ) : (
+        <button type="button" onClick={() => setConfirming("remove")} className="font-bold text-wisteria-deep underline underline-offset-2" data-part="remove-material">
+          Remove from course
+        </button>
+      )}
+    </span>
+  );
   const setPaused = async (paused: boolean) => {
     setPausing(null);
     try {
@@ -99,6 +132,22 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
               Pause
             </button>
           )}
+          {run.status === "running" &&
+            (confirming === "stop" ? (
+              <>
+                <span className="text-prussian">Stop it? What it has built so far is dropped; the file stays, so uploading it again retries.</span>
+                <button type="button" onClick={() => void act("stop")} className="font-bold text-bad-text underline underline-offset-2" data-part="stop-confirm">
+                  Stop
+                </button>
+                <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
+                  Keep going
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => setConfirming("stop")} className="font-bold text-prussian underline underline-offset-2" data-part="stop-upload">
+                Stop
+              </button>
+            ))}
         </span>
         {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
@@ -111,6 +160,8 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         <span className="text-[15px] font-semibold text-prussian">Nothing was added from {material?.filename ?? "this upload"}.</span>
         <span className="text-[15px] text-prussian/80">{run.error}</span>
         <span className="text-[14px] text-prussian/70">The file is saved. Upload it again to try again.</span>
+        {removeOffer}
+        {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
   }
@@ -125,6 +176,8 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         {run.objectivesAttached.length === 1 ? "" : "s"} covered again, {plural(run.questionsAdded, "question")} added.
       </span>
       {coverage}
+      {removeOffer}
+      {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       {hidden && (
         <span className="text-[14px] font-semibold text-prussian" data-part="hidden-text">
           {hidden} Check what this upload added.

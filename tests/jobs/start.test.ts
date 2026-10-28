@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, type StartDeps, pauseUploadRuns, resumeNext, startDeepReviewJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
+import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, STOPPED_ERROR, type StartDeps, pauseUploadRuns, resumeNext, stopRun, startDeepReviewJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
 
 type Row = Record<string, unknown>;
 
@@ -383,4 +383,22 @@ test("resuming puts paused uploads back in the queue, oldest first; a resumed ru
   const next = await resumeNext(d, OWNER);
   assert.equal(next?.job.runId, "run-b", "oldest first, by upload time");
   assert.deepEqual(sent.map((s) => s.job.runId), ["run-b"]);
+});
+
+test("a student can stop an upload's run at any stage: it is failed with the stopped message and the next queued job starts; a finished run can't be stopped", async () => {
+  const running = { id: "run-a", owner_id: OWNER, course_id: "c1", material_id: "m0", kind: "upload", status: "running", at: "2026-10-05T10:00:00.000Z", started_at: "2026-10-05T11:59:00.000Z" };
+  const queued = { id: "run-b", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "queued", at: "2026-10-05T10:01:00.000Z", started_at: null };
+  const done = { id: "run-c", owner_id: OWNER, course_id: "c1", material_id: "m2", kind: "upload", status: "done", at: "2026-10-05T09:00:00.000Z", started_at: null };
+  const other = { id: "run-x", owner_id: "someone-else", course_id: "c9", material_id: "m9", kind: "upload", status: "running", at: "2026-10-05T10:00:00.000Z", started_at: "2026-10-05T11:59:00.000Z" };
+  const { db, tables } = fakeDb({ pipeline_runs: [running, queued, done, other] });
+  const { deps: d, sent } = deps(db, "claude");
+  assert.equal(await stopRun(d, OWNER, "run-c"), false, "finished: nothing to stop");
+  assert.equal(await stopRun(d, OWNER, "run-x"), false, "not this student's");
+  assert.equal(await stopRun(d, OWNER, "run-a"), true);
+  assert.equal(tables.pipeline_runs[0].status, "failed");
+  assert.equal(tables.pipeline_runs[0].error, STOPPED_ERROR);
+  const next = await resumeNext(d, OWNER);
+  assert.equal(next?.job.runId, "run-b", "the queue moves on");
+  assert.deepEqual(sent.map((s) => s.job.runId), ["run-b"]);
+  assert.equal(tables.pipeline_runs[3].status, "running", "the other student's run is untouched");
 });

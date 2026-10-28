@@ -252,7 +252,8 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     else topicSources[id] = addRanges(sourceOf(id), input.material.id, ranges);
   };
   const objectivesOf = (topicId: string) => [...Object.values(input.objectives), ...newObjectives].filter((o) => o.topicId === topicId);
-  const listed = <T extends Named>(items: T[]) => items.filter((i) => !i.mergedInto).map((i) => ({ id: i.id, name: i.name, description: i.description, rejected: i.review === "archived" }));
+  // Items archived because their material was removed aren't the student's rejections: they're left out, so this upload may create them afresh.
+  const listed = <T extends Named>(items: T[]) => items.filter((i) => !i.mergedInto && !i.archivedWithMaterial).map((i) => ({ id: i.id, name: i.name, description: i.description, rejected: i.review === "archived" }));
   const liveTopic = (id: string) => newTopics.some((t) => t.id === id) || input.course.topics.some((t) => t.id === id && t.review !== "archived");
   const confirmedTopic = (id: string) => input.course.topics.some((t) => t.id === id && t.review === "confirmed");
   // One link per pair of topics: a pair the course links already is skipped; within this upload the most specific kind comes first.
@@ -267,7 +268,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     const last = part.at(-1)!.n;
     progress({ stage: "mapping", part: i + 1, parts: parts.length, from: first, to: last });
     const toc = allTopics()
-      .filter((t) => !t.mergedInto)
+      .filter((t) => !t.mergedInto && !t.archivedWithMaterial)
       .map((t) => ({
         id: t.id,
         name: t.name,
@@ -291,7 +292,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     const topicByRef = new Map<string, { kind: "topic"; id: string } | { kind: "dropped" }>();
     /** topicId → its pages in this part. */
     const taught = new Map<string, PageRange[]>();
-    const known = asNamed(allTopics());
+    const known = asNamed(allTopics().filter((t) => !t.archivedWithMaterial)); // removed material's topics aren't rejections
     const topicTexts = mapped.topics.map((t) => validateFields({ name: t.name, summary: t.summary }, EXTRACTED_RULE(facts)));
     const topicResolutions = await pool(mapped.topics, 4, (t, k) =>
       topicTexts[k].ok ? resolve("topic", { existingId: t.existingId, name: t.name, description: t.summary }, known, call) : Promise.resolve<Resolution>({ kind: "dropped", reason: "" }),
@@ -377,7 +378,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       const topic = allTopics().find((t) => t.id === topicId)!;
       progress({ stage: "objectives", topic: topic.name });
       const wanted = new Set(ranges.flatMap((r) => Array.from({ length: r.to - r.from + 1 }, (_, k) => r.from + k)));
-      const own = asNamed(objectivesOf(topicId));
+      const own = asNamed(objectivesOf(topicId).filter((o) => !o.archivedWithMaterial)); // removed material's objectives aren't rejections
       let found: ObjectivesOutput;
       try {
         found = await call("objectives", { course, material, pages: part.filter((p) => wanted.has(p.n)), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own), ...notes });

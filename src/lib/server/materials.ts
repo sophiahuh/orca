@@ -223,3 +223,67 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     throw e;
   }
 }
+
+/**
+ * Remove material from its course (DELETE /api/materials/:id). The file, its stored pages and its
+ * calendar entry go; its row stays, marked `removed` (topics, objectives and questions keep their
+ * provenance; the app doesn't load it), without its hash so the same file can be uploaded again.
+ * The objectives only this material taught are archived, and a topic it created that is left with
+ * no live objective is archived too; what another upload also teaches stays. Answer history is
+ * never touched (archived objectives just leave reviews and the island). A queued or paused run
+ * for it is failed; a running one must be stopped first (409).
+ */
+export type Removal = { status: number; body: { removed: true; archivedObjectives?: number } | { error: string } };
+
+export async function removeMaterial(db: OrcaSupabase, ownerId: string, id: string): Promise<Removal> {
+  const answer = (status: number, body: Removal["body"]): Removal => ({ status, body });
+  const { data: m, error } = await db.from("materials").select("id, course_id, storage_path, status").eq("owner_id", ownerId).eq("id", id).maybeSingle();
+  if (error) throw fail("read the material", error);
+  if (!m) return answer(404, { error: "No such material." });
+  if (m.status === "removed") return answer(200, { removed: true });
+
+  const { data: runs, error: runsError } = await db.from("pipeline_runs").select("id, status").eq("owner_id", ownerId).eq("material_id", id).eq("kind", "upload").in("status", ["queued", "waiting", "running", "paused"]);
+  if (runsError) throw fail("read the material's runs", runsError);
+  if (runs.some((r) => r.status === "running")) return answer(409, { error: "Orca is building from this file right now. Stop that upload first, then remove it." });
+  if (runs.length) {
+    const { error: failed } = await db.from("pipeline_runs").update({ status: "failed", error: "Removed by you.", progress: null }).eq("owner_id", ownerId).in("id", runs.map((r) => r.id)).in("status", ["queued", "waiting", "paused"]);
+    if (failed) throw fail("stop the material's queued run", failed);
+  }
+
+  // The objectives only this upload taught: archived (their questions go with them, by objective).
+  const { data: archived, error: archiveError } = await db.from("objectives").update({ review: "archived", archived_with_material: true }).eq("owner_id", ownerId).eq("material_id", id).neq("review", "archived").select("id, topic_id");
+  if (archiveError) throw fail("archive the material's objectives", archiveError);
+  // A topic this upload created is archived too once it has no live objective left; its place list loses this file either way.
+  const { data: topics, error: topicsError } = await db.from("topics").select("id, material_id, source").eq("owner_id", ownerId).eq("course_id", m.course_id).neq("review", "archived");
+  if (topicsError) throw fail("read the course's topics", topicsError);
+  for (const t of topics) {
+    const places = Array.isArray(t.source) ? (t.source as Array<{ materialId?: string }>) : [];
+    const kept = places.filter((p) => p.materialId !== id);
+    const patch: { source?: NonNullable<Json>; review?: "archived"; archived_with_material?: true } = {};
+    if (kept.length !== places.length) patch.source = kept as unknown as NonNullable<Json>;
+    if (t.material_id === id) {
+      const { count, error: liveError } = await db.from("objectives").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("topic_id", t.id).neq("review", "archived");
+      if (liveError) throw fail("count the topic's objectives", liveError);
+      if (!count) {
+        patch.review = "archived";
+        patch.archived_with_material = true;
+      }
+    }
+    if (Object.keys(patch).length) {
+      const { error: topicError } = await db.from("topics").update(patch).eq("owner_id", ownerId).eq("id", t.id);
+      if (topicError) throw fail("update the topic", topicError);
+    }
+  }
+
+  const { error: pagesError } = await db.from("material_pages").delete().eq("owner_id", ownerId).eq("material_id", id);
+  if (pagesError) throw fail("remove the material's pages", pagesError);
+  const { error: eventsError } = await db.from("calendar_events").delete().eq("owner_id", ownerId).eq("material_id", id);
+  if (eventsError) throw fail("remove the material's calendar entry", eventsError);
+  if (m.storage_path) {
+    const removed = await db.storage.from(BUCKET).remove([m.storage_path]);
+    if (removed.error) throw fail("remove the file", removed.error);
+  }
+  const { error: markError } = await db.from("materials").update({ status: "removed", storage_path: null, content_hash: null, reading_since: null }).eq("owner_id", ownerId).eq("id", id);
+  if (markError) throw fail("mark the material removed", markError);
+  return answer(200, { removed: true, archivedObjectives: archived.length });
+}

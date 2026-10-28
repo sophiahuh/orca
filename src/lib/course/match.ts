@@ -10,6 +10,8 @@ export interface Named {
   name: string;
   review: Review;
   mergedInto?: string;
+  /** Archived because its material was removed: not a rejection, so matching leaves it out. */
+  archivedWithMaterial?: true;
   description?: string;
 }
 

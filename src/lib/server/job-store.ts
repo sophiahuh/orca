@@ -162,6 +162,13 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       const { data, error } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
       if (error) throw new Error(`Couldn't read the course: ${error.message}`);
       if (!data) throw new Error("the course isn't this student's");
+      // A run the student stopped meanwhile (POST /api/runs/stop) is failed; its job must not land its
+      // work and flip it to done. The save is one transaction, so nothing of it is written.
+      for (const run of rows.runs ?? []) {
+        const { data: live, error: readError } = await db.from("pipeline_runs").select("status").eq("owner_id", ownerId).eq("id", run.id).maybeSingle();
+        if (readError) throw new Error(`Couldn't read the run: ${readError.message}`);
+        if (live?.status !== "running") throw new Error(`the run was ${live?.status === "failed" ? "stopped" : (live?.status ?? "removed")} before its work could be saved`);
+      }
       check("save the course", await db.rpc("save_structure", { course: courseId, rows: rows as unknown as Json }));
     },
   };

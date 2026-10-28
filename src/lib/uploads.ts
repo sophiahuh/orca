@@ -54,6 +54,22 @@ export async function importAIChat(input: { text?: string; url?: string }, meta:
   return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/chat", { ...meta, ...input });
 }
 
+/** Stop an upload's run now (queued, paused or running): it's marked failed and the queue moves on. */
+export async function stopUpload(runId: string): Promise<boolean> {
+  const out = await post<{ stopped: boolean }>("/api/runs/stop", { runId });
+  return out.stopped;
+}
+
+/**
+ * Remove material from its course: its file, pages and calendar entry go, the objectives only it
+ * taught are archived (with their questions), and what another upload also teaches stays.
+ */
+export async function removeMaterial(materialId: string): Promise<void> {
+  const res = await fetch(`/api/materials/${materialId}`, { method: "DELETE" });
+  const out = (await res.json().catch(() => null)) as { error?: string } | null;
+  if (!res.ok) throw new Error(out?.error ?? "Couldn't remove the material. Try again in a moment.");
+}
+
 /** Pause queued uploads (one run, or a whole course's) or resume paused ones; how many changed. */
 export async function pauseUploads(target: { runId: string } | { courseId: string }, paused: boolean): Promise<number> {
   const out = await post<{ changed: number }>("/api/runs/pause", { ...target, paused });

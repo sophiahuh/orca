@@ -95,9 +95,10 @@ export function rejectTopic(s: CourseStructure, topicId: string): CourseStructur
 /** Undo a topic rejection. Objectives rejected on their own stay rejected. */
 export function restoreTopic(s: CourseStructure, topicId: string): CourseStructure {
   if (topicOf(s, topicId).mergedInto) throw new Error(`Topic ${topicId} was merged; a topic merge can't be undone`);
-  const next = withTopic(s, topicId, (t) => ({ ...t, review: "proposed" }));
-  const ids = objectiveIdsIn(next, topicId).filter((id) => next.objectives[id].archivedWithTopic);
-  return withObjectives(next, ids, (o) => ({ ...without(o, "archivedWithTopic"), review: "proposed" }));
+  // A topic archived because its material was removed comes back the same way, with the objectives that went with it.
+  const next = withTopic(s, topicId, (t) => ({ ...without(t, "archivedWithMaterial"), review: "proposed" }));
+  const ids = objectiveIdsIn(next, topicId).filter((id) => next.objectives[id].archivedWithTopic || next.objectives[id].archivedWithMaterial);
+  return withObjectives(next, ids, (o) => ({ ...without(o, "archivedWithTopic", "archivedWithMaterial"), review: "proposed" }));
 }
 
 /** Rename a topic. */
@@ -124,19 +125,19 @@ export function mergeTopics(s: CourseStructure, loserId: string, survivorId: str
 }
 
 export function confirmObjective(s: CourseStructure, id: string): CourseStructure {
-  return withObjectives(s, [id], (o) => ({ ...without(o, "uncertain"), review: "confirmed" }));
+  return withObjectives(s, [id], (o) => ({ ...without(o, "uncertain", "archivedWithMaterial"), review: "confirmed" }));
 }
 
 /** Reject an objective: archived, kept so later uploads don't propose it again. */
 export function rejectObjective(s: CourseStructure, id: string): CourseStructure {
-  return withObjectives(s, [id], (o) => ({ ...without(o, "archivedWithTopic"), review: "archived" }));
+  return withObjectives(s, [id], (o) => ({ ...without(o, "archivedWithTopic", "archivedWithMaterial"), review: "archived" }));
 }
 
 /** Undo a rejection or a merge. The student chose to keep it, so it comes back confirmed. */
 export function restoreObjective(s: CourseStructure, id: string): CourseStructure {
   const o = objectiveOf(s, id);
   if (topicOf(s, o.topicId).review === "archived") throw new Error(`Restore topic ${o.topicId} first`);
-  return refiled(withObjectives(s, [id], (x) => ({ ...without(x, "mergedInto", "archivedWithTopic", "uncertain"), review: "confirmed" })));
+  return refiled(withObjectives(s, [id], (x) => ({ ...without(x, "mergedInto", "archivedWithTopic", "archivedWithMaterial", "uncertain"), review: "confirmed" })));
 }
 
 /**
