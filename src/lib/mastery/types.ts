@@ -9,8 +9,8 @@ export type Outcome = "correct" | "partial" | "incorrect";
 /** How an answer was judged. "self" = the student marked it without a grader; it counts as assisted. */
 export type Grader = "choice" | "exact" | "rubric" | "self";
 
-/** Where the answer happened: a topic quiz or one of the scheduled sessions. Later phases add exam review, drills and the connector. */
-export type EvidenceSource = "quiz" | "quick-review" | "deep-review" | "requiz";
+/** Where the answer happened: a topic quiz, one of the scheduled sessions, or a question Claude asked through the connector (graded as self-marked). */
+export type EvidenceSource = "quiz" | "quick-review" | "deep-review" | "requiz" | "connector";
 
 /** One graded answer to one question. */
 export interface AnswerEvent {

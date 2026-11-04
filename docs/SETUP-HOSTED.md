@@ -211,6 +211,19 @@ from public.question_feedback f join public.questions q on q.id = f.question_id
 where f.rating = 'down' order by f.created_at desc limit 50;
 ```
 
+## 8. The Claude connector (a student does this, not the owner)
+
+1. In Orca: Settings → Claude connector → **Connect Claude**. Copy the link (shown once).
+2. In Claude (web or desktop): Settings → Connectors → **Add custom connector**. Name it Orca, paste
+   the link as the URL, leave authentication off, save.
+3. In a chat, turn the Orca connector on and say what you're studying for. Claude calls
+   `course_state` on its own; approve its tool calls the first time.
+
+The link is the secret: anyone who has it can read and change that student's record. **Disconnect**
+in Settings revokes it. `SITE_URL` must be set in production, since the link is built from it. The
+proper fix is OAuth (Supabase Auth as the OAuth server, Claude's connector sign-in flow); until then
+this is for the owner and a few testers.
+
 ## Order
 
 1. Anthropic key into the cloud environment (unblocks the extraction baseline now).

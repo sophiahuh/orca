@@ -343,6 +343,11 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 
 ## Decided (recorded in the roadmap)
 
+- 2026-11-04: an answer Claude grades through the connector is evidence, recorded as self-marked
+  (`grader: "self"`, `source: "connector"`): half credit, never clears a mix-up. The invariant
+  "connector signals never produce mastery" meant activity signals (reading, chatting); a graded
+  answer to one of Orca's own questions is an answer. Open: whether a rubric-graded prose answer
+  from Claude should count full, like Orca's own grader (today it doesn't).
 - 2026-10-04: quick review defaults to 10 minutes per course (adds a "10 min" option).
 - 2026-10-04: the mastery bar is the same for every objective; weights change priority (what
   gets practiced first), never what counts as mastered.

@@ -239,8 +239,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - **Nothing hardcoded or faked.** The app ships no courses; every course starts empty and its
   content comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** Claude is used for extracting material, generating questions and grading
-  short answers. Students' own Claude/ChatGPT can connect through an MCP connector (planned) that
-  logs study activity as a priority signal, never as mastery.
+  short answers. Students' own Claude connects through the MCP connector (built 2026-11-04, see
+  "What exists"): Claude asks Orca's questions and grades them; those answers count as self-marked.
 
 ## Stack
 
@@ -339,6 +339,16 @@ All 11 Figma screens are built. Where things live:
   `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there);
   `link.ts` is the link step (topic links from names and summaries, after each upload and from
   "Find connections" on the Atlas, `POST /api/relink`).
+- `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
+  Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
+  (one JSON-RPC message per POST, no stream) with four tools: `course_state` (exams, topics, every objective's derived
+  status and recall, what's due now), `set_exam` (date + topic ids = the exam's scope), `questions_for` (Orca's own
+  questions with their answers and rubrics, for Claude to ask and grade) and `record_answer` (an answer Claude graded,
+  recorded as `grader: "self"`, `source: "connector"`: half credit, never clears a mix-up). The token is minted in
+  Settings → Claude connector (`/api/connector`; only its sha256 is stored, `connector_tokens`, migration
+  `20261104090000`) and pasted into Claude as a custom connector with no sign-in: the URL is the secret, so the proper
+  OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is pure and tested with a fake
+  `ConnectorTools` (`tests/connector/`); the Supabase-backed tools only read and write the token's student.
 - `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`). A queued
   upload can be **paused** from the Uploads tab (`POST /api/runs/pause`, one run or a whole course's; run status `paused`,
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and

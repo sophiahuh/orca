@@ -30,6 +30,19 @@ isOneToOne: false
       referencedColumns: ["id","owner_id"]
     }
                   ]
+                },"connector_tokens": {
+                  Row: {
+                    "created_at": string,"last_used_at": string | null,"owner_id": string,"token_hash": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"last_used_at"?: string | null,"owner_id": string,"token_hash": string
+                  }
+                  Update: {
+                    "created_at"?: string,"last_used_at"?: string | null,"owner_id"?: string,"token_hash"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"courses": {
                   Row: {
                     "created_at": string,"id": string,"name": string,"orca_notes": string | null,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"schedule": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string
