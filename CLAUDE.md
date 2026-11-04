@@ -108,9 +108,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   were a real bug (finishing a resumed session showed "Nothing to review"; fixed in e2fbf8b).
   Remaining occasional failures come from the environment, not the product: `next dev` compiling a
   route mid-test (a save waits 5 s+ and an `expect.poll` gives up; the one CI retry usually
-  passes), the dev server taking over 120 s to start, and `next build` failing to fetch the
-  Gabarito font from Google Fonts. Read a failing run's trace (`gh run download <id> -n
-  playwright-traces`) before changing a test.
+  passes) and the dev server taking over 120 s to start. (`next build` used to fail when the
+  runner couldn't fetch Gabarito from Google Fonts; since 2026-11-04 the font is served from the
+  repo, `@fontsource-variable/gabarito` through `next/font/local` in `src/app/layout.tsx`.) Read a
+  failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
 1. Done 2026-10-27: the Deploy workflow's secrets are set, and merging PR #18 pushed every
@@ -239,8 +240,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - **Nothing hardcoded or faked.** The app ships no courses; every course starts empty and its
   content comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** Claude is used for extracting material, generating questions and grading
-  short answers. Students' own Claude/ChatGPT can connect through an MCP connector (planned) that
-  logs study activity as a priority signal, never as mastery.
+  short answers. Students' own Claude connects through the MCP connector (built 2026-11-04, see
+  "What exists"): Claude asks Orca's questions and grades them; those answers count as self-marked.
 
 ## Stack
 
@@ -339,6 +340,31 @@ All 11 Figma screens are built. Where things live:
   `POST /api/deep-review` when a deep review starts; questions marked `deep`, asked only there);
   `link.ts` is the link step (topic links from names and summaries, after each upload and from
   "Find connections" on the Atlas, `POST /api/relink`).
+- `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
+  Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
+  (one JSON-RPC message per POST, no stream) with four tools: `course_state` (exams, topics, every objective's derived
+  status and recall, what's due now), `set_exam` (date + topic ids = the exam's scope), `questions_for` (Orca's own
+  questions with their answers and rubrics, for Claude to ask and grade) and `record_answer` (an answer Claude graded,
+  recorded as `grader: "self"`, `source: "connector"`: half credit, never clears a mix-up). The token is minted in
+  Settings → Claude connector (`/api/connector`; only its sha256 is stored, `connector_tokens`, migration
+  `20261104090000`) and pasted into Claude as a custom connector with no sign-in: the URL is the secret, so the proper
+  OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is pure and tested with a fake
+  `ConnectorTools` (`tests/connector/`); the Supabase-backed tools only read and write the token's student.
+- `src/lib/canvas/` + `src/lib/server/canvas.ts` — **Canvas import** (2026-11-04, plan
+  `docs/superpowers/plans/2026-11-04-canvas-import.md`): Settings → Canvas takes the student's Canvas site and access
+  token (checked against `/users/self`, stored AES-256-GCM-encrypted with a key derived from `SUPABASE_SECRET_KEY`;
+  `canvas_connections`, service-role only). `/import/canvas` lists their active Canvas courses (`GET /api/canvas/courses`)
+  and `POST /api/canvas/import { canvasCourseId }` creates or updates the Orca course: assignments with a due date become
+  exams (name says exam/midterm/final/quiz/test) or `hw`/`lab` calendar entries, the syllabus becomes a ready material,
+  and every PDF/.pptx in the modules (in order) and the file list goes through `startUpload` → Storage →
+  `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date).
+  Posting isn't reaching (owner): files posted over the weeks count as covered, three or more posted within three
+  days (`postedAtOnce`) are imported `upcoming` and the page asks "How far has the class got?" (the bulk-upload
+  question, saved through `setMaterialUpcoming`). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
+  route pulls files until a 200 s budget and reports `files.remaining`, and the page keeps calling. The pure module
+  (`api.ts`: classification, file picking, Link pagination; `client.ts`: bearer client with injectable fetch, downloads
+  follow the signed redirect without the token) is tested in `tests/canvas/`; migration `20261104100000`, pgTAP 16.
+  Token auth only; OAuth needs a developer key from the university's Canvas admins (`docs/SETUP-HOSTED.md` §9).
 - `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`). A queued
   upload can be **paused** from the Uploads tab (`POST /api/runs/pause`, one run or a whole course's; run status `paused`,
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and

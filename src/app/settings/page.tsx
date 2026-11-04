@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
 import { AccountCard } from "@/components/settings/Account";
+import { CanvasConnectionCard } from "@/components/settings/CanvasConnection";
+import { ClaudeConnectorCard } from "@/components/settings/ClaudeConnector";
 import { YourMetricsCard } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
 import { Button } from "@/components/ui/Button";
@@ -92,8 +94,10 @@ export default function SettingsPage() {
         <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[380px] max-w-full">
           <AccountCard />
         </motion.div>
-        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[380px] max-w-full">
+        <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex w-[380px] max-w-full flex-col gap-[12px]">
           <YourMetricsCard />
+          <CanvasConnectionCard />
+          <ClaudeConnectorCard />
         </motion.div>
         {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
             Orca's key only (Phase 4, decision 9). Its code stays until "Bring-your-own model" is decided. */}

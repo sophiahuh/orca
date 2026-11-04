@@ -16,6 +16,7 @@ const WHAT: Record<RateAction, string> = {
   grade: "answers graded",
   topUp: "top-ups",
   relink: "connection searches",
+  canvasImport: "Canvas imports",
 };
 
 function spell(seconds: number): string {

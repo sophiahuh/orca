@@ -6,6 +6,18 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Canvas import assumptions (2026-11-04)
+- **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.
+- **Decided by the owner (2026-11-04):** posting doesn't mean reached. Files posted over the weeks
+  count as reached; three or more posted within three days are a dump and wait as `upcoming`
+  until the student taps the last covered one on the import page (the bulk-upload question).
+- **Assumed, pending the owner:** an assignment named exam/midterm/final/quiz/test is an exam,
+  the rest homework (or lab); material types are guessed from file and module names; the
+  assigned date is the module's unlock date, else the file's creation date. Announcements aren't
+  read yet, though that's where professors write "the midterm covers lectures 2 through 7".
+- **What would change:** module unlock dates in the future could set `upcoming`; announcements
+  could become exam scope; a scheduled re-sync instead of pressing Update.
+
 ### Extra priority for the topic the class is on now
 - **Source:** `docs/MASTERY-PLAN.md` §2.6, the `0.5 × frontier` term.
 - **Concern (Amanda):** not convinced current-topic material should outrank older material just
@@ -343,6 +355,11 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 
 ## Decided (recorded in the roadmap)
 
+- 2026-11-04: an answer Claude grades through the connector is evidence, recorded as self-marked
+  (`grader: "self"`, `source: "connector"`): half credit, never clears a mix-up. The invariant
+  "connector signals never produce mastery" meant activity signals (reading, chatting); a graded
+  answer to one of Orca's own questions is an answer. Open: whether a rubric-graded prose answer
+  from Claude should count full, like Orca's own grader (today it doesn't).
 - 2026-10-04: quick review defaults to 10 minutes per course (adds a "10 min" option).
 - 2026-10-04: the mastery bar is the same for every objective; weights change priority (what
   gets practiced first), never what counts as mastered.

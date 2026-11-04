@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useOrca } from "@/lib/store";
@@ -56,6 +57,13 @@ export default function NewCoursePage() {
           </motion.h1>
           <motion.p variants={fadeUp} className="mt-[22px] max-w-[400px] text-[17px] leading-[1.45] text-prussian">
             Every class becomes an island you can explore and grow.
+          </motion.p>
+          <motion.p variants={fadeUp} className="mt-[12px] text-[15px] font-semibold text-prussian">
+            On CourseWorks?{" "}
+            <Link href="/import/canvas" className="font-bold text-wisteria-deep underline underline-offset-2" data-part="import-from-canvas">
+              Import the course from Canvas
+            </Link>{" "}
+            and skip the uploads.
           </motion.p>
 
           <motion.label variants={fadeUp} className="mt-[40px] flex flex-col gap-[10px]">
