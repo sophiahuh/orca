@@ -108,9 +108,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   were a real bug (finishing a resumed session showed "Nothing to review"; fixed in e2fbf8b).
   Remaining occasional failures come from the environment, not the product: `next dev` compiling a
   route mid-test (a save waits 5 s+ and an `expect.poll` gives up; the one CI retry usually
-  passes), the dev server taking over 120 s to start, and `next build` failing to fetch the
-  Gabarito font from Google Fonts. Read a failing run's trace (`gh run download <id> -n
-  playwright-traces`) before changing a test.
+  passes) and the dev server taking over 120 s to start. (`next build` used to fail when the
+  runner couldn't fetch Gabarito from Google Fonts; since 2026-11-04 the font is served from the
+  repo, `@fontsource-variable/gabarito` through `next/font/local` in `src/app/layout.tsx`.) Read a
+  failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
 1. Done 2026-10-27: the Deploy workflow's secrets are set, and merging PR #18 pushed every
