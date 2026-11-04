@@ -356,8 +356,10 @@ All 11 Figma screens are built. Where things live:
   and `POST /api/canvas/import { canvasCourseId }` creates or updates the Orca course: assignments with a due date become
   exams (name says exam/midterm/final/quiz/test) or `hw`/`lab` calendar entries, the syllabus becomes a ready material,
   and every PDF/.pptx in the modules (in order) and the file list goes through `startUpload` → Storage →
-  `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date;
-  never `upcoming`). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
+  `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date).
+  Posting isn't reaching (owner): files posted over the weeks count as covered, three or more posted within three
+  days (`postedAtOnce`) are imported `upcoming` and the page asks "How far has the class got?" (the bulk-upload
+  question, saved through `setMaterialUpcoming`). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
   route pulls files until a 200 s budget and reports `files.remaining`, and the page keeps calling. The pure module
   (`api.ts`: classification, file picking, Link pagination; `client.ts`: bearer client with injectable fetch, downloads
   follow the signed redirect without the token) is tested in `tests/canvas/`; migration `20261104100000`, pgTAP 16.

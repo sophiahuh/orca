@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { type CanvasFile, type CanvasModule, classifyAssignment, dayOf, htmlToText, materialTypeFor, parseNextLink, pickFiles } from "../../src/lib/canvas/api.ts";
+import { type CanvasFile, type CanvasModule, classifyAssignment, dayOf, htmlToText, materialTypeFor, parseNextLink, pickFiles, postedAtOnce } from "../../src/lib/canvas/api.ts";
 
 test("assignments are exams, labs or homework by name", () => {
   assert.equal(classifyAssignment("Midterm Exam"), "exam");
@@ -58,4 +58,14 @@ test("the Link header's next page is found, with or without quotes, and absent o
 
 test("a syllabus's HTML becomes readable text", () => {
   assert.equal(htmlToText("<h2>Grading</h2><p>Midterm &amp; final: 30% each.</p><script>x()</script><ul><li>HW 40%</li></ul>"), "Grading\nMidterm & final: 30% each.\nHW 40%");
+});
+
+test("files posted all at once (three or more within three days) are a dump; files posted over weeks are not", () => {
+  const dump = pickFiles([], [file(1, "L01.pdf", { created_at: "2026-09-01T10:00:00Z" }), file(2, "L02.pdf", { created_at: "2026-09-01T10:05:00Z" }), file(3, "L03.pdf", { created_at: "2026-09-03T09:00:00Z" })]);
+  assert.equal(postedAtOnce(dump), true);
+  const weekly = pickFiles([], [file(1, "L01.pdf"), file(8, "L02.pdf"), file(15, "L03.pdf")]);
+  assert.equal(postedAtOnce(weekly), false, "a week apart");
+  assert.equal(postedAtOnce(dump.slice(0, 2)), false, "two files say nothing");
+  const unknown = pickFiles([{ id: 1, name: "W1", items: [{ id: 1, type: "File", title: "a.pdf", content_id: 91 }, { id: 2, type: "File", title: "b.pdf", content_id: 92 }, { id: 3, type: "File", title: "c.pdf", content_id: 93 }] }], []);
+  assert.equal(postedAtOnce(unknown), false, "no dates, no claim");
 });

@@ -8,8 +8,10 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### Canvas import assumptions (2026-11-04)
 - **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.
-- **Assumed, pending the owner:** a file the professor has posted is one the class has reached
-  (imports are never `upcoming`); an assignment named exam/midterm/final/quiz/test is an exam,
+- **Decided by the owner (2026-11-04):** posting doesn't mean reached. Files posted over the weeks
+  count as reached; three or more posted within three days are a dump and wait as `upcoming`
+  until the student taps the last covered one on the import page (the bulk-upload question).
+- **Assumed, pending the owner:** an assignment named exam/midterm/final/quiz/test is an exam,
   the rest homework (or lab); material types are guessed from file and module names; the
   assigned date is the module's unlock date, else the file's creation date. Announcements aren't
   read yet, though that's where professors write "the midterm covers lectures 2 through 7".

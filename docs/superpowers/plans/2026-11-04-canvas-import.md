@@ -18,8 +18,13 @@ duplicates, the 30 MB limit, reading, pause/stop/remove and Try again all apply)
 later to pick up new files: everything is linked by Canvas id, so nothing is imported twice.
 
 **Assumptions (recorded in `docs/TO-DISCUSS.md`).**
-- A file the professor has posted is one the class has reached: Canvas imports are never
-  `upcoming`. The student can still mark a file upcoming on the Uploads tab.
+- Whether the class has reached a file can't be read from the fact that it was posted (owner:
+  "some profs upload nothing, others upload everything from the jump"). Files posted over the
+  weeks were posted as the class reached them (except a module that opens in the future). Three
+  or more files posted within three days of each other were posted all at once: they're imported
+  as `upcoming` and the import page asks "How far has the class got?", the upload page's bulk
+  question, saved file by file through the store. Either way the question is shown after any
+  import of two or more files, and the Uploads tab's "Mark covered" still works.
 - An assignment whose name contains exam, midterm, final, quiz or test is an exam (exams table,
   drives the exam cadences); the rest are homework on the calendar (`hw`; "lab" if the name says
   lab). Assignments with no due date are skipped.

@@ -7,6 +7,7 @@ import { BackButton } from "@/components/layout/BackButton";
 import { Screen } from "@/components/layout/Screen";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/cn";
 import { fadeUp, stagger } from "@/lib/motion";
 import { useOrca } from "@/lib/store";
 
@@ -23,7 +24,7 @@ interface ImportSummary {
   exams: number;
   events: number;
   syllabus: boolean;
-  files: { added: number; duplicates: number; failed: number; skipped: number; remaining: number; total: number };
+  files: { added: number; duplicates: number; failed: number; skipped: number; remaining: number; total: number; items: Array<{ materialId: string; name: string; upcoming: boolean }>; askCoverage: boolean };
 }
 
 type Progress = { kind: "idle" } | { kind: "running"; pulled: number } | { kind: "done"; summary: ImportSummary } | { kind: "failed"; message: string };
@@ -43,9 +44,42 @@ function summaryLine(s: ImportSummary): string {
   return parts.join(" · ");
 }
 
+/**
+ * After an import: tap the last file the class has covered; the ones after it wait as `upcoming`
+ * (the same question the upload page asks for a bulk upload). Saved through the store, file by file.
+ */
+function Coverage({ items, onChange }: { items: ImportSummary["files"]["items"]; onChange: (materialId: string, upcoming: boolean) => void }) {
+  const [covered, setCovered] = useState(() => items.map((it) => !it.upcoming).lastIndexOf(true));
+  const choose = (index: number) => {
+    setCovered(index);
+    items.forEach((it, i) => onChange(it.materialId, i > index));
+  };
+  return (
+    <section className="flex flex-col gap-[8px]" data-part="coverage">
+      <h3 className="text-[15px] font-bold text-prussian">How far has the class got?</h3>
+      <span className="text-[13px] font-medium text-wisteria-deep">Tap the last file the class has covered. The ones after it wait: Orca won&apos;t put them in your reviews until you mark them covered. Nothing is assumed known either way.</span>
+      <ol className="flex flex-col gap-[6px]">
+        <li>
+          <button type="button" onClick={() => choose(-1)} aria-pressed={covered === -1} className={cn("w-full rounded-[12px] border-2 px-[12px] py-[8px] text-left text-[14px] font-semibold", covered === -1 ? "border-wisteria bg-parchment text-prussian" : "border-alice-deep bg-alice text-wisteria-deep")}>
+            None yet
+          </button>
+        </li>
+        {items.map((it, i) => (
+          <li key={it.materialId}>
+            <button type="button" onClick={() => choose(i)} aria-pressed={i === covered} data-part="covered-up-to" data-covered={i <= covered ? "1" : "0"} className={cn("flex w-full items-center justify-between gap-[10px] rounded-[12px] border-2 px-[12px] py-[8px] text-left text-[14px] font-semibold", i <= covered ? "border-wisteria bg-parchment text-prussian" : "border-alice-deep bg-alice text-wisteria-deep")}>
+              <span className="truncate">{it.name}</span>
+              <span className="shrink-0 text-[12px] font-bold">{i <= covered ? (i === covered ? "Covered up to here" : "Covered") : "Not yet"}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 /** Import a course from Canvas: its slides, assignments, exam dates and syllabus, no uploading. */
 export default function ImportCanvasPage() {
-  const { refresh } = useOrca();
+  const { refresh, setMaterialUpcoming } = useOrca();
   const [courses, setCourses] = useState<CanvasCourseLine[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [notConnected, setNotConnected] = useState(false);
@@ -77,7 +111,7 @@ export default function ImportCanvasPage() {
         setProgress((p) => ({ ...p, [c.id]: { kind: "failed", message: body?.error ?? "Orca couldn't import that course." } }));
         return;
       }
-      last = last ? { ...body, exams: last.exams + body.exams, events: last.events + body.events, syllabus: last.syllabus || body.syllabus, files: { ...body.files, added: last.files.added + body.files.added, duplicates: last.files.duplicates + body.files.duplicates, failed: last.files.failed + body.files.failed, skipped: last.files.skipped + body.files.skipped, total: last.files.total } } : body;
+      last = last ? { ...body, exams: last.exams + body.exams, events: last.events + body.events, syllabus: last.syllabus || body.syllabus, files: { ...body.files, added: last.files.added + body.files.added, duplicates: last.files.duplicates + body.files.duplicates, failed: last.files.failed + body.files.failed, skipped: last.files.skipped + body.files.skipped, total: last.files.total, items: [...last.files.items, ...body.files.items], askCoverage: last.files.askCoverage || body.files.askCoverage } } : body;
       if (body.files.remaining === 0) break;
       const pulled = last.files.added + last.files.duplicates + last.files.failed + last.files.skipped;
       setProgress((p) => ({ ...p, [c.id]: { kind: "running", pulled } }));
@@ -140,12 +174,24 @@ export default function ImportCanvasPage() {
                       </p>
                     )}
                     {p.kind === "done" && (
-                      <p className="text-[13px] font-semibold text-prussian" role="status" data-part="canvas-summary">
-                        {summaryLine(p.summary)}.{" "}
-                        <Link href={`/course/${p.summary.course.slug}/review`} className="font-bold text-wisteria-deep underline underline-offset-2">
-                          Open it
-                        </Link>
-                      </p>
+                      <>
+                        <p className="text-[13px] font-semibold text-prussian" role="status" data-part="canvas-summary">
+                          {summaryLine(p.summary)}.{" "}
+                          <Link href={`/course/${p.summary.course.slug}/review`} className="font-bold text-wisteria-deep underline underline-offset-2">
+                            Open it
+                          </Link>
+                        </p>
+                        {p.summary.files.items.length >= 2 && (
+                          <>
+                            {p.summary.files.askCoverage && (
+                              <p className="text-[13px] font-semibold text-prussian" data-part="posted-at-once">
+                                These were posted all at once, so Orca can&apos;t tell which the class has reached. They wait until you say.
+                              </p>
+                            )}
+                            <Coverage items={p.summary.files.items} onChange={setMaterialUpcoming} />
+                          </>
+                        )}
+                      </>
                     )}
                     {p.kind === "failed" && (
                       <span role="alert" className="text-[13px] font-semibold text-bad-text">

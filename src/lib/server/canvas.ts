@@ -8,7 +8,7 @@
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { type CanvasAssignment, type CanvasCourse, type CanvasFile, type CanvasModule, type CanvasUser, type PickedFile, classifyAssignment, dayOf, htmlToText, pickFiles } from "@/lib/canvas/api";
+import { type CanvasAssignment, type CanvasCourse, type CanvasFile, type CanvasModule, type CanvasUser, type PickedFile, classifyAssignment, dayOf, htmlToText, pickFiles, postedAtOnce } from "@/lib/canvas/api";
 import { type CanvasClient, CanvasError, canvasClient } from "@/lib/canvas/client";
 import { placeIslands } from "@/lib/course/islands";
 import { COURSE_NAME_MAX, type IslandVariant, shortName, slugify } from "@/lib/data";
@@ -140,7 +140,18 @@ export interface ImportSummary {
   exams: number;
   events: number;
   syllabus: boolean;
-  files: { added: number; duplicates: number; failed: number; skipped: number; remaining: number; total: number };
+  files: {
+    added: number;
+    duplicates: number;
+    failed: number;
+    skipped: number;
+    remaining: number;
+    total: number;
+    /** The files now in the course from this import, in Canvas order (added and already-there ones), for "How far has the class got?". */
+    items: Array<{ materialId: string; name: string; upcoming: boolean }>;
+    /** The files were posted all at once, so they wait as `upcoming` until the student says which are covered. */
+    askCoverage: boolean;
+  };
 }
 
 export interface ImportOptions {
@@ -216,7 +227,7 @@ async function importSyllabus(db: OrcaSupabase, ownerId: string, courseId: strin
 
 type FileResult = "added" | "duplicate" | "failed" | "skipped";
 
-async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, client: CanvasClient, pick: PickedFile): Promise<{ result: FileResult; materialId: string | null }> {
+async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, client: CanvasClient, pick: PickedFile, upcoming: boolean): Promise<{ result: FileResult; materialId: string | null }> {
   const file = pick.file ?? (await client.get<CanvasFile>(`/files/${pick.id}`).catch((e: unknown) => (e instanceof CanvasError ? null : Promise.reject(e))));
   if (!file || file.locked_for_user) return { result: "skipped", materialId: null };
   if ((file.size ?? 0) > LIMITS.uploadBytes) return { result: "skipped", materialId: null };
@@ -241,7 +252,7 @@ async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, c
     due: null,
     reflect: false,
     handwritten: false,
-    upcoming: false,
+    upcoming,
   });
   if (started.status === 200 && "duplicate" in started.body) return { result: "duplicate", materialId: started.body.duplicate.id };
   if (started.status !== 201 || !("upload" in started.body)) return { result: "skipped", materialId: null };
@@ -277,17 +288,25 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
   const syllabus = await importSyllabus(db, ownerId, orca.id, course, linked);
 
   const picks = pickFiles(modules, files).filter((p) => !linked.has(`file:${p.id}`));
-  const counts = { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, total: picks.length };
+  // Posted all at once, nothing says how far the class has got: the files wait until the student says (the plan's
+  // assumption 1, corrected by the owner). Posted over the weeks, each file was posted as the class reached it,
+  // except one whose module opens in the future.
+  const dump = postedAtOnce(picks);
+  const today = dayOf(now().toISOString())!;
+  const counts: ImportSummary["files"] = { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, total: picks.length, items: [], askCoverage: dump };
   for (const pick of picks) {
     if (now().getTime() - startedAt > budgetMs) {
       counts.remaining++;
       continue;
     }
-    const { result, materialId } = await importFile(db, ownerId, orca.id, client, pick);
+    const upcoming = dump || (pick.assigned !== null && pick.assigned > today);
+    const { result, materialId } = await importFile(db, ownerId, orca.id, client, pick, upcoming);
     if (result === "added") counts.added++;
     else if (result === "duplicate") counts.duplicates++;
     else if (result === "failed") counts.failed++;
     else counts.skipped++;
+    // One entry per material: two Canvas files with the same bytes are one upload.
+    if ((result === "added" || result === "duplicate") && materialId && !counts.items.some((it) => it.materialId === materialId)) counts.items.push({ materialId, name: pick.name, upcoming: result === "added" && upcoming });
     // Linked even when skipped or failed: a file Orca can't read isn't tried again on every import.
     await link(db, ownerId, "file", String(pick.id), materialId ?? orca.id);
   }
