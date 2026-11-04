@@ -51,10 +51,18 @@ migrations in `supabase/migrations/` are the source of truth.
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
    (the names `src/lib/supabase/env.ts` reads), and `ORCA_DAILY_BUDGET_USD` (the jobs check it).
    Tasks run on Trigger.dev's machines, so they need their own copies.
-5. **Deploy the tasks** (separate from Vercel; again whenever the job code changes): put
-   `TRIGGER_PROJECT_REF=proj_…` in `.env`, then `npx trigger.dev@latest login` and
-   `npx trigger.dev@latest deploy`. On Vercel set `TRIGGER_SECRET_KEY` (`tr_prod_…`) and
-   `ORCA_JOBS=trigger`, and redeploy.
+5. **Deploy the tasks.** Since 2026-11-04 the Deploy workflow does it: add `TRIGGER_ACCESS_TOKEN`
+   (the `tr_pat_…` from step 3) and `TRIGGER_PROJECT_REF` (`proj_…`) as repository secrets
+   (GitHub → Settings → Secrets and variables → Actions), and every merge to `main` deploys
+   `src/trigger/` to the project's prod environment before the site goes out. (By hand, the old
+   way: `TRIGGER_PROJECT_REF=proj_…` in `.env`, `npx trigger.dev@latest login`, then
+   `npx trigger.dev@latest deploy`.)
+6. **Switch the site over.** On Vercel (Production env vars) set `TRIGGER_SECRET_KEY`
+   (`tr_prod_…`) and `ORCA_JOBS=trigger`, then redeploy. From then on uploads, imports, top-ups
+   and dives run on Trigger.dev with a 30-minute limit per job instead of Vercel's 5.
+
+   The order matters: tasks deployed first (step 5), then the switch (step 6), or the site would
+   send jobs to a project with no tasks in it.
 
 ## 3. Anthropic or OpenAI
 

@@ -14,6 +14,11 @@ name: Deploy
 # missing, so this also catches up on any migration pushed late). Without them a change that adds a
 # migration is NOT deployed (the run fails and says so), so the site never runs ahead of its
 # database; changes without migrations still deploy.
+#   TRIGGER_ACCESS_TOKEN    a Trigger.dev personal access token (account → Personal Access Tokens)
+#   TRIGGER_PROJECT_REF     the Trigger.dev project (proj_…)
+# With these two the job code in src/trigger/ is deployed to Trigger.dev's prod environment on
+# every deploy (docs/SETUP-HOSTED.md §2); without them that step is skipped and production keeps
+# running jobs inline (ORCA_JOBS on Vercel decides which the site uses).
 on:
   workflow_run:
     workflows: [CI]
@@ -38,6 +43,7 @@ jobs:
     env:
       SUPABASE_PROJECT_REF: fbbimuspcsytjhbqlzzc
       HAVE_SUPABASE_SECRETS: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' && secrets.SUPABASE_DB_PASSWORD != '' }}
+      HAVE_TRIGGER_SECRETS: ${{ secrets.TRIGGER_ACCESS_TOKEN != '' && secrets.TRIGGER_PROJECT_REF != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,6 +82,21 @@ jobs:
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_REF"
           supabase db push --linked
+
+      - uses: actions/setup-node@v4
+        if: steps.diff.outputs.nothing != 'true' && env.HAVE_TRIGGER_SECRETS == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Deploy the job code to Trigger.dev (prod)
+        if: steps.diff.outputs.nothing != 'true' && env.HAVE_TRIGGER_SECRETS == 'true'
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+          TRIGGER_PROJECT_REF: ${{ secrets.TRIGGER_PROJECT_REF }}
+        run: |
+          npm ci --no-audit --no-fund
+          npx --yes trigger.dev@4 deploy --env prod
 
       - name: Merge main into backend-implementation and push (Vercel builds it)
         if: steps.diff.outputs.nothing != 'true'
