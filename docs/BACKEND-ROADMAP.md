@@ -465,7 +465,7 @@ Proposals an agent made that the owner hasn't accepted or refused; don't build t
 - DAU/WAU: SQL in `docs/SETUP-HOSTED.md`, or Vercel Analytics.
 - Deploy Trigger.dev tasks from CI; raise route `maxDuration` to 800 s on Vercel Pro.
 - Pass the server's real error message through to failed uploads (today a generic one).
-- CI: browser tests against `next build` + `next start` instead of `next dev`; serve Gabarito
-  from the repo so builds don't depend on Google Fonts.
+- CI: browser tests against `next build` + `next start` instead of `next dev`. (Gabarito is
+  served from the repo since 2026-11-04: the Google Fonts fetch blocked two deploys in one day.)
 - Courses map: the number beside each course counts its due sidebar cards (0–2); show the
   quick review's "Covers N", label it, or hide 0.

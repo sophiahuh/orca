@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
-import { Gabarito } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { connection } from "next/server";
 import { NotConnected } from "@/components/auth/NotConnected";
 import { SupabaseNotConfiguredError, publicSupabaseEnv } from "@/lib/supabase/env";
 import { Providers } from "./providers";
 
-const gabarito = Gabarito({
+// Gabarito is served from the repo (the @fontsource-variable package, OFL), not fetched from Google
+// Fonts at build time: that fetch failed on the CI runner twice on 2026-11-04 and blocked deploys.
+const gabarito = localFont({
+  src: "../../node_modules/@fontsource-variable/gabarito/files/gabarito-latin-wght-normal.woff2",
   variable: "--font-gabarito",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: "400 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
