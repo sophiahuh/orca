@@ -68,7 +68,7 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   Notes for Orca); emphasis from the material or the notes is what moves an objective.
 
 ### Before Phase 4's live checks (Task 10) — mostly settled
-- **Status (2026-10-25):** production runs on hosted Supabase `fbbimuspcsytjhbqlzzc`, OpenAI, and inline jobs; Trigger.dev isn't set up. What's left: the scripted live checks against production and the choice below.
+- **Status (2026-11-04):** production runs on hosted Supabase `fbbimuspcsytjhbqlzzc`, OpenAI, and inline jobs; migrations reach it through the Deploy workflow. Trigger.dev isn't set up (the workflow can deploy the tasks once its secrets are set). What's left: the scripted live checks against production and the choice below.
 - **Credentials the session needs** to run the live checks the invariants require: the owner's
   Supabase project (URL, publishable and secret keys, a personal access token to push migrations), a
   Trigger.dev project (secret key, project ref), `ANTHROPIC_API_KEY`, `SITE_URL` and
@@ -79,39 +79,23 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   Trigger.dev when the project exists; waiting runs then resume only when the student next starts
   or finishes a job (the hourly sweep is a Trigger.dev schedule).
 
-### Answers to questions not sorted into an objective
-- **Assumed in Phase 4 Task 3 (2026-10-05):** `POST /api/evidence` refuses (422) an answer to a
-  question with no objective, because every evidence row names a real objective (Task 2's schema).
-  In the browser such questions sit in a topic's "not yet sorted" bucket and their answers count
-  there. Today's pipeline always assigns an objective, so nothing should hit this; hand-written or
-  legacy questions would.
-- **Decide:** keep refusing (and stop showing unsorted questions in quizzes in Task 5), or give
-  each topic a real "unsorted" objective row that evidence can name.
-
 ### Relation mastery details
-- **Decided shape:** a relations table (from objective, to objective, type: builds on | implies |
-  contrasts with | applies to, anchors, status), filled during uploads from Phase 2.
+- **Decided shape:** a relations table between topics since 2026-10-06 (`from_topic`, `to_topic`,
+  type: used-in | has-a-kind | alternative-to | related, a one-sentence reason, review status),
+  filled during uploads and by the link step. (Until 2026-10-06 relations were between objectives:
+  builds on | implies | contrasts with | applies to.)
 - **Open (Phase 5):** how a connection question's answer becomes evidence on a relation, what
-  "weak" and "strong" mean for a relation, and how much an `implies` link counts as a review.
+  "weak" and "strong" mean for a relation, and what replaces objective-level `implies` shielding.
 
 ### Bring-your-own model
-- **Now:** Settings → Your AI keeps a student's key in the browser. With the in-app chat gone, the
-  key is used for extraction, question generation and short-answer grading.
-- **Decide:** keep it as an option, or move everything to Orca's server key once accounts exist.
-  Most students won't have a key, so the server key has to work without one either way.
+- **Now:** every model call uses Orca's server key (OpenAI or Anthropic, `src/lib/model-config.ts`).
+  Settings → Your AI (a student's key kept in the browser) still exists in code but is hidden on
+  the Settings page.
+- **Decide:** bring it back as an option (stored encrypted, server-side), or remove it. Most
+  students won't have a key, so the server key has to work without one either way.
 
 ### A second real course
 - Whether to author another course's content, like ALD, for demos and evaluation.
-
-### Question checks: batched or one at a time
-- **Decided (owner, 2026-10-06):** no model checks at all. Questions go into the stock as written,
-  with only the code validators. Risk to watch: a wrong answer key marks right answers wrong and
-  pulls that objective's mastery down; if students report it, bring back a check (or a "this
-  question is wrong" button that drops the question and the evidence it recorded).
-- **Phase 2:** the blind solve, ambiguity and rubric-agreement checks each run as one call per
-  batch of up to 30 questions. The platform ran one call per question.
-- **Decide:** keep batching (fewer calls, faster uploads) unless the evaluation shows batched
-  checks letting bad questions through.
 
 ### Phase 3 scheduling numbers (provisional)
 - **Set (Phase 3):** priority coefficients are 1 for overdue, weight, gap and open confusion and
@@ -119,9 +103,11 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   misses now wait for the next quick review); top-up (changed 2026-10-18: an upload writes 2 per objective,
   and an objective still being learned gets 2 more after a session once it has < 2 unseen), writing from only the pages the objective is anchored to plus one either side (its
   topic's range when it has no anchors; the whole file only up to 60 pages) (`TOP_UP_RULES`); question time 30 s choice, 45 s exact answer, 90 s one sentence.
-- **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Weekly` =
-  due until one is finished in the last 7 days; `1 wk before exam` = daily within 7 days of an
-  exam on the calendar. Extra practice is always available from the course page.
+- **Quick-review cadence** is read as: `Daily` = due until one is finished today; `Twice a week`
+  and `Weekly` = on the course's review days (the day before class, or the student's picks; see
+  "Assumed in class times and review days"), else rolling every 3 or 7 days; `1 wk before exam` =
+  daily within 7 days of an exam on the calendar. Extra practice is always available from the
+  course page.
 - **Decide:** whether these feel right in use. (Deep review length is now picked by the student at
   the start of each deep review; see Decided. The Settings value is only the starting suggestion,
   30 minutes by default, decided 2026-10-05.)
@@ -129,8 +115,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 ### Assumed while finishing Phase 4 (2026-10-06): decide or accept
 Judgement calls the agents made to keep building; each is in code behind one constant or branch.
 - **Daily token budget: 2,000,000 tokens per student** (`LIMITS.tokensPerDay`; about $8 of Opus 5.5
-  input, less with caching; one 40-slide deck runs 200–400k tokens). The plan named a budget without
-  a number.
+  input when it was set, less with caching; the default model is `gpt-6.1-sol` since, so recheck the
+  dollar figure in `src/lib/pricing.ts`; one 40-slide deck runs 200–400k tokens). The plan named a
+  budget without a number.
 - **The 300-page daily budget counts uploads only.** A top-up sends excerpts of stored pages, not
   files, so its pages aren't counted; its cost is bounded by the token budget. Deviation from
   "uploads and top-ups together".
@@ -157,6 +144,9 @@ Judgement calls the agents made to keep building; each is in code behind one con
   graded records no session (so no re-quiz is queued for it).
 
 ### Assumed in the Figma sync (2026-10-06)
+- *Superseded for the Atlas:* the Concept Atlas is now a topic graph (foundations on top, nodes
+  sized by use, strengths New / Developing / Strong / Fragile; `src/lib/course/topic-graph.ts`). The
+  first two bullets describe the rings version it replaced.
 - **The Concept Atlas is screen 12 (the rings), not the "Concept graph v4" explorations** (E1/E2,
   React Flow + ELK, red/amber/green hues). The rings need no new dependency and stay in the
   palette; the spec's interaction model is followed where it fits (select → panel, dim to 30%, Esc
@@ -212,8 +202,8 @@ Judgement calls the agents made to keep building; each is in code behind one con
   still runs the cheap one. What follows was the first decision.
 - **Decided for now (Amanda, 2026-10-06):** OpenAI's default model is `gpt-6-luna`, the cheap one
   ($0.10 in / $0.50 out per million, 20× under `gpt-6.1-sol`), while the pipeline is tried out.
-  Watch whether it extracts and writes questions well enough: the blind solve and agreement checks
-  run on the same small model, so they may wave through wrong answers. Compare against
+  Watch whether it extracts and writes questions well enough (the model checks of questions were
+  dropped the same day, so nothing catches a wrong answer key but the code validators). Compare against
   `ORCA_MODEL=gpt-6.1-sol` with `npm run score:extraction` before real students. Priced: `gpt-6-astra`, `gpt-6.1-sol`,
   `gpt-6-luna` (Standard tier, read from developers.openai.com on 2026-10-06).
 - **Known gaps on OpenAI:** the prompts were written for Claude and are untested on either; a reply
@@ -306,8 +296,9 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 - **Decided for Phase 4 (2026-10-05):** the browser loads everything a student has (courses,
   structure, materials, finished sessions, every evidence event, snapshots) once at sign-in, so
   screens keep reading the same in-memory state.
-- **Revisit when:** a student's evidence log reaches tens of thousands of events, sign-in gets
-  slow, or the MCP connector (Phase 7) needs state without a browser. Then load per course and
+- **Revisit when:** a student's evidence log reaches tens of thousands of events or sign-in gets
+  slow. (The MCP connector, built 2026-11-04, reads state on the server per call, so it didn't
+  force this.) Then load per course and
   only the events derived reads need (the last N days for streak, poor sessions and last seen),
   with objective state from snapshots alone.
 
@@ -333,7 +324,8 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
   `/api/evidence` takes the outcome it sends; only prose grading loads its rubric on the server.
   An edited request can inflate only the student's own record.
 - **Revisit when:** courses are shared, mastery feeds anything outside the student's own study
-  (grades, leaderboards), or the MCP connector writes answers. Then `/api/evidence` takes the
+  (grades, leaderboards), or the MCP connector writes answers (it has since 2026-11-04, but only as
+  self-marked answers through its own route, so the browser path is unchanged). Then `/api/evidence` takes the
   response and checks choice and exact answers on the server (a string compare, no model call).
 
 ### Sign-up CAPTCHA (deferred)
@@ -354,6 +346,13 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
   reviews it.
 
 ## Decided (recorded in the roadmap)
+
+- 2026-10-26: every question has an objective (`questions.objective_id` not null); the topic's
+  "not yet sorted" bucket is gone, so `POST /api/evidence` refusing an answer without an objective
+  (422) can't be hit by app data.
+- 2026-10-06: no model checks of generated questions (blind solve, ambiguity, rubric agreement were
+  dropped for speed and cost); only the code validators refuse bad output. Risk to watch: a wrong
+  answer key marks right answers wrong; the thumbs down (2026-10-18) replaces such a question.
 
 - 2026-11-04: an answer Claude grades through the connector is evidence, recorded as self-marked
   (`grader: "self"`, `source: "connector"`): half credit, never clears a mix-up. The invariant
@@ -413,4 +412,5 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
   1.6–1.7× Good after the first review. Because checks reach the 60-day cap by about the second
   pass, the stretch mostly lengthens the first check after mastery (about 32 → 48 days).
 - 2026-10-05: the built-in ALD sample course is removed too; the app ships no courses. ALD is
-  reached by uploading `docs/samples/ald/`. The e2e suite seeds its own fixture course.
+  reached by uploading `docs/samples/ald/` (local-only since 2026-10-27; `docs/samples/README.md`).
+  The e2e suite seeds its own fixture course.

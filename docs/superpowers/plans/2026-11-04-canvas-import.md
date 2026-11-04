@@ -1,5 +1,7 @@
 # Canvas import (2026-11-04)
 
+> **Status: built 2026-11-04** on `phase-4` (live; migration `20261104100000` on production).
+
 **Why.** Onboarding is Orca's biggest friction (owner, 2026-11-04): create a course, upload every
 file, wait, review. Columbia's CourseWorks is Canvas, and Canvas already holds the course list,
 the lecture files, the assignments with due dates, the exam dates and the syllabus. Connecting it
