@@ -347,6 +347,11 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 
 ## Decided (recorded in the roadmap)
 
+- 2026-11-04: weak points first (designed, not built): only objectives in rotation (a struggled
+  flag, a miss or partly right answer, or mastered before it ships) come due; islands and rings
+  count mastered out of those; *check me* flags from AI chats come from the Claude connector's
+  `flag_check`; a manual flag on material the class hasn't reached is due now. The full list of
+  decisions is at the end of `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`.
 - 2026-10-26: every question has an objective (`questions.objective_id` not null); the topic's
   "not yet sorted" bucket is gone, so `POST /api/evidence` refusing an answer without an objective
   (422) can't be hit by app data.

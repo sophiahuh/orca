@@ -1,15 +1,16 @@
 # Weak points first — design
 
-Status: design agreed with the owner in brainstorming, 2026-11-04. Not built. Plans A, B and C
-(below) follow from it.
+Status: design agreed with the owner in brainstorming, 2026-11-04; revised the same day after an
+audit against the code (every open point below was decided by the owner). Not built. Plans A, B
+and C (section 5) follow from it.
 
 ## Why
 
 Students found Orca overwhelming. Every objective of every upload came due, and studying meant
 working through all of them, on top of their usual coursework. Orca now practises only what
 the student struggles with. An objective nobody has flagged is left alone. Struggles are found
-mostly from work the student already does: stars in their notes, questions they asked an AI,
-homework reflections.
+mostly from work the student already does: stars in their notes, questions they ask Claude while
+studying, homework reflections.
 
 Ruled out:
 - **Random checks of unflagged objectives.** There are too many objectives for an occasional
@@ -22,14 +23,14 @@ Ruled out:
    caught up" and an optional **Practice other topics**.
 2. Flags come in two strengths:
    - **struggled**: back to learning, the full mastery bar, then spaced checks.
-   - **check me**: one question. A pass clears it; a miss turns it into struggled.
-3. Islands and topic rings measure **weak points mastered**: flagged objectives now mastered or
-   retired, out of all objectives ever flagged. An island with nothing flagged shows its
-   uncharted look, labelled "No weak spots flagged yet".
+   - **check me**: one question. A pass clears it; a miss puts the objective in rotation.
+3. Islands and topic rings measure **weak points mastered**: objectives in rotation that are now
+   mastered or retired, out of all objectives in rotation. An island with nothing in rotation
+   shows its uncharted look, labelled "No weak spots flagged yet".
 4. Questions are written only for flagged objectives, plus whatever Practice other topics and
    dives ask for when they start.
-5. In optional practice, a miss makes the objective struggled. A pass is recorded but never adds
-   future work.
+5. In optional practice, a miss puts the objective in rotation. A pass is recorded but never
+   adds future work.
 6. Learner state stays derived from the evidence log (CLAUDE.md invariant). Flags are
    evidence events, not a stored status.
 
@@ -37,77 +38,115 @@ Ruled out:
 
 ### Statuses
 
-`ObjectiveStatus` (`src/lib/mastery/types.ts`) becomes:
+`ObjectiveStatus` (`src/lib/mastery/types.ts`) gains two values. `unseen` keeps its identifier
+(renaming it would touch 18 files and the connector's output, and would collide with the Atlas's
+topic strength `unverified`, which means something else); only what the student sees changes.
 
 | Status | Meaning | Due? | Student sees |
 |---|---|---|---|
-| `unverified` | no answers, no open flag (replaces `unseen`) | never | "Not flagged" |
-| `verified` | answered correctly while not in rotation | never | "Verified ✓" |
-| `check-due` | an open *check me* flag | yes, one question | "Check" |
+| `unseen` | not in rotation, no answers, no open check | never | "Not flagged" |
+| `verified` (new) | not in rotation, answered, no open check | never | "Verified ✓" |
+| `check-due` (new) | not in rotation, an open *check me* flag | yes, one question | "Check" |
 | `learning` | in rotation, below the mastery bar | yes | as today |
 | `mixed-up` | in rotation, mixed up with another (as today) | yes | as today |
 | `mastered` | in rotation, met the bar, next check not due | no | as today |
 | `fading` | in rotation, its spaced check is due | yes | as today |
 | `retired` | in rotation, retired (as today) | no | as today |
 
-**In rotation** means the objective has had at least one *struggled* flag or at least one
-missed answer, in any session, practice or dive. This one rule covers everything:
-- A pass on an objective that isn't in rotation makes it `verified`. That includes a *check me*
-  pass, Practice other topics, a dive, and a Claude connector answer.
-- Any miss puts the objective in rotation.
+**In rotation** means at least one of:
+- a *struggled* flag;
+- an answer that wasn't fully right (`incorrect` or `partial`, any grader, "Don't know"
+  included), in any session, practice, dive or connector answer;
+- mastery reached on an answer recorded before `MASTERY_RULES.rotationSince` (the day this ships),
+  so nothing a student has already mastered drops off their island.
+
+Everything else follows from it:
+- A fully right answer on an objective that isn't in rotation makes it `verified` (a *check me*
+  pass, Practice other topics, a dive, a Claude connector answer).
 - An objective in rotation follows today's rules unchanged: the mastery bar (3 correct across
   2 days), FSRS spacing, `fading`, `retired`, `mixed-up`.
 
-The fold (`applyAnswer` / `applyConfusion` in `src/lib/mastery/objective-state.ts`) gains an
-`inRotation` flag on the accumulator. Today `applyConfusion` ignores an objective with no
-answers (`if (acc.answered === 0) return acc`). Under this design a struggled flag on a
-never-answered objective must put it in rotation, as `learning` with no credit. A `check` flag
-opens `check-due` until the next answer on that objective. Bump `RULES_VERSION` and record the
-new hash in `tests/mastery/snapshot.test.ts`.
+### The fold
 
-The Atlas's existing topic strength `unverified` ("New", `src/lib/course/topic-graph.ts:22`)
-keeps its name and meaning. `verified` objectives now count as evidence there. The other
-strengths (strong, developing, fragile) come only from objectives in rotation.
+The answer logic of `applyAnswer` (`src/lib/mastery/objective-state.ts`) doesn't change: credit,
+FSRS and the mastery check accumulate whether or not the objective is in rotation. The
+accumulator gains two fields, and `stateAt` reads them:
+
+- `inRotation: boolean`, set by the rules above and never cleared.
+- `checkOpen: boolean`, set by a *check me* flag on an objective not in rotation and cleared by
+  its next answer.
+
+`stateAt`: not in rotation → `check-due` if `checkOpen`, else `unseen` with no answers, else
+`verified`. In rotation → today's statuses.
+
+Flags in the fold (`applyConfusion`, renamed `applyFlag` if that reads better):
+- *struggled*: today's reset (credit, days, mastery check cleared, FSRS memory kept), plus
+  `inRotation = true` and `lastAt` set. Unlike today it applies to an objective with no answers
+  too, which then reads `learning` with no credit.
+- *check me*, not in rotation: `checkOpen = true`. In rotation and mastered: the spaced check
+  is due now (`checkDueAt` = the flag's time), so it reads `fading`. In rotation and not mastered:
+  nothing (it's already due).
+
+Consequence, accepted: an objective that was `verified` and reached the bar through practice reads
+`fading` (not `learning`) after a later miss, since its accumulator is already mastered.
+
+Bump `RULES_VERSION` and record the new hash in `tests/mastery/snapshot.test.ts`
+(`rotationSince` is in `MASTERY_RULES`, so it's hashed).
+
+The Atlas's topic strength `unverified` ("New", `src/lib/course/topic-graph.ts:22`) keeps its name
+and meaning. `verified` objectives count as evidence there; strong, developing and fragile come
+only from objectives in rotation.
 
 The other two status axes stay as they are:
 - **Review state** (`proposed` = "Unreviewed"): whether the extraction is right, not what the
   student knows.
 - **`upcoming`** material: its objectives aren't due, and flags on them wait until the
-  material is marked covered.
+  material is marked covered. Exception: a **manual** flag makes the objective due now (the
+  student asked for it on purpose); `upcomingObjectives` (`src/lib/store.tsx`, and the
+  connector's copy) leaves out objectives with a manual flag.
 
 ### Flags are generalised confusion events
 
-There's no new table and no new event kind. `evidence_events` rows with `kind = 'confusion'`
-gain four columns:
+There's no new table and no new event kind. `evidence_events` rows with `kind = 'confusion'` gain
+two columns:
 
-- `strength text`: `'struggled' | 'check'`.
-- `flag_source text`: `'homework' | 'handwritten-marker' | 'ai-chat' | 'slide' | 'manual'`.
-  It's named `flag_source` because `source` already exists, for answers.
+- `flag_source text not null default 'homework'`: `'homework' | 'handwritten-marker' |
+  'connector' | 'slide' | 'manual'`. The default fills existing rows when the column is added,
+  so the fold has no null case. It's named `flag_source` because `source` already exists, for
+  answers.
 - `page integer`, nullable: the page in `material_id`. For a .pptx this is the slide number,
   since Orca stores one page per slide.
-- `quote text`, nullable, at most 200 characters: the marked passage, or the student's line in
-  an AI chat.
 
-Existing rows read as `struggled` from `homework`: either a migration default, or the fold
-treating null as that. The log is append-only, so old rows are never rewritten. `note`
-(required today for confusion) becomes optional when `quote` is set. `material_id` stays
-required, except for `manual` flags.
+The strength isn't stored: it follows from the source (`connector` → *check me*, every other
+source → *struggled*), in one code table. A column can be added if a source ever needs both.
+
+`note` keeps its meaning, "the student's own words": the reflection, the marked passage, or what
+the student said to Claude. It becomes nullable (slide and manual flags have none), at most 2,000
+characters as today. `material_id` stays required except for `manual` and `connector` flags.
 
 These are called **struggle flags** in code and docs. Objectives' existing `signals` field
 (weight inputs) is a different thing, and flags never change an objective's weight.
 
-All flags are written through `POST /api/evidence` (browser-originated: slide, manual) or by
-the upload job on the server (markers, AI chats, homework). As today, the browser never
-writes evidence directly. Flags follow merges the way answers do. Deterministic ids
-(`src/lib/mastery/ids.ts`) keep a retried job from recording the same flag twice: the key is
-material, page, objective and source.
+Who writes them (the browser never writes evidence directly, as today):
+- `POST /api/evidence`: homework (as today, after `/api/reflect`), slide and manual. The route
+  accepts only these three sources from the browser.
+- The upload job on the server: handwritten markers.
+- The connector's `flag_check` tool: connector.
+
+Ids: flags the upload job writes get deterministic ids (`src/lib/mastery/ids.ts`, keyed by
+material, page, objective and source), so a retried job can't record the same flag twice. Flags
+from the browser and the connector get random ids (the store already retries a save with the same
+event), so flagging the same objective again weeks later is recorded rather than refused as a
+duplicate. Flags follow merges the way answers do.
 
 ### Existing data
 
 Nothing is migrated by hand. Recomputing state under the new rules:
-- objectives never answered become `unverified`;
-- objectives answered correctly with no miss become `verified` and leave rotation;
-- objectives with a miss or a homework confusion stay in rotation.
+- objectives never answered become `unseen` ("Not flagged");
+- objectives answered only fully right, never mastered, become `verified` and leave the due list;
+- objectives with a miss, a partial answer or a homework confusion stay in rotation;
+- objectives mastered before `rotationSince` stay in rotation (mastered, fading or retired), so
+  islands keep what they show.
 
 Existing students' due lists shrink to their weak points on the day this ships. Questions
 already written stay usable.
@@ -121,36 +160,57 @@ Listed in order of friction (passive first), and that's the build order.
 - **Settings → "How do you mark confusion in your notes?"** For example, "★ = lost, ? in the
   margin, red ink = ask in office hours".
   - Per account only (`profiles.marker_notes`), at most 300 characters.
-  - Saved only through a server route that screens it like Notes for Orca (`checkNotes` /
-    `acceptNotes`): a strong injection hit is refused with the offending span, and every hit
-    is logged to `security_events` (new kind `marker_notes`).
-- **The page-reader** (`transcribe`, `src/lib/pipeline/transcribe.ts`) gets the description as
-  a labelled data block, with rules saying it is student data, never instructions.
-  - It still never sees Notes for Orca.
-  - Its output schema adds `marked: [{ quote, marker }]` per page: passages next to one of the
-    student's markers, quoted from that page's transcription.
-- **The objectives step** maps each page's marked passages to that topic's objectives and
-  returns `struggled: [{ objectiveId, page, quote }]`. It already sees each topic's
-  objectives and pages.
-- **Code validators** check two things:
-  - the objective must be one the call was given;
-  - the quote must appear in that page's text (after the normalisation the anchor check uses).
-
-  A failing item is dropped and listed in the run's `dropped`. It's never guessed.
+  - Saved only through a server route that screens it like Notes for Orca (`checkNotes`,
+    `src/lib/pipeline/notes.ts`; `acceptNotes`, `src/lib/server/notes.ts`): a strong injection
+    hit is refused with the offending span, and every hit is logged to `security_events` (new
+    kind `marker_notes`).
+- **The page-reader** (`transcribe`, `src/lib/pipeline/transcribe.ts`) gets the description as a
+  labelled data block, with rules saying it is student data, never instructions. It still never
+  sees Notes for Orca. It writes each passage next to one of the student's markers inline in
+  the page's transcription, as `[marked: <marker>] <passage> [/marked]`. The tags are part of the
+  saved page text, so a retried job (which never transcribes a page twice; `src/lib/jobs/jobs.ts`)
+  still has them, and top-ups and dives see them too.
+- **The objectives step** returns, on each objective it lists (new or existing, like
+  `emphasis`), `struggled: [{ page, quote }]`: marked passages on that topic's pages that are
+  about this objective. Being a field of the objective, it works for objectives the same call
+  creates and follows them through reconciliation.
+- **Code validators**: the quote must appear inside a `[marked]` span on that page (after the
+  normalisation the anchor check uses). A failing item is dropped and listed in the run's
+  `dropped`, never guessed.
+- **Recorded after the structure is saved** (the event's objective must exist), with the
+  job's service-role client through `recordEvent`, as the connector records answers.
 - Only pages read from their images carry markers: handwritten notes, notes-app PDFs, scans.
   With no description saved, nothing is looked for and nothing changes.
 
-### AI chats (passive, check me)
+### The Claude connector (passive, check me)
 
-The map and objectives steps already read STUDENT lines as signals (`src/lib/pipeline/prompts.ts`,
-`isAIChatMaterial`). Their output adds `askedAbout: [{ objectiveId, page, quote }]`, where the
-quote must come from a STUDENT line (checked in code, same drop rule). Each item records a
-`check` flag from `ai-chat`. This applies to pasted transcripts and shared links (`/api/materials/chat`).
+*check me* flags from AI chats come from the Claude connector (`POST /api/mcp/<token>`,
+`src/lib/connector/mcp.ts`), not from parsing pasted transcripts. Claude is already in the
+student's chat and already reads Orca's objectives through `course_state`, so it names the
+objective directly; no model call or quote check is needed on Orca's side.
+
+- A fifth tool, **`flag_check`** `{ courseId, objectiveIds, said }`: the objectives the student
+  asked about or seemed unsure of in the chat, and `said`, the student's own words (at most 200
+  characters, sanitised and screened like a reflection note). Each live objective of the course
+  gets one *check me* flag from `connector` (no material, no page); ids Orca doesn't know are
+  refused and listed in the reply. The tool's description tells Claude to flag only what the
+  student asked about or got wrong in the chat, never everything the chat touched. Claude can't
+  record *struggled* flags.
+- A second *check me* on an objective whose check is still open changes nothing (the fold).
+- A flagged objective with no question starts the top-up (below). Until it lands,
+  `questions_for` returns nothing for it, and the reply says questions are being written.
+- The connector keeps its own copy of the due statuses (`src/lib/server/connector.ts`); it follows
+  the new due list.
+- Pasted transcripts and shared chat links (`/api/materials/chat`) are still uploaded as material
+  and still shape topics and questions, but they don't record flags.
 
 ### Homework reflection (light, struggled)
 
-Unchanged (`/api/reflect`). It now records `strength = 'struggled'` and
-`flag_source = 'homework'`.
+Unchanged in flow: the upload page sends the note to `/api/reflect` as soon as the file is read,
+and records the matches through `POST /api/evidence` (`recordReflection`, `src/lib/store.tsx`).
+The rows get `flag_source = 'homework'` from the column default. Because the reflection is matched
+before the upload job builds anything, it matches only objectives the course already had; the
+flagged objectives get questions from the top-up.
 
 ### Slides tapped (light, struggled)
 
@@ -159,103 +219,118 @@ Unchanged (`/api/reflect`). It now records `strength = 'struggled'` and
   file.
   - A .pptx has no rendered pages: it shows a list of slide titles and first lines from
     `material_pages`.
-- Tapping a page flags every live objective taught on it, found from each objective's own
-  pages (`pagesFor`, `src/lib/pipeline/run.ts`). No model call. One `struggled` flag from
+- Tapping a page flags every live objective taught on that exact page: one whose signals anchor
+  it to the page in this material (`locatorPages`), else one whose topic's `source` covers the
+  page. Not `pagesFor` (`src/lib/pipeline/topup.ts`): it adds a page either side and falls back
+  to the whole file, which would flag far too much. No model call. One *struggled* flag from
   `slide` per objective, with `page` set.
 
 ### Manual (deliberate, struggled)
 
-- **"This is hard"** on an objective (objectives page): one `struggled` flag from `manual`.
+- **"This is hard"** on an objective (objectives page): one *struggled* flag from `manual`.
 - **On a topic** (its trail node menu): one flag for each live objective in the topic.
 
 ### Writing questions
 
-- The upload job writes questions only for objectives flagged in that same job: markers, AI
-  chat, a reflection on that upload. That's 2 per struggled objective and 1 per check-me
+- The upload job writes questions only for objectives flagged in that same job (markers): 2 per
   objective.
-- A flag added later (slide, manual) starts the existing top-up job (`topup.ts`, the `topUp`
-  rate limit) for the flagged objectives.
-- Practice other topics writes its questions when it starts, as a dive does.
+- Every other flag (homework, slide, manual, connector) starts the existing top-up job
+  (`topup.ts`, the `topUp` rate limit) for the flagged objectives that are short of questions:
+  2 for *struggled*, 1 for *check me*. `POST /api/top-up` takes `sessionId` today; it becomes
+  optional for a flag-triggered top-up.
+- Practice other topics and Practice exam topics are dives, which write their questions when
+  they start.
 
 ## 3. Scheduling and screens
 
 ### What's due
 
 In `src/lib/mastery/agenda.ts`, `DUE_TODAY` becomes `["mixed-up", "learning", "fading",
-"check-due"]`. Priority order: mixed-up, then struggled (the existing `confusion` priority term
-in `priority.ts`), then fading, then check-due, with weights and the other terms breaking ties.
+"check-due"]`. The order a quick review asks them in is set by status group in `quickGroup`
+(`src/lib/mastery/session.ts`), not by priority scores (a weighted sum can't guarantee an order):
+mixed-up, then fading overdue, then learning, then fading due today, then check-due. Priority
+breaks ties inside a group, as today. A check-due objective gets one question per session
+(`needsMore` leaves it out).
 
 ### Quick review
 
 - Weak points only, sized to the course's time budget as today. The sidebar's "Covers N
   objectives" (`askable.ts` + `assembleQuickReview`) counts only those.
-- **Nothing due:** the card reads "You're caught up" with a **Practice other topics** button.
-  It writes questions for the highest-weighted `unverified` objectives, sized to the time
-  budget. It's a session kind next to `deep`, with the same pipeline step and the same rules
-  for its answers.
+- **Nothing due:** the card reads "You're caught up" with a **Practice other topics** button. It
+  opens the dive setup (`DeepReviewSetup`) scoped to the course's `verified` and `unseen`
+  objectives, highest weight first: `POST /api/deep-review` already takes `objectiveIds`. No new
+  session kind and no new pipeline step. Answers follow the rotation rule.
 
 ### Dive in
 
 Still started by the student:
 - A topic dive covers every objective in that topic.
-- A course-wide dive covers weak points first, then `unverified` objectives.
+- A course-wide dive covers weak points first, then `verified` and `unseen` objectives.
 
-Answers follow the rotation rule.
+The course's dive cadence still marks a dive due ("Dive in · due"), but only when the course has
+something in rotation that isn't retired (`deepReview.candidates` counts those).
 
 ### Exams
 
 - In the "1 wk before exam" window, that exam's weak points come first (the exam's topics, if
   it lists any).
-- The caught-up card then offers **Practice exam topics**: `unverified` objectives in those
-  topics only.
+- The caught-up card then offers **Practice exam topics**: the same scoped dive, over `verified`
+  and `unseen` objectives in those topics only.
 
 Nothing comes due on its own.
 
 ### Course trail and islands
 
-- **Each topic node** shows a small ring and "1 of 3 mastered", counting the topic's flagged
-  objectives that are now mastered or retired.
-  - A topic with nothing flagged shows no ring.
+- **Each topic node** shows a small ring and "1 of 3 mastered", counting the topic's objectives in
+  rotation that are now mastered or retired.
+  - A topic with nothing in rotation shows no ring.
   - A `fading` objective drops out of the mastered count until it's answered again, so the ring
     can dip.
-  - When everything flagged is mastered, the ring is full with a ✓.
+  - When everything in rotation is mastered, the ring is full with a ✓.
 - **Islands** (`islandLevel`, `src/lib/mastery/progress.ts`) use the same share, over the whole
-  course, with the existing thresholds. Nothing flagged gives the uncharted look, labelled "No
-  weak spots flagged yet".
+  course, with the existing thresholds. Nothing in rotation gives the uncharted look, labelled
+  "No weak spots flagged yet".
 - **Copy**, on the course page and the empty sidebar: "Orca focuses on what you flag: star
-  things in your notes, add AI chats, or tap the slides that were hard."
+  things in your notes, study with Claude, or tap the slides that were hard."
 
 ### Unchanged
 
-The streak (days with answers), question thumbs up/down, `upcoming`, review settings and
-cadences, Notes for Orca, the Claude connector (its answers follow the rotation rule).
+The streak (days with answers), question thumbs up/down, review settings and cadences, Notes for
+Orca. The Claude connector's answers follow the rotation rule; it gains `flag_check` (above).
 
 ## 4. Failure handling
 
 No silent placeholders (CLAUDE.md invariant).
-- **Invalid model output** (an objective the call wasn't given, or a quote not on the page or
-  not from a STUDENT line): the item is dropped and listed in the run's `dropped`.
+- **Invalid model output** (a quote not inside a marked span on its page): the item is dropped
+  and listed in the run's `dropped`.
 - **A top-up for a new flag fails:** the weak spot shows "Couldn't write questions for this yet"
   with Try again, never an empty session.
 - **A refused marker description:** 400 with the span, as Notes for Orca.
-- **Practice other topics with nothing unverified left:** "You've practised everything here"
-  instead of the button.
+- **`flag_check` with unknown objective ids:** refused per id, listed in the reply; the known
+  ones are still recorded.
+- **Practice other topics with nothing `verified` or `unseen` left:** "You've practised everything
+  here" instead of the button.
 
 ## 5. Build: three plans
 
-**Plan A: the core.** This is most of the value, and it ships alone.
-- Migration (block `20261105090000…`): the four confusion columns, check constraints,
-  `security_events` kind `marker_notes` (reserved for Plan B).
-- The fold: `inRotation`, `unverified` / `verified` / `check-due`, the `RULES_VERSION` bump.
-- The agenda and priorities; the topic ring and island share; the Atlas strength.
-- Manual "This is hard" on objectives and topics.
-- Upload question writing limited to flagged objectives; a top-up on later flags.
-- The caught-up card, Practice other topics, the dive changes, Practice exam topics.
-- The copy.
+**Plan A: the core.** This is most of the value, and it ships alone. In order:
+1. Migration (block `20261105090000…`): `flag_source` and `page` on `evidence_events`, `note`
+   nullable, `material_id` optional for manual and connector flags, the check constraints;
+   `security_events` kind `marker_notes` (reserved for Plan B).
+2. The fold: `inRotation`, `checkOpen`, `verified` / `check-due`, `rotationSince`, the
+   `RULES_VERSION` bump.
+3. The agenda, `quickGroup`, the topic ring and island share, the Atlas strength, the
+   connector's due statuses, manual flags past `upcoming`.
+4. Manual "This is hard" on objectives and topics; homework rows with their source; a top-up on
+   every later flag (`sessionId` optional).
+5. The caught-up card, Practice other topics, the dive changes, Practice exam topics.
+6. The copy.
+7. Last: upload question writing limited to flagged objectives (a cost saving; everything above
+   works without it).
 
 **Plan B: passive flags.** The marker setting (column, route, screening, Settings field); the
-`transcribe` data block and `marked` output; `struggled` from the objectives step; `askedAbout`
-from AI chats; validators.
+`transcribe` data block and inline `[marked]` tags; `struggled` on the objectives step's
+objectives; validators; recording after the save; the connector's `flag_check` tool.
 
 **Plan C: tapped slides.** The page grid on the Uploads tab, page-to-objective mapping, the
 .pptx list.
@@ -263,39 +338,55 @@ from AI chats; validators.
 ## 6. Testing
 
 - **Unit (mastery):**
-  - an unverified objective answered right → `verified`;
+  - an `unseen` objective answered right → `verified`; answered partly right → in rotation;
   - *check me*, then right → `verified`; *check me*, then wrong → `learning`;
+  - *check me* on a mastered objective → `fading`;
   - *struggled* with no answers → `learning`, then the bar → `mastered`, then the check due →
     `fading`;
   - a miss in practice → in rotation;
+  - mastered before `rotationSince` → still in rotation; mastered after it with no miss →
+    `verified`;
   - old confusion rows replay as struggled from homework;
   - the snapshot hash.
-- **Unit (agenda):** unverified never due; the caught-up state; priority order; the topic ring
-  and island share, including fading and 0 of 0.
-- **Unit (pipeline, Plan B):** the validators drop unknown objectives, quotes not on the page,
-  and quotes not from a STUDENT line.
-- **pgTAP:** the new columns and constraints; old rows still valid.
+- **Unit (agenda and session):** `unseen` and `verified` never due; the caught-up state; the
+  `quickGroup` order; check-due gets one question; the topic ring and island share, including
+  fading and 0 of 0; a manual flag on upcoming material is due.
+- **Unit (pipeline, Plan B):** the validators drop quotes not inside a marked span on their page.
+- **Unit (connector, Plan B):** `flag_check` records one *check me* flag per known live objective,
+  refuses unknown ids, and screens `said` (`tests/connector/`, fake `ConnectorTools`).
+- **pgTAP:** the new columns and constraints; old rows still valid and read as homework.
 - **Browser:**
   - a manual flag makes the objective due, and answering it fills the ring;
   - the caught-up card and Practice other topics;
   - markers through a fake-model scenario (Plan B);
   - a tapped slide flags its objectives (Plan C).
-- **Existing browser tests** that expect a new objective to be due need updating. That is the
-  largest share of the test work in Plan A.
+- **Existing browser tests** that expect a new objective to be due need updating (8 of the 17
+  specs open sessions). That is the largest share of the test work in Plan A.
 
 ## 7. Docs to update when building
 
 - `docs/MASTERY-PLAN.md` §2.3: the status table.
 - `docs/BACKEND-ROADMAP.md`: the decision.
-- `CLAUDE.md` product model: "Practice", islands, statuses.
-- `docs/TO-DISCUSS.md`: the assumptions below.
+- `CLAUDE.md` product model: "Practice", islands, statuses, the connector's fifth tool.
+- `docs/SETUP-HOSTED.md` §8: the connector's tools.
 
-## Assumptions (for the owner to confirm or change)
+## Decided with the owner (2026-11-04)
 
 1. Marker descriptions are per account only, with no course override.
 2. A tapped slide flags every objective taught on that page, even when the student meant one.
 3. *Check me* asks one question; struggled objectives get 2 written up front.
 4. A miss anywhere (practice, dive, connector) puts the objective in rotation, as a struggled
-   flag would.
-5. Practice other topics picks the highest-weighted unverified objectives first. It doesn't
-   favour the topic the class is on now; that's still the open "extra priority" item.
+   flag would. A partly right answer counts as a miss here.
+5. Practice other topics picks the highest-weighted unflagged objectives first. It doesn't
+   favour the topic the class is on now; that's still the open "extra priority" item in
+   `docs/TO-DISCUSS.md`.
+6. Islands and rings count mastered out of everything in rotation (not "ever flagged", which a
+   passed *check me* would keep in the total for ever).
+7. Objectives already mastered when this ships stay in rotation, so no island loses its look.
+8. A manual flag on material the class hasn't reached is due now.
+9. The dive cadence still marks a dive due, only when something is in rotation.
+10. *Check me* flags from AI chats come from the Claude connector (`flag_check`), which can't
+    record *struggled*; pasted chats no longer record flags.
+11. Simplifications from the audit: `unseen` keeps its name; two new columns, strength derived
+    from the source; Practice other topics and Practice exam topics are scoped dives; limiting
+    upload question writing comes last in Plan A.
