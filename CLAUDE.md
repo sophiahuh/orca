@@ -349,6 +349,19 @@ All 11 Figma screens are built. Where things live:
   `20261104090000`) and pasted into Claude as a custom connector with no sign-in: the URL is the secret, so the proper
   OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is pure and tested with a fake
   `ConnectorTools` (`tests/connector/`); the Supabase-backed tools only read and write the token's student.
+- `src/lib/canvas/` + `src/lib/server/canvas.ts` — **Canvas import** (2026-11-04, plan
+  `docs/superpowers/plans/2026-11-04-canvas-import.md`): Settings → Canvas takes the student's Canvas site and access
+  token (checked against `/users/self`, stored AES-256-GCM-encrypted with a key derived from `SUPABASE_SECRET_KEY`;
+  `canvas_connections`, service-role only). `/import/canvas` lists their active Canvas courses (`GET /api/canvas/courses`)
+  and `POST /api/canvas/import { canvasCourseId }` creates or updates the Orca course: assignments with a due date become
+  exams (name says exam/midterm/final/quiz/test) or `hw`/`lab` calendar entries, the syllabus becomes a ready material,
+  and every PDF/.pptx in the modules (in order) and the file list goes through `startUpload` → Storage →
+  `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date;
+  never `upcoming`). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
+  route pulls files until a 200 s budget and reports `files.remaining`, and the page keeps calling. The pure module
+  (`api.ts`: classification, file picking, Link pagination; `client.ts`: bearer client with injectable fetch, downloads
+  follow the signed redirect without the token) is tested in `tests/canvas/`; migration `20261104100000`, pgTAP 16.
+  Token auth only; OAuth needs a developer key from the university's Canvas admins (`docs/SETUP-HOSTED.md` §9).
 - `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`). A queued
   upload can be **paused** from the Uploads tab (`POST /api/runs/pause`, one run or a whole course's; run status `paused`,
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and

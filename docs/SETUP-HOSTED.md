@@ -224,6 +224,20 @@ in Settings revokes it. `SITE_URL` must be set in production, since the link is 
 proper fix is OAuth (Supabase Auth as the OAuth server, Claude's connector sign-in flow); until then
 this is for the owner and a few testers.
 
+## 9. Canvas (a student does this, not the owner)
+
+1. In Canvas (CourseWorks: https://courseworks2.columbia.edu): Account → Settings → Approved
+   Integrations → **New Access Token**. Give it a purpose ("Orca"), leave the expiry blank or set
+   one, copy the token.
+2. In Orca: Settings → Canvas: the site (prefilled for CourseWorks) and the token → **Connect
+   Canvas**. Orca checks it against Canvas and stores it encrypted.
+3. New course → "Import the course from Canvas", or Settings → Canvas → **Import a course**.
+
+If the New Access Token button is missing, the school has turned student tokens off, and the only
+route is an OAuth developer key approved by the school's Canvas administrators (Canvas's
+"Developer Keys" under the account admin), which is a request to the university, not a setting.
+Disconnect in Settings deletes the stored token; the student can also delete the token in Canvas.
+
 ## Order
 
 1. Anthropic key into the cloud environment (unblocks the extraction baseline now).

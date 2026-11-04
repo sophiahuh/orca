@@ -451,6 +451,11 @@ the token comes from Settings → Claude connector. Answers Claude grades are re
 source and confidence per entry (today an exam's `topic_ids`), a "study notes per class" field, and
 the original activity signals (`log_study`) as priority.
 
+### Canvas import (built 2026-11-04)
+Onboarding without uploads: connect Canvas once, import a course, and its files, assignments,
+exam dates and syllabus arrive through the normal upload pipeline (plan
+`docs/superpowers/plans/2026-11-04-canvas-import.md`; assumptions in `docs/TO-DISCUSS.md`).
+
 ## Offered, not decided (2026-10-25)
 Proposals an agent made that the owner hasn't accepted or refused; don't build them unasked.
 - Store each student's answer text with its evidence, and bring a missed question back after ~3

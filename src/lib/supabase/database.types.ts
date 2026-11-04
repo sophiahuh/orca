@@ -30,6 +30,32 @@ isOneToOne: false
       referencedColumns: ["id","owner_id"]
     }
                   ]
+                },"canvas_connections": {
+                  Row: {
+                    "base_url": string,"canvas_user": string | null,"created_at": string,"last_used_at": string | null,"owner_id": string,"token_enc": string
+                  }
+                  Insert: {
+                    "base_url": string,"canvas_user"?: string | null,"created_at"?: string,"last_used_at"?: string | null,"owner_id": string,"token_enc": string
+                  }
+                  Update: {
+                    "base_url"?: string,"canvas_user"?: string | null,"created_at"?: string,"last_used_at"?: string | null,"owner_id"?: string,"token_enc"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"canvas_links": {
+                  Row: {
+                    "canvas_id": string,"created_at": string,"kind": string,"orca_id": string,"owner_id": string
+                  }
+                  Insert: {
+                    "canvas_id": string,"created_at"?: string,"kind": string,"orca_id": string,"owner_id": string
+                  }
+                  Update: {
+                    "canvas_id"?: string,"created_at"?: string,"kind"?: string,"orca_id"?: string,"owner_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"connector_tokens": {
                   Row: {
                     "created_at": string,"last_used_at": string | null,"owner_id": string,"token_hash": string

@@ -6,6 +6,16 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Canvas import assumptions (2026-11-04)
+- **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.
+- **Assumed, pending the owner:** a file the professor has posted is one the class has reached
+  (imports are never `upcoming`); an assignment named exam/midterm/final/quiz/test is an exam,
+  the rest homework (or lab); material types are guessed from file and module names; the
+  assigned date is the module's unlock date, else the file's creation date. Announcements aren't
+  read yet, though that's where professors write "the midterm covers lectures 2 through 7".
+- **What would change:** module unlock dates in the future could set `upcoming`; announcements
+  could become exam scope; a scheduled re-sync instead of pressing Update.
+
 ### Extra priority for the topic the class is on now
 - **Source:** `docs/MASTERY-PLAN.md` §2.6, the `0.5 × frontier` term.
 - **Concern (Amanda):** not convinced current-topic material should outrank older material just
