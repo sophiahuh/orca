@@ -81,7 +81,8 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           supabase link --project-ref "$SUPABASE_PROJECT_REF"
-          supabase db push --linked
+          # --yes: the CLI (since late 2026) asks to confirm before applying and can't on a runner.
+          supabase db push --linked --yes
 
       - uses: actions/setup-node@v4
         if: steps.diff.outputs.nothing != 'true' && env.HAVE_TRIGGER_SECRETS == 'true'
