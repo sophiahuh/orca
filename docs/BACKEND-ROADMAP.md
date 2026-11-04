@@ -442,9 +442,19 @@ Calendar shows deep reviews, exam blocks and material due dates.
 Generators for the procedural objectives in `docs/OBJECTIVES-ALD.md`; Boolean answers checked by
 truth-table equivalence.
 
-### Phase 7 — MCP connector (not started)
-`/api/mcp` with per-student tokens: `log_study`, `get_due`, `get_material`
-(`docs/MASTERY-PLAN.md` §5). Connector activity raises priority; it never counts toward mastery.
+### Phase 7 — MCP connector (first version built 2026-11-04)
+Moved up after the owner's ALD midterm (a week of studying in a Claude chat that did everything Orca
+does except remember): Claude teaches, Orca keeps score. `POST /api/mcp/<token>` is an MCP server
+with `course_state`, `set_exam`, `questions_for` and `record_answer` (`src/lib/connector/mcp.ts`);
+the token comes from Settings → Claude connector. Answers Claude grades are recorded as self-marked
+(decision in `docs/TO-DISCUSS.md`). Still to do: OAuth instead of a secret URL, exam scope with a
+source and confidence per entry (today an exam's `topic_ids`), a "study notes per class" field, and
+the original activity signals (`log_study`) as priority.
+
+### Canvas import (built 2026-11-04)
+Onboarding without uploads: connect Canvas once, import a course, and its files, assignments,
+exam dates and syllabus arrive through the normal upload pipeline (plan
+`docs/superpowers/plans/2026-11-04-canvas-import.md`; assumptions in `docs/TO-DISCUSS.md`).
 
 ## Offered, not decided (2026-10-25)
 Proposals an agent made that the owner hasn't accepted or refused; don't build them unasked.

@@ -51,10 +51,18 @@ migrations in `supabase/migrations/` are the source of truth.
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
    (the names `src/lib/supabase/env.ts` reads), and `ORCA_DAILY_BUDGET_USD` (the jobs check it).
    Tasks run on Trigger.dev's machines, so they need their own copies.
-5. **Deploy the tasks** (separate from Vercel; again whenever the job code changes): put
-   `TRIGGER_PROJECT_REF=proj_…` in `.env`, then `npx trigger.dev@latest login` and
-   `npx trigger.dev@latest deploy`. On Vercel set `TRIGGER_SECRET_KEY` (`tr_prod_…`) and
-   `ORCA_JOBS=trigger`, and redeploy.
+5. **Deploy the tasks.** Since 2026-11-04 the Deploy workflow does it: add `TRIGGER_ACCESS_TOKEN`
+   (the `tr_pat_…` from step 3) and `TRIGGER_PROJECT_REF` (`proj_…`) as repository secrets
+   (GitHub → Settings → Secrets and variables → Actions), and every merge to `main` deploys
+   `src/trigger/` to the project's prod environment before the site goes out. (By hand, the old
+   way: `TRIGGER_PROJECT_REF=proj_…` in `.env`, `npx trigger.dev@latest login`, then
+   `npx trigger.dev@latest deploy`.)
+6. **Switch the site over.** On Vercel (Production env vars) set `TRIGGER_SECRET_KEY`
+   (`tr_prod_…`) and `ORCA_JOBS=trigger`, then redeploy. From then on uploads, imports, top-ups
+   and dives run on Trigger.dev with a 30-minute limit per job instead of Vercel's 5.
+
+   The order matters: tasks deployed first (step 5), then the switch (step 6), or the site would
+   send jobs to a project with no tasks in it.
 
 ## 3. Anthropic or OpenAI
 
@@ -210,6 +218,33 @@ select f.created_at, f.reason, f.note, q.kind, q.prompt, q.explanation, q.exact
 from public.question_feedback f join public.questions q on q.id = f.question_id
 where f.rating = 'down' order by f.created_at desc limit 50;
 ```
+
+## 8. The Claude connector (a student does this, not the owner)
+
+1. In Orca: Settings → Claude connector → **Connect Claude**. Copy the link (shown once).
+2. In Claude (web or desktop): Settings → Connectors → **Add custom connector**. Name it Orca, paste
+   the link as the URL, leave authentication off, save.
+3. In a chat, turn the Orca connector on and say what you're studying for. Claude calls
+   `course_state` on its own; approve its tool calls the first time.
+
+The link is the secret: anyone who has it can read and change that student's record. **Disconnect**
+in Settings revokes it. `SITE_URL` must be set in production, since the link is built from it. The
+proper fix is OAuth (Supabase Auth as the OAuth server, Claude's connector sign-in flow); until then
+this is for the owner and a few testers.
+
+## 9. Canvas (a student does this, not the owner)
+
+1. In Canvas (CourseWorks: https://courseworks2.columbia.edu): Account → Settings → Approved
+   Integrations → **New Access Token**. Give it a purpose ("Orca"), leave the expiry blank or set
+   one, copy the token.
+2. In Orca: Settings → Canvas: the site (prefilled for CourseWorks) and the token → **Connect
+   Canvas**. Orca checks it against Canvas and stores it encrypted.
+3. New course → "Import the course from Canvas", or Settings → Canvas → **Import a course**.
+
+If the New Access Token button is missing, the school has turned student tokens off, and the only
+route is an OAuth developer key approved by the school's Canvas administrators (Canvas's
+"Developer Keys" under the account admin), which is a request to the university, not a setting.
+Disconnect in Settings deletes the stored token; the student can also delete the token in Canvas.
 
 ## Order
 
