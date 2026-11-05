@@ -149,7 +149,8 @@ them silently; list what you assumed.
   (upload, dive) it's running** (2026-10-17: a real upload died this way). Before that trick, check
   the hosted project has no queued or running `pipeline_runs`, or ask the owner.
 - Cloud containers: Playwright's Chromium build doesn't match; run e2e with
-  `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
+  `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` (that symlink points at
+  whichever build the container ships; the versioned folder's name and layout change).
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
   `.env.local`; template in `.env.example`), `npm run db:reset` (re-applies `supabase/migrations/`),
   `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run check:evidence` (starts its own
