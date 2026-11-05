@@ -1,7 +1,11 @@
 # CourseWorks / Canvas sync: implementation plan
 
-> **Status: planned, not implemented (2026-10-06).** This document is the source of truth for a
-> future implementation. CourseWorks is Columbia's Canvas deployment. Build a direct, read-only
+> **Status (2026-11-04): partly superseded.** A first Canvas import was built on 2026-11-04
+> (`docs/superpowers/plans/2026-11-04-canvas-import.md`) with a student's pasted access token,
+> not OAuth, against the rule below, because OAuth needs a developer key from the university's
+> Canvas admins (`docs/SETUP-HOSTED.md` §9). This document remains the design for the OAuth
+> version and for what the first import leaves out (Planner dates, pages, scheduled refresh).
+> Written 2026-10-06: CourseWorks is Columbia's Canvas deployment. Build a direct, read-only
 > Canvas OAuth integration; do **not** make an MCP server part of Orca's production sync path.
 
 ## 1. Product outcome

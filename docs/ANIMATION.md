@@ -26,15 +26,17 @@ stagger(delay, gap)                  – parent variant that staggers fadeUp/pop
 page                                 – route enter/exit (template.tsx)
 floatIsland(seed), driftWave(seed)   – ambient loops; the seed desynchronises neighbours
 swimOrca, pulseHalo                  – mascot loop, current-node halo
+fadeSwap, overlayFade                – cross-fade between states, modal backdrop
 drawTrail                            – pathLength draw-on for solid paths
 revealDown(height)                   – clip-rect reveal for dotted paths (pathLength would override the dash)
+spin                                 – loading spinner
 ```
 
 ## Patterns used in the screens
 
 - **Lists**: a `stagger()` parent with `fadeUp` children (sidebar due cards, config rows, quiz
   options, calendar cells with a very short gap).
-- **Modals and result cards**: `popIn` inside `AnimatePresence` (class config modal, quiz end).
+- **Modals and result cards**: `popIn` inside `AnimatePresence` (exams modal, dive modal, quiz end).
 - **State changes**: animate the property, not the component. The progress bar animates `width`;
   the toggle animates the knob's `x`; answer rows animate their colour via CSS transitions and
   only use `layout` for reflow.

@@ -1,8 +1,9 @@
 # Quiz question rubric
 
 What makes a question worth asking in Orca. Written from Sophia's reviews of the ALD set;
-every rule below came from a real question that failed. The generator prompt includes this
-file, and the checker pass (planned) grades each generated question against it.
+every rule below came from a real question that failed. The question-writing prompts are built
+from these rules (`src/lib/pipeline/prompts.ts`). No model checks generated questions against it
+(those checks were dropped on 2026-10-06); only code validators refuse bad output.
 
 ## Shape (from the assessment-blueprint model)
 

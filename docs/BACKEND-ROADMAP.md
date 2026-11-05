@@ -4,7 +4,8 @@ How Orca gets a real backend. Decided 2026-10-04: build the backend in this repo
 learner model (`docs/MASTERY-PLAN.md`), and port the parts of `ai-native-learning-platform` that fit
 (`docs/BACKEND-NOTES.md` maps them). The platform repo is a reference, not a dependency.
 
-Each phase gets its own plan in `docs/superpowers/plans/` when it starts. Phases 1 and 2 have one.
+Each phase gets its own plan in `docs/superpowers/plans/` when it starts (Phases 1–4 have one;
+larger features since have their own plans and specs there too).
 Open questions live in `docs/TO-DISCUSS.md`.
 
 ## Decisions
@@ -28,9 +29,9 @@ Open questions live in `docs/TO-DISCUSS.md`.
 - **Every topic and objective has a weight**, starting at a neutral 1.0. Claude records signals
   (coverage, material type, explicit emphasis, what builds on what); code turns them into weights
   with a fixed formula (Phase 2).
-- **Relations between objectives** (builds on, implies, contrasts with, applies to) are extracted
-  with uploads, because weights need "how many objectives build on this". Relation mastery comes
-  later (Phase 5).
+- **Relations between topics** (used-in, has-a-kind, alternative-to, related; between objectives
+  until 2026-10-06, see Phase 2 below) are extracted with uploads and by the link step, because
+  weights need "how many topics this is used in". Relation mastery comes later (Phase 5).
 - **Nothing ships seeded.** Every course is created by the student and filled from uploads: no
   built-in courses, due items, calendar events, materials or streak. (Phase 1 kept ALD as a
   labelled sample; it was removed after Phase 1.)
@@ -62,8 +63,9 @@ Open questions live in `docs/TO-DISCUSS.md`.
   provisional, see TO-DISCUSS).
 
 **Practice**
-- **Questions are generated ahead, sessions are assembled at start.** Each objective keeps a
-  stock of validated questions (about 6 at upload, topped up after sessions). Pressing start
+- **Questions are generated ahead, sessions are assembled at start.** Each objective gets 2
+  questions at upload and 2 more after a session while it's still being learned and has fewer than
+  2 unseen (changed 2026-10-18 from a stock of about 6; Phase 3 below). Pressing start
   assembles the session instantly from that stock: spread across the highest-priority objectives,
   unseen questions first, at least one mechanism question, sized to the course's quick-review
   time budget with per-type time estimates (default 10 minutes). Never a placeholder question.
@@ -71,10 +73,12 @@ Open questions live in `docs/TO-DISCUSS.md`.
   follows the student's Notes for Orca where they speak to it (e.g. exam-length problems like the
   past exams); the material-type sliders were removed 2026-10-25.
 - **No in-app AI chat.** The tutor-agent pieces of the platform are not ported. The MCP connector
-  (Phase 7) lets the student's own Claude or ChatGPT log study activity as a priority signal.
+  (Phase 7, first version 2026-11-04) lets the student's own Claude ask Orca's questions and record
+  the answers it grades (as self-marked); logging study activity as a priority signal is still to do.
 - **Priority omits the "current topic" boost and the distance discount** until discussed.
-- **Claude for all model calls** (`claude-opus-5-5`, via `@anthropic-ai/sdk`); the bring-your-own
-  path stays until discussed.
+- **One server model for every call:** OpenAI (`gpt-6.1-sol` by default) or Anthropic
+  (`claude-opus-5-5`), picked in `src/lib/model-config.ts` (2026-10-06). Settings → Your AI (a
+  student's own key) is hidden; whether to bring it back is open in `docs/TO-DISCUSS.md`.
 
 **Infrastructure**
 - **Files go in object storage** (Supabase Storage, private bucket, per-student folders, signed
@@ -182,7 +186,7 @@ For each upload:
    objectives have no aliases (dropped 2026-10-25).
 3. **Review:** the student confirms new topics; `uncertain` matches are highlighted. Nothing waits
    on review to be practiced (confirmation rule below).
-4. **Questions** are generated per objective (about 6) and stocked. They used to be checked by a
+4. **Questions** are generated per objective (2 at upload since 2026-10-18; about 6 before). They used to be checked by a
    second model (blind solve, ambiguity, rubric agreement); the owner dropped those checks on
    2026-10-06 for speed and cost. Code still refuses rule-breaking output (untrusted-text rules,
    anchors to slides that don't exist, wrong objective, bad structure). Deep reviews write their own
@@ -281,10 +285,11 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
 Plan: `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` (approved 2026-10-05; Tasks 1–9
 built on branch `phase-4` by 2026-10-06, every check green against the local stack). Live since
 2026-10-12 on Vercel (https://orca-lake-omega.vercel.app) with hosted Supabase project
-`fbbimuspcsytjhbqlzzc`, jobs inline (`ORCA_JOBS=inline`; no Trigger.dev project yet), OpenAI as the
-model. Not recorded as done: Task 10's scripted live checks (`check:isolation` against the
-production project), custom SMTP for emails, the dead-run cron (`vercel.json` waits on the plan;
-`docs/SETUP-HOSTED.md` §5).
+`fbbimuspcsytjhbqlzzc`, jobs inline (`ORCA_JOBS=inline`; the Deploy workflow can deploy the
+Trigger.dev tasks since 2026-11-04, but its secrets aren't set yet), OpenAI as the model. Not
+recorded as done (as of 2026-11-04): Task 10's scripted live checks (`check:isolation` against the
+production project), custom SMTP for emails, the dead-run cron (no `vercel.json` yet: it waits on
+the plan; `docs/SETUP-HOSTED.md` §5).
 - Auth screens in Orca's style; `proxy.ts` session refresh (Next 16's name for middleware).
   Email + password through Supabase Auth (email confirmation, password reset, custom SMTP before
   real students); Google sign-in later as a second provider (decided 2026-10-05).
@@ -328,7 +333,7 @@ production project), custom SMTP for emails, the dead-run cron (`vercel.json` wa
   durable, observable, outlive Vercel's function limits) and nothing in the project already
   queues work. The tasks (`src/trigger/jobs.ts`) only call the jobs; locally and in tests
   `ORCA_JOBS=inline` runs the same jobs inside the route, so the SDK is used only to define and
-  enqueue tasks. No Trigger.dev project exists yet (Task 10).
+  enqueue tasks. Production still runs them inline (2026-11-04; `docs/SETUP-HOSTED.md` §2).
   `pdfjs-dist` (Task 6; it was the browser's PDF reader since Phase 2) now also runs on the server,
   on a worker thread, to read uploads into `material_pages`: the same library, no new one.
 - **Built (local only, nothing hosted):** the local stack; the schema with owner-only RLS, Storage
@@ -427,6 +432,24 @@ Without class days or picks it rolls on from the last one finished (7 days, or 3
 The rule is `reviewWeekdays` (`src/lib/mastery/review-days.ts`), used by `courseAgenda`, so the
 calendar follows. Meeting times are stored and shown but don't schedule anything yet.
 
+**Uploads in bulk and material the class hasn't reached (2026-10-27).** An upload takes several
+files or a whole folder; three or more is a bulk upload, whose dates hide behind "Add dates" and
+which asks "How far has the class got?". Files after the one tapped (or with an assigned date in
+the future) are `materials.upcoming`: their objectives aren't due and aren't in quick reviews or
+dives until "Mark covered" on the Uploads tab. A scheduling signal, never mastery. Typed notes are
+a material type. Pasted AI chats are kept whole and stored as ~12,000-character pages.
+
+**Controlling uploads (2026-10-28).** A queued upload can be paused and resumed (run status
+`paused`); a running one stopped ("Stopped by you"); a failed one retried from its saved file
+(Try again, `POST /api/materials/:id/process`); and material removed from a course
+(`DELETE /api/materials/:id`: its file, pages and calendar entry go, the row stays as `removed`,
+and objectives and topics only it taught are archived with `archived_with_material`). Migrations
+`20261031100000`–`20261031120000`.
+
+**Designed, not built (2026-11-04): weak points first.** Only objectives the student flags come
+due; unflagged ones are `unverified`; islands count flagged objectives mastered. Spec:
+`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`.
+
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not
 built: everything below, and the exam review itself (the "Exam review" setting is stored, but no
@@ -462,8 +485,10 @@ Proposals an agent made that the owner hasn't accepted or refused; don't build t
   days (today a miss only puts the objective back in the quick-review queue).
 - Two-stage upload: build topics and objectives first, write questions after the student reviews
   them.
-- DAU/WAU: SQL in `docs/SETUP-HOSTED.md`, or Vercel Analytics.
-- Deploy Trigger.dev tasks from CI; raise route `maxDuration` to 800 s on Vercel Pro.
+- DAU/WAU: SQL in `docs/SETUP-HOSTED.md`, or Vercel Analytics. (Since planned in detail, not
+  started: `docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`.)
+- Raise route `maxDuration` to 800 s on Vercel Pro. (Deploying the Trigger.dev tasks from CI was
+  built 2026-11-04; it runs once its two secrets are set.)
 - Pass the server's real error message through to failed uploads (today a generic one).
 - CI: browser tests against `next build` + `next start` instead of `next dev`. (Gabarito is
   served from the repo since 2026-11-04: the Google Fonts fetch blocked two deploys in one day.)

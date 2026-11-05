@@ -5,12 +5,15 @@ Duolingo-style trail of topics inside each island, quizzes you, and nudges revie
 you configure per class. Mastery is tracked per learning objective from your answers, with spaced
 checks (FSRS), and each island's look shows how much of its course you've mastered.
 
-**Status (2026-10-25):** live at https://orca-lake-omega.vercel.app. Phases 1–4 are built: mastery
-tracking, courses built from uploaded material (PDFs, .pptx decks, handwritten notes), scheduled
-quick reviews and dives, and a Supabase backend with accounts. Phases 5–7 (relation mastery and
-exam review, ALD drills, an MCP connector) haven't started. Work lands on `phase-4`, reaches `main`
-by pull request, and deploys automatically. New here, human or agent? Read `CLAUDE.md` → "Start
-here".
+**Status (2026-11-04):** live at https://orca-lake-omega.vercel.app. Phases 1–4 are built: mastery
+tracking, courses built from uploaded material (PDFs, .pptx decks, handwritten and typed notes,
+AI chats and web pages), scheduled quick reviews and dives, and a Supabase backend with accounts.
+Since then: a Claude connector (an MCP server Claude calls while a student studies in a chat) and
+Canvas import (connect CourseWorks once, import a course instead of uploading it). Phases 5 and 6
+(relation mastery and exam review, ALD drills) haven't started. Designed next: weak points first
+(`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`). Work lands on `phase-4`, reaches
+`main` by pull request, and deploys automatically. New here, human or agent? Read `CLAUDE.md` →
+"Start here".
 
 Stack: Next.js 16 (App Router) + Tailwind v4 + `motion`, Supabase (Postgres with row-level
 security, Auth, Storage), and OpenAI or Claude on the server for reading material, writing
@@ -50,8 +53,11 @@ npm run locked -- npm run check:isolation   # two accounts can't see each other'
 npm run locked -- npm run check:evidence    # the answer-recording API over HTTP
 ```
 
-No test calls a real model. CI (`.github/workflows/ci.yml`) runs all of the above on every push.
-`npm run score:extraction` scores extraction on the ALD decks with a real key (`--dry` without).
+No test calls a real model. CI (`.github/workflows/ci.yml`) runs all of the above on every push to
+`main`, `backend-implementation` and `phase-*`, and on pull requests. `npm run score:extraction`
+scores extraction on the ALD decks with a real key (`--dry` without); the decks aren't in the repo
+(`docs/samples/README.md`). `npm run cleanup:uploads` removes uploads that were never read and old
+failed reads.
 
 ## Routes
 
@@ -60,16 +66,17 @@ No test calls a real model. CI (`.github/workflows/ci.yml`) runs all of the abov
 | `/` | Courses map: one island per course, due sidebar (`/home` redirects here) |
 | `/welcome` | Onboarding |
 | `/sign-in`, `/sign-up`, `/forgot-password`, `/reset-password` | Accounts |
-| `/new-course` | Create a course |
-| `/add-material` | Upload a PDF or .pptx (or handwritten notes) and a homework reflection; Orca maps it onto the course and writes questions |
+| `/new-course` | Create a course (or import it from Canvas) |
+| `/import/canvas` | Pick a Canvas course to import: files, assignments, exam dates and syllabus |
+| `/add-material` | Upload PDFs, .pptx decks, handwritten or typed notes (several files or a folder at once), or add an AI chat or a web page, with a homework reflection; Orca maps it onto the course and writes questions |
 | `/course/[slug]` | The course's trail of topics; each topic's play button opens a dive into it |
-| `/course/[slug]/review` | After an upload: confirm, rename or reject new topics; settle possible duplicates |
+| `/course/[slug]/review` | After an upload: confirm, rename or reject new topics; settle possible duplicates. Its Uploads tab lists every file with its progress (pause, stop, try again, remove, mark covered) |
 | `/course/[slug]/objectives` | Every objective: review status, origin, mastery, weight; reject, restore, merge |
 | `/course/[slug]/atlas` | Concept Atlas: the course's topics and how they connect |
-| `/course/[slug]/settings` | The course's own review settings (overriding the account defaults) and its Notes for Orca |
+| `/course/[slug]/settings` | The course's own review settings (overriding the account defaults), class times and review days, and its Notes for Orca |
 | `/session/[slug]?kind=quick\|deep` | A quick review (sized to the course's time budget) or a dive (harder questions written when it starts) |
-| `/quiz/[slug]/[topic]` | The older single-topic quiz |
-| `/settings` | Account, default review settings and Notes for Orca for all classes |
+| `/quiz/[slug]/[topic]` | The older single-topic quiz (nothing links to it any more) |
+| `/settings` | Account, default review settings, Notes for Orca for all classes, your metrics, the Claude connector and the Canvas connection |
 | `/calendar` | Scheduled reviews and exams, filterable by course |
 
 Design source: Figma "Orca – Study App Mockups" (`docs/figma/screens.png`, `docs/figma/styleguide.png`).

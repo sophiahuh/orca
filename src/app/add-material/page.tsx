@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, MATERIAL_TYPE_LABELS, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { type UploadStage, filesFromDataTransfer, importAIChat, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import { type UploadOutcome, type UploadStage, filesFromDataTransfer, importAIChat, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
 import { type BatchItem, BatchList } from "@/components/upload/BatchList";
 import type { MaterialPages } from "@/lib/data";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
@@ -220,13 +220,19 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf };
     // The form is done with: it gives way to where the student goes next, so Back from there skips it.
     const leave = () => router.replace(due ? "/calendar" : `/course/${course.slug}`);
+    // A pasted chat or a website: new material, or one the course already has (then nothing is added again).
+    const afterImport = (outcome: UploadOutcome) => {
+      if (outcome.kind === "read") addMaterial(outcome.material, { saved: true });
+      const g = outcome.generation;
+      if ("runId" in g) router.replace(`/course/${course.slug}/review?run=${g.runId}`);
+      else if (outcome.kind === "duplicate") setPhase({ kind: "duplicate", filename: outcome.filename });
+      else leave();
+    };
     if (aiChatUrl.trim() || aiChatText.trim()) {
       try {
         setPhase({ kind: "sending", stage: "reading" });
         const outcome = await importAIChat({ ...(aiChatUrl.trim() ? { url: aiChatUrl.trim() } : {}), ...(aiChatText.trim() ? { text: aiChatText.trim() } : {}) }, meta);
-        addMaterial(outcome.material, { saved: true });
-        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built" || outcome.generation.state === "failed") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
-        else leave();
+        afterImport(outcome);
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The AI chat import failed." }); }
       return;
     }
@@ -234,9 +240,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       try {
         setPhase({ kind: "sending", stage: "reading" });
         const outcome = await importWebsite(websiteUrl.trim(), meta);
-        addMaterial(outcome.material, { saved: true });
-        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built" || outcome.generation.state === "failed") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
-        else leave();
+        afterImport(outcome);
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The website import failed." }); }
       return;
     }

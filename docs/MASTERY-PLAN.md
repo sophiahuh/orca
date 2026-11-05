@@ -10,6 +10,16 @@
 > resets an objective to learning (§2.2); importance is a computed weight (§2.1); objectives are
 > created at upload (§2.1); there is no in-app chat (§2.2). §6 and §7 are superseded by the
 > roadmap and TO-DISCUSS.
+>
+> **Changes since (checked 2026-11-04):** question supply is 2 per objective at upload, and 2 more
+> after a session once an objective still being learned has fewer than 2 unseen (§2.4, §4;
+> `QUESTIONS_PER_OBJECTIVE`, `TOP_UP_RULES`); evidence `source` is `quiz | quick-review |
+> deep-review | requiz | connector` (§2.2); relations are between topics, so `implies` shielding
+> (§2.5) has nothing to act on; priority has an open-confusion term (+1) and no exam-proximity term
+> yet (§2.6); the connector built on 2026-11-04 records answers Claude grades as self-marked
+> evidence instead of the activity signals §5 describes. **Designed, not built:** weak points first
+> (`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`) replaces `unseen` with
+> `unverified` (never due) and adds `verified` and `check-due` to §2.3, and changes the island share.
 
 Written after reading the ai-native-learning-platform repo's learner model (`compute-learner-state.ts`,
 `evidence-weights.ts`, `next-review-date.ts`, `review-priority.ts`, `daily-session.ts`) and
@@ -81,7 +91,7 @@ A topic's progress and an island's look are summaries computed from its objectiv
 { id, at, courseId, topicId, objectiveId, questionId, tier,
   outcome: correct | partial | incorrect,
   grader: choice | exact | rubric | self,   // "self" = student marked it without a grader → assisted
-  source: quiz | deep | exam | drill }      // Phase 1 records only "quiz"
+  source: quiz | quick-review | deep-review | requiz | connector }   // as built (planned: quiz | deep | exam | drill)
 ```
 Skipped questions and grading failures record nothing.
 
@@ -91,9 +101,10 @@ student) and each match records a confusion event. A confusion event resets the 
 `learning`: credit, credit days and attempted questions are cleared, so it needs 3 fresh credited
 answers over 2 days again. On an objective that isn't mastered yet it raises priority. The
 asymmetry is deliberate: "I don't get it" is believed because it's cheap and safe to act on;
-"I get it" never raises mastery. Connector activity (§5) is stored as a
+"I get it" never raises mastery. Connector activity (§5) would be stored as a
 separate *signal*, not an evidence event: it raises priority ("you studied this on Tuesday") and
-never counts toward mastery.
+never counts toward mastery. (Not built. What the connector records today is answers to Orca's own
+questions, graded by Claude, as self-marked evidence.)
 
 ### 2.3 Objective state (pure function of events + now)
 
@@ -144,7 +155,8 @@ Rules that apply to all:
   objective has no mechanism question, any unaided correct answer clears it (provisional).
 - Exam-ready = deep mastery and not fading on exam day.
 
-Supply this implies: at least **6 distinct quick questions per objective** (so 3 can be answered
+*Superseded 2026-10-18 (owner): questions follow practice instead of a stock; see the status note
+at the top.* Supply this implies: at least **6 distinct quick questions per objective** (so 3 can be answered
 without repeats and 3 remain for spaced checks), plus **unlimited drill instances** for the
 procedural ones. Today's bank has 4–6 per *topic*; generation must become per-objective, and
 drills are the cheap way to cover the arithmetic half of ALD.
@@ -232,6 +244,9 @@ items, any Deep review nudges, the next exam block. Completing items writes evid
 else is persisted.
 
 ## 4. Question supply
+*As built:* 2 questions per objective at upload (one that does the skill, one "why or how"), 2 more
+after a session for an objective still being learned once it has fewer than 2 unseen; dives write
+their own. No drill generators yet (Phase 6). The plan as first written:
 - **Per-objective generation** replaces per-topic: the extraction prompt asks for objectives first,
   then 6 quick questions per objective (2 exact short answer, 2 mechanism short answer, 2 MC) and
   2 deep questions. Built-in ALD content is re-tagged to objectives.
@@ -245,6 +260,10 @@ else is persisted.
   generation. Runs in the background after a session, never while the student waits.
 
 ## 5. The connector (no API cost)
+*As built (2026-11-04):* `POST /api/mcp/<token>` with `course_state`, `set_exam`, `questions_for`
+and `record_answer`; Claude asks Orca's questions and records the answers it grades as self-marked
+evidence (`src/lib/connector/mcp.ts`, roadmap Phase 7). `log_study` and `get_material` below
+aren't built. The plan as first written:
 Orca exposes a small MCP server at `/api/mcp` with a per-student token. Students add it once to
 Claude.ai (Settings → Connectors, Pro and up) or ChatGPT (Apps & Connectors, developer mode).
 Tools:
