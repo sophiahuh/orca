@@ -34,3 +34,20 @@ test("This topic is hard flags every objective in the topic", async ({ page, stu
   await expect(page.locator('[data-part="topic-ring"]')).toHaveCount(1);
   await expect(page.getByText("0 of 2 weak spots mastered")).toBeVisible();
 });
+
+test("caught up: Practice other topics opens a dive over objectives nobody flagged", async ({ page, student }) => {
+  await seedFixtureCourse(student);
+  await page.goto(`/course/${COURSE_SLUG}`);
+  await expect(page.locator('[data-part="caught-up"]')).toContainText("You're caught up");
+  await page.locator('[data-part="practice-other"]').click();
+  await expect(page).toHaveURL(/kind=deep&scope=practice/);
+  await expect(page.getByText("Practice other topics")).toBeVisible();
+});
+
+test("with a weak point due, the course isn't caught up", async ({ page, student }) => {
+  await seedFixtureCourse(student);
+  await page.goto(`/course/${COURSE_SLUG}/objectives`);
+  await page.locator('[data-part="flag-hard"]').first().getByRole("button", { name: "This is hard" }).click();
+  await page.goto(`/course/${COURSE_SLUG}`);
+  await expect(page.locator('[data-part="caught-up"]')).toHaveCount(0);
+});
