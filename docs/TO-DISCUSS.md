@@ -34,10 +34,11 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### Island looks: art
 - **What an island shows:** one summary of a whole course, computed from its objectives'
-  mastery states: the share of objectives currently held (mastered or retired). The level
+  mastery states: the share of its weak points (objectives in rotation, since 2026-11-05) currently
+  held (mastered or retired). The level
   names (`uncharted`, `sprouting`, `growing`, `thriving`) are only code identifiers for the four
   pictures; students never see them.
-- **Provisional (Phase 1):** no answers yet → look 1; under 1/3 held → look 2; 1/3 or more →
+- **Provisional (Phase 1):** nothing in rotation yet → look 1; under 1/3 held → look 2; 1/3 or more →
   look 3; 2/3 or more → look 4. Fading objectives don't count, so an island loses a look after
   real neglect.
 - **Cut-offs decided** (see Decided).
@@ -347,7 +348,8 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 
 ## Decided (recorded in the roadmap)
 
-- 2026-11-04: weak points first (designed, not built): only objectives in rotation (a struggled
+- 2026-11-04: weak points first (Plan A built 2026-11-05; flag-triggered top-ups and limiting
+  upload question writing to flagged objectives moved to a follow-up plan): only objectives in rotation (a struggled
   flag, a miss or partly right answer, or mastered before it ships) come due; islands and rings
   count mastered out of those; *check me* flags from AI chats come from the Claude connector's
   `flag_check`; a manual flag on material the class hasn't reached is due now. The full list of

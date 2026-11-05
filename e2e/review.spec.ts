@@ -146,7 +146,7 @@ test("the objective list shows status and weight, and rejects, restores, merges 
   await page.goto(`/course/${SLUG}/objectives`);
   const row = (name: string) => page.locator(`[data-objective="${name}"]`);
   await expect(row("Simplify with absorption")).toContainText("Confirmed");
-  await expect(row("Simplify with absorption")).toContainText(/Not started · weight \d\.\d\d/);
+  await expect(row("Simplify with absorption")).toContainText(/Not flagged · weight \d\.\d\d/);
   await expect(row("Read binary numbers")).toContainText("Inferred, not in the material");
   await expect(row("Read binary numbers")).toContainText("weight 1.00");
 

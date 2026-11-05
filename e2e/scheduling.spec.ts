@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import type { AnswerEvent } from "../src/lib/mastery/types";
-import { expect, test, F, FIXTURE_STATE, daysAgo, seedPages, seedState, stored } from "./fixture";
+import { expect, test, F, FIXTURE_STATE, daysAgo, fixtureFlags, seedPages, seedState, stored } from "./fixture";
 import { fakeCalls, fakeModel } from "./fake-model";
 
 const COURSE = "logic-e2e";
@@ -60,7 +60,8 @@ test.beforeEach(async ({}, testInfo) => {
 test.describe("scheduling", () => {
   test("a quick review is due, starts instantly from the stock and is done for the day once finished", async ({ page, student }) => {
     await noModel(page);
-    await seedState(student, FIXTURE_STATE);
+    // Weak points first: only flagged (or missed) objectives come due.
+    await seedState(student, { ...FIXTURE_STATE, evidence: fixtureFlags() });
     await page.goto("/");
     const card = page.locator('[data-todo="quick"]');
     await expect(card).toContainText("Quick review · 10 min");
@@ -73,7 +74,8 @@ test.describe("scheduling", () => {
 
     await expect(page.getByText("You answered 6 of 6 correctly.")).toBeVisible();
     await expect(page.locator('[data-part="top-up"]')).toHaveText("No AI is connected, so Orca can't write new questions.");
-    const { results, evidence } = await stored(page, student);
+    const { results, evidence: all } = await stored(page, student);
+    const evidence = all.filter((e) => e.kind === "answer");
     expect(results.map((r) => r.mode)).toEqual(["quick"]);
     expect(evidence).toHaveLength(6);
     expect(new Set(evidence.map((e) => (e as AnswerEvent).source))).toEqual(new Set(["quick-review"]));
@@ -85,7 +87,7 @@ test.describe("scheduling", () => {
 
   test("questions missed today wait for the next quick review: no same-day review or re-quiz", async ({ page, student }) => {
     await noModel(page);
-    await seedState(student, FIXTURE_STATE);
+    await seedState(student, { ...FIXTURE_STATE, evidence: fixtureFlags() });
     await page.goto(`/session/${COURSE}?kind=quick`);
     await answerAll(page, false);
     await expect(page.getByText("You answered 0 of 6 correctly.")).toBeVisible();
@@ -143,7 +145,8 @@ test.describe("scheduling", () => {
       source: "quiz",
       sessionId: "old",
     });
-    const evidence = [answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement), answered(F.signExtend, F.tc4, F.twosComplement)];
+    // Flagged a month ago, so they're weak points (the dive cadence only counts those), then answered 8 days ago.
+    const evidence = [...fixtureFlags(), answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement), answered(F.signExtend, F.tc4, F.twosComplement)];
     await seedState(student, { ...FIXTURE_STATE, evidence });
     // The deck's stored pages: deep questions are written from where each objective is taught.
     await seedPages(student, { [F.material]: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
@@ -198,7 +201,7 @@ test.describe("scheduling", () => {
       source: "quiz",
       sessionId: "old",
     });
-    await seedState(student, { ...FIXTURE_STATE, evidence: [answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement)] });
+    await seedState(student, { ...FIXTURE_STATE, evidence: [...fixtureFlags(), answered(F.simplify, F.ba1, F.booleanAlgebra), answered(F.convert, F.tc1, F.twosComplement)] });
     await seedPages(student, { [F.material]: [1, 2, 3, 4, 5].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
     await page.goto("/");
     await expect(page.locator('[data-todo="deep"]')).toBeVisible();
@@ -210,7 +213,7 @@ test.describe("scheduling", () => {
     await expect(page.locator("[data-part=quiz-end-summary]")).toHaveText("You skipped every question, so nothing was recorded and your mastery is unchanged.");
 
     const state = await stored(page, student);
-    expect(state.evidence).toHaveLength(2);
+    expect(state.evidence.filter((e) => e.kind === "answer")).toHaveLength(2);
     expect(state.results).toEqual([]);
     const { data: after } = await student.db.from("objective_state").select("objective_id, accumulator").order("objective_id");
     expect(after).toEqual(before);
@@ -220,7 +223,8 @@ test.describe("scheduling", () => {
 
   test("after a session, objectives short of unseen questions are topped up from the material's stored pages", async ({ page, student }) => {
     await fakeModel({ perObjective: 2 });
-    await seedState(student, FIXTURE_STATE);
+    // Only weak points still being learned get more questions after a session.
+    await seedState(student, { ...FIXTURE_STATE, evidence: fixtureFlags() });
     await seedPages(student, { [F.material]: [{ n: 2, text: "x + xy = x (absorption)" }] });
 
     await page.goto(`/quiz/${COURSE}/${F.booleanAlgebra}`);

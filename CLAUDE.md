@@ -85,9 +85,14 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   the class has got (`upcoming` material waits); typed notes; class times and review days
   ("Twice a week"); Dive In runs beside an upload; queued uploads pause and resume, a running one
   stops, material can be removed, a failed upload has Try again; the Claude connector (MCP) and
-  Canvas import (2026-11-04). **Designed, not built:** weak points first
-  (`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`: only flagged objectives come
-  due) and activity logs with soft delete (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`).
+  Canvas import (2026-11-04). **Planned, not built:** activity logs with soft delete
+  (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`).
+- **Since 2026-11-05: weak points first, Plan A** (spec
+  `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`, plan
+  `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`; on `phase-4`, not merged). Only
+  objectives in rotation come due (see "Product model"); flags are `confusion` evidence with
+  `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2, with
+  `MASTERY_RULES.rotationSince` to be set to the deploy day before merging (its status block).
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
   uses for development. `.env` may point at either (it has pointed at each at different times):
@@ -121,9 +126,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Weak points first: the owner agreed the design on 2026-11-04
-   (`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`); next is Plan A (the core) once
-   they approve the written spec.
+1. Weak points first: Plan A is built on `phase-4`. Before merging: set `rotationSince` to the
+   deploy day and run the merge gate. Then Plan B (handwritten markers, the connector's
+   `flag_check`), Plan C (tapped slides) and the follow-up that makes objectives without questions
+   hold state (then uploads write questions only for flagged objectives). None is written yet.
 2. Activity logs, edit history and soft delete: planned
    (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`), not started; read its status
    block first (migration numbers and newer hard deletes changed since it was written).
@@ -184,7 +190,9 @@ them silently; list what you assumed.
   browser's clock wouldn't move the server's. (Playwright's `page.clock.setFixedTime` also freezes
   `motion` animations after the first page.)
 - e2e: seed with `seedState(student, …)` (secret key), read back with `stored(page, student)`;
-  ids must be UUIDs (`ids(...)` makes fresh ones per spec). `page.goto` waits for the app's saves
+  ids must be UUIDs (`ids(...)` makes fresh ones per spec). An objective is due, mastered or fading only once
+  it's in rotation: seed `struggled(...)` / `fixtureFlags()` (e2e/fixture.ts) before answers, since
+  seeded right answers stop counting as mastery once their dates pass `rotationSince`. `page.goto` waits for the app's saves
   (`<html data-saving>`) first, since navigating away would cancel one.
 - Pure modules (`src/lib/mastery`, `src/lib/course`, `src/lib/pipeline`, `src/lib/jobs`) must
   load under plain Node: relative imports with `.ts`, `import type`, no TS parameter properties.
@@ -221,7 +229,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   objective's own pages (spec: `docs/superpowers/specs/2026-10-25-course-index-design.md`). Inferred objectives (from general knowledge, not the material)
   are allowed and labelled. Unreviewed objectives are quizzable, with an "unreviewed" tag.
 - **Learner state is derived, never stored.** Every graded answer appends an evidence event;
-  objective status (unseen → learning → mastered → fading → retired, plus mixed-up; table in
+  objective status (unseen / verified / check-due out of rotation; learning → mastered → fading →
+  retired, plus mixed-up, in rotation; table in
   `docs/MASTERY-PLAN.md` §2.3), topic
   progress, the island's mastery level, the due list and the streak are computed from the events
   and the clock. Spacing uses FSRS (`ts-fsrs`, Anki's scheduler) under Orca's own mastery bar.
@@ -235,10 +244,17 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   related (one works around the other's limitation, or a deliberate contrast). Each carries a one-
   sentence reason shown on hover in the Atlas; used-in/has-a-kind never form a loop. They are the
   Concept Atlas's edges and feed the weights.
+- **Weak points first (2026-11-05).** Only objectives *in rotation* come due: a struggled flag (a
+  homework reflection, "This is hard" on an objective or a topic), an answer short of fully right
+  anywhere, or mastery reached before `MASTERY_RULES.rotationSince`. Unflagged objectives are
+  `unseen` ("Not flagged") or `verified` (answered right) and are never due; a *check me* flag
+  (`check-due`) asks one question. Flag strength follows the source (`src/lib/mastery/flags.ts`).
 - **Practice.** Missed questions have no review of their own: the objective joins the course's
   quick-review queue and isn't due again the same day. Quick reviews draw from questions written
-  ahead: 2 per objective at upload, then 2 more after a session for an objective still being learned
-  once it's under 2 unseen; assembled instantly and sized to the course's time budget.
+  ahead: 2 per objective at upload, then 2 more after a session for a weak point still being learned
+  once it's under 2 unseen; assembled instantly and sized to the course's time budget. With nothing
+  due, "You're caught up" offers Practice other topics (and Practice exam topics in an exam's week):
+  dives over unflagged objectives (`src/lib/mastery/practice.ts`).
   **Dive in** (deep review) writes harder questions when it starts, for the whole course or one
   topic, at the length the student picks; its cadence is the course's setting.
 - **Exams.** Each course's exams (date, optional topics) are their own table; they show on the
@@ -246,14 +262,13 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - **Settings.** The account holds default review settings; a course inherits them until its own
   settings page overrides them. Notes for Orca are sent from both: the account's for every class and
   the course's (which wins on a conflict).
-- **Self-reported confusion** in a homework reflection resets the matching objectives to learning.
+- **Self-reported confusion** in a homework reflection is a struggled flag: the matching objectives
+  go into rotation, back to learning.
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
 - **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
-  growing, thriving) from the share of its course's objectives that are mastered.
-- **Changing (designed 2026-11-04, not built):** weak points first. Only objectives the student
-  flags (markers in notes, AI chats, homework, slides, by hand) come due; unflagged ones are
-  `unverified` and never due; islands count flagged objectives mastered. Until it's built, the
-  bullets above describe the app. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`.
+  growing, thriving) from the share of its weak points (objectives in rotation) that are mastered;
+  nothing in rotation is uncharted, "No weak spots flagged yet". Topic rows and the course header
+  count the same.
 - **Nothing hardcoded or faked.** The app ships no courses; every course starts empty and its
   content comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** The server's model (OpenAI by default, or Claude) extracts material,
@@ -450,7 +465,9 @@ All 11 Figma screens are built. Where things live:
 
 `docs/BACKEND-ROADMAP.md` is the plan. Phases 1–4 are built and live; Phase 7 (the MCP connector)
 has a first version and Canvas import is built (2026-11-04); Phases 5 and 6 haven't started. Next
-by the owner's priorities: weak points first (spec 2026-11-04), then the open items above. Before
+by the owner's priorities: weak points first (Plan A built on `phase-4`: set `rotationSince` and
+run the merge gate; then Plans B and C and the follow-up that makes objectives without questions
+hold state), then the open items above. Before
 tuning extraction, run `npm run score:extraction` with a key (and the local ALD decks) and record a
 baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase

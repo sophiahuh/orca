@@ -1,5 +1,5 @@
 import type { AnswerEvent } from "../src/lib/mastery/types";
-import { expect, test, FIXTURE_STATE, seedState } from "./fixture";
+import { expect, test, FIXTURE_STATE, fixtureFlags, seedState } from "./fixture";
 
 /** Thumbs up / down on questions: saved per student, and a thumbs down before answering skips the question. */
 const SLUG = FIXTURE_STATE.courses[0].slug;
@@ -7,7 +7,8 @@ const bank = Object.values(FIXTURE_STATE.questionBank[FIXTURE_STATE.courses[0].i
 const answers = new Map(bank.map((q) => [q.prompt, q.exact![0]]));
 
 test.beforeEach(async ({ student, page }) => {
-  await seedState(student, FIXTURE_STATE);
+  // Weak points first: the quick review asks only flagged objectives.
+  await seedState(student, { ...FIXTURE_STATE, evidence: fixtureFlags() });
   await page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: null } }));
 });
 
@@ -24,7 +25,7 @@ test("a thumbs down before answering opens the popup (reason and note), skips th
   await expect.poll(async () => (await student.db.from("question_feedback").select("question_id, rating, reason, note")).data).toEqual([
     { question_id: bank.find((q) => q.prompt === first)!.id, rating: "down", reason: "unclear", note: "It never says how many bits to use." },
   ]);
-  const { data: evidence } = await student.db.from("evidence_events").select("question_id");
+  const { data: evidence } = await student.db.from("evidence_events").select("question_id").eq("kind", "answer");
   expect((evidence ?? []).map((e) => e.question_id)).not.toContain(bank.find((q) => q.prompt === first)!.id);
 });
 
@@ -38,7 +39,7 @@ test("after answering, a thumbs up is saved; tapping it again clears it", async 
   await expect.poll(async () => (await student.db.from("question_feedback").select("rating")).data).toEqual([{ rating: "up" }]);
   await page.getByRole("button", { name: "Good question" }).click();
   await expect.poll(async () => (await student.db.from("question_feedback").select("rating")).data).toEqual([]);
-  const { data: evidence } = await student.db.from("evidence_events").select("kind");
+  const { data: evidence } = await student.db.from("evidence_events").select("kind").eq("kind", "answer");
   expect((evidence as Array<Pick<AnswerEvent, "kind">>).length).toBe(1);
 });
 
@@ -47,5 +48,5 @@ test("Don't know counts as a wrong answer, recorded as the student's own, and sh
   await expect(page.getByPlaceholder("Type your answer")).toBeEnabled();
   await page.locator("[data-part=dont-know]").click();
   await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
-  await expect.poll(async () => (await student.db.from("evidence_events").select("outcome, grader")).data).toEqual([{ outcome: "incorrect", grader: "self" }]);
+  await expect.poll(async () => (await student.db.from("evidence_events").select("outcome, grader").eq("kind", "answer")).data).toEqual([{ outcome: "incorrect", grader: "self" }]);
 });

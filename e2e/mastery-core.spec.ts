@@ -69,30 +69,30 @@ test.describe("a fresh browser", () => {
 test.describe("a course with uploaded questions", () => {
   test.beforeEach(async ({ student }) => seedFixtureCourse(student));
 
-  test("the trail has nothing locked, START on the first topic, and objective counts (a gap only for objectives with no questions)", async ({ page }) => {
+  test("the trail has nothing locked, START on the first topic, and says when nothing is flagged (a gap only for objectives with no questions)", async ({ page }) => {
     await page.goto("/course/logic-e2e");
     await expect(page.locator('[data-part="start"]')).toHaveCount(1);
     await expect(page.locator("[data-visual]").first()).toHaveAttribute("data-visual", "current");
     await expect(page.locator('[data-visual="current"]')).toContainText("Boolean Algebra");
-    // Every objective here has at least one question: few is normal (more are written as the student practises).
-    await expect(page.locator('[data-visual="current"]')).toContainText("1 objective");
-    await expect(page.locator('[data-visual="upcoming"]')).toContainText("2 objectives");
+    // Weak points first: nothing flagged or missed yet. Every objective has a question, so no gap.
+    await expect(page.locator('[data-visual="current"]')).toContainText("No weak spots flagged");
+    await expect(page.locator('[data-visual="upcoming"]')).toContainText("No weak spots flagged");
     await expect(page.locator("[data-visual]").filter({ hasText: "without questions" })).toHaveCount(0);
     await expect(page.locator('[data-visual="upcoming"] button').first()).toBeVisible();
     await expect(page.locator("[data-visual] button:disabled")).toHaveCount(0);
   });
 
-  test("answering quiz questions records evidence and moves the trail, island and streak", async ({ page, student }) => {
+  test("answering quiz questions records evidence, and a miss makes a weak point that moves the trail, island and streak", async ({ page, student }) => {
     await page.goto(`/quiz/logic-e2e/${F.booleanAlgebra}`);
-    await answerShort(page, "x");
-    await expect(page.getByText("Correct.")).toBeVisible();
+    await answerShort(page, "nope");
+    await expect(page.getByText("Not quite.", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Continue" }).click();
     await answerShort(page, "a + c");
     await expect(page.getByText("Correct.")).toBeVisible();
 
     const evidence = await storedEvidence(page, student);
     expect(evidence.map((e) => [e.questionId, e.objectiveId, e.outcome, e.grader])).toEqual([
-      [F.ba1, F.simplify, "correct", "exact"],
+      [F.ba1, F.simplify, "incorrect", "exact"],
       [F.ba2, F.simplify, "correct", "exact"],
     ]);
     expect(new Set(evidence.map((e) => e.sessionId)).size, "one session per quiz visit").toBe(1);
@@ -104,16 +104,16 @@ test.describe("a course with uploaded questions", () => {
     await page.goto("/course/logic-e2e");
     const current = page.locator('[data-visual="current"]');
     await expect(current).toContainText("Boolean Algebra");
-    await expect(current).toContainText("0 of 1 objectives mastered");
+    await expect(current).toContainText("0 of 1 mastered");
   });
 
-  test("answers on two topics show progress on both trail nodes", async ({ page, student }) => {
+  test("misses on two topics show weak points on both trail nodes", async ({ page, student }) => {
     await page.goto(`/quiz/logic-e2e/${F.booleanAlgebra}`);
-    await answerShort(page, "x");
-    await expect(page.getByText("Correct.")).toBeVisible();
+    await answerShort(page, "nope");
+    await expect(page.getByText("Not quite.", { exact: true })).toBeVisible();
     await page.goto(`/quiz/logic-e2e/${F.twosComplement}`);
-    await answerShort(page, "1010");
-    await expect(page.getByText("Correct.")).toBeVisible();
+    await answerShort(page, "nope");
+    await expect(page.getByText("Not quite.", { exact: true })).toBeVisible();
 
     const evidence = await storedEvidence(page, student);
     expect(evidence.map((e) => e.objectiveId)).toEqual([F.simplify, F.convert]);
@@ -122,7 +122,7 @@ test.describe("a course with uploaded questions", () => {
     await page.goto("/course/logic-e2e");
     for (const name of ["Boolean Algebra", "Two's Complement"]) {
       const label = page.locator('[data-part="label"]').filter({ hasText: name });
-      await expect(label).toContainText(/\d+ of \d+ objectives mastered/);
+      await expect(label).toContainText(/\d+ of \d+ mastered/);
     }
   });
 });

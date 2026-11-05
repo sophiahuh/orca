@@ -81,9 +81,11 @@ const GOLDEN_OPTIONS = { hasMechanismQuestions: true, dayKey: utcDay };
 /* ── RULES_VERSION ────────────────────────────────────────────────────── */
 
 /**
- * The hash of MASTERY_RULES plus the FSRS parameters each RULES_VERSION was released with. When a
- * rule or the scheduler's parameters change, bump RULES_VERSION and add a line here (never edit
- * an old one): every stored snapshot with an older version is then rebuilt from the log.
+ * The hash of MASTERY_RULES, the FSRS parameters and (from version 2) FLAG_STRENGTH each
+ * RULES_VERSION was released with. When any of them changes, bump RULES_VERSION and add a line here
+ * (never edit a released one; the latest may be re-recorded until it's deployed): every stored
+ * snapshot with an older version is then rebuilt from the log. Version 1 was hashed without the
+ * flag strengths, so its line is a record and can't be reproduced by today's formula.
  */
 const RULES_HASHES: Record<number, string> = {
   1: "eb9aeb80f48d781505b46862b41eeb1176b1e06e54dc833f4c95263d0503a2e0",

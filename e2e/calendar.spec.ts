@@ -1,4 +1,4 @@
-import { expect, F, FIXTURE_STATE, seedState, test } from "./fixture";
+import { expect, F, FIXTURE_STATE, fixtureFlags, seedState, test } from "./fixture";
 
 /** The calendar: "+n more" expands that week to show everything; the course filter shows one course's entries. */
 const day = (() => {
@@ -13,6 +13,8 @@ test("+n more expands the week, and Filter by course narrows the calendar to one
     ...FIXTURE_STATE,
     courses: [...FIXTURE_STATE.courses, other],
     events: [exam("Logic quiz 1", F.course), exam("Logic quiz 2", F.course), exam("Logic quiz 3", F.course), exam("Signals midterm", other.id)],
+    // Weak points, so the fixture course has a quick review today.
+    evidence: fixtureFlags(),
   });
   await page.goto("/calendar");
   const today = page.locator("[data-today]");

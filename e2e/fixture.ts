@@ -267,3 +267,10 @@ export const daysAgo = (days: number, from = Date.now()) => new Date(from - days
 export function struggled(courseId: string, topicId: string, objectiveId: string, at: string): ConfusionEvent {
   return { kind: "confusion", id: crypto.randomUUID(), at, courseId, topicId, objectiveId, materialId: null, note: null, flagSource: "manual", page: null };
 }
+
+/** A struggle flag on every fixture objective (30 days ago), so all three are weak points, due as every objective used to be. */
+export const fixtureFlags = (at = daysAgo(30)): ConfusionEvent[] => [
+  struggled(F.course, F.booleanAlgebra, F.simplify, at),
+  struggled(F.course, F.twosComplement, F.convert, at),
+  struggled(F.course, F.twosComplement, F.signExtend, at),
+];

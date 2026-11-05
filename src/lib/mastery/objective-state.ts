@@ -44,9 +44,10 @@ export const MASTERY_RULES = {
  * A snapshot with an older version counts as stale and is rebuilt from the evidence log. Bump it
  * whenever the result of the fold could change: a constant in MASTERY_RULES, the FSRS parameters
  * (including a ts-fsrs upgrade that moves its default weights), or the logic of applyAnswer,
- * applyConfusion or a day key. tests/mastery/snapshot.test.ts fails when the constants or the FSRS
- * parameters change without a bump (it hashes them) and when the logic does (a golden replay
- * recorded per version); record the new hash and golden accumulator there with the bump.
+ * applyConfusion or a day key, or FLAG_STRENGTH (src/lib/mastery/flags.ts). tests/mastery/snapshot.test.ts
+ * fails when the constants, the FSRS parameters or the flag strengths change without a bump (it
+ * hashes them) and when the logic does (golden replays recorded per version); record the new hash
+ * and golden accumulators there with the bump.
  */
 export const RULES_VERSION = 2;
 

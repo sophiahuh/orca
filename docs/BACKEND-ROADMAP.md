@@ -59,8 +59,8 @@ Open questions live in `docs/TO-DISCUSS.md`.
   updated with each answer (event sourcing with snapshots), rebuilt only when rules change or
   questions are re-filed.
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
-- **Islands show mastery.** Four fixed looks by the share of objectives mastered (thresholds
-  provisional, see TO-DISCUSS).
+- **Islands show mastery.** Four fixed looks by the share of weak points (objectives in rotation)
+  mastered, since 2026-11-05 (thresholds provisional, see TO-DISCUSS).
 
 **Practice**
 - **Questions are generated ahead, sessions are assembled at start.** Each objective gets 2
@@ -446,9 +446,19 @@ a material type. Pasted AI chats are kept whole and stored as ~12,000-character 
 and objectives and topics only it taught are archived with `archived_with_material`). Migrations
 `20261031100000`–`20261031120000`.
 
-**Designed, not built (2026-11-04): weak points first.** Only objectives the student flags come
-due; unflagged ones are `unverified`; islands count flagged objectives mastered. Spec:
-`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`.
+**Weak points first (designed 2026-11-04, Plan A built 2026-11-05).** Only objectives in rotation
+come due: a struggled flag (a homework reflection, "This is hard" on an objective or a topic), an
+answer short of fully right anywhere, or mastery reached before `MASTERY_RULES.rotationSince`.
+Unflagged objectives are `unseen` ("Not flagged") or `verified` (answered right) and are never due;
+a *check me* flag (`check-due`, the connector's, Plan B) asks one question. Islands, topic rows and
+the course header count weak points mastered. With nothing due, "You're caught up" offers Practice
+other topics (and Practice exam topics in an exam's week): dives over unflagged objectives. Flags are
+`confusion` evidence with `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2.
+Uploads still write questions for every objective: limiting them to flagged objectives, and
+flag-triggered top-ups, wait for a follow-up plan that first makes objectives without questions hold
+state. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`; plan:
+`docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`. Plans B (handwritten markers, the
+connector's `flag_check`) and C (tapped slides) are next.
 
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not

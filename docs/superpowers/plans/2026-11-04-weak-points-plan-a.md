@@ -2,10 +2,43 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status (2026-11-04): planned, not started.** Spec:
-> `docs/superpowers/specs/2026-11-04-weak-points-first-design.md` (revised and decided the same
-> day). Plans B (passive flags: handwritten markers, the connector's `flag_check`) and C (tapped
-> slides) come after this one and aren't written yet.
+> **Status (2026-11-05): built on `phase-4`** (commits 48e3d80 … the Task 8 commit), after two rounds
+> of review by a second agent tracing scenarios through the code. The code is the reference where
+> it differs from the task text below. What changed from the plan as written:
+> - **Tasks 5 and 9 moved out** to a follow-up plan. An objective with no questions holds no state
+>   (`objectivesForTopic` groups objectives by their questions), so writing questions only for
+>   flagged objectives would make new objectives unflaggable, undivable and invisible to the
+>   connector; and while uploads still write 2 per objective, a flag-triggered top-up is redundant
+>   (the post-session top-up refills weak points). `requestQuestions` was dropped from Task 6.
+>   The migration's `question_changed` now leaves a stale placeholder when an objective with
+>   evidence but no snapshot gets its first question, so a reflection's flag on such an objective
+>   is folded later.
+> - **Fold** (still `RULES_VERSION` 2): a partly right answer on an unflagged objective whose
+>   accumulator met the bar (or that completes it) makes its check due now; a check flag never
+>   moves an overdue check later; `FLAG_STRENGTH` is part of the rules hash; a second golden log
+>   (`FLAGS_LOG`, dated 2027 so moving `rotationSince` can't change it) covers the flag rules.
+> - **Agenda:** `RankedObjective` carries `weight` and `reached`; `examTopics` (exams table, merges
+>   followed through `survivingTopic`) puts that exam's objectives first; `examInWindow` lives in
+>   `agenda.ts`. The quick-review card is skipped when it would cover 0 objectives.
+> - **Progress:** `TopicProgress` is `{ status, mastered, inRotation, objectives }`; `done` needs no
+>   open check; `not-started` covers verified-only topics. The course header reads "{held} of
+>   {weak} weak spots mastered" / "No weak spots flagged yet".
+> - **Practice** (`src/lib/mastery/practice.ts`): course-wide dives and practice leave out
+>   unreached and weight-0 objectives; topic dives keep everything in the topic.
+> - **UI:** "This is hard" shows "In review" for learning/mixed-up objectives (`canFlagHard`), is
+>   absent for objectives without questions, and can flag a mastered weak point again; the topic
+>   flag skips the same objectives and hides when none is left. `useCaughtUp` shows the caught-up
+>   card only when the due list is empty and the course has objectives with questions. Review
+>   phrases: "not flagged, so Orca won't schedule it", "answered right, so Orca won't schedule it".
+> - **Known, left as is:** the calendar's quick-review count is the due list's size, not the
+>   sidebar's "Covers N" (as before this plan); a verified objective's feedback banner shows credit
+>   progress toward the bar.
+> - **Before merging:** set `MASTERY_RULES.rotationSince` to the deploy day (earlier or later than
+>   2026-11-10) and re-record `RULES_HASHES[2]`. Don't push `phase-4` before the browser specs seed
+>   struggle flags (Task 8): CI runs them.
+>
+> Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`. Plans B (passive flags:
+> handwritten markers, the connector's `flag_check`) and C (tapped slides) aren't written yet.
 
 **Goal:** Only objectives in rotation (struggled-flagged, missed or partly right, or mastered before
 the change) come due; islands and topic rows count weak points mastered; students can flag an

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
-import { expect, test, F, seedFixtureCourse, settled, signIn, stored } from "./fixture";
+import type { AnswerEvent, EvidenceEvent } from "../src/lib/mastery/types";
+import { expect, test, F, FIXTURE_STATE, fixtureFlags, seedFixtureCourse, seedState, settled, signIn, stored } from "./fixture";
 
 /**
  * The store on Supabase: what one browser saves another browser of the same student sees; a save
@@ -18,9 +19,10 @@ test("a second browser signed into the same account sees the same courses and pr
   await page.getByRole("button", { name: "Create Course" }).click();
   await expect(page).toHaveURL(/:\d+\/$/);
 
+  // A miss makes it a weak point, so the island and the objective show progress.
   await page.goto(`/quiz/logic-e2e/${F.booleanAlgebra}`);
-  await answerShort(page, "x");
-  await expect(page.getByText("Correct.")).toBeVisible();
+  await answerShort(page, "nope");
+  await expect(page.getByText("Not quite.", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await answerShort(page, "a + c");
   await expect(page.getByText("Correct.")).toBeVisible();
@@ -107,7 +109,8 @@ test("an action taken while Orca reloads after a failed save is refused with its
 });
 
 test("reloading in the middle of a session keeps the answers given, and the rest is a fresh set that counts once", async ({ page, student }) => {
-  await seedFixtureCourse(student);
+  // Weak points first: the quick review asks only flagged objectives.
+  await seedState(student, { ...FIXTURE_STATE, evidence: fixtureFlags() });
   await page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: null } }));
   await page.goto("/session/logic-e2e?kind=quick");
   await expect(page.getByText("1 / 6")).toBeVisible();
@@ -117,8 +120,9 @@ test("reloading in the middle of a session keeps the answers given, and the rest
   await expect(page.locator("h1").first()).not.toHaveText(first);
   await answerShort(page, "0");
   await settled(page);
+  const answers = (e: readonly EvidenceEvent[]) => e.filter((x): x is AnswerEvent => x.kind === "answer");
   let s = await stored(page, student);
-  expect(s.evidence).toHaveLength(2);
+  expect(answers(s.evidence)).toHaveLength(2);
   expect(s.results).toEqual([]);
 
   await page.reload();
@@ -142,7 +146,7 @@ test("reloading in the middle of a session keeps the answers given, and the rest
   s = await stored(page, student);
   expect(s.results).toHaveLength(1);
   expect(s.results[0].total).toBe(total);
-  expect(s.evidence).toHaveLength(2 + total);
+  expect(answers(s.evidence)).toHaveLength(2 + total);
   // The abandoned run and the finished one are two sessions; nothing was counted twice.
-  expect(new Set(s.evidence.map((e) => (e as { sessionId: string }).sessionId)).size).toBe(2);
+  expect(new Set(answers(s.evidence).map((e) => e.sessionId)).size).toBe(2);
 });
