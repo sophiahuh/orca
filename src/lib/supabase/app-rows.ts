@@ -378,6 +378,7 @@ export function materialFromRow(r: Row<"materials">): Material {
     ...(r.upcoming ? { upcoming: true } : {}),
     ...(r.reflection !== null ? { reflection: r.reflection as unknown as NonNullable<Material["reflection"]> } : {}),
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<Material["hiddenText"]> } : {}),
+    ...(r.storage_path ? { storagePath: r.storage_path } : {}),
   };
 }
 

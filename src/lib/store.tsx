@@ -185,6 +185,8 @@ interface OrcaActions {
   recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note" | "flagSource" | "page">>) => void;
   /** "This is hard": one struggled flag from `manual` per objective (random ids, so flagging again later is recorded again). */
   flagObjectives: (courseId: string, objectiveIds: readonly string[]) => void;
+  /** "Which slides were hard?": one struggle flag (source slide) per objective, on the first selected page that names it. */
+  flagSlides: (courseId: string, materialId: string, pages: ReadonlyArray<{ page: number; objectiveIds: readonly string[] }>) => void;
   /** Whether the class has reached this material yet (`Material.upcoming`); its objectives wait while it hasn't. */
   setMaterialUpcoming: (materialId: string, upcoming: boolean) => void;
   setOnboarded: (v: boolean) => void;
@@ -738,28 +740,48 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       .catch(() => undefined);
   }, []);
 
-  const flagObjectives = useCallback<OrcaActions["flagObjectives"]>(
-    (courseId, objectiveIds) => {
+  /** Record a batch of the student's struggle flags (manual or slide), then ask for questions for the ones with none. */
+  const saveFlags = useCallback(
+    (courseId: string, items: ReadonlyArray<{ objectiveId: string; flagSource: "manual" | "slide"; materialId: string | null; page: number | null }>) => {
       const at = new Date().toISOString();
-      const catalogue = state.objectives[courseId] ?? {};
-      const flags: ConfusionEvent[] = objectiveIds.map((objectiveId) => {
-        const o = catalogue[objectiveId];
-        if (!o) throw new Error(`Objective ${objectiveId} is not in course ${courseId}`);
-        return { kind: "confusion", id: crypto.randomUUID(), at, courseId, topicId: o.topicId, objectiveId, materialId: null, note: null, flagSource: "manual", page: null };
+      const catalogue = stateRef.current.objectives[courseId] ?? {};
+      const flags: ConfusionEvent[] = items.map((item) => {
+        const o = catalogue[item.objectiveId];
+        if (!o) throw new Error(`Objective ${item.objectiveId} is not in course ${courseId}`);
+        return { kind: "confusion", id: crypto.randomUUID(), at, courseId, topicId: o.topicId, objectiveId: item.objectiveId, materialId: item.materialId, note: null, flagSource: item.flagSource, page: item.page };
       });
       if (!flags.length) return;
       const ids = new Set(flags.map((f) => f.id));
       setState((s) => ({ ...s, evidence: [...s.evidence, ...flags] }));
       save(
         async () => {
-          for (const f of flags) await postEvidence(f, { kind: "confusion", id: f.id, courseId, objectiveId: f.objectiveId, flagSource: "manual" });
+          for (const f of flags) {
+            await postEvidence(f, { kind: "confusion", id: f.id, courseId, objectiveId: f.objectiveId, flagSource: f.flagSource, ...(f.materialId ? { materialId: f.materialId } : {}), ...(f.page !== null ? { page: f.page } : {}) });
+          }
         },
         // A flag that couldn't be saved isn't counted.
         { onFail: () => setState((s) => ({ ...s, evidence: s.evidence.filter((e) => !ids.has(e.id)) })) },
       );
-      requestFlagTopUp(courseId, objectiveIds);
+      requestFlagTopUp(courseId, flags.map((f) => f.objectiveId));
     },
-    [save, postEvidence, state.objectives, requestFlagTopUp],
+    [save, postEvidence, requestFlagTopUp],
+  );
+
+  const flagObjectives = useCallback<OrcaActions["flagObjectives"]>(
+    (courseId, objectiveIds) => saveFlags(courseId, objectiveIds.map((objectiveId) => ({ objectiveId, flagSource: "manual", materialId: null, page: null }))),
+    [saveFlags],
+  );
+
+  const flagSlides = useCallback<OrcaActions["flagSlides"]>(
+    (courseId, materialId, pages) => {
+      // One flag per objective: overlapping pages name some objectives twice.
+      const seen = new Set<string>();
+      const items = pages.flatMap(({ page, objectiveIds }) =>
+        objectiveIds.filter((id) => !seen.has(id) && (seen.add(id), true)).map((objectiveId) => ({ objectiveId, flagSource: "slide" as const, materialId, page })),
+      );
+      saveFlags(courseId, items);
+    },
+    [saveFlags],
   );
 
   const recordReflection = useCallback<OrcaActions["recordReflection"]>(
@@ -925,6 +947,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       recordEvidence,
       recordReflection,
       flagObjectives,
+      flagSlides,
       setMaterialUpcoming,
       setOnboarded,
       setName,
@@ -937,7 +960,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
