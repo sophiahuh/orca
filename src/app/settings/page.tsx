@@ -7,6 +7,7 @@ import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Card } from "@/components/ui/Card";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
+import { MarkerNotes } from "@/components/config/MarkerNotes";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
 import { AccountCard } from "@/components/settings/Account";
 import { CanvasConnectionCard } from "@/components/settings/CanvasConnection";
@@ -22,15 +23,22 @@ async function saveAccountNotes(notes: string | null) {
   if (!response.ok) throw new Error(result?.error ?? "Orca couldn't save your notes.");
 }
 
+async function saveMarkerNotes(markers: string | null) {
+  const response = await fetch("/api/marker-notes", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ markers }) });
+  const result = (await response.json().catch(() => null)) as { error?: string } | null;
+  if (!response.ok) throw new Error(result?.error ?? "Orca couldn't save how you mark your notes.");
+}
+
 /**
  * Settings: account-wide fallbacks. A course can inherit these live defaults or set a higher-
  * priority override from its own settings page. Notes for Orca here apply to every class, alongside
  * each class's own.
  */
 export default function SettingsPage() {
-  const { defaultConfig, setDefaults, accountNotes, refresh, hydrated } = useOrca();
+  const { defaultConfig, setDefaults, accountNotes, markerNotes, refresh, hydrated } = useOrca();
   const [draft, setDraft] = useState<ReviewConfig | null>(null);
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
+  const [markersDraft, setMarkersDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -40,12 +48,18 @@ export default function SettingsPage() {
     setDefaults(draftConfig);
     setSaved(false);
     setProblem(null);
-    if (notesDraft !== null) {
+    if (notesDraft !== null || markersDraft !== null) {
       setSaving(true);
       try {
-        await saveAccountNotes(notesDraft.trim() || null);
+        if (notesDraft !== null) {
+          await saveAccountNotes(notesDraft.trim() || null);
+          setNotesDraft(null);
+        }
+        if (markersDraft !== null) {
+          await saveMarkerNotes(markersDraft.trim() || null);
+          setMarkersDraft(null);
+        }
         await refresh();
-        setNotesDraft(null);
       } catch (error) {
         setProblem(error instanceof Error ? error.message : "Orca couldn't save your notes.");
         return;
@@ -82,6 +96,9 @@ export default function SettingsPage() {
           </motion.div>
           <motion.div variants={fadeUp}>
             <NotesForOrca scope="account" value={notesDraft ?? accountNotes ?? ""} onChange={(v) => { setNotesDraft(v); setSaved(false); }} />
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <MarkerNotes value={markersDraft ?? markerNotes ?? ""} onChange={(v) => { setMarkersDraft(v); setSaved(false); }} />
           </motion.div>
           <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
             {problem && <span role="alert" className="text-[14px] font-semibold text-bad-text">{problem}</span>}

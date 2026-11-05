@@ -94,6 +94,8 @@ interface OrcaState {
   /** Notes for Orca for all classes, and per course; null = none. Saved through their routes, then `refresh()`. */
   accountNotes: string | null;
   courseNotes: Record<string, string | null>;
+  /** How the student marks confusion in their handwritten notes (Settings); null = not described. Saved through its route, then `refresh()`. */
+  markerNotes: string | null;
   /** Account defaults, used by every course without an explicit override. */
   defaultConfig: ReviewConfig;
   results: QuizResult[];
@@ -136,6 +138,7 @@ const initialState: OrcaState = {
   configOverrides: {},
   schedules: {},
   accountNotes: null,
+  markerNotes: null,
   courseNotes: {},
   defaultConfig: DEFAULT_CONFIG,
   results: [],

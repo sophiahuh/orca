@@ -450,6 +450,8 @@ export interface LoadedState {
   schedules: Record<string, CourseSchedule | null>;
   /** Notes for Orca for all classes; null = none. */
   accountNotes: string | null;
+  /** How the student marks confusion in their handwritten notes; null = not described. */
+  markerNotes: string | null;
   /** Notes for Orca per course; null = none. */
   courseNotes: Record<string, string | null>;
   objectives: Record<string, Record<string, Objective>>;
@@ -513,6 +515,7 @@ export function loadedState(d: MyData): LoadedState {
     configOverrides,
     schedules: Object.fromEntries(d.courses.map((c) => [c.id, c.schedule === null ? null : CourseScheduleSchema.parse(c.schedule)])),
     accountNotes: d.profile.orca_notes,
+    markerNotes: d.profile.marker_notes,
     courseNotes: Object.fromEntries(d.courses.map((c) => [c.id, c.orca_notes])),
     objectives,
     questionBank,

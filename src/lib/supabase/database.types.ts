@@ -290,13 +290,13 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "avatar": string,"created_at": string,"default_review_config": Json | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
+                    "avatar": string,"created_at": string,"default_review_config": Json | null,"marker_notes": string | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
                   }
                   Insert: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
                   }
                   Update: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
                     
