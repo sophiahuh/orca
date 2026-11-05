@@ -48,6 +48,8 @@ const confusion = (when: string): ConfusionEvent => ({
   objectiveId: "o",
   materialId: "m",
   note: "I don't get it",
+  flagSource: "homework",
+  page: null,
 });
 
 /**

@@ -42,6 +42,6 @@ test("self-marked answers don't keep a streak alive", () => {
 });
 
 test("confusion events don't count toward the streak", () => {
-  const confusion = { kind: "confusion" as const, id: "c", at: "2026-10-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "" };
+  const confusion = { kind: "confusion" as const, id: "c", at: "2026-10-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "", flagSource: "homework" as const, page: null };
   assert.equal(streakDays([confusion], new Date("2026-10-05T15:00:00.000Z"), (iso) => iso.slice(0, 10)), 0);
 });

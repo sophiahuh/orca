@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BROWSER_FLAG_SOURCES } from "@/lib/mastery/flags";
 import { NewerRulesError, VersionConflictError, recordEvent } from "@/lib/mastery/snapshots";
 import type { AnswerEvent, EvidenceEvent } from "@/lib/mastery/types";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
@@ -11,8 +12,9 @@ import { forStudent, ownsCourse, reply } from "@/lib/server/student";
  * An answer: { kind: "answer", id, courseId, questionId, outcome, grader, source, sessionId }. The
  * browser grades choice and exact answers and sends the outcome (decision 13: an edited request can
  * only inflate the student's own record). Prose grading moves server-side in Task 8.
- * A confusion event from a homework reflection: { kind: "confusion", id, courseId, objectiveId,
- * materialId, note }.
+ * A struggle flag (kind "confusion"): { kind, id, courseId, objectiveId, flagSource, materialId?,
+ * page?, note? }. The browser sends homework (a reflection: material and note), slide (material and
+ * page) and manual (neither) flags; markers and connector flags are written on the server.
  *
  * The server stamps the time (a browser's clock can't be trusted for spacing) and takes the topic,
  * objective and tier from the question or objective rows, not from the request.
@@ -31,16 +33,23 @@ const Answer = z.object({
   source: z.enum(["quiz", "quick-review", "deep-review", "requiz"]),
   sessionId: z.string().min(1).max(200),
 });
-const Confusion = z.object({
-  kind: z.literal("confusion"),
-  id: uuid,
-  courseId: uuid,
-  objectiveId: uuid,
-  materialId: uuid,
-  // Plan decision 10: reflection notes are capped at 2,000 characters.
-  note: z.string().trim().min(1).max(2000),
-});
-const Body = z.discriminatedUnion("kind", [Answer, Confusion]);
+const Confusion = z
+  .object({
+    kind: z.literal("confusion"),
+    id: uuid,
+    courseId: uuid,
+    objectiveId: uuid,
+    // Server-written sources (handwritten markers, the connector) are refused here.
+    flagSource: z.enum(BROWSER_FLAG_SOURCES).default("homework"),
+    materialId: uuid.nullable().default(null),
+    page: z.number().int().min(1).nullable().default(null),
+    // Plan decision 10: reflection notes are capped at 2,000 characters.
+    note: z.string().trim().min(1).max(2000).nullable().default(null),
+  })
+  .refine((b) => b.flagSource !== "homework" || (b.materialId !== null && b.note !== null), "A homework flag needs its upload and note.")
+  .refine((b) => b.flagSource !== "slide" || (b.materialId !== null && b.page !== null), "A slide flag needs its upload and page.")
+  .refine((b) => b.flagSource !== "manual" || (b.materialId === null && b.page === null), "A manual flag isn't about an upload.");
+const Body = z.union([Answer, Confusion]);
 
 export async function POST(request: Request) {
   return forStudent(request, async (student, db) => {
@@ -89,12 +98,25 @@ export async function POST(request: Request) {
     } else {
       const [objective, material] = await Promise.all([
         db.from("objectives").select("topic_id").eq("owner_id", student.id).eq("course_id", body.courseId).eq("id", body.objectiveId).maybeSingle(),
-        db.from("materials").select("id").eq("owner_id", student.id).eq("course_id", body.courseId).eq("id", body.materialId).maybeSingle(),
+        body.materialId === null
+          ? Promise.resolve({ data: null, error: null })
+          : db.from("materials").select("id").eq("owner_id", student.id).eq("course_id", body.courseId).eq("id", body.materialId).maybeSingle(),
       ]);
       if (objective.error || material.error) throw new Error(`Couldn't read the objective or material: ${(objective.error ?? material.error)!.message}`);
       if (!objective.data) return reply(404, { error: "No such objective in this course." });
-      if (!material.data) return reply(404, { error: "No such upload in this course." });
-      event = { kind: "confusion", id: body.id, at, courseId: body.courseId, topicId: objective.data.topic_id, objectiveId: body.objectiveId, materialId: body.materialId, note: body.note };
+      if (body.materialId !== null && !material.data) return reply(404, { error: "No such upload in this course." });
+      event = {
+        kind: "confusion",
+        id: body.id,
+        at,
+        courseId: body.courseId,
+        topicId: objective.data.topic_id,
+        objectiveId: body.objectiveId,
+        materialId: body.materialId,
+        note: body.note,
+        flagSource: body.flagSource,
+        page: body.page,
+      };
     }
 
     try {

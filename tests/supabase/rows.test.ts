@@ -17,10 +17,12 @@ const answer: AnswerEvent = {
   source: "deep-review",
   sessionId: "s",
 };
-const confusion: ConfusionEvent = { kind: "confusion", id: "e2", at: "2026-10-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost" };
+const confusion: ConfusionEvent = { kind: "confusion", id: "e2", at: "2026-10-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost", flagSource: "homework", page: null };
+const manual: ConfusionEvent = { kind: "confusion", id: "e3", at: "2026-11-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: null, note: null, flagSource: "manual", page: null };
+const slide: ConfusionEvent = { ...manual, id: "e4", flagSource: "slide", materialId: "m", page: 4 };
 
 test("events survive the trip to a row and back, with Postgres's timestamp format normalised", () => {
-  for (const e of [answer, confusion]) {
+  for (const e of [answer, confusion, manual, slide]) {
     const row = { ...eventToRow(e), owner_id: "u" };
     assert.deepEqual(eventFromRow({ ...row, at: row.at.replace("Z", "+00:00") }), e);
   }
@@ -29,6 +31,16 @@ test("events survive the trip to a row and back, with Postgres's timestamp forma
 test("a row missing a field its kind needs throws instead of becoming a partial event", () => {
   const row = { ...eventToRow(answer), owner_id: "u", outcome: null };
   assert.throws(() => eventFromRow(row), /missing/);
+});
+
+test("a struggle flag's row carries its source and page; an answer's carries neither", () => {
+  assert.deepEqual([eventToRow(slide).flag_source, eventToRow(slide).page, eventToRow(slide).material_id], ["slide", 4, "m"]);
+  assert.deepEqual([eventToRow(manual).material_id, eventToRow(manual).note], [null, null]);
+  assert.deepEqual([eventToRow(answer).flag_source, eventToRow(answer).page], [null, null]);
+});
+
+test("a confusion row without a flag source is refused, not guessed", () => {
+  assert.throws(() => eventFromRow({ ...eventToRow(confusion), owner_id: "u", flag_source: null }), /no flag source/);
 });
 
 test("courseView orders the trail, leaves archived topics off it and uses the student's timezone", () => {

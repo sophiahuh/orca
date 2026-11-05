@@ -67,7 +67,7 @@ test("a fading objective with no due time is a bug, not a guess", () => {
   assert.throws(() => objectivePriority(s("fading"), 1, null, now), /no check due time/);
 });
 
-const confusion = (at: string): ConfusionEvent => ({ kind: "confusion", id: at, at, courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost" });
+const confusion = (at: string): ConfusionEvent => ({ kind: "confusion", id: at, at, courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost", flagSource: "homework", page: null });
 const answer = (at: string, outcome: AnswerEvent["outcome"], grader: AnswerEvent["grader"] = "exact"): AnswerEvent => ({
   kind: "answer",
   id: at,

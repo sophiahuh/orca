@@ -178,7 +178,7 @@ interface OrcaActions {
   /** Append one graded answer. The only way learner state changes. Not counted if it can't be saved. */
   recordEvidence: (e: Omit<AnswerEvent, "id" | "at" | "kind">) => void;
   /** A homework reflection: one confusion event per objective the student confirmed, and the note kept on the material. */
-  recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note">>) => void;
+  recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note" | "flagSource" | "page">>) => void;
   /** Whether the class has reached this material yet (`Material.upcoming`); its objectives wait while it hasn't. */
   setMaterialUpcoming: (materialId: string, upcoming: boolean) => void;
   setOnboarded: (v: boolean) => void;
@@ -709,7 +709,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       const at = new Date().toISOString();
       // One id per (material, objective): a retry after a half-failed save sends the same ids, and the
       // server refuses the ones already recorded instead of recording the confusion twice.
-      const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: confusionEventId(materialId, e.objectiveId), at, materialId, note }));
+      const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: confusionEventId(materialId, e.objectiveId), at, materialId, note, flagSource: "homework", page: null }));
       const reflection = { at, note, objectiveIds: events.map((e) => e.objectiveId) };
       setState((s) => ({
         ...s,
@@ -719,7 +719,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       save(
         async () => {
           for (const c of confusion) {
-            await postEvidence(c, { kind: "confusion", id: c.id, courseId: c.courseId, objectiveId: c.objectiveId, materialId, note });
+            await postEvidence(c, { kind: "confusion", id: c.id, courseId: c.courseId, objectiveId: c.objectiveId, flagSource: "homework", materialId, note });
           }
           mustChange(await browserSupabase().from("materials").update({ reflection: reflection as unknown as Json }).eq("id", materialId).select("id"));
         },

@@ -30,10 +30,16 @@ export interface AnswerEvent {
   sessionId: string;
 }
 
+/** Where a struggle flag came from (`evidence_events.flag_source`). */
+export type FlagSource = "homework" | "handwritten-marker" | "connector" | "slide" | "manual";
+
+/** struggled: back to learning and the full mastery bar. check: one question (src/lib/mastery/flags.ts). */
+export type FlagStrength = "struggled" | "check";
+
 /**
- * The student said they don't understand an objective (a homework reflection matched to it). It
- * resets the objective to learning; it never adds credit ("I don't get it" is believed, "I get it"
- * is not).
+ * A struggle flag: the student (or Claude, through the connector) says they don't have an
+ * objective. A struggled flag puts the objective in rotation, back to learning; a check flag asks
+ * one question. Never credit ("I don't get it" is believed, "I get it" is not).
  */
 export interface ConfusionEvent {
   kind: "confusion";
@@ -43,10 +49,13 @@ export interface ConfusionEvent {
   courseId: string;
   topicId: string;
   objectiveId: string;
-  /** The upload the reflection was about. */
-  materialId: string;
-  /** The student's own words. */
-  note: string;
+  /** The upload it's about; null for manual and connector flags. */
+  materialId: string | null;
+  /** The student's own words (a reflection, a marked passage, what they said to Claude); null for slide and manual flags. */
+  note: string | null;
+  flagSource: FlagSource;
+  /** The page in `materialId` (a .pptx: the slide); null when the flag isn't about a page. */
+  page: number | null;
 }
 
 /** The append-only learner log. Every learner-facing state is computed from it. */

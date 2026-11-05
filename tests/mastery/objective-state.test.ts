@@ -373,6 +373,8 @@ const confused = (when: string, objectiveId = "t/o"): ConfusionEvent => ({
   objectiveId,
   materialId: "hw1",
   note: "I don't get K-map groups",
+  flagSource: "homework",
+  page: null,
 });
 const fold = (events: Array<EvidenceEvent | ConfusionEvent>, now: Date) => computeObjectiveState("t/o", events, now, opts());
 

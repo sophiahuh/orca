@@ -43,6 +43,8 @@ const confusion = (objectiveId: string): ConfusionEvent => ({
   objectiveId,
   materialId: "m",
   note: "?",
+  flagSource: "homework",
+  page: null,
 });
 
 const att = attribution({ topicIds: ["t1"], bank, catalogue });
