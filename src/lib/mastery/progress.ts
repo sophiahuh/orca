@@ -20,7 +20,7 @@ export interface TopicProgress {
 /** Counts as mastered: mastered or retired. A fading objective (check due) doesn't. */
 const held = (s: ObjectiveState) => s.status === "mastered" || s.status === "retired";
 
-/** done: every weak point mastered (at least one). in-progress: a weak point to work on, or an open check. not-started: neither (nothing flagged or missed). */
+/** done: every weak point mastered (at least one) and no open check. in-progress: a weak point to work on, or an open check. not-started: neither (nothing flagged or missed). */
 export function topicProgress(objectiveIds: readonly string[], states: ReadonlyMap<string, ObjectiveState>): TopicProgress {
   const list = objectiveIds.map((id) => {
     const s = states.get(id);
@@ -29,8 +29,9 @@ export function topicProgress(objectiveIds: readonly string[], states: ReadonlyM
   });
   const rotating = list.filter((s) => isInRotation(s.status));
   const mastered = rotating.filter(held).length;
+  const openCheck = list.some((s) => s.status === "check-due");
   const status: TopicStatus =
-    rotating.length > 0 && mastered === rotating.length ? "done" : rotating.length > mastered || list.some((s) => s.status === "check-due") ? "in-progress" : "not-started";
+    rotating.length > 0 && mastered === rotating.length && !openCheck ? "done" : rotating.length > mastered || openCheck ? "in-progress" : "not-started";
   return { status, mastered, inRotation: rotating.length, objectives: list.length };
 }
 

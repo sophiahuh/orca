@@ -48,9 +48,15 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   if (!m) throw new Error(`No mastery computed for course ${course.id}`);
   const topics = trailTopics(course);
   // Weak points first: the header counts the course's weak points (objectives in rotation) mastered.
-  const weak = topics.reduce((sum, t) => sum + (m.topics.get(t.id)?.inRotation ?? 0), 0);
-  const held = topics.reduce((sum, t) => sum + (m.topics.get(t.id)?.mastered ?? 0), 0);
+  const progressOf = (topicId: string) => {
+    const p = m.topics.get(topicId);
+    if (!p) throw new Error(`No progress computed for topic ${topicId}`);
+    return p;
+  };
+  const weak = topics.reduce((sum, t) => sum + progressOf(t.id).inRotation, 0);
+  const held = topics.reduce((sum, t) => sum + progressOf(t.id).mastered, 0);
   const pct = weak ? held / weak : 0;
+  const flaggable = (topicId: string) => (m.topicObjectives.get(topicId) ?? []).filter((id) => canFlagHard(m.objectives.get(id)!.status));
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
   const uploading = uploadsInProgress(runs, course.id);
   const agenda = agendas[course.id];
@@ -146,12 +152,15 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         initialMinutes={durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60}
         onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
         onClose={closeDive}
-        onFlagTopic={(topicId) => {
-          // Every objective in the topic with questions, except ones already being learned.
-          const ids = (m.topicObjectives.get(topicId) ?? []).filter((id) => canFlagHard(m.objectives.get(id)!.status));
-          flagObjectives(course.id, ids);
-          closeDive();
-        }}
+        onFlagTopic={
+          // Every objective in the topic with questions, except ones already being learned; no button when that's none.
+          diving && flaggable(diving.id).length
+            ? (topicId) => {
+                flagObjectives(course.id, flaggable(topicId));
+                closeDive();
+              }
+            : undefined
+        }
       />
     </AppShell>
   );

@@ -14,7 +14,7 @@ import {
   sessionCandidates,
 } from "@/lib/mastery/session";
 import { useAgenda, useCourse, useDayKey, useMasteryByCourse, useOrca } from "@/lib/store";
-import { examInWindow } from "@/lib/mastery/agenda";
+import { examInWindow, survivingTopic } from "@/lib/mastery/agenda";
 import { type DiveScope, diveObjectives } from "@/lib/mastery/practice";
 import { CaughtUp, useCaughtUp } from "@/components/layout/CaughtUp";
 import { Screen } from "@/components/layout/Screen";
@@ -221,7 +221,7 @@ function DeepReview({ course, onAgain, topicId, startMinutes, scope }: { course:
   const [phase, setPhase] = useState<{ kind: "setup" | "starting" } | { kind: "following"; runId: string } | { kind: "error"; message: string }>({ kind: autostart ? "starting" : "setup" });
   // What it covers, most urgent first (src/lib/mastery/practice.ts).
   const [objectiveIds] = useState(() =>
-    diveObjectives(agenda.ranked, scope, { topicId, examTopicIds: scope === "exam" ? (examInWindow(exams, course.id, dayKey(new Date().toISOString()))?.topicIds ?? []) : undefined }),
+    diveObjectives(agenda.ranked, scope, { topicId, examTopicIds: scope === "exam" ? (examInWindow(exams, course.id, dayKey(new Date().toISOString()), survivingTopic(course.topics))?.topicIds ?? []) : undefined }),
   );
   const scopeName = scope === "practice" ? "Practice other topics" : scope === "exam" ? "Practice exam topics" : null;
   const topicName = topicId ? trailTopics(course).find((t) => t.id === topicId)?.name : undefined;
@@ -267,7 +267,7 @@ function DeepReview({ course, onAgain, topicId, startMinutes, scope }: { course:
   });
 
   if (objectiveIds.length === 0) {
-    const message = scopeName ? "You've practised everything here" : topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet: upload material first.";
+    const message = scopeName ? "You've practised everything here" : topicName ? `${topicName} has no objectives to dive into yet.` : "Nothing to dive into yet.";
     return <NothingToDo course={course} message={message} onBack={() => goBack(router, backHref)} />;
   }
   if (items) {

@@ -274,6 +274,8 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
       next.mastered = true;
       next.checkDueAt = stored.due;
       if (t < Date.parse(R.rotationSince)) next.inRotation = true;
+      // A partly right answer completed the bar and made it a weak point in the same step: check it now.
+      else if (!acc.inRotation && e.outcome !== "correct") next.checkDueAt = e.at;
     }
     return next;
   }

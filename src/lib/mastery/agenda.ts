@@ -89,12 +89,30 @@ export function addDays(day: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
 
-/** The course's next exam (the exams table) if today is in its "1 wk before exam" window. */
-export function examInWindow(exams: readonly { courseId: string; date: string; topicIds: readonly string[] }[], courseId: string, today: string): { topicIds: readonly string[] } | null {
+/**
+ * The course's next exam (the exams table) if today is in its "1 wk before exam" window, with its
+ * topics as they are now (`currentTopic` follows topic merges; an exam's topic ids aren't updated by them).
+ */
+export function examInWindow(
+  exams: readonly { courseId: string; date: string; topicIds: readonly string[] }[],
+  courseId: string,
+  today: string,
+  currentTopic: (topicId: string) => string = (id) => id,
+): { topicIds: readonly string[] } | null {
   const next = exams
     .filter((e) => e.courseId === courseId && e.date >= today && addDays(e.date, -AGENDA_RULES.examWindowDays) <= today)
     .sort((a, b) => a.date.localeCompare(b.date))[0];
-  return next ? { topicIds: next.topicIds } : null;
+  return next ? { topicIds: [...new Set(next.topicIds.map(currentTopic))] } : null;
+}
+
+/** A topic's survivor after merges (topics are merged, never deleted). */
+export function survivingTopic(topics: ReadonlyArray<{ id: string; mergedInto?: string }>): (topicId: string) => string {
+  const byId = new Map(topics.map((t) => [t.id, t]));
+  return (topicId) => {
+    let t = byId.get(topicId);
+    for (let i = 0; t?.mergedInto && i < 50; i++) t = byId.get(t.mergedInto);
+    return t?.id ?? topicId;
+  };
 }
 
 /** Weights for the agenda: the computed weight of every objective, or a throw for one without. */

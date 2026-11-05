@@ -2,7 +2,7 @@
 -- optional page; old rows read as homework; answers carry neither.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(9);
+select plan(11);
 
 \set A aaaaaaaa-0000-4000-8000-000000000171
 \set course c0000000-0000-4000-8000-000000000171
@@ -41,6 +41,17 @@ select throws_ok(format($$insert into public.evidence_events (id, owner_id, kind
   '23514', null, 'an answer carries no flag source');
 select lives_ok(format($$insert into public.security_events (owner_id, kind, "check", quote) values (%L, 'marker_notes', 'p', 'x')$$, :'A'),
   'security_events accepts marker_notes (reserved for Plan B)');
+
+-- A flag recorded before the objective had questions (no snapshot) is folded once a question arrives.
+\set obj2 f1000000-0000-4000-8000-000000000171
+insert into public.objectives (id, owner_id, course_id, topic_id, name, description, origin, review)
+  values (:'obj2', :'A', :'course', :'topic', 'Explain ripple carry', '', 'inferred', 'confirmed');
+insert into public.evidence_events (id, owner_id, kind, at, course_id, topic_id, objective_id, flag_source)
+  values ('b7000000-0000-4000-8000-000000000171', :'A', 'confusion', now(), :'course', :'topic', :'obj2', 'manual');
+select is((select count(*) from public.objective_state where objective_id = :'obj2'), 0::bigint, 'no snapshot while the objective has no questions');
+insert into public.questions (id, owner_id, course_id, topic_id, sort_order, objective_id, kind, topic_name, prompt, options, answer, exact, explanation)
+  values ('a7000000-0000-4000-8000-000000000171', :'A', :'course', :'topic', 0, :'obj2', 'Short answer', 'Adders', 'Why does carry ripple?', '{}', -1, '{"chain"}', 'Chain.');
+select is((select stale from public.objective_state where objective_id = :'obj2'), true, 'its first question leaves a stale placeholder, so the next read folds the flag');
 
 select * from finish();
 rollback;

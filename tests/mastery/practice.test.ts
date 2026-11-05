@@ -24,7 +24,7 @@ test("practice leaves out material the class hasn't reached and objectives that 
 });
 
 test("a course-wide dive covers weak points first (in priority order), then unflagged objectives by weight", () => {
-  const ranked = [r("b", "unseen", 2), r("a", "learning", 1), r("e", "check-due", 1), r("c", "verified", 1), r("d", "retired", 2), r("x", "fading", 1, "t1", false)];
+  const ranked = [r("b", "unseen", 2), r("a", "learning", 1), r("e", "check-due", 1), r("c", "verified", 1), r("d", "retired", 2), r("x", "fading", 1, "t1", false), r("z", "learning", 0)];
   assert.deepEqual(diveObjectives(ranked, "course"), ["a", "e", "b", "c"]);
 });
 

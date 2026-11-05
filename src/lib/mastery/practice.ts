@@ -5,8 +5,8 @@
  *   unflagged objectives (not flagged or verified) by weight.
  * - Practice other topics / Practice exam topics: unflagged objectives only, by weight; the exam's
  *   topics only when it lists some.
- * Course-wide dives and practice leave out material the class hasn't reached, and practice leaves out
- * objectives weighted 0 ("won't be tested"). Pure.
+ * Course-wide dives and practice leave out material the class hasn't reached and objectives weighted
+ * 0 ("won't be tested"), as the due list does. Pure.
  */
 import type { RankedObjective } from "./agenda.ts";
 import { isInRotation } from "./flags.ts";
@@ -23,7 +23,7 @@ export function diveObjectives(ranked: readonly RankedObjective[], scope: DiveSc
   const others = reached.filter((r) => unflagged(r) && r.weight > 0);
   if (scope === "course") {
     // `ranked` is already highest priority first.
-    const weak = reached.filter((r) => isInRotation(r.status) || r.status === "check-due");
+    const weak = reached.filter((r) => (isInRotation(r.status) || r.status === "check-due") && r.weight > 0);
     return [...weak, ...others.sort(byWeight)].map((r) => r.objectiveId);
   }
   const topics = scope === "exam" && opts.examTopicIds?.length ? new Set(opts.examTopicIds) : null;

@@ -81,17 +81,20 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0, ring }: 
           style={{ left: -box / 2, top: -box / 2 }}
         >
           <circle cx={box / 2} cy={box / 2} r={radius} fill="none" stroke="var(--color-alice-deep)" strokeWidth={4} />
-          <circle
-            cx={box / 2}
-            cy={box / 2}
-            r={radius}
-            fill="none"
-            stroke="var(--color-wisteria-deep)"
-            strokeWidth={4}
-            strokeLinecap="round"
-            strokeDasharray={`${(circumference * ring.mastered) / ring.of} ${circumference}`}
-            transform={`rotate(-90 ${box / 2} ${box / 2})`}
-          />
+          {/* At 0 the round cap would still draw a dot. */}
+          {ring.mastered > 0 && (
+            <circle
+              cx={box / 2}
+              cy={box / 2}
+              r={radius}
+              fill="none"
+              stroke="var(--color-wisteria-deep)"
+              strokeWidth={4}
+              strokeLinecap="round"
+              strokeDasharray={`${(circumference * ring.mastered) / ring.of} ${circumference}`}
+              transform={`rotate(-90 ${box / 2} ${box / 2})`}
+            />
+          )}
         </svg>
       )}
 

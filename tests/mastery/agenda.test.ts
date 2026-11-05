@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, agendaWeights, courseAgenda, examInWindow } from "../../src/lib/mastery/agenda.ts";
+import { addDays, agendaWeights, courseAgenda, examInWindow, survivingTopic } from "../../src/lib/mastery/agenda.ts";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
 import { classCadence, reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
@@ -249,4 +249,10 @@ test("an exam is in its window from 7 days before it, through its day", () => {
   assert.equal(examInWindow(exams, "k", "2026-11-12"), null);
   assert.equal(examInWindow(exams, "k", "2026-11-21"), null);
   assert.equal(examInWindow(exams, "other", "2026-11-15"), null);
+});
+
+test("an exam naming a merged-away topic covers its survivor", () => {
+  const exams = [{ courseId: "k", date: "2026-11-20", topicIds: ["old", "t1"] }];
+  const current = survivingTopic([{ id: "old", mergedInto: "mid" }, { id: "mid", mergedInto: "t1" }, { id: "t1" }]);
+  assert.deepEqual(examInWindow(exams, "k", "2026-11-15", current), { topicIds: ["t1"] });
 });

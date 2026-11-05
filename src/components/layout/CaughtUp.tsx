@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 import type { Course } from "@/lib/data";
-import { examInWindow } from "@/lib/mastery/agenda";
+import { examInWindow, survivingTopic } from "@/lib/mastery/agenda";
 import { diveObjectives } from "@/lib/mastery/practice";
 import { fadeUp } from "@/lib/motion";
 import { useNow } from "@/hooks/useNow";
@@ -22,7 +22,7 @@ export function useCaughtUp(course: Course): { canPractise: boolean; examTopics:
   const dayKey = useDayKey();
   const nowMs = useNow();
   if (!agenda || agenda.ranked.length === 0 || agenda.dueToday.length > 0) return null;
-  const exam = examInWindow(exams, course.id, dayKey(new Date(nowMs).toISOString()));
+  const exam = examInWindow(exams, course.id, dayKey(new Date(nowMs).toISOString()), survivingTopic(course.topics));
   return {
     canPractise: diveObjectives(agenda.ranked, "practice").length > 0,
     // Only an exam that names its topics gets its own button (otherwise it's the same as Practice other topics).

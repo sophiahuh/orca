@@ -61,7 +61,7 @@ import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { type TodoCard, todoCards } from "./mastery/todo";
 import { assembleQuickReview, durationSeconds, lastSeenOf, sessionCandidates } from "./mastery/session";
 import { askableQuestions } from "./askable";
-import { type CourseAgenda, agendaWeights, courseAgenda, examInWindow } from "./mastery/agenda";
+import { type CourseAgenda, agendaWeights, courseAgenda, examInWindow, survivingTopic } from "./mastery/agenda";
 import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
@@ -1019,7 +1019,7 @@ export function useAgenda(): Record<string, CourseAgenda> {
             results,
             // Exams, and any uploaded exam's due date on the calendar.
             examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
-            examTopics: new Set(examInWindow(exams, c.id, dayKey(new Date(nowMs).toISOString()))?.topicIds ?? []),
+            examTopics: new Set(examInWindow(exams, c.id, dayKey(new Date(nowMs).toISOString()), survivingTopic(c.topics))?.topicIds ?? []),
             upcoming: upcomingObjectives(materials, objectives[c.id] ?? {}),
             now: new Date(nowMs),
             dayKey,

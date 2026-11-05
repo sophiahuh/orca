@@ -27,6 +27,7 @@ test("a topic with nothing in rotation is never done, and not started until it h
   assert.equal(topicProgress(["a", "b"], map(s("a", "unseen"), s("b", "unseen"))).status, "not-started");
   assert.equal(topicProgress(["a", "b"], map(s("a", "learning"), s("b", "unseen"))).status, "in-progress");
   assert.equal(topicProgress(["a"], map(s("a", "check-due"))).status, "in-progress");
+  assert.equal(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "check-due"))).status, "in-progress", "an open check keeps it from done");
 });
 
 test("a topic with no objectives is not started", () => {

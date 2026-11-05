@@ -177,7 +177,8 @@ test("the golden log replays to the accumulators recorded for this RULES_VERSION
  * Weak points first (version 2 on): a history after rotationSince touching every flag rule: a check
  * flag on an unanswered objective, passes that only verify it, the bar met unflagged, a partly right
  * answer putting it in rotation with its check due, a passed check, a check flag on the mastered
- * objective, and a struggled flag resetting it.
+ * objective, and a struggled flag resetting it. FLAGS_LOG_PARTIAL: a partly right answer that
+ * itself completes the bar on an unflagged objective.
  */
 const flagEvent = (when: string, flagSource: "connector" | "manual"): ConfusionEvent => ({
   kind: "confusion",
@@ -191,7 +192,8 @@ const flagEvent = (when: string, flagSource: "connector" | "manual"): ConfusionE
   flagSource,
   page: null,
 });
-const nov = (n: number, hour = 12) => new Date(Date.UTC(2026, 10, n, hour)).toISOString();
+// Well after any rotationSince (the merge gate moves it to the deploy day), so nothing here is grandfathered into rotation.
+const nov = (n: number, hour = 12) => new Date(Date.UTC(2027, 10, n, hour)).toISOString();
 const FLAGS_LOG: EvidenceEvent[] = [
   flagEvent(nov(11), "connector"),
   answer("q1", nov(12)),
@@ -202,31 +204,42 @@ const FLAGS_LOG: EvidenceEvent[] = [
   flagEvent(nov(16), "connector"),
   flagEvent(nov(17), "manual"),
 ];
+// 2.5 credit from fully right answers (one self-marked) over two days, then a partial adds the last 0.5.
+const FLAGS_LOG_PARTIAL: EvidenceEvent[] = [answer("p1", nov(20)), answer("p2", nov(20), { grader: "self" }), answer("p3", nov(21)), answer("p4", nov(21, 13), { outcome: "partial" })];
+
+test("a partly right answer that completes the bar on an unflagged objective leaves it due for a check, not mastered", () => {
+  const before = replayObjective("o", FLAGS_LOG_PARTIAL.slice(0, -1), GOLDEN_OPTIONS);
+  assert.deepEqual([before.mastered, before.inRotation, before.credit], [false, false, 2.5]);
+  const acc = replayObjective("o", FLAGS_LOG_PARTIAL, GOLDEN_OPTIONS);
+  assert.deepEqual([acc.mastered, acc.inRotation], [true, true]);
+  assert.equal(stateAt("o", acc, new Date(Date.parse(nov(21, 13)) + 60_000)).status, "fading");
+});
+
 const GOLDEN_FLAGS: Record<number, { beforeStruggled: ObjectiveAccumulator; end: ObjectiveAccumulator }> = {
   2: {
     beforeStruggled: {
       answered: 5,
-      lastAt: "2026-11-16T12:00:00.000Z",
+      lastAt: "2027-11-16T12:00:00.000Z",
       attempted: ["q1", "q2", "q3"],
       credit: 3,
       gradedCredit: 3,
-      creditDays: ["2026-11-12", "2026-11-13"],
+      creditDays: ["2027-11-12", "2027-11-13"],
       lastTwo: ["correct", "correct"],
       mixedUp: false,
       lastMissQuestion: null,
       mastered: true,
-      checkDueAt: "2026-11-16T12:00:00.000Z",
+      checkDueAt: "2027-11-16T12:00:00.000Z",
       spacedChecks: 1,
       missPending: false,
       missSessionId: null,
       retired: false,
-      card: { due: "2026-11-28T12:00:00.000Z", stability: 13.30547848, difficulty: 4.73420027, elapsed_days: 1, scheduled_days: 13, learning_steps: 0, reps: 5, lapses: 0, state: 2, last_review: "2026-11-15T12:00:00.000Z" },
+      card: { due: "2027-11-28T12:00:00.000Z", stability: 13.30547848, difficulty: 4.73420027, elapsed_days: 1, scheduled_days: 13, learning_steps: 0, reps: 5, lapses: 0, state: 2, last_review: "2027-11-15T12:00:00.000Z" },
       inRotation: true,
       checkOpen: false,
     },
     end: {
       answered: 5,
-      lastAt: "2026-11-17T12:00:00.000Z",
+      lastAt: "2027-11-17T12:00:00.000Z",
       attempted: [],
       credit: 0,
       gradedCredit: 0,
@@ -240,7 +253,7 @@ const GOLDEN_FLAGS: Record<number, { beforeStruggled: ObjectiveAccumulator; end:
       missPending: false,
       missSessionId: null,
       retired: false,
-      card: { due: "2026-11-28T12:00:00.000Z", stability: 13.30547848, difficulty: 4.73420027, elapsed_days: 1, scheduled_days: 13, learning_steps: 0, reps: 5, lapses: 0, state: 2, last_review: "2026-11-15T12:00:00.000Z" },
+      card: { due: "2027-11-28T12:00:00.000Z", stability: 13.30547848, difficulty: 4.73420027, elapsed_days: 1, scheduled_days: 13, learning_steps: 0, reps: 5, lapses: 0, state: 2, last_review: "2027-11-15T12:00:00.000Z" },
       inRotation: true,
       checkOpen: false,
     },

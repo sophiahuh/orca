@@ -45,3 +45,43 @@ comment on column public.evidence_events.page is 'Struggle flags: the page (a .p
 alter table public.security_events drop constraint security_events_kind_check;
 alter table public.security_events add constraint security_events_kind_check
   check (kind in ('upload', 'reflection_note', 'student_answer', 'generated', 'orca_notes', 'marker_notes'));
+
+-- A flag can arrive before its objective has questions (a homework reflection matches any live
+-- objective). Such an objective counts for nothing until it has a question, so the flag gets no
+-- snapshot; when its first question is inserted, a stale placeholder makes the next read fold the
+-- flag in. Otherwise unchanged from 20261005180000_store_reads.sql.
+create or replace function private.question_changed() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  target uuid;
+begin
+  if tg_op = 'UPDATE' and (old.objective_id is distinct from new.objective_id or old.topic_id is distinct from new.topic_id) then
+    if old.objective_id is not null then
+      perform private.mark_stale(old.objective_id, true);
+    end if;
+    if new.objective_id is not null then
+      perform private.mark_stale(new.objective_id, true);
+    end if;
+    return null;
+  end if;
+  if new.objective_id is null then
+    return null;
+  end if;
+  target := private.resolve_objective(new.objective_id);
+  if tg_op = 'INSERT'
+     and not exists (select 1 from public.objective_state s where s.objective_id = target)
+     and exists (select 1 from public.evidence_events e where e.objective_id = target and e.owner_id = new.owner_id) then
+    perform private.mark_stale(target, true);
+    return null;
+  end if;
+  if (tg_op = 'INSERT' and new.tier = 'mechanism')
+     or (tg_op = 'UPDATE' and (old.tier is not distinct from 'mechanism') <> (new.tier is not distinct from 'mechanism')) then
+    if not private.has_mechanism_question(target, new.course_id, new.id) then
+      -- create_missing: with no snapshot yet, an answer being recorded right now would insert one
+      -- folded without the mechanism flag. A stale placeholder makes that insert lose and retry.
+      perform private.mark_stale(target, true);
+    end if;
+  end if;
+  return null;
+end;
+$$;
