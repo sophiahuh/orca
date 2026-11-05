@@ -172,6 +172,30 @@ test("handwritten notes with the student's marks described: a marked passage bec
   expect(flags[0].objectiveId).toBe(objectiveId);
 });
 
+test("which slides were hard: the deck's pages as a grid; tapping a page flags the objectives taught there", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await upload(page);
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 60_000 });
+  await page.goto("/course/logic/review?tab=uploads");
+  await page.locator("[data-part=hard-slides]").click();
+  const modal = page.locator("[data-part=hard-slides-modal]");
+  const tiles = modal.locator("[data-part=slide-tile]");
+  await expect.poll(() => tiles.count(), { timeout: 30_000 }).toBeGreaterThan(12);
+  // Drawn from the stored file in the browser.
+  await expect.poll(() => tiles.first().locator("canvas").evaluate((c: HTMLCanvasElement) => c.width), { timeout: 30_000 }).toBeGreaterThan(0);
+  // Slide 1 is in the topic's range, but its one objective is anchored to slide 12: nothing to flag there.
+  await expect(modal.locator("[data-part=slide-tile][data-page='1']")).toBeDisabled();
+  await modal.locator("[data-part=slide-tile][data-page='12']").click();
+  await modal.locator("[data-part=flag-slides]").click();
+  await expect(modal.locator("[data-part=slides-flagged]")).toHaveText("Orca will practise these with you.");
+  const after = await stored(page, student);
+  const flags = after.evidence.filter((e) => e.kind === "confusion");
+  expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.materialId])).toEqual([["slide", 12, after.materials[0].id]]);
+  await page.goto("/course/logic/objectives");
+  await expect(page.locator("li[data-objective='Simplify with absorption']")).toContainText("Learning");
+});
+
 test("a folder of files: one row each with its own type, prefilled from the shared default; sent one after another; a file Orca can't read is listed as skipped", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");

@@ -8,6 +8,7 @@ import { isFinished, useRun } from "@/hooks/useRun";
 import { jobAhead } from "@/lib/course/review";
 import { useOrca } from "@/lib/store";
 import { Card } from "@/components/ui/Card";
+import { HardSlides } from "@/components/review/HardSlides";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
 /** How far along a running upload is, from its stage (a rough share for the bar). */
@@ -31,8 +32,10 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   // A finished stored row wins: useRun keeps its last live row when it stops following, which would show a stopped run as still building.
   const run = isFinished(stored) ? stored : (live ?? stored);
-  const { runs, setMaterialUpcoming, refresh } = useOrca();
+  const { runs, courses, setMaterialUpcoming, refresh } = useOrca();
+  const [pickingSlides, setPickingSlides] = useState(false);
   const name = material?.filename ?? "An upload";
+  const course = material ? courses.find((c) => c.id === material.courseId) : undefined;
   // Pause a queued upload (it leaves the queue), put a paused one back in line, stop a running one,
   // or remove the material. Stop and Remove ask once more before acting.
   const [pausing, setPausing] = useState<string | null>(null);
@@ -191,6 +194,15 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         </span>
       )}
       {coverage}
+      {/* Weak points first (Plan C): tap the slides that were hard. Only a stored PDF or .pptx has pages to show. */}
+      {material?.storagePath && /\.(pdf|pptx)$/i.test(material.filename) && course && (
+        <>
+          <button type="button" onClick={() => setPickingSlides(true)} className="self-start text-[14px] font-bold text-prussian underline underline-offset-2" data-part="hard-slides">
+            Which slides were hard?
+          </button>
+          <HardSlides course={course} material={material} open={pickingSlides} onClose={() => setPickingSlides(false)} />
+        </>
+      )}
       {removeOffer}
       {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       {hidden && (
