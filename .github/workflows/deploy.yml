@@ -72,7 +72,9 @@ jobs:
       - uses: supabase/setup-cli@v1
         if: steps.diff.outputs.nothing != 'true' && env.HAVE_SUPABASE_SECRETS == 'true'
         with:
-          version: latest
+          # Pinned (the version in package.json): resolving "latest" asks GitHub's API without a token
+          # and a deploy failed on its rate limit (2026-11-05). Bump it with the package.
+          version: 2.119.0
 
       - name: Push pending migrations to the hosted project
         if: steps.diff.outputs.nothing != 'true' && env.HAVE_SUPABASE_SECRETS == 'true'

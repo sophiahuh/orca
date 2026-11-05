@@ -200,6 +200,18 @@ test("a hand-off that fails marks the run failed and says why", async () => {
   );
 });
 
+test("an upload whose hand-off fails is answered 'failed' with the run and the reason, not thrown: the material is already saved", async () => {
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [] });
+  const { deps: d } = deps(f.db, "claude-opus-5-5", async () => {
+    throw new Error("Trigger.dev is unreachable");
+  });
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "failed", runId: "run-new", error: "Orca couldn't start the job: Trigger.dev is unreachable" });
+  assert.deepEqual(
+    f.tables.pipeline_runs.map((r) => [r.id, r.status, r.error]),
+    [["run-new", "failed", "Orca couldn't start the job: Trigger.dev is unreachable"]],
+  );
+});
+
 /* ── One job at a time per student (decision 10) ── */
 
 test("a second upload while another job is in flight is queued, not dispatched, and starts when resumeNext runs", async () => {

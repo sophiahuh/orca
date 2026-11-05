@@ -69,6 +69,12 @@ migrations in `supabase/migrations/` are the source of truth.
    The order matters: tasks deployed first (step 5), then the switch (step 6), or the site would
    send jobs to a project with no tasks in it.
 
+   Gotcha, fixed in code on 2026-11-05: on Vercel the SDK reads `VERCEL_GIT_COMMIT_REF` (the
+   deployed branch) and sends it as a preview branch, and Trigger.dev answers "No matching
+   branch env" for every job. Orca now tells the SDK to send no branch
+   (`src/lib/server/jobs/start.ts`), so a Prod key works from `backend-implementation`. If that
+   message ever comes back, that code is the first place to look, not the key.
+
 ## 3. Anthropic or OpenAI
 
 Create an API key for Orca's server: at console.anthropic.com, or at platform.openai.com

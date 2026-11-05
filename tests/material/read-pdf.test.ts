@@ -82,14 +82,17 @@ test("a parser thread that dies before opening the file is replaced by a read on
 });
 
 test("a parser thread that dies with the file open makes the file unreadable, not a retry here", async () => {
-  // Long enough to still be reading when the thread dies (the stand-in deck alone reads in under the 150 ms).
   const deck = makePdf(Array.from({ length: LIMITS.pagesPerFile }, (_, i) => ({ runs: lines(`Slide ${i + 1}`, "A circuit, drawn."), paths: 60 })));
-  // Answers pdf.js's first message (so the document opens), then dies.
+  // Opens the document, then dies on the first page request (sent only once the document is open),
+  // so it dies mid-read however fast the machine is (a timer did, and a CI runner once read the
+  // whole deck before it fired, 2026-11-05).
   const dying = `
     const { workerData } = require("node:worker_threads");
+    workerData.port.on("message", (m) => {
+      if (m && m.action === "GetPage") setImmediate(() => process.exit(7));
+    });
     import("pdfjs-dist/legacy/build/pdf.worker.mjs").then((m) => {
       m.WorkerMessageHandler.initializeFromPort(workerData.port);
-      setTimeout(() => process.exit(7), 150);
     });
   `;
   await assert.rejects(readPdf(deck, { workerSource: dying }), (e: unknown) => e instanceof UnreadablePdfError && e.status === 422);

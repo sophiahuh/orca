@@ -96,9 +96,11 @@ test("a second upload queues behind the first and runs when it finishes; one job
 });
 
 test("a queued upload can be paused from the Uploads tab: it sits out while the others finish, and Resume puts it back in line", async ({ page, student }) => {
-  test.setTimeout(240_000); // six uploads, each a few slow fake model calls
-  // Two calls an upload (map, objectives; no questions since weak points first): slow enough that two are still queued when the page opens.
-  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 3000 });
+  test.setTimeout(300_000); // six uploads, each a few slow fake model calls
+  // Slow enough that the first job is still running when the page has loaded and been read (three
+  // model calls at 1.5 s lost that race once the review route was already compiled, 2026-11-05; an
+  // upload makes two calls since weak points first, map and objectives).
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 4000 });
   const courseId = await newCourse(student);
   const first = await sendDeck(page, student, courseId, "first.pdf", "Absorption");
   expect(first.generation.state).toBe("started");
@@ -126,7 +128,7 @@ test("a queued upload can be paused from the Uploads tab: it sits out while the 
   expect(runs!.map((r) => r.status)).toEqual(["done", "done", "done"]);
 
   // Pause all / Resume all act on every queued or paused upload of the course.
-  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 2500 });
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 4000 });
   const fourth = await sendDeck(page, student, courseId, "fourth.pdf", "Idempotence");
   const fifth = await sendDeck(page, student, courseId, "fifth.pdf", "Involution");
   const sixth = await sendDeck(page, student, courseId, "sixth.pdf", "Commutativity");

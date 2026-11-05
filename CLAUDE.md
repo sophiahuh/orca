@@ -169,7 +169,8 @@ them silently; list what you assumed.
   (upload, dive) it's running** (2026-10-17: a real upload died this way). Before that trick, check
   the hosted project has no queued or running `pipeline_runs`, or ask the owner.
 - Cloud containers: Playwright's Chromium build doesn't match; run e2e with
-  `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npm run test:e2e`.
+  `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium npm run test:e2e` (that symlink points at
+  whichever build the container ships; the versioned folder's name and layout change).
 - Local Supabase (Phase 4) runs in Docker: `npm run db:start` (prints the local URL and keys for
   `.env.local`; template in `.env.example`), `npm run db:reset` (re-applies `supabase/migrations/`),
   `npm run test:db` (pgTAP files in `supabase/tests/`), `npm run check:evidence` (starts its own
@@ -476,8 +477,12 @@ All 11 Figma screens are built. Where things live:
   key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
   commit by the owner pushed to `backend-implementation`, or Redeploy on the deployment's page).
   The Deploy workflow also deploys `src/trigger/` to Trigger.dev once `TRIGGER_ACCESS_TOKEN` and
-  `TRIGGER_PROJECT_REF` are repository secrets; they aren't yet (the step was skipped on
-  2026-11-04), so production runs jobs inline.
+  `TRIGGER_PROJECT_REF` are repository secrets; they aren't yet (the step is skipped). On
+  2026-11-05 the owner set `ORCA_JOBS=trigger` and `TRIGGER_SECRET_KEY` (a Prod key of Amanda's
+  Trigger.dev project) on Vercel, so production sends jobs to Trigger.dev; whether the tasks are
+  deployed there is Amanda's side and was unverified when this was written. The first jobs failed
+  with "No matching branch env" until the SDK was told to send no preview branch
+  (`src/lib/server/jobs/start.ts`; `docs/SETUP-HOSTED.md` §2).
 
 ## What to build next
 

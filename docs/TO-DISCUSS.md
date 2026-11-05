@@ -22,6 +22,17 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   - a connector *check me* gets 2 questions written (it still asks one).
 - **What would change:** each is one small change in the files the plan names.
 
+### Who grades a connector answer, and what Claude's tool output shows (2026-11-05)
+- **Source:** the Claude connector (`src/lib/connector/mcp.ts`).
+- **Today:** `questions_for` hands Claude each question with its answer, exact forms or rubric, and
+  Claude grades and reports through `record_answer` as a self-marked answer (half credit). A student
+  who expands the tool result in Claude can read the answers before answering.
+- **Alternative:** a `check_answer` tool: Claude sends the student's words, Orca grades them itself
+  (exact and choice locally, prose through the server's rubric grader on the owner's key) and
+  records the result as a full-credit answer with Orca's own grader, and `questions_for` stops
+  returning answers. Consistent with the app's grading, costs model calls for prose, and the
+  student can no longer peek. Worth deciding before classmates get links.
+
 ### Canvas import assumptions (2026-11-04)
 - **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.
 - **Decided by the owner (2026-11-04):** posting doesn't mean reached. Files posted over the weeks

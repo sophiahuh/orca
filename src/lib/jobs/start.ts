@@ -93,7 +93,13 @@ export type Generation =
   /** The server has no model key: the file is stored and read, nothing is generated. */
   | { state: "no-model" }
   /** Orca found no text in the file, so there's nothing to build from. */
-  | { state: "no-text" };
+  | { state: "no-text" }
+  /**
+   * The material is saved and read, but the job couldn't be handed to the runner (Trigger.dev
+   * refused it, say): the run is marked failed with why, and Try again on its card starts another.
+   * Answered, not thrown, so the student still gets the material they just sent (2026-11-05).
+   */
+  | { state: "failed"; runId: string; error: string };
 
 /** `busy`: the course's top-up is already in flight (`runId`, when it could be read); it catches up flagged objectives without questions, and names any it couldn't as a follow-up. */
 export type TopUpStart = { state: "started"; runId: string } | { state: "queued"; runId: string } | { state: "busy"; runId?: string } | { state: "no-model" } | { state: "no-session" };
@@ -246,7 +252,12 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   // One job at a time per student, oldest first: even two uploads started together run in the order
   // they were recorded, so the later one maps its file onto the topics the earlier one made. This
   // run starts now only if nothing of the student's is running and no older run is queued.
-  return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
+  try {
+    return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
+  } catch (e) {
+    // handOff marked the run failed and said why; the material itself is saved, so say so instead of failing the request.
+    return { state: "failed", runId, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /**
