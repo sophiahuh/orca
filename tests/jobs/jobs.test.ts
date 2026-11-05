@@ -126,15 +126,18 @@ const newId = () => `id${++n}`;
 
 test("processMaterial builds the structure from the stored pages and saves it with the finished run", async () => {
   const mem = memoryStore({ run: queued(), pages });
-  const out = await processMaterial({ store: mem.store, call: honestModel().call, newId }, { runId: "run1", materialId: "m1" });
+  const model = honestModel();
+  const out = await processMaterial({ store: mem.store, call: model.call, newId }, { runId: "run1", materialId: "m1" });
   assert.equal(out.status, "done");
   assert.equal(mem.saves.length, 1);
   const rows = mem.saves[0];
-  assert.deepEqual(rows.runs!.map((r) => [r.id, r.status, r.questions_added, r.progress, r.error]), [["run1", "done", 2, null, null]]);
+  // Weak points first: nothing marked in this upload, so no questions are written (a flag or a dive writes them).
+  assert.deepEqual(rows.runs!.map((r) => [r.id, r.status, r.questions_added, r.progress, r.error]), [["run1", "done", 0, null, null]]);
   assert.deepEqual(rows.topics!.map((t) => [t.name, t.review]), [["Boolean Algebra", "proposed"]]);
   assert.equal(rows.objectives!.length, 1);
-  assert.equal(rows.questions!.length, 2);
-  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "objectives", "writing"]);
+  assert.equal(rows.questions, undefined);
+  assert.ok(!model.steps.includes("generate"));
+  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "objectives"]);
 });
 
 test("handwritten pages are read from their images first: the text is stored, mapping reads it, and an unrenderable page keeps its own", async () => {
@@ -364,7 +367,7 @@ test("a Dive In is as long as picked, whatever its objectives: 20 minutes on one
   assert.deepEqual(mem.saves[0].runs![0].question_ids, ["d1", "d2", "d3", "d4", "d5"]);
 });
 
-test("the course's Notes for Orca reach every writing call of an upload", async () => {
+test("the course's Notes for Orca reach the upload's writing calls (generate's is covered in tests/pipeline/run.test.ts)", async () => {
   const notes = { forAllClasses: null, forThisClass: "No proofs." };
   const mem = memoryStore({ run: queued(), pages, notes });
   const model = honestModel();
@@ -375,7 +378,7 @@ test("the course's Notes for Orca reach every writing call of an upload", async 
   }) as CallStep;
   const out = await processMaterial({ store: mem.store, call, newId }, { runId: "run1", materialId: "m1" });
   assert.equal(out.status, "done");
-  for (const step of ["map", "objectives", "generate"]) {
+  for (const step of ["map", "objectives"]) {
     const calls = seen.filter((c) => c.step === step);
     assert.ok(calls.length > 0, step);
     for (const c of calls) assert.deepEqual(c.notes, notes, step);

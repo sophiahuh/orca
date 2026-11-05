@@ -73,7 +73,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </Button>
         </div>
       ) : (
-        <KnowledgePath course={course} progress={m.topics} needingQuestions={m.objectivesNeedingQuestions} onStart={(t) => setDiving({ id: t.id, name: t.name })} />
+        <KnowledgePath course={course} progress={m.topics} onStart={(t) => setDiving({ id: t.id, name: t.name })} />
       )}
 
       <motion.header variants={stagger()} initial="hidden" animate="show" className="absolute left-[28px] top-[28px] flex items-start gap-[16px]">

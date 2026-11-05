@@ -38,9 +38,6 @@ test("rolls evidence up into objectives, topics and an island level", () => {
   assert.deepEqual(m.topics.get("t3"), { status: "not-started", mastered: 0, inRotation: 0, objectives: 0 });
   assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a"]);
   assert.deepEqual(m.topicObjectives.get("t3"), []);
-  assert.equal(m.objectivesNeedingQuestions.get("t1"), 0, "t1/a has 3 questions");
-  assert.equal(m.objectivesNeedingQuestions.get("t2"), 0, "t2/b has 1 question: few, but it can be practised");
-  assert.equal(m.objectivesNeedingQuestions.get("t3"), 0);
   // t1/a, mastered (before rotationSince), is the course's one weak point: all of them held.
   assert.equal(m.island, "thriving");
 });
@@ -100,5 +97,4 @@ test("a manual flag on an objective with no questions puts it in rotation, learn
   assert.equal(m.objectives.get("t1/z")!.status, "learning");
   assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a", "t1/z"]);
   assert.equal(m.topics.get("t1")!.inRotation, 1);
-  assert.equal(m.objectivesNeedingQuestions.get("t1"), 1);
 });

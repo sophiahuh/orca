@@ -181,8 +181,15 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
       {head}
       <span className="text-[15px] text-prussian/80">
         {plural(run.topicsCreated.length, "new topic")}, {plural(run.objectivesCreated.length, "new objective")}, {run.objectivesAttached.length} existing objective
-        {run.objectivesAttached.length === 1 ? "" : "s"} covered again, {plural(run.questionsAdded, "question")} added.
+        {run.objectivesAttached.length === 1 ? "" : "s"} covered again
+        {run.questionsAdded > 0 ? `, ${plural(run.questionsAdded, "question")} added.` : "."}
       </span>
+      {/* Weak points first: an upload writes questions only for what's marked in it. */}
+      {run.questionsAdded === 0 && (run.kind ?? "upload") === "upload" && (
+        <span className="text-[14px] font-medium text-wisteria-deep" data-part="questions-later">
+          Questions are written when you flag something or start a dive.
+        </span>
+      )}
       {coverage}
       {removeOffer}
       {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}

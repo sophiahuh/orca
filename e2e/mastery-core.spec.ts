@@ -69,15 +69,14 @@ test.describe("a fresh browser", () => {
 test.describe("a course with uploaded questions", () => {
   test.beforeEach(async ({ student }) => seedFixtureCourse(student));
 
-  test("the trail has nothing locked, START on the first topic, and says when nothing is flagged (a gap only for objectives with no questions)", async ({ page }) => {
+  test("the trail has nothing locked, START on the first topic, and says when nothing is flagged", async ({ page }) => {
     await page.goto("/course/logic-e2e");
     await expect(page.locator('[data-part="start"]')).toHaveCount(1);
     await expect(page.locator("[data-visual]").first()).toHaveAttribute("data-visual", "current");
     await expect(page.locator('[data-visual="current"]')).toContainText("Boolean Algebra");
-    // Weak points first: nothing flagged or missed yet. Every objective has a question, so no gap.
+    // Weak points first: nothing flagged or missed yet.
     await expect(page.locator('[data-visual="current"]')).toContainText("No weak spots flagged");
     await expect(page.locator('[data-visual="upcoming"]')).toContainText("No weak spots flagged");
-    await expect(page.locator("[data-visual]").filter({ hasText: "without questions" })).toHaveCount(0);
     await expect(page.locator('[data-visual="upcoming"] button').first()).toBeVisible();
     await expect(page.locator("[data-visual] button:disabled")).toHaveCount(0);
   });

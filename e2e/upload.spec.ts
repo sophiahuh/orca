@@ -52,7 +52,7 @@ async function upload(page: Page, type = "Lecture") {
   await page.getByRole("button", { name: "Add to course" }).click();
 }
 
-test("a lecture upload is built by a job on the server; the review screen follows it and lands the questions on the trail", async ({ page, student }) => {
+test("a lecture upload is built by a job on the server; the review screen follows it and lands the topics on the trail", async ({ page, student }) => {
   // Each model call takes a moment, so the review screen shows the job working first.
   await fakeModel({ extract: LECTURE, perObjective: 2, delayMs: 800 });
   await createCourse(page, "Logic");
@@ -60,14 +60,16 @@ test("a lecture upload is built by a job on the server; the review screen follow
 
   await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
   await expect(page.locator("[data-part=run-progress]")).toBeVisible();
-  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 6 questions added.", { timeout: 60_000 });
+  // Weak points first: nothing is marked in a typed deck, so no questions are written at upload.
+  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=questions-later]")).toHaveText("Questions are written when you flag something or start a dive.");
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
   // Slides 3 and 4 are pictures with only a slide number: they're read from their images first; then
   // the 8 typed slides with a figure get it described (4 a call). The log can start with calls from
   // the previous test's job still finishing in the background, so this run's are compared from its first.
   const calls = await fakeCalls();
-  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", "describe", "describe", "map", "objectives", "objectives", "link", "generate", "generate"]);
+  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", "describe", "describe", "map", "objectives", "objectives", "link"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -77,7 +79,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   ]);
   expect(Object.values(state.objectives[course.id]).map((o) => (o as { review: string }).review)).toEqual(["proposed", "proposed", "proposed"]);
   expect(state.relations[course.id]).toHaveLength(1);
-  expect(state.runs).toEqual([expect.objectContaining({ kind: "upload", status: "done", model: "claude-opus-5-5", questionsAdded: 6 })]);
+  expect(state.runs).toEqual([expect.objectContaining({ kind: "upload", status: "done", model: "claude-opus-5-5", questionsAdded: 0 })]);
   expect(state.materials[0].filename).toBe(DECK_NAME);
 
   // The file is in the student's folder in Storage, and its pages were read on the server.
@@ -100,8 +102,6 @@ test("a lecture upload is built by a job on the server; the review screen follow
 
   await page.goto("/course/logic");
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
-  await page.goto(`/quiz/logic/${course.topics[0].id}`);
-  await expect(page.getByText("Simplify with absorption: case 1?")).toBeVisible();
 });
 
 test("removing material: its file, pages and calendar entry go, the objectives only it taught are archived, and the same file can be uploaded again", async ({ page, student }) => {
@@ -265,7 +265,7 @@ test("re-uploading the same deck is recognised by its content and adds nothing",
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
   await upload(page);
   await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so there's nothing new to add.`)).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "map")).toHaveLength(1);
@@ -291,7 +291,7 @@ test("a job that fails says why on the review screen, saves nothing, and uploadi
   // The file is kept; uploading it again (now that the model answers) builds it.
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await upload(page);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 2 questions added.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
   state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
   expect(state.runs.map((r) => r.status)).toEqual(["failed", "done"]);

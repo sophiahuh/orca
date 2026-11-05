@@ -516,12 +516,13 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   });
   if (deps.structureOnly) return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, flags, run: runRecord({}) };
 
-  /* Questions for every objective this upload touched that is short of its stock, from its own pages */
+  /* Questions only for objectives marked in this upload (weak points first), from their own pages:
+     every other objective gets them when it's flagged (a top-up) or practised (a dive). */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
   const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => survivor(q.objectiveId, objectiveById)?.id === id);
   const topicsNow = new Map(allTopics().map((t) => [t.id, { ...t, source: sourceOf(t.id) }]));
   const byTopic = new Map<string, { targets: WriteTarget[]; pages: Set<number> }>();
-  for (const id of new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])) {
+  for (const id of new Set(flags.map((f) => f.objectiveId))) {
     const o = objectiveById.get(id)!;
     if (o.review === "archived") continue;
     const need = QUESTIONS_PER_OBJECTIVE - liveQuestions(o.id).length;
