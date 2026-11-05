@@ -225,7 +225,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         setPhase({ kind: "sending", stage: "reading" });
         const outcome = await importAIChat({ ...(aiChatUrl.trim() ? { url: aiChatUrl.trim() } : {}), ...(aiChatText.trim() ? { text: aiChatText.trim() } : {}) }, meta);
         addMaterial(outcome.material, { saved: true });
-        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
+        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built" || outcome.generation.state === "failed") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
         else leave();
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The AI chat import failed." }); }
       return;
@@ -235,7 +235,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         setPhase({ kind: "sending", stage: "reading" });
         const outcome = await importWebsite(websiteUrl.trim(), meta);
         addMaterial(outcome.material, { saved: true });
-        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
+        if (outcome.generation.state === "started" || outcome.generation.state === "running" || outcome.generation.state === "queued" || outcome.generation.state === "waiting" || outcome.generation.state === "built" || outcome.generation.state === "failed") router.replace(`/course/${course.slug}/review?run=${outcome.generation.runId}`);
         else leave();
       } catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "The website import failed." }); }
       return;
@@ -280,6 +280,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       if (g.state === "built") {
         // Read again after its questions were built (a repeated request): show what was built.
         go(() => router.replace(`/course/${course.slug}/review?run=${g.runId}`));
+        return;
+      }
+      if (g.state === "failed") {
+        // Saved and read, but the job couldn't be started: the Uploads tab shows why and has Try again.
+        setPhase({ kind: "error", message: `Saved to ${course.name}, but ${g.error} Its card on the Uploads tab has Try again.` });
+        window.setTimeout(() => router.replace(`/course/${course.slug}/review?run=${g.runId}`), 2500);
         return;
       }
       setPhase({
