@@ -90,7 +90,7 @@ const GOLDEN_OPTIONS = { hasMechanismQuestions: true, dayKey: utcDay };
 const RULES_HASHES: Record<number, string> = {
   1: "eb9aeb80f48d781505b46862b41eeb1176b1e06e54dc833f4c95263d0503a2e0",
   // Weak points first: rotationSince, and the fold's inRotation / checkOpen.
-  2: "0e664584e02d2149afa371df6b6742133a8ef711278b61024a5c1791e439feb1",
+  2: "e56f02e25b111dcfa67d7ae205524e4ea8dd16e66736fc0efb7aa1aa68c4c60c",
 };
 
 /**

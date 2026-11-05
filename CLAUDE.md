@@ -92,7 +92,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`; on `phase-4`, not merged). Only
   objectives in rotation come due (see "Product model"); flags are `confusion` evidence with
   `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2, with
-  `MASTERY_RULES.rotationSince` to be set to the deploy day before merging (its status block).
+  `MASTERY_RULES.rotationSince` = 2026-11-05 (set by the owner).
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
   uses for development. `.env` may point at either (it has pointed at each at different times):
@@ -126,8 +126,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Weak points first: Plan A is built on `phase-4`. Before merging: set `rotationSince` to the
-   deploy day and run the merge gate. Then Plan B (handwritten markers, the connector's
+1. Weak points first: Plan A is built on `phase-4` (`rotationSince` 2026-11-05, merge gate
+   green). Then Plan B (handwritten markers, the connector's
    `flag_check`), Plan C (tapped slides) and the follow-up that makes objectives without questions
    hold state (then uploads write questions only for flagged objectives). None is written yet.
 2. Activity logs, edit history and soft delete: planned
@@ -465,8 +465,7 @@ All 11 Figma screens are built. Where things live:
 
 `docs/BACKEND-ROADMAP.md` is the plan. Phases 1–4 are built and live; Phase 7 (the MCP connector)
 has a first version and Canvas import is built (2026-11-04); Phases 5 and 6 haven't started. Next
-by the owner's priorities: weak points first (Plan A built on `phase-4`: set `rotationSince` and
-run the merge gate; then Plans B and C and the follow-up that makes objectives without questions
+by the owner's priorities: weak points first (Plan A built on `phase-4`; then Plans B and C and the follow-up that makes objectives without questions
 hold state), then the open items above. Before
 tuning extraction, run `npm run score:extraction` with a key (and the local ALD decks) and record a
 baseline. Phases: (1) mastery core on-device, (2) uploads create

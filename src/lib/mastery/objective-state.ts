@@ -36,7 +36,7 @@ export const MASTERY_RULES = {
    * rotation, so nothing a student had already mastered drops off their island. The day the rules
    * shipped (move it, and record the new hash, if they ship later).
    */
-  rotationSince: "2026-11-10T00:00:00.000Z",
+  rotationSince: "2026-11-05T00:00:00.000Z",
 } as const;
 
 /**

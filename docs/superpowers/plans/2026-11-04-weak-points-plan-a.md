@@ -33,9 +33,9 @@
 > - **Known, left as is:** the calendar's quick-review count is the due list's size, not the
 >   sidebar's "Covers N" (as before this plan); a verified objective's feedback banner shows credit
 >   progress toward the bar.
-> - **Before merging:** set `MASTERY_RULES.rotationSince` to the deploy day (earlier or later than
->   2026-11-10) and re-record `RULES_HASHES[2]`. Don't push `phase-4` before the browser specs seed
->   struggle flags (Task 8): CI runs them.
+> - **`rotationSince` is 2026-11-05** (set by the owner; `RULES_HASHES[2]` re-recorded). If the
+>   deploy is later, mastery reached on production between that day and the deploy isn't
+>   grandfathered into rotation (it reads as verified); moving it again means re-recording the hash.
 >
 > Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`. Plans B (passive flags:
 > handwritten markers, the connector's `flag_check`) and C (tapped slides) aren't written yet.
@@ -1754,5 +1754,5 @@ git commit -m "Uploads write questions only for objectives in rotation (weak poi
 - [ ] `npm run locked -- npm run test:e2e`
 - [ ] `npm run locked -- npm run check:isolation`
 - [ ] `npm run locked -- npm run check:evidence`
-- [ ] If merging after 2026-11-10, move `MASTERY_RULES.rotationSince` to the merge day and record the new `RULES_HASHES[2]` (no other change; the golden accumulators don't move because the golden log is in October 2026).
+- [x] `MASTERY_RULES.rotationSince` set to 2026-11-05 and the new `RULES_HASHES[2]` recorded (the golden accumulators don't move: the golden log is in October 2026, `FLAGS_LOG` in 2027).
 - [ ] Deploy note: once the migration lands, the old code's homework reflection fails (it inserts confusion rows without `flag_source`, which the new check refuses) until the new code is live. Nothing else breaks: old code never reads the new columns, and the new code's manual flags only exist once it's live. Push the migration right before deploying; the Deploy workflow does both on merge to `main`.
