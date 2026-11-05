@@ -67,7 +67,7 @@ function pick(questions: readonly SessionQuestion[], used: ReadonlySet<string>, 
   return sorted[0]?.q ?? null;
 }
 
-/** Quick-review order (§3): mixed-up → fading, overdue before today → learning → fading due today → unseen. Priority order inside each group. */
+/** Quick-review order (§3): mixed-up → fading, overdue before today → learning → fading due today → check-due. Priority order inside each group. */
 function quickGroup(c: SessionCandidate, today: string, dayKey: (iso: string) => string): number {
   switch (c.status) {
     case "mixed-up":
@@ -76,7 +76,7 @@ function quickGroup(c: SessionCandidate, today: string, dayKey: (iso: string) =>
       return c.dueAt !== null && dayKey(c.dueAt) < today ? 1 : 3;
     case "learning":
       return 2;
-    case "unseen":
+    case "check-due":
       return 4;
     default:
       return 5;

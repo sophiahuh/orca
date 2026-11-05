@@ -35,13 +35,14 @@ test("rolls evidence up into objectives, topics and an island level", () => {
   assert.equal(m.objectives.get("t2/b")!.status, "unseen");
   assert.equal(m.topics.get("t1")!.status, "done");
   assert.equal(m.topics.get("t2")!.status, "not-started");
-  assert.deepEqual(m.topics.get("t3"), { status: "not-started", mastered: 0, total: 0 });
+  assert.deepEqual(m.topics.get("t3"), { status: "not-started", mastered: 0, inRotation: 0, objectives: 0 });
   assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a"]);
   assert.deepEqual(m.topicObjectives.get("t3"), []);
   assert.equal(m.objectivesNeedingQuestions.get("t1"), 0, "t1/a has 3 questions");
   assert.equal(m.objectivesNeedingQuestions.get("t2"), 0, "t2/b has 1 question: few, but it can be practised");
   assert.equal(m.objectivesNeedingQuestions.get("t3"), 0);
-  assert.equal(m.island, "growing");
+  // t1/a, mastered (before rotationSince), is the course's one weak point: all of them held.
+  assert.equal(m.island, "thriving");
 });
 
 test("answers follow their question's current objective, not the one recorded", () => {
@@ -75,7 +76,7 @@ test("answers on a merged objective count for the survivor; answers on an archiv
   const archived = { ...catalogue, "t2/b": { ...catalogue["t2/b"], review: "archived" as const } };
   const a = courseMastery({ ...base, catalogue: archived, evidence: day1, now: new Date("2026-10-01T13:00:00Z") });
   assert.equal(a.objectives.has("t2/b"), false);
-  assert.deepEqual(a.topics.get("t2"), { status: "not-started", mastered: 0, total: 0 });
+  assert.deepEqual(a.topics.get("t2"), { status: "not-started", mastered: 0, inRotation: 0, objectives: 0 });
 });
 
 test("with stored snapshots, objective state is read from them, and an objective without one is unseen", async () => {

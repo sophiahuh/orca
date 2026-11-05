@@ -16,29 +16,34 @@ const s = (objectiveId: string, status: ObjectiveStatus): ObjectiveState => ({
 });
 const map = (...states: ObjectiveState[]) => new Map(states.map((x) => [x.objectiveId, x]));
 
-test("a topic is done only when every objective is mastered or retired", () => {
-  assert.deepEqual(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "retired"))), { status: "done", mastered: 2, total: 2 });
-  assert.equal(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "fading"))).status, "in-progress");
+test("a topic's progress counts weak points: objectives in rotation mastered or retired, out of those in rotation", () => {
+  assert.deepEqual(topicProgress(["a", "b", "c"], map(s("a", "mastered"), s("b", "learning"), s("c", "verified"))), { status: "in-progress", mastered: 1, inRotation: 2, objectives: 3 });
+  assert.deepEqual(topicProgress(["a", "b", "c"], map(s("a", "mastered"), s("b", "retired"), s("c", "unseen"))), { status: "done", mastered: 2, inRotation: 2, objectives: 3 });
+  assert.equal(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "fading"))).status, "in-progress", "a fading objective drops out until answered");
 });
 
-test("a topic with no answers is not started; any answer makes it in progress", () => {
+test("a topic with nothing in rotation is never done; not started until something is answered or flagged", () => {
+  assert.deepEqual(topicProgress(["a"], map(s("a", "verified"))), { status: "in-progress", mastered: 0, inRotation: 0, objectives: 1 });
   assert.equal(topicProgress(["a", "b"], map(s("a", "unseen"), s("b", "unseen"))).status, "not-started");
   assert.equal(topicProgress(["a", "b"], map(s("a", "learning"), s("b", "unseen"))).status, "in-progress");
+  assert.equal(topicProgress(["a"], map(s("a", "check-due"))).status, "in-progress");
 });
 
 test("a topic with no objectives is not started", () => {
-  assert.deepEqual(topicProgress([], map()), { status: "not-started", mastered: 0, total: 0 });
+  assert.deepEqual(topicProgress([], map()), { status: "not-started", mastered: 0, inRotation: 0, objectives: 0 });
 });
 
 test("a missing objective state throws", () => {
   assert.throws(() => topicProgress(["a"], map()), /No state computed for objective a/);
 });
 
-test("island level follows the share of objectives held", () => {
+test("the island follows the share of weak points held; unflagged objectives don't count", () => {
   assert.equal(islandLevel([]), "uncharted");
-  assert.equal(islandLevel([s("a", "unseen"), s("b", "unseen")]), "uncharted");
-  assert.equal(islandLevel([s("a", "learning"), s("b", "unseen"), s("c", "unseen")]), "sprouting");
-  assert.equal(islandLevel([s("a", "mastered"), s("b", "unseen"), s("c", "unseen")]), "growing");
+  assert.equal(islandLevel([s("a", "unseen"), s("b", "verified"), s("c", "check-due")]), "uncharted", "nothing in rotation");
+  assert.equal(islandLevel([s("a", "learning"), s("b", "unseen"), s("c", "verified")]), "sprouting");
+  assert.equal(islandLevel([s("a", "mastered"), s("b", "learning"), s("c", "learning"), s("d", "learning"), s("e", "verified")]), "sprouting", "a quarter");
+  assert.equal(islandLevel([s("a", "mastered"), s("b", "learning"), s("c", "unseen")]), "growing");
+  assert.equal(islandLevel([s("a", "mastered"), s("b", "learning"), s("c", "learning"), s("d", "unseen")]), "growing", "a third");
   assert.equal(islandLevel([s("a", "mastered"), s("b", "retired"), s("c", "unseen")]), "thriving");
 });
 

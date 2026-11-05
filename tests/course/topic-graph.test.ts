@@ -91,6 +91,19 @@ test("strength: nothing answered is unverified; fading or mixed up is fragile; e
   assert.equal(topicStrength(["m1", "f"], states), "fragile");
 });
 
+test("strength: verified objectives count as evidence, so a topic of them is strong, not new", () => {
+  const state = (status: ObjectiveState["status"]) => ({ status }) as ObjectiveState;
+  const states = new Map([
+    ["v", state("verified")],
+    ["m", state("mastered")],
+    ["u", state("unseen")],
+    ["c", state("check-due")],
+  ]);
+  assert.equal(topicStrength(["v", "m"], states), "strong");
+  assert.equal(topicStrength(["v", "u"], states), "developing");
+  assert.equal(topicStrength(["c"], states), "developing");
+});
+
 test("long names wrap at spaces into at most three lines, and edges leave from under the name", () => {
   assert.deepEqual(wrapLabel("Big-O analysis of loops and recursive algorithms"), ["Big-O analysis of", "loops and recursive", "algorithms"]);
   assert.deepEqual(wrapLabel("Iterator-based list traversal"), ["Iterator-based list", "traversal"]);
