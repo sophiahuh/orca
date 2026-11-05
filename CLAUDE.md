@@ -444,8 +444,12 @@ All 11 Figma screens are built. Where things live:
   key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
   commit by the owner pushed to `backend-implementation`, or Redeploy on the deployment's page).
   The Deploy workflow also deploys `src/trigger/` to Trigger.dev once `TRIGGER_ACCESS_TOKEN` and
-  `TRIGGER_PROJECT_REF` are repository secrets; they aren't yet (the step was skipped on
-  2026-11-04), so production runs jobs inline.
+  `TRIGGER_PROJECT_REF` are repository secrets; they aren't yet (the step is skipped). On
+  2026-11-05 the owner set `ORCA_JOBS=trigger` and `TRIGGER_SECRET_KEY` (a Prod key of Amanda's
+  Trigger.dev project) on Vercel, so production sends jobs to Trigger.dev; whether the tasks are
+  deployed there is Amanda's side and was unverified when this was written. The first jobs failed
+  with "No matching branch env" until the SDK was told to send no preview branch
+  (`src/lib/server/jobs/start.ts`; `docs/SETUP-HOSTED.md` §2).
 
 ## What to build next
 
