@@ -38,7 +38,9 @@ export type Generation =
   | { state: "started" | "running" | "built"; runId: string }
   | { state: "queued" | "waiting"; runId: string }
   | { state: "no-model" }
-  | { state: "no-text" };
+  | { state: "no-text" }
+  /** Saved and read, but the job couldn't be started: the run says why, and its card has Try again. */
+  | { state: "failed"; runId: string; error: string };
 
 export type UploadOutcome =
   | { kind: "read"; material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation }
