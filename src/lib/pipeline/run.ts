@@ -3,7 +3,7 @@
  * injected (`call`), so the orchestration is tested with fakes; the result is a plan that
  * `applyUploadPlan` merges into the course. Nothing here touches the store.
  */
-import type { FlaggedQuestion, Material, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic, TopicPlace } from "../data.ts";
+import type { FlaggedQuestion, Material, MaterialPages, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic, TopicPlace } from "../data.ts";
 import { type Named, exactMatch, shortlist } from "../course/match.ts";
 import { locatorPages } from "../course/study.ts";
 import { type PageRange, addRanges, describePlaces } from "../course/places.ts";
@@ -13,6 +13,7 @@ import { screen } from "../untrusted/screen.ts";
 import { urlsIn, validateFields } from "../untrusted/validate.ts";
 import { linkReason, linkTopics, liveDirectional } from "./link.ts";
 import { flaggedFor } from "./flagged.ts";
+import { struggledItemOk } from "./marked.ts";
 import type { OrcaNotes } from "./notes.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
@@ -37,7 +38,13 @@ export interface RunInput {
   material: Material;
   /** The course's materials, so the table of contents can say where each topic is taught by file name. */
   materials: ReadonlyArray<{ id: string; filename: string }>;
-  pages: Array<{ n: number; text: string }>;
+  /** The file's pages; `source` "vision" marks a page read from its image (only those can carry marked passages). */
+  pages: MaterialPages;
+  /**
+   * How the student marks confusion in their notes (screened), when they've said: the objectives
+   * step's `struggled` items are kept only then (no description, nothing is looked for).
+   */
+  markers?: string | null;
   /** What hidden text the server dropped when it read the file; recorded on the run (decision 13). */
   hiddenText?: { items: number; pages: number[] };
   /** The course's thumbs-down questions (cleaned, newest first), for question writing. */
@@ -70,6 +77,8 @@ export interface UploadPlan {
   relations: Relation[];
   /** topicId → new questions. */
   questions: Record<string, QuizQuestion[]>;
+  /** Marked passages (weak points first, Plan B): struggle flags to record once the objectives are saved. */
+  flags: Array<{ objectiveId: string; page: number; quote: string }>;
   run: PipelineRun;
 }
 
@@ -227,6 +236,18 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
   const progress = deps.onProgress ?? (() => {});
   const dropped: PipelineRun["dropped"] = [];
   const refuse = (what: string, reason: string) => dropped.push({ prompt: what, reason: `${REFUSED_PREFIX}${reason}` });
+  const flags: UploadPlan["flags"] = [];
+  // A marked passage about an objective, checked against the pages that objectives call was sent.
+  const keepFlags = (objectiveId: string, items: ReadonlyArray<{ page: number; quote: string }>, name: string, sent: RunInput["pages"]) => {
+    if (!input.markers) return;
+    for (const item of items) {
+      if (!struggledItemOk(item, sent)) {
+        dropped.push({ prompt: `A marked passage for "${shown(name, 120)}"`, reason: `skipped: it isn't inside a marked passage on page ${item.page}` });
+        continue;
+      }
+      if (!flags.some((f) => f.objectiveId === objectiveId && f.page === item.page)) flags.push({ objectiveId, page: item.page, quote: sanitize(item.quote, 300).text });
+    }
+  };
   const signalFor = (places: ObjectiveSignal["places"], emphasis: ObjectiveSignal["emphasis"] | null): ObjectiveSignal | null =>
     places.length || emphasis ? { materialId: input.material.id, materialType: input.material.type, places, ...(emphasis ? { emphasis } : {}) } : null;
   const course = { name: input.course.name, short: input.course.short };
@@ -380,8 +401,9 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       const wanted = new Set(ranges.flatMap((r) => Array.from({ length: r.to - r.from + 1 }, (_, k) => r.from + k)));
       const own = asNamed(objectivesOf(topicId).filter((o) => !o.archivedWithMaterial)); // removed material's objectives aren't rejections
       let found: ObjectivesOutput;
+      const sent = part.filter((p) => wanted.has(p.n));
       try {
-        found = await call("objectives", { course, material, pages: part.filter((p) => wanted.has(p.n)), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own), ...notes });
+        found = await call("objectives", { course, material, pages: sent.map(({ n, text }) => ({ n, text })), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own), ...notes });
       } catch (e) {
         dropped.push({ prompt: `Objectives for "${topic.name}"`, reason: `couldn't be found: ${errorText(e)}` });
         return;
@@ -415,6 +437,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
         }
         const twin = r.kind === "existing" ? null : exactMatch([o.name], asNamed(newObjectives.filter((x) => x.topicId === topicId)));
         if (r.kind === "existing" && !newObjectives.some((x) => x.id === r.id)) {
+          keepFlags(r.id, o.struggled ?? [], o.name, sent);
           const update = (objectiveUpdates[r.id] ??= { signal: null });
           if (signal) update.signal = update.signal ? { ...update.signal, places: [...update.signal.places, ...signal.places], emphasis: signal.emphasis ?? update.signal.emphasis } : signal;
           return;
@@ -422,11 +445,14 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
         // One made earlier in this upload (an earlier part, or the same name twice): it gains this signal.
         const earlier = newObjectives.find((x) => x.id === (r.kind === "existing" ? r.id : twin?.id));
         if (earlier) {
+          keepFlags(earlier.id, o.struggled ?? [], o.name, sent);
           if (signal) earlier.signals = [...earlier.signals, signal];
           return;
         }
+        const id = newId();
+        keepFlags(id, o.struggled ?? [], o.name, sent);
         newObjectives.push({
-          id: newId(),
+          id,
           topicId,
           name: o.name,
           description: o.description,
@@ -488,7 +514,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       refusedItems: dropped.filter((d) => d.reason.startsWith(REFUSED_PREFIX)).slice(0, 40).map((d) => ({ what: d.prompt.slice(0, 120), reason: d.reason.slice(REFUSED_PREFIX.length, REFUSED_PREFIX.length + 110) })),
     },
   });
-  if (deps.structureOnly) return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, run: runRecord({}) };
+  if (deps.structureOnly) return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, flags, run: runRecord({}) };
 
   /* Questions for every objective this upload touched that is short of its stock, from its own pages */
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
@@ -523,7 +549,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     for (const [topicId, qs] of Object.entries(w.questions)) questions[topicId] = [...(questions[topicId] ?? []), ...qs];
   }
 
-  return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions, run: runRecord(questions) };
+  return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions, flags, run: runRecord(questions) };
 }
 
 export interface WriteTarget {

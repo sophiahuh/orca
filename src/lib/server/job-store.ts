@@ -3,13 +3,15 @@
  * every query names the owner: the owner is the user a route verified when it started the job,
  * carried in the job's payload, never anything the browser sent.
  */
-import type { Material, MaterialPages } from "@/lib/data";
+import type { Material, MaterialPages, PipelineRun } from "@/lib/data";
 import type { JobStore, LoadedCourse, WaitingProgress } from "@/lib/jobs/jobs";
 import { LIMITS } from "@/lib/limits";
 import { fileQuestions, withCurrentTopics } from "@/lib/mastery/catalogue";
 import { checkBudget } from "@/lib/server/usage";
 import { flaggedForWriting } from "@/lib/pipeline/flagged";
-import { notesForPrompts } from "@/lib/pipeline/notes";
+import { checkNotes, notesForPrompts } from "@/lib/pipeline/notes";
+import { recordEvent } from "@/lib/mastery/snapshots";
+import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
 import { recordSecurityEvents } from "@/lib/server/security";
 import { materialFromRow, objectiveFromRow, questionFromRow, relationFromRow, runFromRow, topicFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
@@ -77,11 +79,14 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       const { data: course, error } = await db.from("courses").select("id, name, short, orca_notes").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
       if (error) throw new Error(`Couldn't read the course: ${error.message}`);
       if (!course) return null;
-      const { data: profile, error: profileError } = await db.from("profiles").select("orca_notes").eq("owner_id", ownerId).single();
+      const { data: profile, error: profileError } = await db.from("profiles").select("orca_notes, marker_notes").eq("owner_id", ownerId).single();
       if (profileError) throw new Error(`Couldn't read the student's notes: ${profileError.message}`);
       // Saved through the routes, notes are already clean; a note written straight through RLS is held to the same rules here.
       const { notes, refused } = notesForPrompts({ account: profile.orca_notes, course: course.orca_notes });
       for (const hits of refused) await recordSecurityEvents(db, ownerId, "orca_notes", hits);
+      // The marker description too: a refused one is logged and left out (nothing is looked for).
+      const markers = checkNotes(profile.marker_notes, LIMITS.markerChars);
+      if (!markers.ok) await recordSecurityEvents(db, ownerId, "marker_notes", markers.hits);
       const [topics, objectives, relations, questions] = await Promise.all([
         readAll((a, b) => db.from("topics").select().eq("owner_id", ownerId).eq("course_id", courseId).order("sort_order").order("id").range(a, b), "the topics"),
         readAll((a, b) => db.from("objectives").select().eq("owner_id", ownerId).eq("course_id", courseId).order("created_at").order("id").range(a, b), "the objectives"),
@@ -99,7 +104,7 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
         bank,
         relations: relations.map(relationFromRow),
       };
-      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure, notes };
+      return { course: { id: course.id, name: course.name, short: course.short, topics: structure.topics }, structure, notes, markers: markers.ok ? markers.text : null };
     },
 
     async materials(courseId): Promise<Material[]> {
@@ -140,14 +145,34 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
     },
 
     async flaggedObjectives(courseId) {
-      const ids = new Set<string>();
-      // PostgREST answers at most 1,000 rows a request: read in pages.
-      for (let from = 0; ; from += 1000) {
-        const { data, error } = await db.from("evidence_events").select("objective_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "confusion").order("id").range(from, from + 999);
-        if (error) throw new Error(`Couldn't read the course's struggle flags: ${error.message}`);
-        for (const r of data) ids.add(r.objective_id);
-        if (data.length < 1000) return [...ids];
+      const rows = await readAll((a, b) => db.from("evidence_events").select("objective_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "confusion").order("id").range(a, b), "the course's struggle flags");
+      return [...new Set(rows.map((r) => r.objective_id))];
+    },
+
+    async recordFlags(courseId, events) {
+      const failed: Array<{ id: string; message: string }> = [];
+      let recorded = 0;
+      for (const e of events) {
+        try {
+          await recordEvent(supabaseSnapshotStore(db, ownerId, courseId), e);
+          recorded++;
+        } catch (err) {
+          // Recorded by an earlier attempt of this job (stable ids): that's done.
+          if (err instanceof RecordError && err.code === "23505") recorded++;
+          else failed.push({ id: e.id, message: err instanceof Error ? err.message : String(err) });
+        }
       }
+      return { recorded, failed };
+    },
+
+    async noteDropped(runId, items) {
+      if (!items.length) return;
+      const { data, error } = await db.from("pipeline_runs").select("dropped").eq("owner_id", ownerId).eq("id", runId).maybeSingle();
+      if (error) throw new Error(`Couldn't read the run: ${error.message}`);
+      if (!data) return;
+      const dropped = [...((data.dropped as PipelineRun["dropped"] | null) ?? []), ...items];
+      const { error: updateError } = await db.from("pipeline_runs").update({ dropped: dropped as unknown as NonNullable<Json> }).eq("owner_id", ownerId).eq("id", runId);
+      if (updateError) throw new Error(`Couldn't note what was left out: ${updateError.message}`);
     },
 
     async flagged(courseId) {

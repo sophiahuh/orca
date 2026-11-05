@@ -33,3 +33,8 @@ export function stableUuid(...parts: string[]): string {
 export function confusionEventId(materialId: string, objectiveId: string): string {
   return stableUuid("confusion", materialId, objectiveId);
 }
+
+/** The id of the struggle flag an upload records for a passage marked on `page` of `materialId` about `objectiveId` (a retried job can't record it twice). */
+export function markerFlagId(materialId: string, page: number, objectiveId: string): string {
+  return stableUuid("marker", materialId, String(page), objectiveId);
+}

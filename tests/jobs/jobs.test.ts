@@ -7,6 +7,8 @@ import type { StepInput } from "../../src/lib/pipeline/schemas.ts";
 import type { StructureRows, StructureState } from "../../src/lib/supabase/app-rows.ts";
 import type { BudgetVerdict } from "../../src/lib/jobs/budget.ts";
 import type { OrcaNotes } from "../../src/lib/pipeline/notes.ts";
+import type { ConfusionEvent } from "../../src/lib/mastery/types.ts";
+import { markerFlagId } from "../../src/lib/mastery/ids.ts";
 
 const anchor = { locator: "slide 2", excerpt: "x + xy = x" };
 const material: Material = { id: "m1", courseId: "c", filename: "L02.pdf", type: "Lecture", assigned: null, due: null, reflect: false };
@@ -27,13 +29,14 @@ const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
 });
 
 /** An in-memory JobStore for one student: what the jobs saved, the progress they wrote, the run's state. */
-function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; flaggedObjectives?: () => string[]; notes?: OrcaNotes | null; lostReply?: boolean; budget?: BudgetVerdict }) {
+function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; flaggedObjectives?: () => string[]; markers?: string | null; notes?: OrcaNotes | null; lostReply?: boolean; budget?: BudgetVerdict }) {
   const run = { ...init.run };
   const structure: StructureState = init.structure ?? { topics: [], objectives: {}, bank: {}, relations: [] };
   const saves: StructureRows[] = [];
   const progress: Progress[] = [];
   const budgetAsked: number[] = [];
   const savedPages: Array<{ n: number; text: string; source: string }> = [];
+  const recordedFlags: ConfusionEvent[] = [];
   const store: JobStore = {
     run: async (id) => (id === run.id ? { ...run } : null),
     claim: async (id, p) => {
@@ -57,20 +60,25 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
       run.status = "waiting";
       run.progress = { stage: "waiting", reason: verdict.reason, message: verdict.message };
     },
-    course: async (id) => (id === "c" ? { course: { id: "c", name: "Logic", short: "LOG", topics: structure.topics }, structure, notes: init.notes ?? null } : null),
+    course: async (id) => (id === "c" ? { course: { id: "c", name: "Logic", short: "LOG", topics: structure.topics }, structure, notes: init.notes ?? null, markers: init.markers ?? null } : null),
     materials: async () => [material],
     pages: async (ids) => Object.fromEntries(ids.flatMap((id) => (init.pages?.[id] ? [[id, init.pages[id]]] : []))),
     savePages: async (_id, read, source) => void savedPages.push(...read.map((p) => ({ ...p, source }))),
     answered: async () => new Set(init.answered ?? []),
     flagged: async () => init.flagged ?? [],
     flaggedObjectives: async () => init.flaggedObjectives?.() ?? [],
+    recordFlags: async (_course, events) => {
+      recordedFlags.push(...events);
+      return { recorded: events.length, failed: [] };
+    },
+    noteDropped: async () => {},
     save: async (_course, rows) => {
       saves.push(rows);
       run.status = "done";
       if (init.lostReply) throw new Error("fetch failed");
     },
   };
-  return { store, saves, progress, budgetAsked, savedPages, state: run };
+  return { store, saves, progress, budgetAsked, savedPages, recordedFlags, state: run };
 }
 
 /** A model that maps one topic and objective, writes `per` exact questions per objective and solves them right. */
@@ -159,6 +167,41 @@ test("handwritten pages are read from their images first: the text is stored, ma
   assert.deepEqual(mem.progress.map((p) => p.stage).slice(0, 2), ["transcribing", "mapping"]);
   const dropped = mem.saves[0].runs![0].dropped as Array<{ prompt: string; reason: string }>;
   assert.ok(dropped.some((d) => d.prompt === "Page 3" && /kept the file's own text: the page couldn't be drawn/.test(d.reason)));
+});
+
+test("with the student's marks described, marked passages become handwritten-marker flags, recorded after the save with stable ids", async () => {
+  const handwritten: Record<string, MaterialPages> = { m1: [{ n: 1, text: "", source: "needs-vision" }, { n: 2, text: "x + xy = x", source: "text" }] };
+  const mem = memoryStore({ run: queued(), pages: handwritten, markers: "★ = lost" });
+  const honest = honestModel();
+  const sent: Array<StepInput<"transcribe">> = [];
+  const call = (async (step: string, input: unknown) => {
+    if (step === "transcribe") {
+      const t = input as StepInput<"transcribe">;
+      sent.push(t);
+      return { pages: t.pages.map((p) => ({ n: p.n, text: "Absorption. [marked: ★] why does x + xy = x? [/marked]" })) };
+    }
+    if (step === "objectives") {
+      return { objectives: [{ localId: "o1", existingId: null, name: "Simplify with absorption", description: "", origin: "material", places: [anchor], emphasis: null, struggled: [{ page: 1, quote: "why does x + xy = x?" }] }] };
+    }
+    return honest.call(step as never, input as never);
+  }) as CallStep;
+  let savesWhenRecorded = -1;
+  const recordFlags = mem.store.recordFlags;
+  mem.store.recordFlags = async (course, events) => {
+    savesWhenRecorded = mem.saves.length;
+    return recordFlags(course, events);
+  };
+  const out = await processMaterial({ store: mem.store, call, newId, renderPage: async (_m, n) => `data:image/jpeg;base64,P${n}` }, { runId: "run1", materialId: "m1" });
+  assert.equal(out.status, "done");
+  assert.equal(sent[0].markers, "★ = lost", "the page reader is told the marks");
+  assert.equal(savesWhenRecorded, 1, "recorded after the structure is saved");
+  const objectiveId = Object.keys(Object.fromEntries((mem.saves[0].objectives ?? []).map((o) => [o.id, o])))[0];
+  assert.deepEqual(
+    mem.recordedFlags.map((f) => [f.flagSource, f.materialId, f.page, f.note, f.objectiveId]),
+    [["handwritten-marker", "m1", 1, "why does x + xy = x?", objectiveId]],
+  );
+  assert.equal(mem.recordedFlags[0].id, markerFlagId("m1", 1, objectiveId));
+  assert.ok(out.status === "done" && out.followUp === undefined, "it got its questions in the upload");
 });
 
 test("typed slides with a figure get its description appended to their text; decoration only leaves the text as it was", async () => {

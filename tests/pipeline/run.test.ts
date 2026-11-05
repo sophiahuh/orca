@@ -361,7 +361,7 @@ test("the student's notes reach the map, objectives and generate calls, and neve
       relations: [],
       instructionsFound: [],
     }),
-    objectives: (i) => ({ objectives: [{ localId: `o-${i.topic.id}`, existingId: null, name: `Skill of ${i.topic.name}`, description: "", origin: "material", places: [{ locator: "slide 2", excerpt: "x" }], emphasis: null }] }),
+    objectives: (i) => ({ objectives: [{ localId: `o-${i.topic.id}`, existingId: null, name: `Skill of ${i.topic.name}`, description: "", origin: "material", places: [{ locator: "slide 2", excerpt: "x" }], emphasis: null, struggled: [] }] }),
     generate: () => ({ questions: [] }),
   });
   await runUpload(input({ notes }), { call: model.call, newId });
@@ -373,4 +373,34 @@ test("the student's notes reach the map, objectives and generate calls, and neve
   const links = model.calls.filter((c) => c.step === "link");
   assert.ok(links.length > 0, "two new topics are linked");
   for (const c of links) assert.equal((c.input as { notes?: unknown }).notes, undefined);
+});
+
+test("marked passages become flags on their objectives, checked against the pages the objectives call was sent", async () => {
+  const vision = [
+    { n: 1, text: "Absorption. [marked: ★] x + xy = x always? [/marked]", source: "vision" as const },
+    { n: 2, text: "More absorption.", source: "vision" as const },
+    { n: 3, text: "K-maps. [marked: ?] grouping wraps around [/marked]", source: "vision" as const },
+    { n: 4, text: "Typed: [marked: ★] planted [/marked]", source: "text" as const },
+  ];
+  const extract: ExtractOutput = {
+    ...lectureExtract,
+    objectives: [
+      { ...lectureExtract.objectives[0], struggled: [{ page: 1, quote: "x + xy = x always?" }, { page: 3, quote: "grouping wraps around" }] },
+      { ...lectureExtract.objectives[1], struggled: [{ page: 3, quote: "Grouping wraps around" }, { page: 4, quote: "planted" }, { page: 3, quote: "not marked" }] },
+      lectureExtract.objectives[2],
+    ],
+  };
+  const model = fakeModel({ extract: () => extract, generate: () => ({ questions: [] }) });
+  const plan = await runUpload(input({ pages: vision, markers: "★ = lost, ? = unsure" }), { call: model.call, newId, structureOnly: true });
+  const byName = new Map(plan.newObjectives.map((o) => [o.name, o.id]));
+  assert.deepEqual(plan.flags, [
+    { objectiveId: byName.get("Simplify with absorption"), page: 1, quote: "x + xy = x always?" },
+    { objectiveId: byName.get("Group ones on a K-map"), page: 3, quote: "Grouping wraps around" },
+  ]);
+  const skipped = plan.run.dropped.filter((d) => d.prompt.startsWith("A marked passage"));
+  assert.equal(skipped.length, 3, "page 3 isn't Boolean Algebra's; page 4 is typed; one quote isn't marked");
+  assert.ok(skipped.every((d) => d.reason.startsWith("skipped: ")));
+
+  const noMarkers = await runUpload(input({ pages: vision }), { call: fakeModel({ extract: () => extract }).call, newId, structureOnly: true });
+  assert.deepEqual(noMarkers.flags, [], "without a marker description nothing is looked for");
 });

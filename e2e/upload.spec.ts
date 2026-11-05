@@ -155,6 +155,23 @@ test("handwritten notes: every page is read from its image before the upload is 
   expect(calls.indexOf("transcribe")).toBeLessThan(calls.indexOf("map"));
 });
 
+test("handwritten notes with the student's marks described: a marked passage becomes a struggle flag on its objective", async ({ page, student }) => {
+  await fakeModel({ extract: { ...ONE_TOPIC, objectives: [{ ...ONE_TOPIC.objectives[0], struggled: [{ page: 1, quote: "x + xy = x by absorption." }] }] }, perObjective: 2 });
+  await createCourse(page, "Logic");
+  const saved = await page.request.put("/api/marker-notes", { data: { markers: "★ = lost" } });
+  expect(saved.ok()).toBe(true);
+  await page.goto("/add-material");
+  await page.locator('[data-part=file-input]').setInputFiles(DECK);
+  await page.getByLabel("What kind of material is this?").selectOption("Handwritten notes");
+  await page.getByRole("button", { name: "Add to course" }).click();
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 90_000 });
+  const after = await stored(page, student);
+  const flags = after.evidence.filter((e) => e.kind === "confusion");
+  expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.note])).toEqual([["handwritten-marker", 1, "x + xy = x by absorption."]]);
+  const objectiveId = Object.keys(after.objectives[after.courses[0].id])[0];
+  expect(flags[0].objectiveId).toBe(objectiveId);
+});
+
 test("a folder of files: one row each with its own type, prefilled from the shared default; sent one after another; a file Orca can't read is listed as skipped", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");

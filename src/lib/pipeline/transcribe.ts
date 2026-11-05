@@ -74,12 +74,18 @@ async function readFromImages(
   return result;
 }
 
-export function transcribePages(input: ReadInput, deps: { call: CallStep; render: Render }): Promise<ImageReadResult> {
+/** `markers`: how the student marks confusion (screened); the reader then tags marked passages `[marked: …] … [/marked]` (./marked.ts). */
+export function transcribePages(input: ReadInput & { markers?: string | null }, deps: { call: CallStep; render: Render }): Promise<ImageReadResult> {
   return readFromImages(
     input.pages.filter((p) => p.source === "needs-vision"),
     deps.render,
     async (pages) => {
-      const out = await deps.call("transcribe", { course: input.course, material: { filename: input.material.filename }, pages: pages.map(({ n, image }) => ({ n, image })) });
+      const out = await deps.call("transcribe", {
+        course: input.course,
+        material: { filename: input.material.filename },
+        pages: pages.map(({ n, image }) => ({ n, image })),
+        ...(input.markers ? { markers: input.markers } : {}),
+      });
       return new Map(out.pages.map((p) => [p.n, p.text]));
     },
     (_page, answer) => answer,

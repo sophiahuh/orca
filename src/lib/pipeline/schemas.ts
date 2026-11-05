@@ -33,6 +33,10 @@ const ExtractedObjective = z.object({
     .object({ kind: z.enum(["tested", "skipped"]), quote: z.string() })
     .nullable()
     .describe("Only when the material, or the student's notes, explicitly say it will or won't be examined, quoted; else null"),
+  struggled: z
+    .array(z.object({ page: z.number().int().min(1), quote: z.string().max(300) }))
+    .max(10)
+    .describe("Passages on these pages inside [marked: …] … [/marked] tags that are about this objective: the page and the passage quoted from inside the tags. Empty when none."),
 });
 
 const TopicRelations = z
@@ -263,6 +267,8 @@ export const TranscribeInput = z.object({
     .array(z.object({ n: z.number().int().min(1), image: z.string().min(1).max(7_000_000) }))
     .min(1)
     .max(TRANSCRIBE_PAGES_PER_CALL),
+  /** How the student marks confusion in their notes (profiles.marker_notes, screened); absent when they haven't said. */
+  markers: z.string().max(300).optional(),
 });
 export type TranscribeInput = z.infer<typeof TranscribeInput>;
 
