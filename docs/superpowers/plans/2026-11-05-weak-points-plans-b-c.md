@@ -14,15 +14,19 @@ The browser asks for one top-up per batch of flags through `POST /api/top-up` wi
 
 **Tech Stack:** Next.js 16, Supabase (Postgres, RLS, pgTAP), zod, `node:test` with type stripping, Playwright with the fake model API (`e2e/fake-anthropic.ts`), `pdfjs-dist` 6 in the browser.
 
-> **Status (2026-11-05):** Tasks 1–6 built on `phase-4` (commits b425b4d, 4f24562, 871dee9, eea29ca,
-> d9b22c1, 3d0cc4f). Task 7 half built: `objectivesOnPage` (`src/lib/course/slides.ts`, tested), the
-> store's `flagSlides` / `saveFlags` and `Material.storagePath` are committed; the modal
-> (`src/components/review/HardSlides.tsx`) and the upload card's "Which slides were hard?" button are in
-> `git stash` ("Task 7 WIP"): they typecheck but haven't run in a browser, and whether
-> `new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url)` resolves under Turbopack is unverified.
-> Next: `git stash pop`, Task 7 Steps 4–6 (browser test), then Task 8. The last full browser run (after
-> Task 6) had 94 passed, 1 failed: `scheduling.spec.ts:224` timed out on the post-session top-up in the
-> suite and passed alone in 13 s; recheck it in the merge gate.
+> **Status (2026-11-06): built** on `phase-4` (Tasks 1–8; not merged, ships with Plan A in one PR).
+> Merge gate: unit 440/441 (only the known `read-pdf` "parser thread that dies with the file open"),
+> `test:db` PASS, browser 96/96, `check:isolation` 44/44, `check:evidence` 44/44; `next build` passes
+> and emits the PDF.js worker as a static file (CSP `worker-src 'self'`). Differences from the steps
+> below, as built:
+> - `FlagTopUpWatcher` follows only the run this tab's flags started (`useRun(flagTopUpRun)`) and
+>   catches follow-up top-ups by watching top-ups finish (one Realtime subscription, a refresh per
+>   finished run), not by following newly inserted runs: a second `useRun` channel on the run a
+>   session's end card follows stopped that card's updates.
+> - The objectives page shows no status for an objective without state (now only rejected or merged
+>   ones) instead of "Questions are written when you flag it or start a dive".
+> - The topic row's line for a topic with no objectives reads "No objectives yet".
+> - `cost-guard.spec.ts`'s pause test runs its fake model slower (uploads make two calls now).
 
 **Spec:** `docs/superpowers/specs/2026-11-04-weak-points-first-design.md` (§2 "Handwritten markers", "The Claude connector", "Slides tapped", "Writing questions"; §4; §6).
 
