@@ -15,7 +15,7 @@
  * The mode is checked before any run row is written, so a bad setting leaves nothing queued.
  */
 import { after } from "next/server";
-import { tasks } from "@trigger.dev/sdk";
+import { configure, tasks } from "@trigger.dev/sdk";
 import type { deepReviewTask, processMaterialTask, topUpTask } from "@/trigger/jobs";
 import * as core from "@/lib/jobs/start";
 import type { Dispatch, Generation, StartDeps, TopUpStart } from "@/lib/jobs/start";
@@ -35,8 +35,22 @@ export function jobsMode(): JobsMode {
   throw new Error(`ORCA_JOBS must be "inline" or "trigger" (it is ${mode ? `"${mode}"` : "unset"}); see .env.example.`);
 }
 
+/**
+ * On Vercel the SDK reads VERCEL_GIT_COMMIT_REF (the deployed branch, "backend-implementation")
+ * and sends it as a preview branch with every request; Trigger.dev then looks for a branch
+ * environment of that name and refuses ("No matching branch env", 2026-11-05). Orca's jobs only
+ * ever run in the key's own environment (prod), so no branch is sent. Empty means none to the SDK.
+ */
+let triggerConfigured = false;
+function configureTrigger() {
+  if (triggerConfigured) return;
+  configure({ previewBranch: "" });
+  triggerConfigured = true;
+}
+
 function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"): StartDeps {
   const mode = jobsMode();
+  if (mode === "trigger") configureTrigger();
   return {
     db,
     model: serverModel(),
