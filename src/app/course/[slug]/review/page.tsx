@@ -8,6 +8,7 @@ import { useCourse, useOrca } from "@/lib/store";
 import { courseUploads, pendingReview, uploadsInProgress } from "@/lib/course/review";
 import { isFinished, useRun } from "@/hooks/useRun";
 import { ReviewTabs, type ReviewTab } from "@/components/review/ReviewTabs";
+import { UnbuiltCard } from "@/components/review/UnbuiltCard";
 import { UploadCard } from "@/components/review/UploadCard";
 import { QueueControls } from "@/components/review/QueueControls";
 import { IconUpload } from "@/components/icons";
@@ -57,6 +58,8 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
   const pending = pendingReview(course.topics, catalogue);
   // Every upload of the course, newest first; the page opens on them while one is building.
   const uploads = courseUploads(runs, course.id);
+  // Saved and read (the store holds only ready materials), but never given a job (the saving request died first): listed so they can be built.
+  const unbuilt = materials.filter((m) => m.courseId === course.id && !runs.some((r) => r.materialId === m.id));
   const tab: ReviewTab = sp.tab === "uploads" || sp.tab === "review" ? sp.tab : uploads.some((u) => !isFinished(u)) && !runId ? "uploads" : "review";
   const material = run ? materials.find((m) => m.id === run.materialId) : undefined;
   const working = run && !isFinished(run);
@@ -106,7 +109,10 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
         {tab === "uploads" ? (
           <motion.section variants={fadeUp} className="flex flex-col gap-[14px]" data-part="uploads-list">
             <QueueControls courseId={course.id} uploads={uploads} />
-            {uploads.length === 0 ? (
+            {unbuilt.map((m) => (
+              <UnbuiltCard key={m.id} material={m} slug={course.slug} />
+            ))}
+            {uploads.length === 0 && unbuilt.length === 0 ? (
               <p className="text-[17px] font-semibold text-prussian">
                 No uploads yet.{" "}
                 <Link href={`/add-material?course=${course.slug}`} className="text-wisteria-deep hover:underline">
