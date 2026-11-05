@@ -1,5 +1,7 @@
 # Course Index Implementation Plan
 
+> **Status: built 2026-10-25** and merged into `phase-4` (live).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Uploads are mapped page by page through a table of contents (topics first, then one topic's objectives), every page of a file is read, and questions come from each objective's own pages.

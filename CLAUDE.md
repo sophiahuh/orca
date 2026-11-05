@@ -18,7 +18,7 @@ links), **Next** (the next step), **Notes** (only explanations or decisions the 
 A few bullets each; no restating the plan, no long background, no option surveys. Answer a
 question directly first, then stop.
 
-## Start here (handoff, updated 2026-10-25)
+## Start here (handoff, updated 2026-11-04)
 
 **Who it's for.** A college student who wants to actually master their classes, not cram. They
 create a course, upload its material (lecture decks, syllabus, homework, past exams), and Orca
@@ -80,33 +80,40 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   understanding against rubrics built only from what the material teaches. The sidebar's
   quick-review card reads "Covers N objectives": N is planned exactly as the session plans it
   (`src/lib/askable.ts` + `assembleQuickReview`), not the full due count.
+- **Since 2026-10-26** (details under "What exists"): every question has an objective (the
+  unsorted bucket is gone); several files or a folder per upload, with bulk uploads asking how far
+  the class has got (`upcoming` material waits); typed notes; class times and review days
+  ("Twice a week"); Dive In runs beside an upload; queued uploads pause and resume, a running one
+  stops, material can be removed, a failed upload has Try again; the Claude connector (MCP) and
+  Canvas import (2026-11-04). **Designed, not built:** weak points first
+  (`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`: only flagged objectives come
+  due) and activity logs with soft delete (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`).
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
-  used for development. `.env` may point at either (Amanda switched it to production on 2026-10-25):
+  uses for development. `.env` may point at either (it has pointed at each at different times):
   check `NEXT_PUBLIC_SUPABASE_URL` before anything that reads or writes hosted data. The Supabase
   CLI doesn't read `.env`: `db push` and `--linked` commands go to the project in
   `supabase/.temp/project-ref` (`npx supabase link --project-ref <ref>` changes it).
 - **The owner runs `npm run dev` on port 3000 against a hosted project and a real OpenAI key**
   (`.env`, default model `gpt-6.1-sol`): uploads there spend money and write real data. Don't seed
   test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** every migration through `20261019090000_session_progress` is on
-  `mtztzsxgcopohlokragm` (checked 2026-10-25). Production had everything but `session_progress`
-  (checked 2026-10-25); Amanda then ran its `db push`, but no agent has checked it since. Pushing is
-  the owner's step (the agent's auto mode blocks `db push`); the Deploy workflow pushes pending
-  migrations itself once its two secrets are set. A migration the code needs but the database
-  lacks shows as "Could not find the table … in the schema cache". Check with
-  `npx supabase migration list --linked` (read-only). `20261027090000_orca_notes` (Notes for Orca)
-  **drops** `profiles.default_weights` and `courses.weights`: between it landing and the new code
-  going live, the old code's course creation and course-settings save fail, so push it right before
-  deploying (the Deploy workflow does).
+- **Hosted migrations:** production has every migration through `20261104100000_canvas` (the
+  Deploy run of 2026-11-04 applied the connector and Canvas ones). The Deploy workflow pushes
+  pending migrations to production on every merge to `main` (its two secrets are set), so nobody
+  pushes by hand; a new migration must be numbered after the newest one applied, or `db push`
+  refuses it. The development project `mtztzsxgcopohlokragm` was last checked on 2026-10-25
+  (everything through `20261019090000`); later ones go there only by hand. A migration the code
+  needs but the database lacks shows as "Could not find the table … in the schema cache". Check
+  with `npx supabase migration list --linked` (read-only; from an IPv4-only network the CLI says
+  "IPv6 is not supported" until `supabase link` is rerun). A migration that drops a column the
+  running code still uses must land with that code, as the Deploy workflow does.
 - **Tests never call a real model.** Unit tests inject fake step callers; the browser tests run
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
   and the weight constants are untuned.
 - **CI** (`.github/workflows/ci.yml`) runs the whole merge gate on every push to `phase-4` and
-  `main` and is green as of e2fbf8b (2026-10-25: 79/79 browser tests). Red runs from 10-19 to 10-25
-  were a real bug (finishing a resumed session showed "Nothing to review"; fixed in e2fbf8b).
-  Remaining occasional failures come from the environment, not the product: `next dev` compiling a
+  `main` and is green as of fe7a9f4 (2026-11-04: 87/87 browser tests).
+  Occasional failures come from the environment, not the product: `next dev` compiling a
   route mid-test (a save waits 5 s+ and an `expect.poll` gives up; the one CI retry usually
   passes) and the dev server taking over 120 s to start. (`next build` used to fail when the
   runner couldn't fetch Gabarito from Google Fonts; since 2026-11-04 the font is served from the
@@ -114,12 +121,15 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Done 2026-10-27: the Deploy workflow's secrets are set, and merging PR #18 pushed every
-   migration through `20261029090100` to production. Later ones push themselves on merge to `main`;
-   a new migration must be numbered after the newest one already applied, or `db push` refuses it.
-2. Optional CI hardening offered to the owner, not decided: run the browser tests against
-   `next build` + `next start` instead of `next dev`, and serve Gabarito from the repo.
-3. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
+1. Weak points first: the owner agreed the design on 2026-11-04
+   (`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`); next is Plan A (the core) once
+   they approve the written spec.
+2. Activity logs, edit history and soft delete: planned
+   (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`), not started; read its status
+   block first (migration numbers and newer hard deletes changed since it was written).
+3. Optional CI hardening offered to the owner, not decided: run the browser tests against
+   `next build` + `next start` instead of `next dev`.
+4. The open items in `docs/TO-DISCUSS.md` (the assumptions listed there want the owner's decision),
    exam review proper (the "Exam review" setting is stored but no session uses it yet; Phase 5),
    and the rest of Phase 5 per `docs/BACKEND-ROADMAP.md`.
 Open product questions the student/owner must decide are in `docs/TO-DISCUSS.md`. Don't decide
@@ -182,12 +192,15 @@ them silently; list what you assumed.
   follow the same flow by hand (plan doc first, then task-by-task commits with tests).
 
 **Map of the docs.** `docs/BACKEND-ROADMAP.md` (decisions + phases, what's done), `docs/MASTERY-PLAN.md`
-(learner model), `docs/TO-DISCUSS.md` (open questions), `docs/superpowers/plans/` (per-phase plans
-with status notes), `docs/QUIZ-RUBRIC.md` (what makes a good question), `docs/OBJECTIVES-ALD.md`
+(learner model), `docs/TO-DISCUSS.md` (open questions), `docs/superpowers/plans/` (per-phase and
+per-feature plans with status notes), `docs/superpowers/specs/` (designs agreed in brainstorming),
+`docs/QUIZ-RUBRIC.md` (what makes a good question), `docs/OBJECTIVES-ALD.md`
 (reference objectives / evaluation benchmark), `docs/BACKEND-NOTES.md` (what to port from the
-earlier `ai-native-learning-platform` repo), `docs/ANIMATION.md`, `docs/SETUP-HOSTED.md` (what the
-owner sets up in Supabase, Trigger.dev, Anthropic, Vercel and the cloud environment for live
-checks, and the SQL for watching costs and security events). Repo-local skills:
+earlier `ai-native-learning-platform` repo), `docs/ANIMATION.md`, `docs/COURSEWORKS-SYNC.md` (the
+Canvas OAuth design; the token-based import built 2026-11-04 is the first step), `docs/samples/README.md`
+(the local-only ALD decks), `docs/SETUP-HOSTED.md` (what the owner sets up in Supabase,
+Trigger.dev, the model provider, Vercel and the cloud environment, the connector and Canvas steps,
+and the SQL for watching costs and security events). Repo-local skills:
 `.claude/skills/learner-evidence` and `.claude/skills/assessment` (load before touching mastery
 or question code).
 
@@ -237,10 +250,14 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - **Topics are not gates.** Every topic is playable; the trail shows progress, not locks.
 - **Islands show mastery.** Each island has one of four fixed looks (uncharted, sprouting,
   growing, thriving) from the share of its course's objectives that are mastered.
+- **Changing (designed 2026-11-04, not built):** weak points first. Only objectives the student
+  flags (markers in notes, AI chats, homework, slides, by hand) come due; unflagged ones are
+  `unverified` and never due; islands count flagged objectives mastered. Until it's built, the
+  bullets above describe the app. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`.
 - **Nothing hardcoded or faked.** The app ships no courses; every course starts empty and its
   content comes from uploads. Missing data shows as an explicit empty or error state.
-- **No in-app AI chat.** Claude is used for extracting material, generating questions and grading
-  short answers. Students' own Claude connects through the MCP connector (built 2026-11-04, see
+- **No in-app AI chat.** The server's model (OpenAI by default, or Claude) extracts material,
+  writes questions and grades short answers. Students' own Claude connects through the MCP connector (built 2026-11-04, see
   "What exists"): Claude asks Orca's questions and grades them; those answers count as self-marked.
 
 ## Stack
@@ -279,9 +296,14 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `profiles.default_review_config` (account default), `courses.review_config` nullable (null
   inherits), `profiles.orca_notes` / `courses.orca_notes` (Notes for Orca; the slider columns
   `default_weights` / `weights` were dropped 2026-10-25), `security_events.kind` `orca_notes`, `questions.deep`, `relations` rebuilt between topics
-  (`from_topic`, `to_topic`, four types, `material_id` nullable), and `exams` (owner-only, in
-  `my_data`).
-  Env vars (`.env.example`): the Supabase three, `ANTHROPIC_API_KEY`, `ORCA_JOBS`, `SITE_URL`
+  (`from_topic`, `to_topic`, four types, `material_id` nullable), `exams` (owner-only, in
+  `my_data`), `question_feedback`, `session_progress`, `courses.schedule` (class times and review
+  days), `materials.upcoming`, run status `paused`, material status `removed` with
+  `archived_with_material` on topics and objectives, `connector_tokens`, and `canvas_connections` /
+  `canvas_links` (service-role only).
+  Env vars (`.env.example`): the Supabase three, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` (with
+  `ORCA_MODEL_PROVIDER`, `ORCA_MODEL`, `ORCA_GRADE_MODEL`, and `OPENAI_BASE_URL` /
+  `ANTHROPIC_BASE_URL` for a proxy or the tests' fake API), `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
   service-wide daily ceiling; unset = none), `TRIGGER_*`, `CRON_SECRET` (the dead-run sweep,
   `GET /api/cron/runs`; pages following a run also ask `POST /api/runs/check` once it's past its
@@ -291,7 +313,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
   must be priced. OpenAI goes through its Responses API in the same `completeJson` (strict schema
   from `src/lib/openai-schema.ts`, explicit caching of the material, same bounds and metering).
-- Model calls use the Claude API (`claude-opus-5-5`) through `completeJson` (`src/lib/llm-server.ts`:
+- Model calls, on either provider, go through `completeJson` (`src/lib/llm-server.ts`:
   10-minute timeout, at most 2 retries of transient failures, spend-limit answers never retried,
   every reply's tokens reported to `onUsage`). Load the `claude-api` skill before writing any model
   call if it's available; prices live in `src/lib/pricing.ts` with their source and date. Without a
@@ -312,7 +334,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 
 Colors: `prussian #151D3A`, `wisteria #839BEC` / `wisteria-deep #5B78D8`, `periwinkle #AFB5F2` /
 `periwinkle-deep #8C93DE`, `alice #E1ECFA` / `alice-deep #B4C8E6`, `parchment #FCF7F4` /
-`parchment-deep #E3D9D2`, `orca-shadow #D9D0CB`, `ink-deep #0A0F22`. Font: Gabarito (Google).
+`parchment-deep #E3D9D2`, `orca-shadow #D9D0CB`, `ink-deep #0A0F22`. Font: Gabarito, served from
+the repo (`@fontsource-variable/gabarito` through `next/font/local` in `src/app/layout.tsx`).
 Deep shades are used ONLY for the bottom "lip" shadow and strokes.
 
 Utilities: `lip-{1..10}` sets the offset shadow size, `lip-{alice|wisteria|periwinkle|ink|parchment}`
@@ -395,11 +418,15 @@ All 11 Figma screens are built. Where things live:
   template artwork ignored) are marked `needs-figure` and the `describe` step appends "[Figures: …]" to their text
   (`src/lib/pipeline/transcribe.ts`; plan in `docs/superpowers/plans/2026-10-18-handwritten-notes.md`).
 - `src/components/` — `ui/` primitives, `layout/` (TopBar, AppShell, LoadingScreen: the shared full-screen wait, NavBar: on a course page its
-  gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal), `config/`
-  (ClassConfigModal, WeightsEditor, ExamsModal), `calendar/`, `map/`, `path/`, `atlas/`
-  (TopicGraph), `auth/`, `brand/`; `src/lib/motion.ts` holds every animation preset.
-- `src/app/` — routes (`/` is the courses map; `/home` redirects there; `/welcome` the old onboarding screen; `/course/[slug]/…`, `/quiz/…`, `/session/…`, `/add-material`,
-  `/settings`, `/calendar`, auth screens, `/api/*` including `deep-review` and `relink`). Run
+  gear opens that course's settings), `quiz/` (QuizRunner, DeepReviewSetup, DiveModal, QuizEnd,
+  RateQuestion, ShortAnswer, TruthTable), `config/` (ClassMeetings, ReviewDays, ConfigRow,
+  ExamsModal, NotesForOrca), `review/` (the review screen's tabs and upload cards), `settings/`
+  (Account, ClaudeConnector, CanvasConnection, YourMetrics; YourAI is hidden), `upload/`
+  (BatchList), `calendar/`, `map/`, `path/`, `atlas/` (TopicGraph), `auth/`, `brand/`, `store/`
+  (SaveStatus); `src/lib/motion.ts` holds every animation preset.
+- `src/app/` — routes (`/` is the courses map; `/home` redirects there; `/welcome` the old onboarding screen; `/new-course`, `/course/[slug]/…`, `/quiz/…`, `/session/…`, `/add-material`,
+  `/import/canvas`, `/settings`, `/calendar`, auth screens, `/api/*` including `deep-review`, `relink`, `runs/*`,
+  `connector`, `mcp/[token]` and `canvas/*`). Run
   `npx next typegen` before `tsc` after adding a route.
 - `e2e/` — Playwright specs, one per area; `fixture.ts` signs in a throwaway student. Tests find
   things by `data-level`, `data-visual` and `data-part`; keep those attributes stable.
@@ -415,13 +442,17 @@ All 11 Figma screens are built. Where things live:
   key (`OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) with `ORCA_MODEL` if not the default; without a
   key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
   commit by the owner pushed to `backend-implementation`, or Redeploy on the deployment's page).
+  The Deploy workflow also deploys `src/trigger/` to Trigger.dev once `TRIGGER_ACCESS_TOKEN` and
+  `TRIGGER_PROJECT_REF` are repository secrets; they aren't yet (the step was skipped on
+  2026-11-04), so production runs jobs inline.
 
 ## What to build next
 
-`docs/BACKEND-ROADMAP.md` is the plan. Phases 1 (mastery core), 2 (uploads create the course
-structure) and 3 (scheduling and sessions) are done on-device; Phase 4
-(Supabase) is next. Before tuning anything in
-Phase 2, run `npm run score:extraction` with a key and record a baseline. Phases: (1) mastery core on-device, (2) uploads create
+`docs/BACKEND-ROADMAP.md` is the plan. Phases 1–4 are built and live; Phase 7 (the MCP connector)
+has a first version and Canvas import is built (2026-11-04); Phases 5 and 6 haven't started. Next
+by the owner's priorities: weak points first (spec 2026-11-04), then the open items above. Before
+tuning extraction, run `npm run score:extraction` with a key (and the local ALD decks) and record a
+baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase
 (auth, tables, Storage, snapshots, server-side pipeline), (5) relation mastery, exams and calendar,
 (6) ALD drills, (7) MCP connector. Build each phase with

@@ -1,9 +1,14 @@
 # Setting up the hosted services (owner's checklist)
 
-What the owner sets up so Phase 4 can be checked live (plan Task 10,
-`docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md`). Tasks 1–9 don't need any of it:
-they run against local Supabase, inline jobs and a fake Anthropic API. Dashboard menu names drift;
-if one below doesn't match, look for the closest equivalent.
+What the owner sets up for the hosted services Orca runs on (first written for Phase 4's live
+checks, `docs/superpowers/plans/2026-10-05-orca-phase4-supabase.md` Task 10). Local development and
+the tests don't need any of it: they run against local Supabase, inline jobs and a fake model API.
+Dashboard menu names drift; if one below doesn't match, look for the closest equivalent.
+
+**Where it stands (2026-11-04):** done: Supabase production project, Vercel, the model key
+(OpenAI), the Deploy workflow's two Supabase secrets (§5). Not done: Trigger.dev (§2; production
+runs jobs inline), an email provider (§4), the dead-run cron (§5), OAuth for the connector (§8)
+and for Canvas (§9).
 
 **Never paste a key, token or password into a chat.** Keys go into the Claude Code cloud
 environment's settings (the cloud environment menu in the session's title bar → Edit →
@@ -125,15 +130,16 @@ the owner, because Hobby builds only the account owner's commits. It needs two r
 | `SUPABASE_ACCESS_TOKEN` | a personal access token from supabase.com/dashboard/account/tokens |
 | `SUPABASE_DB_PASSWORD` | the project's database password (Supabase → Connect → "Reset database password" if lost) |
 
-Until they exist, a change that adds a migration isn't deployed (the run fails and says why);
-changes without migrations deploy regardless. Optional repository variables `DEPLOY_AUTHOR_NAME`
+Both are set (since 2026-10-27). Without them, a change that adds a migration isn't deployed (the
+run fails and says why); changes without migrations deploy regardless. Optional repository variables `DEPLOY_AUTHOR_NAME`
 and `DEPLOY_AUTHOR_EMAIL` change whose name the deploy commits carry (default: the owner's).
 
 ## 6. The Claude Code cloud environment
 
 So a session can run the live checks:
 
-- **Environment variables** (cloud environment menu → Edit): `ANTHROPIC_API_KEY`,
+- **Environment variables** (cloud environment menu → Edit): the model key (`OPENAI_API_KEY` or
+  `ANTHROPIC_API_KEY`),
   `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_ACCESS_TOKEN`,
   `SUPABASE_DB_PASSWORD`, `TRIGGER_SECRET_KEY` (dev key), `TRIGGER_ACCESS_TOKEN`,
   `TRIGGER_PROJECT_REF`.
@@ -175,7 +181,8 @@ from public.pipeline_runs where status in ('queued', 'waiting', 'running') order
 -- Students hitting rate limits repeatedly (worth a look).
 select owner_id, action, count(*) as windows_over_limit
 from public.rate_limits
-where count > case action when 'upload' then 20 when 'reflect' then 10 when 'grade' then 60 when 'topUp' then 30 end
+where count > case action when 'upload' then 20 when 'reflect' then 10 when 'grade' then 60 when 'topUp' then 30
+                          when 'relink' then 10 when 'canvasImport' then 6 end
 group by owner_id, action order by windows_over_limit desc;
 
 -- Security events this week: uploads with text aimed at an AI, flagged reflection notes and
@@ -248,8 +255,10 @@ Disconnect in Settings deletes the stored token; the student can also delete the
 
 ## Order
 
-1. Anthropic key into the cloud environment (unblocks the extraction baseline now).
-2. Supabase project, keys, auth settings; environment variables and network access.
-3. Trigger.dev project and keys.
-4. Vercel variables, once Phase 4 is merged and ready to deploy.
-5. Email provider, before real students.
+Done: the Supabase project, keys and auth settings; Vercel's variables; the model key; the Deploy
+workflow's Supabase secrets. Left, in order:
+
+1. Email provider (§4), before real students.
+2. Trigger.dev (§2): project and keys, its two repository secrets, then the switch on Vercel.
+3. The dead-run cron (§5), once the Vercel plan is known.
+4. The model key in the cloud environment (§6), which also unblocks the extraction baseline.

@@ -18,10 +18,10 @@ description: Use when building or changing question generation, question validat
 - Prefer exact checkers (bit strings, numbers, Boolean expressions by truth table). Model grading
   needs a structured rubric (`requiredIdeas`, `acceptableAlternatives`, `knownMisconceptions`).
 - Course-specific questions carry a source anchor (`anchor.locator`, `anchor.excerpt`).
-- Generated questions must not copy the source verbatim, and pass the pipeline's checks before a
-  student sees them (`src/lib/pipeline/run.ts`: blind solve, ambiguity for choice questions, rubric
-  agreement for prose answers). A question that fails or can't be checked is dropped with a reason,
-  never shown.
+- Generated questions must not copy the source verbatim, and pass the pipeline's code validators
+  before a student sees them (`src/lib/pipeline/run.ts` with `src/lib/untrusted/validate.ts`: structure,
+  objective, anchors to pages that exist, untrusted-text rules). There is no model check (dropped
+  2026-10-06). A question that fails is dropped with a reason, never shown.
 - The quiz records evidence only after grading finishes. A grading error records nothing.
 - Never show a placeholder question. A topic with no questions shows an empty state that points
   to adding material.

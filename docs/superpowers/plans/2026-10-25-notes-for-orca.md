@@ -1,5 +1,7 @@
 # Notes for Orca Implementation Plan
 
+> **Status: built 2026-10-25/26** on `phase-4` (live; migration `20261027090000` on production).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Students tell Orca what their professor cares about ("the exam will be like past exams", "no proofs, only applications") in a free-text box, once for all classes and once per class; the steps that write topics, objectives and questions follow it. The box replaces the material-type weight sliders, whose columns are dropped.

@@ -10,6 +10,8 @@
 
 ## Status (2026-10-26)
 
+- Merged into `phase-4` on 2026-10-26 and live.
+
 - Tasks 1–4 done on `questions-by-objective` (unit suite 348/348, `test:db` and `check:evidence` 44/44 pass).
 - Deviation from Task 2: objectives have the same stale-copy problem (an upload can create an
   objective in a topic the student merges meanwhile), so the loaders also pass objectives through

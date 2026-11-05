@@ -1,5 +1,8 @@
 # Orca Phase 1: Mastery Core Implementation Plan
 
+> **Status: built 2026-10-04** (roadmap Phase 1 ✅). A historical record: the on-device store,
+> localStorage and the ALD sample course it describes were replaced in Phases 2–4.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace hand-set topic statuses with learner state derived from an append-only evidence log (objective → topic → island), remove the in-app AI chat, and show each course's mastery level on its island. Everything stays on-device (localStorage).
