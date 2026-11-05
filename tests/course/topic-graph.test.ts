@@ -86,7 +86,7 @@ test("strength: nothing answered is unverified; fading or mixed up is fragile; e
   assert.equal(topicStrength([], states), "unverified");
   assert.equal(topicStrength(["u"], states), "unverified");
   assert.equal(topicStrength(["m1", "m2"], states), "strong");
-  assert.equal(topicStrength(["m1", "u"], states), "developing");
+  assert.equal(topicStrength(["m1", "u"], states), "strong", "an objective nobody touched doesn't count against it");
   assert.equal(topicStrength(["m1", "l"], states), "developing");
   assert.equal(topicStrength(["m1", "f"], states), "fragile");
 });
@@ -100,7 +100,7 @@ test("strength: verified objectives count as evidence, so a topic of them is str
     ["c", state("check-due")],
   ]);
   assert.equal(topicStrength(["v", "m"], states), "strong");
-  assert.equal(topicStrength(["v", "u"], states), "developing");
+  assert.equal(topicStrength(["v", "u", "u"], states), "strong", "one verified and untouched ones: strong");
   assert.equal(topicStrength(["c"], states), "developing");
 });
 

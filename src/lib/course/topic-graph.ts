@@ -21,8 +21,9 @@ export function topicStrength(objectiveIds: readonly string[], states: ReadonlyM
   const seen = objectiveIds.map((id) => states.get(id)).filter((s): s is ObjectiveState => !!s && s.status !== "unseen");
   if (seen.length === 0) return "unverified";
   if (seen.some((s) => s.status === "fading" || s.status === "mixed-up")) return "fragile";
-  // Verified objectives count as evidence: answered right without being a weak point.
-  if (seen.length === objectiveIds.length && seen.every((s) => s.status === "mastered" || s.status === "retired" || s.status === "verified")) return "strong";
+  // Verified objectives count as evidence: answered right without being a weak point. Objectives nobody
+  // has touched (unseen: most have no questions since uploads write them only for flagged ones) don't count against it.
+  if (seen.every((s) => s.status === "mastered" || s.status === "retired" || s.status === "verified")) return "strong";
   return "developing";
 }
 

@@ -92,3 +92,13 @@ test("with stored snapshots, objective state is read from them, and an objective
   assert.equal(none.objectives.get("t1/a")!.status, "unseen", "events alone don't make state when snapshots are given");
   assert.equal(none.events.length, 3, "the events are still there for the agenda");
 });
+
+test("a manual flag on an objective with no questions puts it in rotation, learning", () => {
+  const withBare = { ...catalogue, "t1/z": { id: "t1/z", topicId: "t1", name: "Z", review: "confirmed" as const } };
+  const flag = { kind: "confusion" as const, id: "f1", at: "2026-11-06T10:00:00Z", courseId: "c", topicId: "t1", objectiveId: "t1/z", materialId: null, note: null, flagSource: "manual" as const, page: null };
+  const m = courseMastery({ ...base, catalogue: withBare, evidence: [flag], now: new Date("2026-11-06T12:00:00Z") });
+  assert.equal(m.objectives.get("t1/z")!.status, "learning");
+  assert.deepEqual(m.topicObjectives.get("t1"), ["t1/a", "t1/z"]);
+  assert.equal(m.topics.get("t1")!.inRotation, 1);
+  assert.equal(m.objectivesNeedingQuestions.get("t1"), 1);
+});

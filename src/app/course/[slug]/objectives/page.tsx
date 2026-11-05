@@ -144,11 +144,11 @@ function TopicSection({
                     <OriginPill origin={o.origin} />
                   </span>
                   <span className="shrink-0 text-right text-[13px] text-prussian/70">
-                    {status ? MASTERY_LABEL[status] : "No questions yet"} · weight {weightText(weightOf(o.id))}
+                    {status ? `${MASTERY_LABEL[status]} · ` : ""}weight {weightText(weightOf(o.id))}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-[14px]">
-                  {/* No state means no questions yet: there's nothing to practise, so nothing to flag. */}
+                  {/* Every live objective has state (with or without questions); one without is rejected or merged away. */}
                   {status !== undefined && (
                     <span data-part="flag-hard">
                       {canFlagHard(status) ? (

@@ -153,7 +153,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
         onClose={closeDive}
         onFlagTopic={
-          // Every objective in the topic with questions, except ones already being learned; no button when that's none.
+          // Every objective in the topic, except ones already being learned; no button when that's none. A flag on one with no questions writes them (requestFlagTopUp).
           diving && flaggable(diving.id).length
             ? (topicId) => {
                 flagObjectives(course.id, flaggable(topicId));

@@ -13,8 +13,9 @@ export const FOCUS_COPY = "Orca focuses on what you flag: star things in your no
 
 /**
  * The caught-up card's props for a course, or null when it isn't caught up: something is due today
- * (by the agenda, whether or not the cadence asks for a review today), or the course has nothing to
- * practise at all yet (no objectives with questions).
+ * (by the agenda, whether or not the cadence asks for a review today), or the course has no objectives
+ * yet. A course whose objectives have no questions yet still gets the card: Practice other topics is a
+ * dive, which writes its questions when it starts.
  */
 export function useCaughtUp(course: Course): { canPractise: boolean; examTopics: boolean } | null {
   const agenda = useAgenda()[course.id];
