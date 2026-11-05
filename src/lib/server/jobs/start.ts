@@ -72,6 +72,16 @@ export function startTopUpJob(db: OrcaSupabase, ownerId: string, req: { courseId
   return core.startTopUpJob(deps(db), ownerId, req);
 }
 
+/** See `startFlagTopUpJob` in src/lib/jobs/start.ts. */
+export function startFlagTopUpJob(db: OrcaSupabase, ownerId: string, req: { courseId: string; objectiveIds: string[] }): Promise<TopUpStart> {
+  return core.startFlagTopUpJob(deps(db), ownerId, req);
+}
+
+/** See `queueFlagTopUp` in src/lib/jobs/start.ts: from a finishing job, whose `resumeNext` dispatches it. */
+export function queueFlagTopUp(db: OrcaSupabase, ownerId: string, req: { courseId: string; objectiveIds: string[] }): Promise<TopUpStart> {
+  return core.queueFlagTopUp(deps(db, "now"), ownerId, req);
+}
+
 /** See `startDeepReviewJob` in src/lib/jobs/start.ts. */
 export function startDeepReviewJob(db: OrcaSupabase, ownerId: string, req: { courseId: string; minutes: number; objectiveIds: string[] }): Promise<import("@/lib/jobs/start").DeepReviewStart> {
   return core.startDeepReviewJob(deps(db), ownerId, req);

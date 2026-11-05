@@ -139,6 +139,17 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
       return new Set([...rows.flatMap((r) => (r.question_id ? [r.question_id] : [])), ...down.map((r) => r.question_id)]);
     },
 
+    async flaggedObjectives(courseId) {
+      const ids = new Set<string>();
+      // PostgREST answers at most 1,000 rows a request: read in pages.
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await db.from("evidence_events").select("objective_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "confusion").order("id").range(from, from + 999);
+        if (error) throw new Error(`Couldn't read the course's struggle flags: ${error.message}`);
+        for (const r of data) ids.add(r.objective_id);
+        if (data.length < 1000) return [...ids];
+      }
+    },
+
     async flagged(courseId) {
       const { data, error } = await db
         .from("question_feedback")

@@ -8,6 +8,7 @@ import type { ConnectorTools, CourseState, ExamLine, FlagCheckResult, ObjectiveL
 import { dayKeyIn, stateAt } from "@/lib/mastery/objective-state";
 import { NewerRulesError, VersionConflictError, readCourseState, recordEvent } from "@/lib/mastery/snapshots";
 import type { AnswerEvent, ConfusionEvent, ObjectiveStatus } from "@/lib/mastery/types";
+import { topUpAfterFlag } from "@/lib/server/flag-top-up";
 import { recordSecurityEvents } from "@/lib/server/security";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
 import { questionFromRow } from "@/lib/supabase/app-rows";
@@ -272,7 +273,16 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         if (error) throw new Error(`Couldn't read the questions: ${error.message}`);
         for (const q of data) if (q.objective_id) asked.add(survivor(objectiveById, q.objective_id)?.id ?? q.objective_id);
       }
-      return { flagged, unknown, withoutQuestions: ids.filter((id) => !asked.has(id)) };
+      const withoutQuestions = ids.filter((id) => !asked.has(id));
+      if (!withoutQuestions.length) return { flagged, unknown, withoutQuestions };
+      const started = await topUpAfterFlag(db, ownerId, courseId, withoutQuestions);
+      const note =
+        started === "started" || started === "queued" || started === "busy"
+          ? "Orca is writing questions for these; ask for them again in a few minutes."
+          : started === "no-model"
+            ? "Orca has no AI connected, so it can't write questions for these yet."
+            : "Orca will write questions for these with its next batch.";
+      return { flagged, unknown, withoutQuestions, note };
     },
 
     async setExam(courseId, exam): Promise<ExamLine | { error: string }> {

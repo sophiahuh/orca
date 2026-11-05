@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { MotionConfig } from "motion/react";
 import { usePathname } from "next/navigation";
 import { AvatarPreviewProvider } from "@/components/brand/avatar-preview";
+import { FlagTopUpWatcher } from "@/components/layout/FlagTopUpWatcher";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { TopBar } from "@/components/layout/TopBar";
 import { LoadFailed, SaveStatus } from "@/components/store/SaveStatus";
@@ -31,6 +32,7 @@ function Loaded({ children }: { children: React.ReactNode }) {
     <>
       {children}
       <SaveStatus />
+      <FlagTopUpWatcher />
     </>
   );
 }

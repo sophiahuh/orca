@@ -72,6 +72,7 @@ import { browserSupabase } from "./supabase/browser";
 import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, progressKey, progressToRow, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
+import { resolveObjectiveId } from "./mastery/catalogue";
 import type { Json } from "./supabase/database.types";
 import { useNow } from "@/hooks/useNow";
 
@@ -214,6 +215,8 @@ type OrcaContextValue = OrcaState &
     saving: number;
     /** "Couldn't save: …" for the last save that failed (the state was then read again from the database). */
     saveError: string | null;
+    /** The last top-up a batch of struggle flags started (`FlagTopUpWatcher` follows it); null before any. */
+    flagTopUpRun: string | null;
   };
 
 const OrcaContext = createContext<OrcaContextValue | null>(null);
@@ -706,6 +709,32 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save, postEvidence],
   );
 
+  const [flagTopUpRun, setFlagTopUpRun] = useState<string | null>(null);
+  /**
+   * After a batch of struggle flags: questions for the flagged objectives that have none, written now
+   * (POST /api/top-up without a session), once the flags are saved (the route keeps only flagged
+   * objectives). Best effort: every later top-up also catches them up.
+   */
+  const requestFlagTopUp = useCallback((courseId: string, objectiveIds: readonly string[]) => {
+    const s = stateRef.current;
+    const catalogue = s.objectives[courseId] ?? {};
+    const asked = new Set(
+      Object.values(s.questionBank[courseId] ?? {})
+        .flat()
+        .filter((q) => !q.deep && catalogue[q.objectiveId])
+        .map((q) => resolveObjectiveId(q.objectiveId, catalogue)),
+    );
+    const missing = [...new Set(objectiveIds)].filter((id) => !asked.has(id));
+    if (!missing.length) return;
+    void queue.current
+      .then(() => fetch("/api/top-up", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId, objectiveIds: missing }) }))
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as { runId?: string } | null;
+        if (res.ok && body?.runId) setFlagTopUpRun(body.runId);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const flagObjectives = useCallback<OrcaActions["flagObjectives"]>(
     (courseId, objectiveIds) => {
       const at = new Date().toISOString();
@@ -725,8 +754,9 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
         // A flag that couldn't be saved isn't counted.
         { onFail: () => setState((s) => ({ ...s, evidence: s.evidence.filter((e) => !ids.has(e.id)) })) },
       );
+      requestFlagTopUp(courseId, objectiveIds);
     },
-    [save, postEvidence, state.objectives],
+    [save, postEvidence, state.objectives, requestFlagTopUp],
   );
 
   const recordReflection = useCallback<OrcaActions["recordReflection"]>(
@@ -749,8 +779,10 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
           mustChange(await browserSupabase().from("materials").update({ reflection: reflection as unknown as Json }).eq("id", materialId).select("id"));
         },
       );
+      const courseId = confusion[0]?.courseId;
+      if (courseId) requestFlagTopUp(courseId, confusion.map((c) => c.objectiveId));
     },
-    [save, postEvidence],
+    [save, postEvidence, requestFlagTopUp],
   );
 
   const setMaterialUpcoming = useCallback<OrcaActions["setMaterialUpcoming"]>(
@@ -874,6 +906,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       loadError,
       saving,
       saveError,
+      flagTopUpRun,
       addCourse,
       renameCourse,
       setConfig,
@@ -901,7 +934,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;

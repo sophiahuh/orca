@@ -11,7 +11,7 @@ import { figureRenderer, pageRenderer } from "@/lib/server/figures";
 import { supabaseJobStore } from "@/lib/server/job-store";
 import { stepCaller } from "@/lib/server/model";
 import { adminClient } from "@/lib/supabase/server";
-import { resumeNext } from "./start";
+import { queueFlagTopUp, resumeNext } from "./start";
 
 export type { DeepReviewJob, MaterialJob, TopUpJob } from "@/lib/jobs/start";
 
@@ -26,6 +26,15 @@ async function guarded(ownerId: string, runId: string, work: (store: ReturnType<
     const error = `Orca's job stopped: ${e instanceof Error ? e.message : String(e)}`;
     await store.fail(runId, error).catch(() => undefined);
     outcome = { status: "failed", error };
+  }
+  // Flags recorded while it ran, on objectives still without questions: one more top-up, queued here
+  // and dispatched by the resumeNext below (handing it off too would start it twice).
+  if (outcome.status === "done" && outcome.followUp?.length) {
+    try {
+      await queueFlagTopUp(db, ownerId, { courseId: outcome.run.courseId, objectiveIds: outcome.followUp });
+    } catch (e) {
+      console.error(`Couldn't queue the follow-up top-up for ${ownerId}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   // This job is out of the way (done, failed or waiting): the student's next one may start.
   if (outcome.status !== "skipped") {

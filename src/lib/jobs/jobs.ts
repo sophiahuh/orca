@@ -16,7 +16,7 @@ import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
 import type { OrcaNotes } from "../pipeline/notes.ts";
 import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
-import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
+import { runDeepReview, runTopUp, SKIPPED_PREFIX, topUpTargets, unansweredDeepQuestions } from "../pipeline/topup.ts";
 import { deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
 import type { BudgetVerdict } from "./budget.ts";
@@ -54,6 +54,8 @@ export interface JobStore {
   answered(courseId: string): Promise<Set<string>>;
   /** The course's thumbs-down questions, newest first, cleaned for question writing. */
   flagged(courseId: string): Promise<FlaggedQuestion[]>;
+  /** Objective ids with a struggle flag (any `confusion` event) in the course, as recorded (merges not followed). */
+  flaggedObjectives(courseId: string): Promise<string[]>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
   save(courseId: string, rows: StructureRows): Promise<void>;
 }
@@ -69,7 +71,11 @@ export interface JobDeps {
 }
 
 export type JobOutcome =
-  | { status: "done"; run: PipelineRun }
+  /**
+   * `followUp`: flagged objectives that still have no quick-review question and weren't in this run
+   * (flags recorded while it worked): the runner queues a top-up for them (src/lib/server/jobs/run.ts).
+   */
+  | { status: "done"; run: PipelineRun; followUp?: string[] }
   | { status: "failed"; error: string }
   | { status: "skipped"; reason: string }
   /** Held by a daily budget; the run is `waiting` and will be resumed. */
@@ -212,11 +218,18 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
     const before = loaded.structure;
     const materials = await store.materials(run.courseId);
     const [materialPages, answered] = await Promise.all([store.pages(materials.map((m) => m.id)), store.answered(run.courseId)]);
+    const course = { ...loaded.course, topics: before.topics };
     // Only this course's objectives: ids from the request that aren't in it are ignored.
-    const objectiveIds = job.objectiveIds.filter((id) => before.objectives[id]);
+    const requested = job.objectiveIds.filter((id) => before.objectives[id]);
+    // Flagged objectives with no quick-review question yet are written for too, when there's material
+    // to write from (a flag whose own top-up was skipped gets its questions here). Ones with nothing to
+    // write from are left out quietly: every top-up would list them again.
+    const catchUp = (await flaggedWithoutQuestions(store, run.courseId, before)).filter((id) => !requested.includes(id));
+    const unwritable = new Set(topUpTargets({ course, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds: catchUp, answered }).skipped.map((s) => s.objectiveId));
+    const objectiveIds = [...requested, ...catchUp.filter((id) => !unwritable.has(id))];
     const plan = await runTopUp(
       {
-        course: { ...loaded.course, topics: before.topics },
+        course,
         objectives: before.objectives,
         bank: before.bank,
         materials,
@@ -235,11 +248,25 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
     for (const [topicId, qs] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...qs];
     await progress.flushed();
     await store.save(run.courseId, structureRows(before, { ...before, bank }, [plan.run]));
-    return { status: "done", run: plan.run };
+    // Flags recorded while this ran: the next top-up writes for them.
+    const followUp = (await flaggedWithoutQuestions(store, run.courseId, { ...before, bank })).filter((id) => !objectiveIds.includes(id) && !unwritable.has(id));
+    return { status: "done", run: plan.run, ...(followUp.length ? { followUp } : {}) };
   } catch (e) {
     await progress.flushed();
     return failed(store, run.id, "Orca couldn't write new questions", e);
   }
+}
+
+/** Flagged objectives (as they stand now, after merges) that are live and have no quick-review question. */
+async function flaggedWithoutQuestions(store: JobStore, courseId: string, structure: Pick<StructureState, "objectives" | "bank">): Promise<string[]> {
+  const survivor = (id: string) => {
+    let o = structure.objectives[id];
+    for (let i = 0; o?.mergedInto && i < 50; i++) o = structure.objectives[o.mergedInto];
+    return o?.id ?? id;
+  };
+  const asked = new Set(Object.values(structure.bank).flat().filter((q) => !q.deep).map((q) => survivor(q.objectiveId)));
+  const flagged = [...new Set((await store.flaggedObjectives(courseId)).map(survivor))];
+  return flagged.filter((id) => structure.objectives[id] && structure.objectives[id].review !== "archived" && !asked.has(id));
 }
 
 /** Write a durable Dive In's harder questions, then atomically save its questions and completed run. */

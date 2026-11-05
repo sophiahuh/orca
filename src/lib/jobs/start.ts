@@ -95,7 +95,8 @@ export type Generation =
   /** Orca found no text in the file, so there's nothing to build from. */
   | { state: "no-text" };
 
-export type TopUpStart = { state: "started"; runId: string } | { state: "queued"; runId: string } | { state: "busy" } | { state: "no-model" } | { state: "no-session" };
+/** `busy`: the course's top-up is already in flight (`runId`, when it could be read); it catches up flagged objectives without questions, and names any it couldn't as a follow-up. */
+export type TopUpStart = { state: "started"; runId: string } | { state: "queued"; runId: string } | { state: "busy"; runId?: string } | { state: "no-model" } | { state: "no-session" };
 export type DeepReviewStart = { state: "started" | "running" | "queued" | "waiting"; runId: string } | { state: "no-model" } | { state: "no-course" };
 
 const LIVE = ["queued", "waiting", "running"] as const;
@@ -337,27 +338,58 @@ export async function startTopUpJob(deps: StartDeps, ownerId: string, req: { cou
   if (error) throw new Error(`Couldn't read the session: ${error.message}`);
   if (!session.length) return { state: "no-session" };
   await failDeadRuns(deps, ownerId);
+  return insertTopUp(deps, ownerId, req.courseId, req.objectiveIds);
+}
+
+/**
+ * A top-up for struggle flags (weak points first): questions for flagged objectives that have none,
+ * with no session. The route keeps only flagged objectives.
+ */
+export async function startFlagTopUpJob(deps: StartDeps, ownerId: string, req: { courseId: string; objectiveIds: string[] }): Promise<TopUpStart> {
+  if (!deps.model) return { state: "no-model" };
+  await failDeadRuns(deps, ownerId);
+  return insertTopUp(deps, ownerId, req.courseId, req.objectiveIds);
+}
+
+/**
+ * Queue a flag top-up without handing it off: for a finishing job (its `followUp`), whose own
+ * `resumeNext` then dispatches it once. Handing it off as well would dispatch it twice (resumeNext
+ * takes the first queued run whether or not it was handed off).
+ */
+export async function queueFlagTopUp(deps: StartDeps, ownerId: string, req: { courseId: string; objectiveIds: string[] }): Promise<TopUpStart> {
+  if (!deps.model) return { state: "no-model" };
+  return insertTopUp(deps, ownerId, req.courseId, req.objectiveIds, { handOff: false });
+}
+
+/** Record a top-up run and hand it off (or queue it behind the student's job in flight). */
+async function insertTopUp(deps: StartDeps, ownerId: string, courseId: string, objectiveIds: string[], opts: { handOff?: boolean } = {}): Promise<TopUpStart> {
+  const { db, model } = deps;
+  const handOffNow = opts.handOff !== false;
   const runId = deps.newId?.() ?? crypto.randomUUID();
-  const queueBehind = await hasJobInFlight(deps, ownerId);
+  const queueBehind = !handOffNow || (await hasJobInFlight(deps, ownerId));
   const at = (deps.now?.() ?? new Date()).toISOString();
   const inserted = await db.from("pipeline_runs").insert({
     id: runId,
     owner_id: ownerId,
-    course_id: req.courseId,
+    course_id: courseId,
     material_id: null,
     kind: "top-up",
     at,
-    model,
+    model: model!,
     status: "queued",
     // Handed off right below unless it queues behind another job (see HANDOFF_MS).
     ...(queueBehind ? {} : { started_at: at }),
     // Kept on the run, so a queued or waiting top-up can start later without the browser.
-    objective_ids: req.objectiveIds,
+    objective_ids: objectiveIds,
   });
-  if (inserted.error?.code === UNIQUE_VIOLATION) return { state: "busy" };
+  if (inserted.error?.code === UNIQUE_VIOLATION) {
+    const { data: live } = await db.from("pipeline_runs").select("id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "top-up").in("status", [...LIVE]).limit(1);
+    return { state: "busy", ...(live?.[0] ? { runId: live[0].id as string } : {}) };
+  }
   if (inserted.error) throw new Error(`Couldn't record the job: ${inserted.error.message}`);
+  if (!handOffNow) return { state: "queued", runId };
   if (queueBehind) return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
-  await handOff(deps, { kind: "top-up", job: { ownerId, runId, objectiveIds: req.objectiveIds } });
+  await handOff(deps, { kind: "top-up", job: { ownerId, runId, objectiveIds } });
   return { state: "started", runId };
 }
 

@@ -27,7 +27,7 @@ const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
 });
 
 /** An in-memory JobStore for one student: what the jobs saved, the progress they wrote, the run's state. */
-function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; notes?: OrcaNotes | null; lostReply?: boolean; budget?: BudgetVerdict }) {
+function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages?: Record<string, MaterialPages>; answered?: string[]; flagged?: FlaggedQuestion[]; flaggedObjectives?: () => string[]; notes?: OrcaNotes | null; lostReply?: boolean; budget?: BudgetVerdict }) {
   const run = { ...init.run };
   const structure: StructureState = init.structure ?? { topics: [], objectives: {}, bank: {}, relations: [] };
   const saves: StructureRows[] = [];
@@ -63,6 +63,7 @@ function memoryStore(init: { run: PipelineRun; structure?: StructureState; pages
     savePages: async (_id, read, source) => void savedPages.push(...read.map((p) => ({ ...p, source }))),
     answered: async () => new Set(init.answered ?? []),
     flagged: async () => init.flagged ?? [],
+    flaggedObjectives: async () => init.flaggedObjectives?.() ?? [],
     save: async (_course, rows) => {
       saves.push(rows);
       run.status = "done";
@@ -238,6 +239,23 @@ test("topUp writes questions for the session's objectives from their stored page
   assert.deepEqual(rows.runs!.map((r) => [r.kind, r.material_id, r.questions_added, r.status]), [["top-up", "m1", 2, "done"]]);
   assert.deepEqual(rows.questions!.map((x) => [x.prompt, x.sort_order]), [["Simplify: case 1?", 2], ["Simplify: case 2?", 3]]);
   assert.equal(rows.topics, undefined, "nothing else is written");
+});
+
+test("a top-up also writes for flagged objectives with no questions, quietly skips ones with nothing to write from, and names flags that arrived meanwhile", async () => {
+  const topic: Topic = { id: "t", name: "Boolean Algebra", review: "confirmed", pos: { x: 0, y: 0 } };
+  const obj = (id: string, anchored = true): Objective => ({ id, topicId: "t", name: `Skill ${id}`, description: "", origin: "material", review: "confirmed", materialId: anchored ? "m1" : null, runId: "r0", signals: anchored ? [{ materialId: "m1", materialType: "Lecture", places: [anchor] }] : [] }) as Objective;
+  const q = (id: string, objectiveId: string): QuizQuestion => ({ id, kind: "Short answer", topic: "Boolean Algebra", prompt: `${id}?`, options: [], answer: -1, exact: ["1"], explanation: "", anchor, objectiveId });
+  // A: the session's; B: flagged, no questions; C: flagged, has questions; D: flagged, nothing to write from; E: flagged during the run.
+  const structure: StructureState = { topics: [topic], objectives: { a: obj("a"), b: obj("b"), c: obj("c"), d: obj("d", false), e: obj("e") }, bank: { t: [q("q1", "a"), q("q2", "c"), q("q3", "c")] }, relations: [] };
+  let calls = 0;
+  const mem = memoryStore({ run: queued({ kind: "top-up", materialId: null }), structure, pages, answered: ["q1"], flaggedObjectives: () => (++calls === 1 ? ["b", "c", "d"] : ["b", "c", "d", "e"]) });
+  const model = honestModel(2);
+  const out = await topUp({ store: mem.store, call: model.call, newId }, { runId: "run1", objectiveIds: ["a"] });
+  assert.equal(out.status, "done");
+  const written = new Set(mem.saves[0].questions!.map((x) => x.objective_id));
+  assert.deepEqual([...written].sort(), ["a", "b"]);
+  assert.ok(out.status === "done" && !out.run.dropped.some((d) => d.prompt.includes("Skill d")), "d isn't reported as skipped");
+  assert.deepEqual(out.status === "done" && out.followUp, ["e"]);
 });
 
 test("a save that landed but whose reply was lost leaves the run done, so a re-upload doesn't build it again", async () => {
