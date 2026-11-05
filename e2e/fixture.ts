@@ -19,7 +19,7 @@ import {
   DEFAULT_CONFIG,
   defaultTopicPositions,
 } from "../src/lib/data";
-import type { EvidenceEvent } from "../src/lib/mastery/types";
+import type { ConfusionEvent, EvidenceEvent } from "../src/lib/mastery/types";
 import { type LoadedState, type MyData, calendarToRow, courseToRow, loadedState, materialToRow, sessionToRow, structureRows } from "../src/lib/supabase/app-rows";
 import { eventToRow } from "../src/lib/supabase/rows";
 
@@ -257,3 +257,13 @@ export async function seedFixtureCourse(student: Student) {
 
 /** A time `days` days before now (the server stamps answers with its clock, so seeded history is relative to it). */
 export const daysAgo = (days: number, from = Date.now()) => new Date(from - days * 86_400_000).toISOString();
+
+/**
+ * A manual struggle flag, to seed an objective into rotation. Weak points first: an objective comes
+ * due, fades or counts on the island only once it's in rotation, and seeded answers that are all
+ * right stop counting as mastered once their dates pass MASTERY_RULES.rotationSince, so a spec that
+ * needs an objective due, mastered or fading seeds one of these before its answers.
+ */
+export function struggled(courseId: string, topicId: string, objectiveId: string, at: string): ConfusionEvent {
+  return { kind: "confusion", id: crypto.randomUUID(), at, courseId, topicId, objectiveId, materialId: null, note: null, flagSource: "manual", page: null };
+}

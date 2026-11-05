@@ -4,6 +4,7 @@ import { use, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { DiveModal } from "@/components/quiz/DiveModal";
+import { canFlagHard } from "@/lib/mastery/flags";
 import { durationSeconds } from "@/lib/mastery/session";
 import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { AppShell } from "@/components/layout/AppShell";
@@ -27,7 +28,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const [editingExams, setEditingExams] = useState(false);
   const closeExams = useCallback(() => setEditingExams(false), []);
   const router = useRouter();
-  const { hydrated, objectives, renameCourse, configs, runs } = useOrca();
+  const { hydrated, objectives, renameCourse, configs, runs, flagObjectives } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -145,6 +146,12 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         initialMinutes={durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60}
         onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
         onClose={closeDive}
+        onFlagTopic={(topicId) => {
+          // Every objective in the topic with questions, except ones already being learned.
+          const ids = (m.topicObjectives.get(topicId) ?? []).filter((id) => canFlagHard(m.objectives.get(id)!.status));
+          flagObjectives(course.id, ids);
+          closeDive();
+        }}
       />
     </AppShell>
   );

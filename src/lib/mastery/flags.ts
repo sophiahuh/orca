@@ -23,3 +23,12 @@ const OUT_OF_ROTATION: ReadonlySet<ObjectiveStatus> = new Set(["unseen", "verifi
 export function isInRotation(status: ObjectiveStatus): boolean {
   return !OUT_OF_ROTATION.has(status);
 }
+
+/**
+ * "This is hard" applies to any objective except one already being learned (learning or mixed up):
+ * flagging that again would only wipe its progress toward the bar. A mastered, fading or retired
+ * weak point can be flagged again.
+ */
+export function canFlagHard(status: ObjectiveStatus): boolean {
+  return status !== "learning" && status !== "mixed-up";
+}
