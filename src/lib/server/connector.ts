@@ -89,7 +89,14 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const questionCount = new Map<string, number>();
     for (const q of questions.data ?? []) if (q.objective_id) questionCount.set(q.objective_id, (questionCount.get(q.objective_id) ?? 0) + 1);
     const upcoming = new Set((materials.data ?? []).filter((m) => m.upcoming).map((m) => m.id));
-    const manual = new Set((manualFlags.data ?? []).map((f) => f.objective_id));
+    // Flags follow merges, as in the browser's agenda.
+    const objectiveById = new Map((objectives.data ?? []).map((o) => [o.id, o]));
+    const current = (id: string) => {
+      let o = objectiveById.get(id);
+      for (let i = 0; o?.merged_into && i < 50; i++) o = objectiveById.get(o.merged_into);
+      return o?.id ?? id;
+    };
+    const manual = new Set((manualFlags.data ?? []).map((f) => current(f.objective_id)));
     const stateOf = new Map(snapshots.objectives.map((s) => [s.objectiveId, stateAt(s.objectiveId, s.accumulator, at)]));
 
     const lines: ObjectiveLine[] = [];

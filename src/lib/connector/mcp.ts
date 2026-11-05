@@ -34,7 +34,7 @@ export interface ObjectiveLine {
   topicId: string;
   topic: string;
   name: string;
-  /** Orca's derived status: unseen, learning, mixed-up, mastered, fading, retired. */
+  /** Orca's derived status: unseen (not flagged), verified, check-due, learning, mixed-up, mastered, fading, retired. */
   status: string;
   /** Predicted chance of recalling it now, 0–1, or null before any answer. */
   recall: number | null;
@@ -146,7 +146,8 @@ export const TOOLS = [
       "Questions from Orca's bank to check the student with, each with its objective, the answer and " +
       "how to grade it. Ask them in your own words if you like, but grade against the answer, exact " +
       "forms or rubric given. For a choice question, show the options. Then call record_answer for " +
-      "each one you graded. Leave objectiveIds out to get questions for what's due now.",
+      "each one you graded. Leave objectiveIds out to get questions for what's due now (only weak points are " +
+      "ever due; pass objectiveIds to practise others).",
     inputSchema: {
       type: "object",
       properties: {

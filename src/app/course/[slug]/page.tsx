@@ -46,9 +46,10 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const m = mastery[course.id];
   if (!m) throw new Error(`No mastery computed for course ${course.id}`);
   const topics = trailTopics(course);
-  const total = topics.length;
-  const done = topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
-  const pct = total ? done / total : 0;
+  // Weak points first: the header counts the course's weak points (objectives in rotation) mastered.
+  const weak = topics.reduce((sum, t) => sum + (m.topics.get(t.id)?.inRotation ?? 0), 0);
+  const held = topics.reduce((sum, t) => sum + (m.topics.get(t.id)?.mastered ?? 0), 0);
+  const pct = weak ? held / weak : 0;
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
   const uploading = uploadsInProgress(runs, course.id);
   const agenda = agendas[course.id];
@@ -102,7 +103,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
             {course.name}
           </motion.h1>
           <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep">
-            {done} of {total} topics complete
+            {weak ? `${held} of ${weak} weak spots mastered` : "No weak spots flagged yet"}
           </motion.p>
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
             <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />

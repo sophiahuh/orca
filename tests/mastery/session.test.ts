@@ -59,6 +59,11 @@ test("check-due objectives come after the weak points, with one question each", 
   assert.deepEqual(ids(s).filter((id) => id.startsWith("c")), ["c1"], "a check asks once");
 });
 
+test("the mechanism rule doesn't give a check a second question", () => {
+  const s = assembleQuickReview([cand("check", "check-due", [mc("c1"), mc("c2", "mechanism")])], ctx(3600));
+  assert.deepEqual(ids(s), ["c1"]);
+});
+
 test("fits the budget, spreads across objectives before repeating, and repeats only objectives not yet mastered", () => {
   const s = assembleQuickReview(
     [cand("a", "learning", [mc("a1"), mc("a2"), mc("a3")]), cand("b", "fading", [mc("b1"), mc("b2")], "2026-10-01T00:00:00Z"), cand("c", "unseen", [mc("c1"), mc("c2")])],

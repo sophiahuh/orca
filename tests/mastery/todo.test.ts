@@ -9,6 +9,8 @@ const ranked = (objectiveId: string, topicId: string, reason: string): RankedObj
   topicId,
   status: "learning",
   priority: { objectiveId, score: 2, terms: [{ term: "gap", value: 1, reason }] },
+  weight: 1,
+  reached: true,
 });
 const names = { objective: (id: string) => `Obj ${id}`, topic: (id: string) => `Topic ${id}` };
 const empty: CourseAgenda = {
@@ -29,6 +31,10 @@ test("nothing due, no cards", () => {
 test("quick review shows how many objectives it covers", () => {
   const cards = todoCards({ ...empty, quickReviewDue: true, dueToday: [ranked("a", "t", "Not mastered yet: 1 of 3 correct"), ranked("b", "t", "x")] }, DEFAULT_CONFIG, names, 2);
   assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title, c.detail]), [["quick", "today", "Quick review · 10 min", "Covers 2 objectives"]]);
+});
+
+test("a due quick review with nothing it can ask (dive-only or thumbed-down questions) shows no card", () => {
+  assert.deepEqual(todoCards({ ...empty, quickReviewDue: true, dueToday: [ranked("a", "t", "x")] }, DEFAULT_CONFIG, names, 0), []);
 });
 
 test("deep review today or tomorrow and tomorrow's checks", () => {

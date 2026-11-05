@@ -22,8 +22,8 @@ test("a topic's progress counts weak points: objectives in rotation mastered or 
   assert.equal(topicProgress(["a", "b"], map(s("a", "mastered"), s("b", "fading"))).status, "in-progress", "a fading objective drops out until answered");
 });
 
-test("a topic with nothing in rotation is never done; not started until something is answered or flagged", () => {
-  assert.deepEqual(topicProgress(["a"], map(s("a", "verified"))), { status: "in-progress", mastered: 0, inRotation: 0, objectives: 1 });
+test("a topic with nothing in rotation is never done, and not started until it has a weak point or an open check", () => {
+  assert.deepEqual(topicProgress(["a"], map(s("a", "verified"))), { status: "not-started", mastered: 0, inRotation: 0, objectives: 1 });
   assert.equal(topicProgress(["a", "b"], map(s("a", "unseen"), s("b", "unseen"))).status, "not-started");
   assert.equal(topicProgress(["a", "b"], map(s("a", "learning"), s("b", "unseen"))).status, "in-progress");
   assert.equal(topicProgress(["a"], map(s("a", "check-due"))).status, "in-progress");

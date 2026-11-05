@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDays, agendaWeights, courseAgenda } from "../../src/lib/mastery/agenda.ts";
+import { addDays, agendaWeights, courseAgenda, examInWindow } from "../../src/lib/mastery/agenda.ts";
 import { courseMastery } from "../../src/lib/mastery/course-mastery.ts";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
 import { classCadence, reviewWeekdays } from "../../src/lib/mastery/review-days.ts";
@@ -39,11 +39,11 @@ const flagged = (objectiveId: string, at = "2026-09-01T00:00:00Z", flagSource: "
 });
 
 /** By default every objective carries a struggle flag from before the test's history, so the cadence tests see them all in rotation; `unflagged` leaves them as they are. */
-function agenda(evidence: EvidenceEvent[], now: string, opts: { results?: QuizResult[]; config?: ReviewConfig; examDays?: string[]; weights?: Record<string, number>; schedule?: CourseSchedule; unflagged?: boolean; upcoming?: string[] } = {}) {
+function agenda(evidence: EvidenceEvent[], now: string, opts: { results?: QuizResult[]; config?: ReviewConfig; examDays?: string[]; weights?: Record<string, number>; schedule?: CourseSchedule; unflagged?: boolean; examTopics?: string[] } = {}) {
   const flags = opts.unflagged ? [] : Object.keys(catalogue).map((id) => flagged(id));
   const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence: [...flags, ...evidence], now: new Date(now), dayKey: utcDay });
   const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1, ...opts.weights })));
-  return courseAgenda({ courseId: "k", mastery, weights, config: opts.config ?? DEFAULT_CONFIG, schedule: opts.schedule ?? NO_SCHEDULE, results: opts.results ?? [], examDays: opts.examDays ?? [], now: new Date(now), dayKey: utcDay });
+  return courseAgenda({ courseId: "k", mastery, weights, config: opts.config ?? DEFAULT_CONFIG, schedule: opts.schedule ?? NO_SCHEDULE, results: opts.results ?? [], examDays: opts.examDays ?? [], examTopics: new Set(opts.examTopics ?? []), now: new Date(now), dayKey: utcDay });
 }
 
 test("addDays is plain calendar arithmetic", () => {
@@ -234,4 +234,19 @@ test("nothing in rotation: nothing due, no quick review, and no dive comes due",
   assert.equal(g.dueToday.length, 0);
   assert.equal(g.quickReviewDue, false);
   assert.deepEqual(g.deepReview, { due: false, dueDay: null, tomorrow: false, candidates: 0 });
+});
+
+test("before an exam, its topics' weak points come first; ranked objectives carry their weight", () => {
+  const g = agenda([], "2026-10-05T09:00:00Z", { weights: { a: 2 }, examTopics: ["t2"] });
+  assert.deepEqual(g.dueToday.map((r) => r.objectiveId), ["c", "a", "b"]);
+  assert.deepEqual(g.ranked.map((r) => [r.objectiveId, r.weight]), [["c", 1], ["a", 2], ["b", 1]]);
+});
+
+test("an exam is in its window from 7 days before it, through its day", () => {
+  const exams = [{ courseId: "k", date: "2026-11-20", topicIds: ["t1"] }];
+  assert.deepEqual(examInWindow(exams, "k", "2026-11-13"), { topicIds: ["t1"] });
+  assert.deepEqual(examInWindow(exams, "k", "2026-11-20"), { topicIds: ["t1"] });
+  assert.equal(examInWindow(exams, "k", "2026-11-12"), null);
+  assert.equal(examInWindow(exams, "k", "2026-11-21"), null);
+  assert.equal(examInWindow(exams, "other", "2026-11-15"), null);
 });

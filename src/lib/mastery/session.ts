@@ -120,7 +120,9 @@ export function assembleQuickReview(candidates: readonly SessionCandidate[], ctx
   }
 
   if (items.length > 0 && !items.some((i) => i.mechanism)) {
-    const withMechanism = ordered.find((c) => c.questions.some((q) => isMechanism(q) && !used.has(q.id)));
+    // A check asks once: a check-due objective already in the session doesn't get a second question for this.
+    const asked = new Set(items.map((i) => i.objectiveId));
+    const withMechanism = ordered.find((c) => !(c.status === "check-due" && asked.has(c.objectiveId)) && c.questions.some((q) => isMechanism(q) && !used.has(q.id)));
     if (withMechanism) {
       const q = pick(withMechanism.questions.filter(isMechanism), used, ctx.lastSeen)!;
       while (items.length > 0 && time + questionSeconds(q) > ctx.budgetSeconds) time -= items.pop()!.seconds;
