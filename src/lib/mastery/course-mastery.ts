@@ -10,8 +10,6 @@ export interface CourseMastery {
   /** topicId → its objective ids, in first-seen order. */
   topicObjectives: Map<string, string[]>;
   topics: Map<string, TopicProgress>;
-  /** topicId → how many of its objectives have no questions at all (they can't be practised until some are written). */
-  objectivesNeedingQuestions: Map<string, number>;
   island: IslandLevel;
   /** This course's evidence, each event filed under the objective it counts for now (merges and re-sorting followed). */
   events: EvidenceEvent[];
@@ -50,7 +48,6 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
   const objectives = new Map<string, ObjectiveState>();
   const topicObjectives = new Map<string, string[]>();
   const topics = new Map<string, TopicProgress>();
-  const objectivesNeedingQuestions = new Map<string, number>();
   for (const { topicId, list } of perTopic) {
     for (const o of list) {
       objectives.set(
@@ -63,9 +60,6 @@ export function courseMastery({ courseId, topicIds, bank, catalogue, evidence, n
     const ids = list.map((o) => o.id);
     topicObjectives.set(topicId, ids);
     topics.set(topicId, topicProgress(ids, objectives));
-    // Objectives with no questions can't be practised at all (fewer than the mastery bar is normal:
-    // an upload writes two and more follow as the student practises).
-    objectivesNeedingQuestions.set(topicId, list.filter((o) => o.questionIds.length === 0).length);
   }
-  return { objectives, topicObjectives, topics, objectivesNeedingQuestions, island: islandLevel([...objectives.values()]), events };
+  return { objectives, topicObjectives, topics, island: islandLevel([...objectives.values()]), events };
 }

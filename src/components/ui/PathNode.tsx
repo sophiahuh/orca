@@ -24,10 +24,15 @@ export interface PathNodeProps {
   sub: string;
   onClick?: () => void;
   index?: number;
+  /** The topic's weak points: how many of them are mastered. Absent when nothing is in rotation. */
+  ring?: { mastered: number; of: number };
 }
 
-export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNodeProps) {
+export function PathNode({ visual, x, y, name, sub, onClick, index = 0, ring }: PathNodeProps) {
   const size = NODE_SIZE[visual];
+  const box = size + 16;
+  const radius = size / 2 + 5;
+  const circumference = 2 * Math.PI * radius;
   const clickable = Boolean(onClick);
   const faded = visual === "upcoming";
 
@@ -62,6 +67,35 @@ export function PathNode({ visual, x, y, name, sub, onClick, index = 0 }: PathNo
         >
           START
         </motion.span>
+      )}
+
+      {ring && ring.of > 0 && (
+        <svg
+          data-part="topic-ring"
+          data-mastered={ring.mastered}
+          data-of={ring.of}
+          aria-hidden
+          className="pointer-events-none absolute"
+          width={box}
+          height={box}
+          style={{ left: -box / 2, top: -box / 2 }}
+        >
+          <circle cx={box / 2} cy={box / 2} r={radius} fill="none" stroke="var(--color-alice-deep)" strokeWidth={4} />
+          {/* At 0 the round cap would still draw a dot. */}
+          {ring.mastered > 0 && (
+            <circle
+              cx={box / 2}
+              cy={box / 2}
+              r={radius}
+              fill="none"
+              stroke="var(--color-wisteria-deep)"
+              strokeWidth={4}
+              strokeLinecap="round"
+              strokeDasharray={`${(circumference * ring.mastered) / ring.of} ${circumference}`}
+              transform={`rotate(-90 ${box / 2} ${box / 2})`}
+            />
+          )}
+        </svg>
       )}
 
       <motion.button

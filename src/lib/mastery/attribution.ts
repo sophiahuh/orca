@@ -7,7 +7,7 @@ import { type QuestionRef, type TopicObjective, objectivesForTopic, resolveObjec
 import type { EvidenceEvent, ObjectiveInfo } from "./types.ts";
 
 export interface AttributionInput {
-  /** The topics on the trail (archived ones left out); their objectives are the ones that hold state. */
+  /** The topics on the trail (archived ones left out); their live objectives are the ones that hold state, with or without questions. */
   topicIds: readonly string[];
   /** topicId → that topic's questions. */
   bank: Readonly<Record<string, readonly QuestionRef[]>>;
@@ -15,7 +15,7 @@ export interface AttributionInput {
 }
 
 export interface Attribution {
-  /** topicId → its objectives with their questions, in first-seen order. */
+  /** topicId → its objectives with their questions: those with questions in first-seen order, then the rest in catalogue order. */
   perTopic: ReadonlyArray<{ topicId: string; list: TopicObjective[] }>;
   /** Every objective that can hold state now, by id. */
   objectives: ReadonlyMap<string, TopicObjective>;
@@ -31,6 +31,15 @@ export interface Attribution {
 
 export function attribution({ topicIds, bank, catalogue }: AttributionInput): Attribution {
   const perTopic = topicIds.map((topicId) => ({ topicId, list: objectivesForTopic(topicId, bank[topicId] ?? [], catalogue) }));
+  // Every live objective of a trail topic holds state, with or without questions (weak points first:
+  // a flag can land before any question is written, and uploads write questions only for flagged ones).
+  // The catalogue's topicId is the current topic (objectivesForTopic throws otherwise).
+  const byTopic = new Map(perTopic.map((p) => [p.topicId, p]));
+  for (const o of Object.values(catalogue)) {
+    if (o.mergedInto || o.review === "archived") continue;
+    const entry = byTopic.get(o.topicId);
+    if (entry && !entry.list.some((x) => x.id === o.id)) entry.list.push({ ...o, hasMechanismQuestions: false, questionIds: [] });
+  }
   const objectives = new Map<string, TopicObjective>();
   const objectiveOfQuestion = new Map<string, string>();
   for (const { list } of perTopic) {

@@ -6,7 +6,7 @@ import { attribution } from "../mastery/attribution.ts";
 import { type QuestionRef, fileQuestions, withCurrentTopics } from "../mastery/catalogue.ts";
 import { type ObjectiveAccumulator, dayKeyIn } from "../mastery/objective-state.ts";
 import type { CourseView, Snapshot } from "../mastery/snapshots.ts";
-import type { AnswerEvent, EvidenceEvent, ObjectiveInfo } from "../mastery/types.ts";
+import type { AnswerEvent, EvidenceEvent, FlagSource, ObjectiveInfo } from "../mastery/types.ts";
 import type { Database } from "./database.types.ts";
 
 type Tables = Database["public"]["Tables"];
@@ -17,8 +17,9 @@ export type SnapshotRow = Tables["objective_state"]["Row"];
 export function eventFromRow(r: EvidenceRow): EvidenceEvent {
   const base = { id: r.id, at: new Date(r.at).toISOString(), courseId: r.course_id, topicId: r.topic_id, objectiveId: r.objective_id };
   if (r.kind === "confusion") {
-    if (r.material_id === null || r.note === null) throw new Error(`Confusion event ${r.id} is missing its material or note`);
-    return { ...base, kind: "confusion", materialId: r.material_id, note: r.note };
+    if (r.flag_source === null) throw new Error(`Confusion event ${r.id} has no flag source`);
+    // The table's CHECK constraints hold flag_source to FlagSource's values and its material and page to what the source needs.
+    return { ...base, kind: "confusion", materialId: r.material_id, note: r.note, flagSource: r.flag_source as FlagSource, page: r.page };
   }
   if (r.question_id === null || r.outcome === null || r.grader === null || r.source === null || r.session_id === null) {
     throw new Error(`Answer event ${r.id} is missing a field`);
@@ -40,8 +41,8 @@ export function eventFromRow(r: EvidenceRow): EvidenceEvent {
 export function eventToRow(e: EvidenceEvent): Omit<EvidenceRow, "owner_id"> {
   const common = { id: e.id, kind: e.kind, at: e.at, course_id: e.courseId, topic_id: e.topicId, objective_id: e.objectiveId };
   return e.kind === "answer"
-    ? { ...common, question_id: e.questionId, tier: e.tier, outcome: e.outcome, grader: e.grader, source: e.source, session_id: e.sessionId, material_id: null, note: null }
-    : { ...common, question_id: null, tier: null, outcome: null, grader: null, source: null, session_id: null, material_id: e.materialId, note: e.note };
+    ? { ...common, question_id: e.questionId, tier: e.tier, outcome: e.outcome, grader: e.grader, source: e.source, session_id: e.sessionId, material_id: null, note: null, flag_source: null, page: null }
+    : { ...common, question_id: null, tier: null, outcome: null, grader: null, source: null, session_id: null, material_id: e.materialId, note: e.note, flag_source: e.flagSource, page: e.page };
 }
 
 export function snapshotFromRow(r: SnapshotRow): Snapshot {

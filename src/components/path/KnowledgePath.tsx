@@ -19,30 +19,24 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 640, y: 150, w: 60 },
 ];
 
-function statusLine(p: TopicProgress, needing: number) {
-  if (p.total === 0) return "No questions yet";
-  const gap = needing > 0 ? ` · ${needing} without questions` : "";
-  if (p.status === "done") return `Complete${gap}`;
-  if (p.status === "not-started") return `${p.total} ${p.total === 1 ? "objective" : "objectives"}${gap}`;
-  return `${p.mastered} of ${p.total} objectives mastered${gap}`;
+/** The topic's weak points (objectives in rotation): how many are mastered. */
+function statusLine(p: TopicProgress) {
+  if (p.objectives === 0) return "No objectives yet";
+  if (p.inRotation === 0) return "No weak spots flagged";
+  if (p.status === "done") return "Weak spots mastered";
+  return `${p.mastered} of ${p.inRotation} mastered`;
 }
 
 /** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
-export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
+export function KnowledgePath({ course, progress, onStart }: {
   course: Course;
   progress: ReadonlyMap<string, TopicProgress>;
-  needingQuestions: ReadonlyMap<string, number>;
   onStart: (topic: Topic) => void;
 }) {
   const progressOf = (t: Topic) => {
     const p = progress.get(t.id);
     if (!p) throw new Error(`No progress computed for topic ${t.id}`);
     return p;
-  };
-  const needingOf = (t: Topic) => {
-    const n = needingQuestions.get(t.id);
-    if (n === undefined) throw new Error(`No question-gap count computed for topic ${t.id}`);
-    return n;
   };
   const topics = trailTopics(course);
   // START goes to the first topic in progress, else the first not started; none when everything is done.
@@ -107,7 +101,8 @@ export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
             x={t.pos.x}
             y={t.pos.y}
             name={t.name}
-            sub={statusLine(progressOf(t), needingOf(t))}
+            sub={statusLine(progressOf(t))}
+            ring={progressOf(t).inRotation > 0 ? { mastered: progressOf(t).mastered, of: progressOf(t).inRotation } : undefined}
             onClick={() => onStart(t)}
           />
         ))}

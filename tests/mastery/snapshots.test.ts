@@ -111,6 +111,8 @@ const confusion = (objectiveId: string, at: string): ConfusionEvent => ({
   objectiveId,
   materialId: "m",
   note: "lost",
+  flagSource: "homework",
+  page: null,
 });
 
 test("each answer updates its objective's snapshot, which always equals a full replay", async () => {

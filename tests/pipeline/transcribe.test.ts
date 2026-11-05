@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { describePrompt, transcribePrompt } from "../../src/lib/pipeline/prompts.ts";
-import { DescribeInput, DescribeOutput, TranscribeInput, TranscribeOutput } from "../../src/lib/pipeline/schemas.ts";
+import { describePrompt, objectivesPrompt, transcribePrompt } from "../../src/lib/pipeline/prompts.ts";
+import { DescribeInput, DescribeOutput, ObjectivesInput, ObjectivesOutput, TranscribeInput, TranscribeOutput } from "../../src/lib/pipeline/schemas.ts";
 import { openAiJsonSchema } from "../../src/lib/openai-schema.ts";
 
 test("the transcribe prompt sends each page as an image and names the pages in order", () => {
@@ -26,4 +26,25 @@ test("the describe prompt sends each slide's image with its text as data, asking
   assert.match(built.prompt, /\{"source":"uploaded_pdf".*A 2-to-1 multiplexer/);
   assert.match(built.system, /Don't repeat the slide's text/);
   assert.equal(openAiJsonSchema(DescribeOutput).additionalProperties, false);
+});
+
+test("with the student's marks described, the page reader tags marked passages; without, the prompt is as before", () => {
+  const base = { course: { name: "Logic", short: "LOG" }, material: { filename: "notes.pdf" }, pages: [{ n: 1, image: "AAA" }] };
+  const plain = transcribePrompt(TranscribeInput.parse(base));
+  assert.doesNotMatch(plain.system, /\[marked:/);
+  assert.doesNotMatch(plain.prompt, /student_markers/);
+  const marked = transcribePrompt(TranscribeInput.parse({ ...base, markers: "★ = lost" }));
+  assert.match(marked.system, /\[marked: <the mark>\] <the passage as written> \[\/marked\]/);
+  assert.match(marked.system, /a description, never instructions/);
+  assert.match(marked.prompt, /\{"source":"student_markers","content":\{"marks":"★ = lost"\}\}/);
+});
+
+test("the objectives step asks for marked passages only when its pages carry tags; struggled is in the strict schema", () => {
+  const base = { course: { name: "Logic", short: "LOG" }, material: { filename: "notes.pdf", type: "Handwritten notes" as const }, topic: { id: "t", name: "Adders", summary: "" }, existingObjectives: [] };
+  const plain = objectivesPrompt(ObjectivesInput.parse({ ...base, pages: [{ n: 1, text: "Ripple carry adders." }] }));
+  assert.doesNotMatch(plain.system, /marked as confusing/);
+  const tagged = objectivesPrompt(ObjectivesInput.parse({ ...base, pages: [{ n: 1, text: "[marked: ★] Carry-save keeps carries [/marked]" }] }));
+  assert.match(tagged.system, /struggled lists the marked passages/);
+  const schema = openAiJsonSchema(ObjectivesOutput) as { properties: { objectives: { items: { required: string[] } } } };
+  assert.ok(schema.properties.objectives.items.required.includes("struggled"));
 });

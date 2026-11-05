@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, STOPPED_ERROR, type StartDeps, pauseUploadRuns, resumeNext, stopRun, startDeepReviewJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
+import { DEAD_RUN_ERROR, DEAD_RUN_MS, type Dispatch, HANDOFF_MS, NEVER_STARTED_ERROR, STOPPED_ERROR, type StartDeps, pauseUploadRuns, queueFlagTopUp, resumeNext, stopRun, startDeepReviewJob, startFlagTopUpJob, startTopUpJob, startUploadJob } from "../../src/lib/jobs/start.ts";
 
 type Row = Record<string, unknown>;
 
@@ -413,4 +413,38 @@ test("a student can stop an upload's run at any stage: it is failed with the sto
   assert.equal(next?.job.runId, "run-b", "the queue moves on");
   assert.deepEqual(sent.map((s) => s.job.runId), ["run-b"]);
   assert.equal(tables.pipeline_runs[3].status, "running", "the other student's run is untouched");
+});
+
+test("a flag top-up needs a model key, reads no session, and hands its run off", async () => {
+  const none = fakeDb({ pipeline_runs: [] });
+  assert.deepEqual(await startFlagTopUpJob(deps(none.db, null).deps, OWNER, { courseId: "c1", objectiveIds: ["o1"] }), { state: "no-model" });
+  assert.equal(none.tables.pipeline_runs.length, 0);
+
+  const f = fakeDb({ pipeline_runs: [] });
+  const { deps: d, sent } = deps(f.db, "model-x");
+  assert.deepEqual(await startFlagTopUpJob(d, OWNER, { courseId: "c1", objectiveIds: ["o1", "o2"] }), { state: "started", runId: "run-new" });
+  assert.equal(f.tables.session_results, undefined, "no session is read");
+  assert.equal(f.tables.pipeline_runs[0].kind, "top-up");
+  assert.deepEqual(f.tables.pipeline_runs[0].objective_ids, ["o1", "o2"]);
+  assert.deepEqual(sent, [{ kind: "top-up", job: { ownerId: OWNER, runId: "run-new", objectiveIds: ["o1", "o2"] } }]);
+});
+
+test("a flag top-up while the course's top-up is in flight is busy and names that run", async () => {
+  const running = { id: "run-old", owner_id: OWNER, course_id: "c1", kind: "top-up", status: "running", started_at: now.toISOString(), at: now.toISOString() };
+  const f = fakeDb({ pipeline_runs: [running] });
+  const { deps: d, sent } = deps(f.db, "model-x");
+  assert.deepEqual(await startFlagTopUpJob(d, OWNER, { courseId: "c1", objectiveIds: ["o1"] }), { state: "busy", runId: "run-old" });
+  assert.equal(f.tables.pipeline_runs.length, 1);
+  assert.deepEqual(sent, []);
+});
+
+test("a follow-up top-up is queued without a hand-off, for the finishing job's resumeNext", async () => {
+  const f = fakeDb({ pipeline_runs: [] });
+  const { deps: d, sent } = deps(f.db, "model-x");
+  assert.deepEqual(await queueFlagTopUp(d, OWNER, { courseId: "c1", objectiveIds: ["o3"] }), { state: "queued", runId: "run-new" });
+  assert.equal(f.tables.pipeline_runs[0].status, "queued");
+  assert.equal(f.tables.pipeline_runs[0].started_at, undefined, "not handed off");
+  assert.deepEqual(sent, []);
+  await resumeNext(d, OWNER);
+  assert.deepEqual(sent, [{ kind: "top-up", job: { ownerId: OWNER, runId: "run-new", objectiveIds: ["o3"] } }], "resumeNext dispatches it once");
 });

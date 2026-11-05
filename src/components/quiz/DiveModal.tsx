@@ -12,8 +12,21 @@ import { overlayFade, popIn } from "@/lib/motion";
 /**
  * "Dive into [topic]": a deep review of one topic. The student picks how long; Start opens the
  * session, which writes harder questions for that topic's objectives (POST /api/deep-review).
+ * "This topic is hard" flags the topic's objectives instead (weak points first).
  */
-export function DiveModal({ topic, initialMinutes, onStart, onClose }: { topic: { id: string; name: string } | null; initialMinutes: number; onStart: (topicId: string, minutes: number) => void; onClose: () => void }) {
+export function DiveModal({
+  topic,
+  initialMinutes,
+  onStart,
+  onClose,
+  onFlagTopic,
+}: {
+  topic: { id: string; name: string } | null;
+  initialMinutes: number;
+  onStart: (topicId: string, minutes: number) => void;
+  onClose: () => void;
+  onFlagTopic?: (topicId: string) => void;
+}) {
   const [minutes, setMinutes] = useState(initialMinutes);
   const [custom, setCustom] = useState(DEEP_MINUTE_PRESETS.some((m) => m === initialMinutes) ? "" : String(initialMinutes));
 
@@ -90,6 +103,11 @@ export function DiveModal({ topic, initialMinutes, onStart, onClose }: { topic: 
             <Button onClick={() => onStart(topic.id, minutes)} data-part="dive-start">
               Start dive
             </Button>
+            {onFlagTopic && (
+              <button type="button" data-part="flag-topic" onClick={() => onFlagTopic(topic.id)} className="text-[14px] font-bold text-wisteria-deep underline underline-offset-4">
+                This topic is hard: flag all of it
+              </button>
+            )}
           </motion.div>
         </motion.div>
       )}

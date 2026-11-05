@@ -67,7 +67,7 @@ function pick(questions: readonly SessionQuestion[], used: ReadonlySet<string>, 
   return sorted[0]?.q ?? null;
 }
 
-/** Quick-review order (§3): mixed-up → fading, overdue before today → learning → fading due today → unseen. Priority order inside each group. */
+/** Quick-review order (§3): mixed-up → fading, overdue before today → learning → fading due today → check-due. Priority order inside each group. */
 function quickGroup(c: SessionCandidate, today: string, dayKey: (iso: string) => string): number {
   switch (c.status) {
     case "mixed-up":
@@ -76,7 +76,7 @@ function quickGroup(c: SessionCandidate, today: string, dayKey: (iso: string) =>
       return c.dueAt !== null && dayKey(c.dueAt) < today ? 1 : 3;
     case "learning":
       return 2;
-    case "unseen":
+    case "check-due":
       return 4;
     default:
       return 5;
@@ -120,7 +120,9 @@ export function assembleQuickReview(candidates: readonly SessionCandidate[], ctx
   }
 
   if (items.length > 0 && !items.some((i) => i.mechanism)) {
-    const withMechanism = ordered.find((c) => c.questions.some((q) => isMechanism(q) && !used.has(q.id)));
+    // A check asks once: a check-due objective already in the session doesn't get a second question for this.
+    const asked = new Set(items.map((i) => i.objectiveId));
+    const withMechanism = ordered.find((c) => !(c.status === "check-due" && asked.has(c.objectiveId)) && c.questions.some((q) => isMechanism(q) && !used.has(q.id)));
     if (withMechanism) {
       const q = pick(withMechanism.questions.filter(isMechanism), used, ctx.lastSeen)!;
       while (items.length > 0 && time + questionSeconds(q) > ctx.budgetSeconds) time -= items.pop()!.seconds;

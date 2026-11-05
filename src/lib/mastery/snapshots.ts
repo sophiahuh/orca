@@ -162,7 +162,9 @@ export interface ObjectiveSnapshot {
  * old-rules and placeholder ones are rebuilt from the log (read once, only if needed) and saved.
  * One folded by a newer Orca is computed from the log under this server's rules and returned
  * unsaved (`newer`), so an older server in a rolling deploy never overwrites a newer fold.
- * Objectives with no snapshot have no events counting for them: they are unseen.
+ * Objectives with no snapshot have no events counting for them: they are unseen. (Every live objective
+ * holds state since 2026-11-06, with or without questions; migration 20261106090000 left placeholders
+ * for evidence recorded earlier on objectives that had none.)
  */
 export async function readCourseState(store: SnapshotStore): Promise<{ objectives: ObjectiveSnapshot[]; rebuilt: string[]; newer: string[] }> {
   // Rows first: a structure change before the view is read is in it, and one after marks the
