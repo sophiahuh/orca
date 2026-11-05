@@ -16,9 +16,11 @@ import { applyUploadPlan } from "../pipeline/apply.ts";
 import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
 import type { OrcaNotes } from "../pipeline/notes.ts";
 import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
-import { runDeepReview, runTopUp, SKIPPED_PREFIX, unansweredDeepQuestions } from "../pipeline/topup.ts";
+import { runDeepReview, runTopUp, SKIPPED_PREFIX, topUpTargets, unansweredDeepQuestions } from "../pipeline/topup.ts";
 import { deepQuestionCount } from "../deep-review.ts";
 import { type StructureRows, type StructureState, structureRows } from "../supabase/app-rows.ts";
+import { markerFlagId } from "../mastery/ids.ts";
+import type { ConfusionEvent } from "../mastery/types.ts";
 import type { BudgetVerdict } from "./budget.ts";
 
 export interface LoadedCourse {
@@ -26,6 +28,8 @@ export interface LoadedCourse {
   structure: StructureState;
   /** Notes for Orca (the account's and the course's), cleaned; null when there are none (src/lib/pipeline/notes.ts). */
   notes: OrcaNotes | null;
+  /** How the student marks confusion in their notes, screened; null when they haven't said (or it was refused). */
+  markers: string | null;
 }
 
 /** Everything a job reads and writes, for one student (every method is scoped to them). */
@@ -54,6 +58,12 @@ export interface JobStore {
   answered(courseId: string): Promise<Set<string>>;
   /** The course's thumbs-down questions, newest first, cleaned for question writing. */
   flagged(courseId: string): Promise<FlaggedQuestion[]>;
+  /** Objective ids with a struggle flag (any `confusion` event) in the course, as recorded (merges not followed). */
+  flaggedObjectives(courseId: string): Promise<string[]>;
+  /** Record struggle flags the job found (marked passages), each with its snapshot; an id already recorded counts as recorded. */
+  recordFlags(courseId: string, events: ConfusionEvent[]): Promise<{ recorded: number; failed: Array<{ id: string; message: string }> }>;
+  /** Add to a finished run's left-out list (what couldn't be done after its save). */
+  noteDropped(runId: string, items: PipelineRun["dropped"]): Promise<void>;
   /** save_structure for the course: the rows that changed and the finished run, in one transaction. */
   save(courseId: string, rows: StructureRows): Promise<void>;
 }
@@ -69,7 +79,11 @@ export interface JobDeps {
 }
 
 export type JobOutcome =
-  | { status: "done"; run: PipelineRun }
+  /**
+   * `followUp`: flagged objectives that still have no quick-review question and weren't in this run
+   * (flags recorded while it worked): the runner queues a top-up for them (src/lib/server/jobs/run.ts).
+   */
+  | { status: "done"; run: PipelineRun; followUp?: string[] }
   | { status: "failed"; error: string }
   | { status: "skipped"; reason: string }
   /** Held by a daily budget; the run is `waiting` and will be resumed. */
@@ -150,7 +164,7 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
       if (!count || !deps.renderPage) continue;
       progress.write(pass.done === "vision" ? { stage: "transcribing", pages: count } : { stage: "figures-reading", slides: count });
       const render = deps.renderPage;
-      const out = await pass.run({ course, material, pages }, { call: deps.call, render: (n) => render(material, n) });
+      const out = await pass.run({ course, material, pages, ...(pass.done === "vision" ? { markers: loaded.markers } : {}) }, { call: deps.call, render: (n) => render(material, n) });
       kept = [...kept, ...out.kept];
       if (out.read.length) {
         await store.savePages(material.id, out.read, pass.done);
@@ -172,6 +186,7 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
         ...(material.hiddenText ? { hiddenText: material.hiddenText } : {}),
         flagged: await store.flagged(run.courseId),
         notes: loaded.notes,
+        markers: loaded.markers,
         runId: run.id,
         model: run.model,
         now: run.at,
@@ -189,7 +204,8 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
     const after: StructureState = { ...merged, topics: laidOut(merged.topics) };
     await progress.flushed();
     await store.save(run.courseId, structureRows(before, after, [plan.run]));
-    return { status: "done", run: plan.run };
+    const followUp = await recordMarkedPassages(store, run, material, plan.flags, after, materials, loaded);
+    return { status: "done", run: plan.run, ...(followUp.length ? { followUp } : {}) };
   } catch (e) {
     await progress.flushed();
     return failed(store, run.id, "Orca couldn't build this upload", e);
@@ -212,11 +228,18 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
     const before = loaded.structure;
     const materials = await store.materials(run.courseId);
     const [materialPages, answered] = await Promise.all([store.pages(materials.map((m) => m.id)), store.answered(run.courseId)]);
+    const course = { ...loaded.course, topics: before.topics };
     // Only this course's objectives: ids from the request that aren't in it are ignored.
-    const objectiveIds = job.objectiveIds.filter((id) => before.objectives[id]);
+    const requested = job.objectiveIds.filter((id) => before.objectives[id]);
+    // Flagged objectives with no quick-review question yet are written for too, when there's material
+    // to write from (a flag whose own top-up was skipped gets its questions here). Ones with nothing to
+    // write from are left out quietly: every top-up would list them again.
+    const catchUp = (await flaggedWithoutQuestions(store, run.courseId, before)).filter((id) => !requested.includes(id));
+    const unwritable = new Set(topUpTargets({ course, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds: catchUp, answered }).skipped.map((s) => s.objectiveId));
+    const objectiveIds = [...requested, ...catchUp.filter((id) => !unwritable.has(id))];
     const plan = await runTopUp(
       {
-        course: { ...loaded.course, topics: before.topics },
+        course,
         objectives: before.objectives,
         bank: before.bank,
         materials,
@@ -235,11 +258,74 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
     for (const [topicId, qs] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...qs];
     await progress.flushed();
     await store.save(run.courseId, structureRows(before, { ...before, bank }, [plan.run]));
-    return { status: "done", run: plan.run };
+    // Flags recorded while this ran: the next top-up writes for them.
+    const followUp = (await flaggedWithoutQuestions(store, run.courseId, { ...before, bank })).filter((id) => !objectiveIds.includes(id) && !unwritable.has(id));
+    return { status: "done", run: plan.run, ...(followUp.length ? { followUp } : {}) };
   } catch (e) {
     await progress.flushed();
     return failed(store, run.id, "Orca couldn't write new questions", e);
   }
+}
+
+/**
+ * Marked passages are struggle flags, recorded once their objectives are saved (an event's objective
+ * must exist). The upload is done either way: what still fails after one retry is listed on the run,
+ * never silently lost, and the ids are stable, so nothing is recorded twice. Returns the marked
+ * objectives still without questions that a top-up could write for (the runner queues one).
+ */
+async function recordMarkedPassages(
+  store: JobStore,
+  run: PipelineRun,
+  material: Material,
+  flags: ReadonlyArray<{ objectiveId: string; page: number; quote: string }>,
+  after: StructureState,
+  materials: Material[],
+  loaded: LoadedCourse,
+): Promise<string[]> {
+  if (!flags.length) return [];
+  const at = new Date().toISOString();
+  const events: ConfusionEvent[] = flags.flatMap((f) => {
+    const o = after.objectives[f.objectiveId];
+    return o ? [{ kind: "confusion", id: markerFlagId(material.id, f.page, f.objectiveId), at, courseId: run.courseId, topicId: o.topicId, objectiveId: f.objectiveId, materialId: material.id, note: f.quote, flagSource: "handwritten-marker", page: f.page }] : [];
+  });
+  const failedAll = (list: ConfusionEvent[], e: unknown) => ({ recorded: 0, failed: list.map((ev) => ({ id: ev.id, message: e instanceof Error ? e.message : String(e) })) });
+  let out = await store.recordFlags(run.courseId, events).catch((e) => failedAll(events, e));
+  if (out.failed.length) {
+    const again = events.filter((ev) => out.failed.some((f) => f.id === ev.id));
+    out = await store.recordFlags(run.courseId, again).catch((e) => failedAll(again, e));
+  }
+  // The browser may already have refreshed on "done": these show on the upload card at the next load.
+  if (out.failed.length) {
+    await store
+      .noteDropped(run.id, out.failed.map((f) => ({ prompt: "A marked passage", reason: `couldn't be recorded as a struggle flag (${f.message}); flag it with This is hard` })))
+      .catch(() => undefined);
+  }
+  const recorded = new Set(events.filter((ev) => !out.failed.some((f) => f.id === ev.id)).map((ev) => ev.objectiveId));
+  const unasked = withoutQuestions([...recorded], after);
+  if (!unasked.length) return [];
+  const materialPages = await store.pages(materials.map((m) => m.id));
+  // Ones a top-up can't write for either (no pages to write from) aren't worth an empty run.
+  const unwritable = new Set(
+    topUpTargets({ course: { ...loaded.course, topics: after.topics }, objectives: after.objectives, bank: after.bank, materials, materialPages, objectiveIds: unasked, answered: new Set() }).skipped.map((s) => s.objectiveId),
+  );
+  return unasked.filter((id) => !unwritable.has(id));
+}
+
+/** Flagged objectives (as they stand now, after merges) that are live and have no quick-review question. */
+async function flaggedWithoutQuestions(store: JobStore, courseId: string, structure: Pick<StructureState, "objectives" | "bank">): Promise<string[]> {
+  return withoutQuestions(await store.flaggedObjectives(courseId), structure);
+}
+
+/** Of `ids` (followed through merges), the live objectives with no quick-review question. */
+function withoutQuestions(ids: readonly string[], structure: Pick<StructureState, "objectives" | "bank">): string[] {
+  const survivor = (id: string) => {
+    let o = structure.objectives[id];
+    for (let i = 0; o?.mergedInto && i < 50; i++) o = structure.objectives[o.mergedInto];
+    return o?.id ?? id;
+  };
+  const asked = new Set(Object.values(structure.bank).flat().filter((q) => !q.deep).map((q) => survivor(q.objectiveId)));
+  const flagged = [...new Set(ids.map(survivor))];
+  return flagged.filter((id) => structure.objectives[id] && structure.objectives[id].review !== "archived" && !asked.has(id));
 }
 
 /** Write a durable Dive In's harder questions, then atomically save its questions and completed run. */

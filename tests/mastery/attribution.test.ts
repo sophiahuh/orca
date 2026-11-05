@@ -43,6 +43,8 @@ const confusion = (objectiveId: string): ConfusionEvent => ({
   objectiveId,
   materialId: "m",
   note: "?",
+  flagSource: "homework",
+  page: null,
 });
 
 const att = attribution({ topicIds: ["t1"], bank, catalogue });
@@ -77,4 +79,16 @@ test("eventsCountingFor picks an objective's events, filed under it", () => {
   assert.deepEqual(forC.map((e) => e.id), ["q2-b", "c-b"]);
   assert.ok(forC.every((e) => e.objectiveId === "c"));
   assert.deepEqual(eventsCountingFor("gone", log, att), []);
+});
+
+test("an objective with no questions holds state too; merged, archived and off-trail ones don't", () => {
+  const withBare: Record<string, ObjectiveInfo> = { ...catalogue, bare: { id: "bare", topicId: "t1", name: "Bare", review: "proposed" }, old: { id: "old", topicId: "t1", name: "Old", review: "archived", mergedInto: "bare" } };
+  const a = attribution({ topicIds: ["t1"], bank, catalogue: withBare });
+  assert.deepEqual(a.perTopic[0].list.map((o) => o.id), ["a", "c", "bare"], "question-bearing objectives first, then the rest");
+  assert.deepEqual(a.objectives.get("bare")!.questionIds, []);
+  assert.equal(a.objectives.get("bare")!.hasMechanismQuestions, false);
+  assert.equal(a.countsFor(confusion("bare")), "bare");
+  assert.equal(a.countsFor(confusion("old")), "bare", "a flag on a merged-away objective follows the merge");
+  assert.equal(a.countsFor(confusion("d")), null, "t2 isn't on the trail");
+  assert.equal(a.objectives.has("gone"), false);
 });

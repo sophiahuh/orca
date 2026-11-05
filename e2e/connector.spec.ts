@@ -30,9 +30,9 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   const note = await page.request.post(url, { data: { jsonrpc: "2.0", method: "notifications/initialized" } });
   expect(note.status()).toBe(202);
   const tools = await rpc(page, url, "tools/list");
-  expect(tools.body!.result!.tools!.map((t) => t.name)).toEqual(["course_state", "set_exam", "questions_for", "record_answer"]);
+  expect(tools.body!.result!.tools!.map((t) => t.name)).toEqual(["course_state", "set_exam", "questions_for", "record_answer", "flag_check"]);
 
-  // The courses, then one course: every objective unseen, each with its questions counted, all due.
+  // The courses, then one course: every objective unseen (not flagged), each with its questions counted; weak points first, so none is due.
   const courses = toolText(await call(page, url, "course_state", {}));
   expect(courses.courses).toEqual([{ id: F.course, name: "Logic Fixture" }]);
   const state = toolText(await call(page, url, "course_state", { courseId: F.course })) as { topics: Array<{ name: string }>; objectives: Array<{ id: string; status: string; questions: number; upcoming: boolean }>; dueNow: string[]; exams: unknown[] };
@@ -44,7 +44,7 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
       [F.signExtend, "unseen", 1, false],
     ].sort(),
   );
-  expect(state.dueNow.sort()).toEqual([F.simplify, F.convert, F.signExtend].sort());
+  expect(state.dueNow).toEqual([]);
   expect(state.exams).toEqual([]);
 
   // An exam with its scope; then a question for one objective, with what Claude needs to grade it.
@@ -55,16 +55,21 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   expect(questions.questions).toHaveLength(1);
   expect(questions.questions[0]).toMatchObject({ id: F.ba1, objectiveId: F.simplify, prompt: "Simplify x + xy.", exact: ["x"] });
 
-  // Claude grades it and records it: self-marked evidence from the connector, and the objective moves to learning.
+  // Claude grades it and records it: self-marked evidence from the connector; answered right while unflagged, the objective is verified.
   const recorded = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: F.ba1, outcome: "correct" }));
-  expect(recorded).toEqual({ recorded: true, objectiveId: F.simplify, status: "learning" });
-  const after = toolText(await call(page, url, "course_state", { courseId: F.course })) as { objectives: Array<{ id: string; status: string }>; exams: Array<{ title: string }> };
-  expect(after.objectives.find((o) => o.id === F.simplify)!.status).toBe("learning");
+  expect(recorded).toEqual({ recorded: true, objectiveId: F.simplify, status: "verified" });
+  // The student asked about sign extension in the chat: a check-me flag, so it comes due for one question.
+  const flagged = toolText(await call(page, url, "flag_check", { courseId: F.course, objectiveIds: [F.signExtend], said: "why does the sign bit get copied?" })) as { flagged: Array<{ objectiveId: string; status: string }>; unknown: string[]; withoutQuestions: string[] };
+  expect(flagged).toEqual({ flagged: [{ objectiveId: F.signExtend, status: "check-due" }], unknown: [], withoutQuestions: [] });
+  const after = toolText(await call(page, url, "course_state", { courseId: F.course })) as { objectives: Array<{ id: string; status: string }>; exams: Array<{ title: string }>; dueNow: string[] };
+  expect(after.objectives.find((o) => o.id === F.simplify)!.status).toBe("verified");
+  expect(after.dueNow).toEqual([F.signExtend]);
   expect(after.exams.map((e) => e.title)).toEqual(["Midterm"]);
   const s = await stored(page, student);
   const events = s.evidence.filter((e) => e.kind === "answer");
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({ kind: "answer", questionId: F.ba1, objectiveId: F.simplify, outcome: "correct", grader: "self", source: "connector" });
+  expect(s.evidence.filter((e) => e.kind === "confusion")).toEqual([expect.objectContaining({ objectiveId: F.signExtend, flagSource: "connector", note: "why does the sign bit get copied?", materialId: null, page: null })]);
 
   // Refusals are the tool's, not the protocol's: an unknown question, a name for an id.
   const bad = await call(page, url, "record_answer", { courseId: F.course, questionId: "a0000000-0000-4000-8000-000000000009", outcome: "correct" });

@@ -67,10 +67,9 @@ test("an injected deck: the screen and the model's report are recorded, planted 
   // The place that named a slide the deck doesn't have went; the objective stayed with its real place.
   const dontCares = Object.values(state.objectives[course.id]).find((o) => (o as { name: string }).name === "Use don't-cares") as { signals: Array<{ places: Array<{ locator: string }> }> };
   expect(dontCares.signals[0].places.map((p) => p.locator)).toEqual(["slide 2"]);
-  // Questions were still written for the real objectives.
-  expect(run.questionsAdded).toBe(4);
-  // The refused topic's objectives are never asked for.
-  expect(await fakeCalls()).toEqual(["map", "objectives", "generate"]);
+  // Weak points first: nothing marked, so no questions at upload. The refused topic's objectives are never asked for.
+  expect(run.questionsAdded).toBe(0);
+  expect(await fakeCalls()).toEqual(["map", "objectives"]);
 
   const { data: events } = await admin().from("security_events").select("kind, check, severity, quote, run_id, material_id").eq("owner_id", student.id).order("check");
   expect(events!.length).toBeGreaterThanOrEqual(3);

@@ -3,6 +3,7 @@
  * the student as a sentence. The "current topic" boost, the distance discount and exam proximity are
  * left out until they're decided (docs/TO-DISCUSS.md; exams arrive in Phase 5).
  */
+import { flagStrength } from "./flags.ts";
 import { MASTERY_RULES } from "./objective-state.ts";
 import type { EvidenceEvent, ObjectiveState } from "./types.ts";
 
@@ -38,12 +39,12 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const fmtCredit = (c: number) => (Number.isInteger(c) ? String(c) : c.toFixed(1));
 
 /**
- * The time of the student's latest "I don't get this" on the objective, if no unaided correct answer
+ * The time of the student's latest struggled flag ("I don't get this") on the objective, if no unaided correct answer
  * has come after it. Events must already be filed under their current objective (merges followed).
  */
 export function openConfusion(objectiveId: string, events: readonly EvidenceEvent[]): string | null {
   const latest = events
-    .filter((e) => e.kind === "confusion" && e.objectiveId === objectiveId)
+    .filter((e) => e.kind === "confusion" && e.objectiveId === objectiveId && flagStrength(e) === "struggled")
     .reduce<string | null>((best, e) => (best === null || Date.parse(e.at) >= Date.parse(best) ? e.at : best), null);
   if (latest === null) return null;
   const since = Date.parse(latest);
@@ -64,6 +65,8 @@ export function objectivePriority(state: ObjectiveState, weight: number, confuse
 
   if (state.status === "unseen") {
     terms.push({ term: "overdue", value: R.overdue, reason: "New: not practiced yet" });
+  } else if (state.status === "check-due") {
+    terms.push({ term: "overdue", value: R.overdue, reason: "Flagged for a quick check" });
   } else if (state.status === "fading") {
     if (state.dueAt === null) throw new Error(`Objective ${state.objectiveId} is fading with no check due time`);
     const daysPast = Math.max(0, (now.getTime() - Date.parse(state.dueAt)) / DAY_MS);

@@ -4,6 +4,7 @@ import { use, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { DiveModal } from "@/components/quiz/DiveModal";
+import { canFlagHard } from "@/lib/mastery/flags";
 import { durationSeconds } from "@/lib/mastery/session";
 import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { AppShell } from "@/components/layout/AppShell";
@@ -27,7 +28,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const [editingExams, setEditingExams] = useState(false);
   const closeExams = useCallback(() => setEditingExams(false), []);
   const router = useRouter();
-  const { hydrated, objectives, renameCourse, configs, runs } = useOrca();
+  const { hydrated, objectives, renameCourse, configs, runs, flagObjectives } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -46,9 +47,16 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const m = mastery[course.id];
   if (!m) throw new Error(`No mastery computed for course ${course.id}`);
   const topics = trailTopics(course);
-  const total = topics.length;
-  const done = topics.filter((t) => m.topics.get(t.id)?.status === "done").length;
-  const pct = total ? done / total : 0;
+  // Weak points first: the header counts the course's weak points (objectives in rotation) mastered.
+  const progressOf = (topicId: string) => {
+    const p = m.topics.get(topicId);
+    if (!p) throw new Error(`No progress computed for topic ${topicId}`);
+    return p;
+  };
+  const weak = topics.reduce((sum, t) => sum + progressOf(t.id).inRotation, 0);
+  const held = topics.reduce((sum, t) => sum + progressOf(t.id).mastered, 0);
+  const pct = weak ? held / weak : 0;
+  const flaggable = (topicId: string) => (m.topicObjectives.get(topicId) ?? []).filter((id) => canFlagHard(m.objectives.get(id)!.status));
   const toReview = pendingReview(course.topics, objectives[course.id] ?? {}).count;
   const uploading = uploadsInProgress(runs, course.id);
   const agenda = agendas[course.id];
@@ -65,7 +73,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </Button>
         </div>
       ) : (
-        <KnowledgePath course={course} progress={m.topics} needingQuestions={m.objectivesNeedingQuestions} onStart={(t) => setDiving({ id: t.id, name: t.name })} />
+        <KnowledgePath course={course} progress={m.topics} onStart={(t) => setDiving({ id: t.id, name: t.name })} />
       )}
 
       <motion.header variants={stagger()} initial="hidden" animate="show" className="absolute left-[28px] top-[28px] flex items-start gap-[16px]">
@@ -102,7 +110,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
             {course.name}
           </motion.h1>
           <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep">
-            {done} of {total} topics complete
+            {weak ? `${held} of ${weak} weak spots mastered` : "No weak spots flagged yet"}
           </motion.p>
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
             <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />
@@ -125,7 +133,8 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         <button type="button" onClick={() => setEditingExams(true)} data-part="edit-exams" className="pressable rounded-pill bg-prussian px-[14px] py-[7px] text-[13px] font-bold text-parchment lip-2 lip-ink">
           Edit Exams
         </button>
-        {agenda.deepReview.candidates > 0 && (
+        {/* A dive can always be started; the cadence only adds "due" when there are weak points. */}
+        {agenda.ranked.length > 0 && (
           <div className="group relative">
             <Link href={`/session/${course.slug}?kind=deep`} data-part="start-deep" aria-describedby="dive-in-info" className="pressable rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice">
               Dive in{agenda.deepReview.due ? " · due" : ""}
@@ -143,6 +152,15 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         initialMinutes={durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).deep.duration) / 60}
         onStart={(topicId, minutes) => router.push(`/session/${course.slug}?kind=deep&topic=${topicId}&minutes=${minutes}`)}
         onClose={closeDive}
+        onFlagTopic={
+          // Every objective in the topic, except ones already being learned; no button when that's none. A flag on one with no questions writes them (requestFlagTopUp).
+          diving && flaggable(diving.id).length
+            ? (topicId) => {
+                flagObjectives(course.id, flaggable(topicId));
+                closeDive();
+              }
+            : undefined
+        }
       />
     </AppShell>
   );

@@ -9,9 +9,9 @@
  * layer, not a replacement.
  */
 
-export type UntrustedSource = "uploaded_pdf" | "reflection_note" | "student_answer" | "generated_question" | "student_feedback" | "student_notes";
+export type UntrustedSource = "uploaded_pdf" | "reflection_note" | "student_answer" | "generated_question" | "student_feedback" | "student_notes" | "student_markers";
 
-const SOURCES: ReadonlySet<string> = new Set<UntrustedSource>(["uploaded_pdf", "reflection_note", "student_answer", "generated_question", "student_feedback", "student_notes"]);
+const SOURCES: ReadonlySet<string> = new Set<UntrustedSource>(["uploaded_pdf", "reflection_note", "student_answer", "generated_question", "student_feedback", "student_notes", "student_markers"]);
 
 /**
  * Characters JSON.stringify leaves as they are but that shouldn't reach a model literally: format

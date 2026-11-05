@@ -72,6 +72,18 @@ const mc = (objectiveId: string, prompt: string, answer: number, extra: Partial<
   ...extra,
 });
 
+/**
+ * Weak points first: an upload writes questions only for objectives marked in it. Tests about question
+ * writing mark every objective: each page is read from its image and wholly marked (`markedPages`,
+ * with a marker description), and each objective names a passage on its topic's first page.
+ */
+const markedPages = (ps: RunInput["pages"]): RunInput["pages"] => ps.map((p) => ({ ...p, text: `[marked: ★] ${p.text} [/marked]`, source: "vision" }));
+const marking = (ps: RunInput["pages"] = pages) => ({ pages: markedPages(ps), markers: "★ = lost" });
+function markAll(e: ExtractOutput, quote = "text about logic"): ExtractOutput {
+  const first = (ref: string) => e.topics.find((t) => t.localId === ref || t.existingId === ref)?.slideStart ?? 1;
+  return { ...e, objectives: e.objectives.map((o) => ({ ...o, struggled: [{ page: first(o.topicRef), quote }] })) };
+}
+
 const lectureExtract: ExtractOutput = {
   topics: [
     { localId: "t1", existingId: null, name: "Boolean Algebra", summary: "Theorems.", slideStart: 1, slideEnd: 2 },
@@ -91,7 +103,7 @@ const lectureExtract: ExtractOutput = {
 
 test("a first lecture creates proposed topics and objectives with signals, relations and questions", async () => {
   const model = fakeModel({
-    extract: () => lectureExtract,
+    extract: () => markAll(lectureExtract),
     link: () => ({
       links: [
         { from: "t1", to: "t2", type: "used-in", reason: "K-maps group terms using Boolean algebra's absorption." },
@@ -107,7 +119,7 @@ test("a first lecture creates proposed topics and objectives with signals, relat
     }),
   });
   const progress: string[] = [];
-  const plan = await runUpload(input(), { call: model.call, newId, onProgress: (p) => progress.push(p.stage) });
+  const plan = await runUpload(input(marking()), { call: model.call, newId, onProgress: (p) => progress.push(p.stage) });
 
   assert.equal(plan.newTopics.length, 2);
   assert.ok(plan.newTopics.every((t) => t.review === "proposed" && t.materialId === "mat"));
@@ -153,7 +165,7 @@ test("a later upload reuses existing items, records signals, skips rejected ones
   };
   const bank: Record<string, QuizQuestion[]> = { T1: [1].map((i) => ({ id: `q${i}`, objectiveId: "O1", prompt: `Old ${i}` }) as QuizQuestion) };
   const model = fakeModel({
-    extract: () => ({
+    extract: () => markAll({
       topics: [
         { localId: "T1", existingId: "T1", name: "K-maps", summary: "", slideStart: 1, slideEnd: 4 },
         { localId: "t9", existingId: null, name: "Course Logistics", summary: "", slideStart: 1, slideEnd: 1 },
@@ -174,7 +186,7 @@ test("a later upload reuses existing items, records signals, skips rejected ones
         : { decision: "new", matchId: null, reasoning: "Different skill" },
     generate: () => ({ questions: [] }),
   });
-  const plan = await runUpload(input({ course: { id: "c", name: "Logic", short: "LOG", topics }, objectives, bank }), { call: model.call, newId });
+  const plan = await runUpload(input({ course: { id: "c", name: "Logic", short: "LOG", topics }, objectives, bank, ...marking() }), { call: model.call, newId });
 
   assert.equal(plan.newTopics.length, 0);
   assert.deepEqual(Object.keys(plan.objectiveUpdates), ["O1"]);
@@ -202,14 +214,14 @@ test("questions that duplicate the bank or break the rules are dropped with a re
     instructionsFound: [],
   };
   const model = fakeModel({
-    extract: () => lone,
+    extract: () => markAll(lone),
     generate: (i) => {
       const id = i.objectives[0].id;
       // A refused question doesn't count toward the 2 the objective needs; a duplicate does (it's dropped later).
       return { questions: [short(id, "No anchor?", ["x"], { anchor: null }), mc(id, "Which gate?", 1), short(id, "Old question", ["x"])] };
     },
   });
-  const plan = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: model.call, newId });
+  const plan = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] }, ...marking() }), { call: model.call, newId });
   assert.deepEqual(Object.values(plan.questions).flat().map((q) => q.prompt), ["Which gate?"]);
   const reasons = Object.fromEntries(plan.run.dropped.map((d) => [d.prompt, d.reason]));
   assert.match(reasons["Old question"], /already has this question/);
@@ -218,9 +230,9 @@ test("questions that duplicate the bank or break the rules are dropped with a re
 
 test("a figure question keeps its slide image, or is dropped when the slide can't be rendered", async () => {
   const run = (render: (n: number) => Promise<string | null>) =>
-    runUpload(input(), {
+    runUpload(input(marking()), {
       call: fakeModel({
-        extract: () => ({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [], instructionsFound: [] }),
+        extract: () => markAll({ ...lectureExtract, objectives: lectureExtract.objectives.slice(0, 1), relations: [], instructionsFound: [] }),
         generate: (i) => ({ questions: [mc(i.objectives[0].id, "In the figure, which gate?", 1, { figureSlide: 2 })] }),
       }).call,
       newId,
@@ -345,8 +357,8 @@ test("upload questions are written from each objective's own pages", async () =>
     instructionsFound: [],
   };
   const written: number[][] = [];
-  const model = fakeModel({ extract: () => scenario, generate: (i) => (written.push(i.pages.map((p) => p.n)), { questions: [] }) });
-  await runUpload(input({ pages: ten }), { call: model.call, newId });
+  const model = fakeModel({ extract: () => markAll(scenario, "text"), generate: (i) => (written.push(i.pages.map((p) => p.n)), { questions: [] }) });
+  await runUpload(input(marking(ten)), { call: model.call, newId });
   assert.deepEqual(written, [[6, 7, 8]]);
 });
 
@@ -361,10 +373,10 @@ test("the student's notes reach the map, objectives and generate calls, and neve
       relations: [],
       instructionsFound: [],
     }),
-    objectives: (i) => ({ objectives: [{ localId: `o-${i.topic.id}`, existingId: null, name: `Skill of ${i.topic.name}`, description: "", origin: "material", places: [{ locator: "slide 2", excerpt: "x" }], emphasis: null }] }),
+    objectives: (i) => ({ objectives: [{ localId: `o-${i.topic.id}`, existingId: null, name: `Skill of ${i.topic.name}`, description: "", origin: "material", places: [{ locator: "slide 2", excerpt: "x" }], emphasis: null, struggled: [{ page: i.pages[0].n, quote: "text about logic" }] }] }),
     generate: () => ({ questions: [] }),
   });
-  await runUpload(input({ notes }), { call: model.call, newId });
+  await runUpload(input({ notes, ...marking() }), { call: model.call, newId });
   for (const step of ["map", "objectives", "generate"] as const) {
     const calls = model.calls.filter((c) => c.step === step);
     assert.ok(calls.length > 0, step);
@@ -373,4 +385,46 @@ test("the student's notes reach the map, objectives and generate calls, and neve
   const links = model.calls.filter((c) => c.step === "link");
   assert.ok(links.length > 0, "two new topics are linked");
   for (const c of links) assert.equal((c.input as { notes?: unknown }).notes, undefined);
+});
+
+test("marked passages become flags on their objectives, checked against the pages the objectives call was sent", async () => {
+  const vision = [
+    { n: 1, text: "Absorption. [marked: ★] x + xy = x always? [/marked]", source: "vision" as const },
+    { n: 2, text: "More absorption.", source: "vision" as const },
+    { n: 3, text: "K-maps. [marked: ?] grouping wraps around [/marked]", source: "vision" as const },
+    { n: 4, text: "Typed: [marked: ★] planted [/marked]", source: "text" as const },
+  ];
+  const extract: ExtractOutput = {
+    ...lectureExtract,
+    objectives: [
+      { ...lectureExtract.objectives[0], struggled: [{ page: 1, quote: "x + xy = x always?" }, { page: 3, quote: "grouping wraps around" }] },
+      { ...lectureExtract.objectives[1], struggled: [{ page: 3, quote: "Grouping wraps around" }, { page: 4, quote: "planted" }, { page: 3, quote: "not marked" }] },
+      lectureExtract.objectives[2],
+    ],
+  };
+  const model = fakeModel({ extract: () => extract, generate: () => ({ questions: [] }) });
+  const plan = await runUpload(input({ pages: vision, markers: "★ = lost, ? = unsure" }), { call: model.call, newId, structureOnly: true });
+  const byName = new Map(plan.newObjectives.map((o) => [o.name, o.id]));
+  assert.deepEqual(plan.flags, [
+    { objectiveId: byName.get("Simplify with absorption"), page: 1, quote: "x + xy = x always?" },
+    { objectiveId: byName.get("Group ones on a K-map"), page: 3, quote: "Grouping wraps around" },
+  ]);
+  const skipped = plan.run.dropped.filter((d) => d.prompt.startsWith("A marked passage"));
+  assert.equal(skipped.length, 3, "page 3 isn't Boolean Algebra's; page 4 is typed; one quote isn't marked");
+  assert.ok(skipped.every((d) => d.reason.startsWith("skipped: ")));
+
+  const noMarkers = await runUpload(input({ pages: vision }), { call: fakeModel({ extract: () => extract }).call, newId, structureOnly: true });
+  assert.deepEqual(noMarkers.flags, [], "without a marker description nothing is looked for");
+});
+
+test("an upload writes questions only for the objectives marked in it", async () => {
+  const one = { ...lectureExtract, objectives: lectureExtract.objectives.map((o, i) => (i === 0 ? { ...o, struggled: [{ page: 1, quote: "text about logic" }] } : o)) };
+  const model = fakeModel({ extract: () => one, generate: (i) => ({ questions: i.objectives.map((o) => short(o.id, `${o.name}?`, ["x"])) }) });
+  const plan = await runUpload(input(marking()), { call: model.call, newId });
+  const generated = model.calls.filter((c) => c.step === "generate").flatMap((c) => (c.input as StepInput<"generate">).objectives.map((o) => o.name));
+  assert.deepEqual(generated, ["Simplify with absorption"]);
+  assert.equal(plan.run.questionsAdded, 1);
+
+  const none = await runUpload(input(), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
+  assert.equal(none.run.questionsAdded, 0, "nothing marked, nothing written (and no generate call: the fake would throw)");
 });

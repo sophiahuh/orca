@@ -121,6 +121,11 @@ export function KnowledgeMap({ courses, dueCount }: { courses: Course[]; dueCoun
                 <LabelPill count={dueCount(c.id)} onClick={() => router.push(`/course/${c.slug}`)} aria-label={`Open ${c.name}, ${dueCount(c.id)} due today`} title={c.name} style={{ maxWidth: ISLAND_LAYOUT.pillMax }}>
                   <span className="min-w-0 truncate">{c.name}</span>
                 </LabelPill>
+                {levelOf(c.id) === "uncharted" && (mastery[c.id]?.objectives.size ?? 0) > 0 && (
+                  <p data-part="island-note" className="mt-[6px] whitespace-nowrap text-center text-[13px] font-semibold text-wisteria-deep">
+                    No weak spots flagged yet
+                  </p>
+                )}
               </div>
             </div>
           );

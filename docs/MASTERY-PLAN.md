@@ -11,15 +11,17 @@
 > created at upload (§2.1); there is no in-app chat (§2.2). §6 and §7 are superseded by the
 > roadmap and TO-DISCUSS.
 >
-> **Changes since (checked 2026-11-04):** question supply is 2 per objective at upload, and 2 more
-> after a session once an objective still being learned has fewer than 2 unseen (§2.4, §4;
+> **Changes since (checked 2026-11-06):** question supply is 2 per objective when it's flagged (marked
+> in an upload, or a flag top-up; uploads write none for unflagged objectives), and 2 more
+> after a session once a weak point still being learned has fewer than 2 unseen (§2.4, §4;
 > `QUESTIONS_PER_OBJECTIVE`, `TOP_UP_RULES`); evidence `source` is `quiz | quick-review |
 > deep-review | requiz | connector` (§2.2); relations are between topics, so `implies` shielding
 > (§2.5) has nothing to act on; priority has an open-confusion term (+1) and no exam-proximity term
 > yet (§2.6); the connector built on 2026-11-04 records answers Claude grades as self-marked
-> evidence instead of the activity signals §5 describes. **Designed, not built:** weak points first
-> (`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`) replaces `unseen` with
-> `unverified` (never due) and adds `verified` and `check-due` to §2.3, and changes the island share.
+> evidence instead of the activity signals §5 describes. **Weak points first** (Plan A built
+> 2026-11-05; `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`): only objectives in
+> rotation come due; `unseen` keeps its name ("Not flagged"), `verified` and `check-due` are added
+> to §2.3; struggle flags generalise confusion events (§2.2); islands count weak points (§2.3).
 
 Written after reading the ai-native-learning-platform repo's learner model (`compute-learner-state.ts`,
 `evidence-weights.ts`, `next-review-date.ts`, `review-priority.ts`, `daily-session.ts`) and
@@ -95,9 +97,19 @@ A topic's progress and an island's look are summaries computed from its objectiv
 ```
 Skipped questions and grading failures record nothing.
 
+**Struggle flags** (weak points first, 2026-11-05; spec
+`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`): a flag is a `confusion` event with a
+`flag_source` (homework, handwritten-marker, connector, slide, manual) and an optional `page`. Its
+strength follows from the source (`src/lib/mastery/flags.ts`): the connector's flags are *check me*
+(one question), every other source's are *struggled* (the reset below). Today the browser records
+homework reflections, manual "This is hard" flags and tapped slides ("Which slides were hard?"); the
+server records handwritten markers (the upload job) and the connector's `flag_check`. Every live
+objective holds state with or without questions, and a flag on one with none writes its questions
+(a flag top-up).
+
 **Self-reported confusion** (Phase 2): when a homework reflection says the student doesn't
 understand something, the note is matched to objectives (uncertain matches are confirmed by the
-student) and each match records a confusion event. A confusion event resets the objective to
+student) and each match records a confusion event (a struggled flag from `homework`). A confusion event resets the objective to
 `learning`: credit, credit days and attempted questions are cleared, so it needs 3 fresh credited
 answers over 2 days again. On an objective that isn't mastered yet it raises priority. The
 asymmetry is deliberate: "I don't get it" is believed because it's cheap and safe to act on;
@@ -113,21 +125,35 @@ summarise them.
 
 | State | Meaning | Counts as mastered? | Leaves the state when |
 |---|---|---|---|
-| `unseen` | Never answered | No | Any graded answer |
-| `learning` | Answered, mastery bar not met yet | No | The bar is met (→ mastered), or a mix-up is detected (→ mixed-up) |
+| `unseen` | Not in rotation, never answered, no open check ("Not flagged") | No | A fully right answer (→ verified), a check flag (→ check-due), a struggled flag or any answer short of right (→ in rotation) |
+| `verified` | Not in rotation, answered fully right ("Verified ✓"); never due | No | A check flag (→ check-due), a struggled flag or any answer short of right (→ in rotation) |
+| `check-due` | Not in rotation, an open *check me* flag; due for one question | No | Its next answer: fully right → verified, otherwise → in rotation |
+| `learning` | In rotation, mastery bar not met yet | No | The bar is met (→ mastered), or a mix-up is detected (→ mixed-up) |
 | `mixed-up` | Two unaided wrong answers in a row on different questions: probably a wrong idea, not a slip (no confidence rating is captured; see TO-DISCUSS) | No | An unaided correct answer on a "why" (mechanism) question, or any unaided correct answer if the objective has none (→ learning) |
 | `mastered` | Bar met (§2.4); its next spaced check isn't due yet | **Yes** | The check comes due, or any miss, including a self-marked one (→ fading) |
 | `fading` | Its spaced check is due or overdue, or it was just missed; it's in the review queue (a missed check is due again at once, for the course's next review session) | No | A genuine pass: an unaided correct answer at or after the due time, and after a miss, in a later session than the miss (→ mastered, with a longer interval). Partial or self-marked answers don't clear it |
 | `retired` | Stable: FSRS stability ≥ 60 days with 3+ passed checks; out of daily review | **Yes** | Any miss, including a self-marked one (→ fading), or an exam covering it brings it back |
 
-A self-reported "I don't understand this" sends any of these back to `learning` (§2.2).
+**In rotation** (weak points first): an objective with a struggled flag, an answer that wasn't fully
+right (wrong, partly right, "Don't know", anywhere: quick review, dive, practice, connector), or
+mastery reached on an answer before `MASTERY_RULES.rotationSince` (the day the rules shipped). Only
+objectives in rotation, and open checks, are ever due; the rows from `learning` down apply only to
+them. The fold keeps counting credit and FSRS for every objective, so an unflagged objective can
+meet the bar in practice: it still reads `verified`, and a later answer short of right puts it in
+rotation with its check due (`fading`). A *check me* flag on a mastered objective makes its check
+due now (never later than it already was).
 
-Topic status is derived: `done` when every objective is mastered or retired (none fading); `in progress` otherwise; `not started` when all unseen. Topics are **not gates**: the
+A struggled flag sends any of these back to `learning` (§2.2), also an objective never answered.
+
+Topic status is derived from its weak points: `done` when every objective in rotation is mastered
+or retired (at least one) and no check is open; `in progress` when one isn't held or a check is
+open; `not started` otherwise (nothing flagged or missed). Topics are **not gates**: the
 course moves on whether or not the student has mastered Lecture 2, so later topics unlock when
 their material exists. The trail shows which earlier topics need work rather than blocking them.
 
-Island level is derived too: the share of the course's objectives that are mastered or retired
-picks one of four fixed looks (no answers yet → look 1; under ⅓ → 2; ⅓ or more → 3; ⅔ or more → 4).
+Island level is derived too: the share of the course's weak points (objectives in rotation) that
+are mastered or retired picks one of four fixed looks (nothing in rotation → look 1, "No weak spots
+flagged yet"; under ⅓ → 2; ⅓ or more → 3; ⅔ or more → 4).
 Fading objectives don't count, so an island drops a level when checks come due. The level names
 (`uncharted`, `sprouting`, `growing`, `thriving`) are code identifiers only.
 
@@ -208,9 +234,11 @@ Each term that fires becomes a sentence under the due card, as their `reasons[]`
 
 ## 3. The loops the student actually feels
 
-**Quick review (daily).** Budget from Configurations (5 min ≈ 5 questions). Composition order:
-mixed-up → fading overdue → learning objectives in the current topic → fading due today →
-anything else by priority. Within an objective, pick a question the student hasn't seen, else the
+**Quick review (daily).** Budget from Configurations (5 min ≈ 5 questions). Weak points only
+(2026-11-05). Composition order (`quickGroup`): mixed-up → fading overdue → learning → fading due
+today → check-due (one question each); before an exam, its topics first inside each group. With
+nothing due, the course shows "You're caught up" and **Practice other topics**: a dive over
+objectives nobody flagged, highest weight first (and **Practice exam topics** in an exam's week). Within an objective, pick a question the student hasn't seen, else the
 one seen longest ago. Mix tiers: ≥ 1 mechanism question per session.
 
 **After missed questions** (changed 2026-10-10 by the owner; the poor-quiz loop below is no longer
@@ -245,8 +273,8 @@ else is persisted.
 
 ## 4. Question supply
 *As built:* 2 questions per objective at upload (one that does the skill, one "why or how"), 2 more
-after a session for an objective still being learned once it has fewer than 2 unseen; dives write
-their own. No drill generators yet (Phase 6). The plan as first written:
+after a session for a weak point still being learned once it has fewer than 2 unseen (unflagged
+objectives get none); dives and practice write their own. No drill generators yet (Phase 6). The plan as first written:
 - **Per-objective generation** replaces per-topic: the extraction prompt asks for objectives first,
   then 6 quick questions per objective (2 exact short answer, 2 mechanism short answer, 2 MC) and
   2 deep questions. Built-in ALD content is re-tagged to objectives.

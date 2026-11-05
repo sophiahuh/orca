@@ -144,6 +144,8 @@ export interface Material {
   reflection?: { at: string; note: string; objectiveIds: string[] };
   /** Text hidden in the file (drawn too small to see) that the server dropped when reading it. */
   hiddenText?: { items: number; pages: number[] };
+  /** Where its file is in Storage (the `materials` bucket); absent when there's no file (typed notes, a Canvas syllabus, a pasted chat). */
+  storagePath?: string;
 }
 
 /** The topics a student sees: everything except archived (rejected or merged-away) ones. */

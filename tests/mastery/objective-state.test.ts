@@ -4,10 +4,12 @@ import {
   EMPTY_ACCUMULATOR,
   MASTERY_RULES,
   applyAnswer,
+  applyEvidence,
   computeObjectiveState,
+  replayObjective,
   stateAt,
 } from "../../src/lib/mastery/objective-state.ts";
-import type { AnswerEvent as EvidenceEvent, ConfusionEvent } from "../../src/lib/mastery/types.ts";
+import type { AnswerEvent as EvidenceEvent, ConfusionEvent, FlagSource } from "../../src/lib/mastery/types.ts";
 
 /** Noon UTC on 2026-10-<n>. */
 const day = (n: number, hour = 12) => new Date(Date.UTC(2026, 9, n, hour)).toISOString();
@@ -62,7 +64,7 @@ test("events for other objectives are ignored", () => {
 
 test("three correct answers on one day is still learning", () => {
   const s = state([ev("q1", day(1)), ev("q2", day(1)), ev("q3", day(1))], at(1));
-  assert.equal(s.status, "learning");
+  assert.equal(s.status, "verified", "not mastered; answered right and never flagged or missed, so not a weak point");
   assert.equal(s.credit, 3);
   assert.equal(s.creditDays, 1);
   assert.equal(s.dueAt, null);
@@ -79,7 +81,7 @@ test("three credited answers over two days with the last two correct is mastered
 test("repeating a question never adds credit", () => {
   const s = state([ev("q1", day(1)), ev("q1", day(2)), ev("q2", day(2))], at(2));
   assert.equal(s.credit, 2);
-  assert.equal(s.status, "learning");
+  assert.equal(s.status, "verified", "not mastered; answered right and never flagged or missed, so not a weak point");
 });
 
 test("a question first missed earns nothing when later answered correctly", () => {
@@ -99,7 +101,7 @@ test("self-marked answers alone can't master an objective", () => {
   const events = [...selfOnly, ev("q5", day(2), { grader: "self" }), ev("q6", day(2), { grader: "self" })];
   const s = state(events, at(2));
   assert.equal(s.credit, 3);
-  assert.equal(s.status, "learning");
+  assert.equal(s.status, "verified", "not mastered; answered right and never flagged or missed, so not a weak point");
 });
 
 test("the last two answers must be correct", () => {
@@ -373,6 +375,8 @@ const confused = (when: string, objectiveId = "t/o"): ConfusionEvent => ({
   objectiveId,
   materialId: "hw1",
   note: "I don't get K-map groups",
+  flagSource: "homework",
+  page: null,
 });
 const fold = (events: Array<EvidenceEvent | ConfusionEvent>, now: Date) => computeObjectiveState("t/o", events, now, opts());
 
@@ -395,13 +399,109 @@ test("after confusion the same questions earn credit again, and mastery needs tw
   assert.equal(fold([...masteredOnDay2(), confused(day(3)), ev("q1", day(4)), ev("q2", day(4)), ev("q3", day(5))], at(5)).status, "mastered");
 });
 
-test("confusion un-retires and un-fades, and does nothing to an objective with no answers", () => {
-  assert.equal(fold([confused(day(1))], at(1)).status, "unseen");
+test("confusion un-retires and un-fades, and puts an unanswered objective in rotation", () => {
+  assert.equal(fold([confused(day(1))], at(1)).status, "learning");
   const missedCheck = [...masteredOnDay2(), ev("q1", day(30), { outcome: "incorrect" })];
   assert.equal(fold(missedCheck, at(30)).status, "fading");
   assert.equal(fold([...missedCheck, confused(day(31))], at(31)).status, "learning");
 });
 
-test("confusion is never credit: a confusion-only log stays unseen and other objectives are untouched", () => {
+test("confusion is never credit, and other objectives are untouched", () => {
   assert.equal(fold([...masteredOnDay2(), confused(day(3), "t/other")], at(3)).status, "mastered");
+});
+
+/* ── Weak points first: rotation and check flags ───────────────────── */
+
+const flag = (when: string, flagSource: FlagSource = "manual", objectiveId = "t/o"): ConfusionEvent => ({
+  kind: "confusion",
+  id: `f-${flagSource}-${when}`,
+  at: when,
+  courseId: "ald",
+  topicId: "t",
+  objectiveId,
+  materialId: flagSource === "manual" || flagSource === "connector" ? null : "m",
+  note: null,
+  flagSource,
+  page: null,
+});
+const replayed = (events: Array<EvidenceEvent | ConfusionEvent>) => replayObjective("t/o", events, opts());
+const statusOf = (events: Array<EvidenceEvent | ConfusionEvent>, now: Date) => stateAt("t/o", replayed(events), now).status;
+
+test("an objective answered fully right, never flagged, is verified and never in rotation", () => {
+  assert.equal(statusOf([ev("q1", day(20))], at(20)), "verified");
+  assert.equal(replayed([ev("q1", day(20))]).inRotation, false);
+});
+
+test("a wrong or partly right answer puts an objective in rotation, Don't know included", () => {
+  assert.equal(statusOf([ev("q1", day(20), { outcome: "incorrect" })], at(20)), "learning");
+  assert.equal(statusOf([ev("q1", day(20), { outcome: "partial" })], at(20)), "learning");
+  assert.equal(statusOf([ev("q1", day(20), { outcome: "incorrect", grader: "self" })], at(20)), "learning");
+});
+
+test("a struggled flag on a never-answered objective is learning with no credit", () => {
+  const s = stateAt("t/o", replayed([flag(day(20))]), at(20));
+  assert.equal(s.status, "learning");
+  assert.equal(s.credit, 0);
+  assert.equal(s.recall, null);
+  assert.equal(s.lastEvidenceAt, day(20));
+});
+
+test("in rotation, the usual bar, spacing and fading apply", () => {
+  const events = [flag(day(20)), ev("q1", day(21)), ev("q2", day(21)), ev("q3", day(22))];
+  assert.equal(statusOf(events, at(22)), "mastered");
+  const dueAt = stateAt("t/o", replayed(events), at(22)).dueAt!;
+  assert.equal(statusOf(events, new Date(Date.parse(dueAt) + 1)), "fading");
+});
+
+test("a check flag asks once: a pass verifies, a miss puts it in rotation", () => {
+  assert.equal(statusOf([flag(day(20), "connector")], at(20)), "check-due");
+  assert.equal(statusOf([flag(day(20), "connector"), ev("q1", day(21))], at(21)), "verified");
+  assert.equal(statusOf([flag(day(20), "connector"), ev("q1", day(21), { outcome: "incorrect" })], at(21)), "learning");
+});
+
+test("a second check flag while one is open changes nothing", () => {
+  const one = replayed([flag(day(20), "connector")]);
+  const two = replayed([flag(day(20), "connector"), flag(day(20, 13), "connector")]);
+  assert.deepEqual({ ...two, lastAt: one.lastAt }, one);
+});
+
+test("a check flag on a mastered or retired objective makes its spaced check due now", () => {
+  const mastered = [flag(day(20)), ev("q1", day(21)), ev("q2", day(21)), ev("q3", day(22))];
+  assert.equal(statusOf([...mastered, flag(day(23), "connector")], at(23)), "fading");
+  const retired = { ...replayed(mastered), retired: true };
+  assert.equal(stateAt("t/o", applyEvidence(retired, flag(day(23), "connector"), opts()), at(23)).status, "fading");
+});
+
+test("a check flag on an objective still being learned changes nothing", () => {
+  const learning = [ev("q1", day(20), { outcome: "incorrect" })];
+  assert.equal(statusOf([...learning, flag(day(21), "connector")], at(21)), "learning");
+});
+
+test("mastered before rotationSince stays in rotation; mastered after it with no miss is verified", () => {
+  // masteredOnDay2 is in October 2026, before MASTERY_RULES.rotationSince.
+  assert.equal(statusOf(masteredOnDay2(), at(2)), "mastered");
+  const after = Date.parse(MASTERY_RULES.rotationSince);
+  const d = (n: number) => new Date(after + n * 86_400_000).toISOString();
+  const later = [ev("q1", d(1)), ev("q2", d(1)), ev("q3", d(2))];
+  assert.equal(replayed(later).mastered, true, "the bar was met");
+  assert.equal(statusOf(later, new Date(after + 2.1 * 86_400_000)), "verified", "but it was never a weak point");
+});
+
+test("old homework confusion replays as a struggled flag", () => {
+  const missedCheck = [...masteredOnDay2(), ev("q1", day(30), { outcome: "incorrect" })];
+  assert.equal(statusOf([...missedCheck, flag(day(31), "homework")], at(31)), "learning");
+});
+
+test("a partly right answer after reaching the bar unflagged makes its check due now", () => {
+  const after = Date.parse(MASTERY_RULES.rotationSince);
+  const d = (n: number) => new Date(after + n * 86_400_000).toISOString();
+  const practised = [ev("q1", d(1)), ev("q2", d(1)), ev("q3", d(2))];
+  assert.equal(statusOf([...practised, ev("q4", d(3), { outcome: "partial" })], new Date(after + 3.1 * 86_400_000)), "fading");
+});
+
+test("a check flag never makes an overdue check look less urgent", () => {
+  const mastered = [flag(day(20)), ev("q1", day(21)), ev("q2", day(21)), ev("q3", day(22))];
+  const overdueAt = replayed(mastered).checkDueAt!;
+  const late = new Date(Date.parse(overdueAt) + 5 * 86_400_000).toISOString();
+  assert.equal(replayed([...mastered, flag(late, "connector")]).checkDueAt, overdueAt);
 });

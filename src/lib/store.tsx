@@ -61,7 +61,7 @@ import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { type TodoCard, todoCards } from "./mastery/todo";
 import { assembleQuickReview, durationSeconds, lastSeenOf, sessionCandidates } from "./mastery/session";
 import { askableQuestions } from "./askable";
-import { type CourseAgenda, agendaWeights, courseAgenda } from "./mastery/agenda";
+import { type CourseAgenda, agendaWeights, courseAgenda, examInWindow, survivingTopic } from "./mastery/agenda";
 import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
 import { courseObjectiveWeights } from "./course/weights";
@@ -72,6 +72,7 @@ import { browserSupabase } from "./supabase/browser";
 import { type MyData, type StructureState, calendarToRow, courseToRow, defaultsToRow, examToRow, isEmpty, progressKey, progressToRow, loadedState, materialInsertRow, sessionFromRow, sessionToRow, structureRows } from "./supabase/app-rows";
 import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
+import { resolveObjectiveId } from "./mastery/catalogue";
 import type { Json } from "./supabase/database.types";
 import { useNow } from "@/hooks/useNow";
 
@@ -93,6 +94,8 @@ interface OrcaState {
   /** Notes for Orca for all classes, and per course; null = none. Saved through their routes, then `refresh()`. */
   accountNotes: string | null;
   courseNotes: Record<string, string | null>;
+  /** How the student marks confusion in their handwritten notes (Settings); null = not described. Saved through its route, then `refresh()`. */
+  markerNotes: string | null;
   /** Account defaults, used by every course without an explicit override. */
   defaultConfig: ReviewConfig;
   results: QuizResult[];
@@ -135,6 +138,7 @@ const initialState: OrcaState = {
   configOverrides: {},
   schedules: {},
   accountNotes: null,
+  markerNotes: null,
   courseNotes: {},
   defaultConfig: DEFAULT_CONFIG,
   results: [],
@@ -178,7 +182,11 @@ interface OrcaActions {
   /** Append one graded answer. The only way learner state changes. Not counted if it can't be saved. */
   recordEvidence: (e: Omit<AnswerEvent, "id" | "at" | "kind">) => void;
   /** A homework reflection: one confusion event per objective the student confirmed, and the note kept on the material. */
-  recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note">>) => void;
+  recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note" | "flagSource" | "page">>) => void;
+  /** "This is hard": one struggled flag from `manual` per objective (random ids, so flagging again later is recorded again). */
+  flagObjectives: (courseId: string, objectiveIds: readonly string[]) => void;
+  /** "Which slides were hard?": one struggle flag (source slide) per objective, on the first selected page that names it. */
+  flagSlides: (courseId: string, materialId: string, pages: ReadonlyArray<{ page: number; objectiveIds: readonly string[] }>) => void;
   /** Whether the class has reached this material yet (`Material.upcoming`); its objectives wait while it hasn't. */
   setMaterialUpcoming: (materialId: string, upcoming: boolean) => void;
   setOnboarded: (v: boolean) => void;
@@ -212,6 +220,8 @@ type OrcaContextValue = OrcaState &
     saving: number;
     /** "Couldn't save: …" for the last save that failed (the state was then read again from the database). */
     saveError: string | null;
+    /** The last top-up a batch of struggle flags started (`FlagTopUpWatcher` follows it); null before any. */
+    flagTopUpRun: string | null;
   };
 
 const OrcaContext = createContext<OrcaContextValue | null>(null);
@@ -704,12 +714,82 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save, postEvidence],
   );
 
+  const [flagTopUpRun, setFlagTopUpRun] = useState<string | null>(null);
+  /**
+   * After a batch of struggle flags: questions for the flagged objectives that have none, written now
+   * (POST /api/top-up without a session), once the flags are saved (the route keeps only flagged
+   * objectives). Best effort: every later top-up also catches them up.
+   */
+  const requestFlagTopUp = useCallback((courseId: string, objectiveIds: readonly string[]) => {
+    const s = stateRef.current;
+    const catalogue = s.objectives[courseId] ?? {};
+    const asked = new Set(
+      Object.values(s.questionBank[courseId] ?? {})
+        .flat()
+        .filter((q) => !q.deep && catalogue[q.objectiveId])
+        .map((q) => resolveObjectiveId(q.objectiveId, catalogue)),
+    );
+    const missing = [...new Set(objectiveIds)].filter((id) => !asked.has(id));
+    if (!missing.length) return;
+    void queue.current
+      .then(() => fetch("/api/top-up", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ courseId, objectiveIds: missing }) }))
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as { runId?: string } | null;
+        if (res.ok && body?.runId) setFlagTopUpRun(body.runId);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  /** Record a batch of the student's struggle flags (manual or slide), then ask for questions for the ones with none. */
+  const saveFlags = useCallback(
+    (courseId: string, items: ReadonlyArray<{ objectiveId: string; flagSource: "manual" | "slide"; materialId: string | null; page: number | null }>) => {
+      const at = new Date().toISOString();
+      const catalogue = stateRef.current.objectives[courseId] ?? {};
+      const flags: ConfusionEvent[] = items.map((item) => {
+        const o = catalogue[item.objectiveId];
+        if (!o) throw new Error(`Objective ${item.objectiveId} is not in course ${courseId}`);
+        return { kind: "confusion", id: crypto.randomUUID(), at, courseId, topicId: o.topicId, objectiveId: item.objectiveId, materialId: item.materialId, note: null, flagSource: item.flagSource, page: item.page };
+      });
+      if (!flags.length) return;
+      const ids = new Set(flags.map((f) => f.id));
+      setState((s) => ({ ...s, evidence: [...s.evidence, ...flags] }));
+      save(
+        async () => {
+          for (const f of flags) {
+            await postEvidence(f, { kind: "confusion", id: f.id, courseId, objectiveId: f.objectiveId, flagSource: f.flagSource, ...(f.materialId ? { materialId: f.materialId } : {}), ...(f.page !== null ? { page: f.page } : {}) });
+          }
+        },
+        // A flag that couldn't be saved isn't counted.
+        { onFail: () => setState((s) => ({ ...s, evidence: s.evidence.filter((e) => !ids.has(e.id)) })) },
+      );
+      requestFlagTopUp(courseId, flags.map((f) => f.objectiveId));
+    },
+    [save, postEvidence, requestFlagTopUp],
+  );
+
+  const flagObjectives = useCallback<OrcaActions["flagObjectives"]>(
+    (courseId, objectiveIds) => saveFlags(courseId, objectiveIds.map((objectiveId) => ({ objectiveId, flagSource: "manual", materialId: null, page: null }))),
+    [saveFlags],
+  );
+
+  const flagSlides = useCallback<OrcaActions["flagSlides"]>(
+    (courseId, materialId, pages) => {
+      // One flag per objective: overlapping pages name some objectives twice.
+      const seen = new Set<string>();
+      const items = pages.flatMap(({ page, objectiveIds }) =>
+        objectiveIds.filter((id) => !seen.has(id) && (seen.add(id), true)).map((objectiveId) => ({ objectiveId, flagSource: "slide" as const, materialId, page })),
+      );
+      saveFlags(courseId, items);
+    },
+    [saveFlags],
+  );
+
   const recordReflection = useCallback<OrcaActions["recordReflection"]>(
     (materialId, note, events) => {
       const at = new Date().toISOString();
       // One id per (material, objective): a retry after a half-failed save sends the same ids, and the
       // server refuses the ones already recorded instead of recording the confusion twice.
-      const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: confusionEventId(materialId, e.objectiveId), at, materialId, note }));
+      const confusion: ConfusionEvent[] = events.map((e) => ({ ...e, kind: "confusion", id: confusionEventId(materialId, e.objectiveId), at, materialId, note, flagSource: "homework", page: null }));
       const reflection = { at, note, objectiveIds: events.map((e) => e.objectiveId) };
       setState((s) => ({
         ...s,
@@ -719,13 +799,15 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       save(
         async () => {
           for (const c of confusion) {
-            await postEvidence(c, { kind: "confusion", id: c.id, courseId: c.courseId, objectiveId: c.objectiveId, materialId, note });
+            await postEvidence(c, { kind: "confusion", id: c.id, courseId: c.courseId, objectiveId: c.objectiveId, flagSource: "homework", materialId, note });
           }
           mustChange(await browserSupabase().from("materials").update({ reflection: reflection as unknown as Json }).eq("id", materialId).select("id"));
         },
       );
+      const courseId = confusion[0]?.courseId;
+      if (courseId) requestFlagTopUp(courseId, confusion.map((c) => c.objectiveId));
     },
-    [save, postEvidence],
+    [save, postEvidence, requestFlagTopUp],
   );
 
   const setMaterialUpcoming = useCallback<OrcaActions["setMaterialUpcoming"]>(
@@ -849,6 +931,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       loadError,
       saving,
       saveError,
+      flagTopUpRun,
       addCourse,
       renameCourse,
       setConfig,
@@ -863,6 +946,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       recordQuiz,
       recordEvidence,
       recordReflection,
+      flagObjectives,
+      flagSlides,
       setMaterialUpcoming,
       setOnboarded,
       setName,
@@ -875,7 +960,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
@@ -993,6 +1078,7 @@ export function useAgenda(): Record<string, CourseAgenda> {
             results,
             // Exams, and any uploaded exam's due date on the calendar.
             examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
+            examTopics: new Set(examInWindow(exams, c.id, dayKey(new Date(nowMs).toISOString()), survivingTopic(c.topics))?.topicIds ?? []),
             upcoming: upcomingObjectives(materials, objectives[c.id] ?? {}),
             now: new Date(nowMs),
             dayKey,

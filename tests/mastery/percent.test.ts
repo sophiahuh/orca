@@ -21,7 +21,9 @@ test("the display percent climbs with credit before mastery and follows recall a
 test("the review phrase reads the next due day in the student's day", () => {
   const dayKey = (iso: string) => iso.slice(0, 10);
   const now = new Date("2026-10-06T15:00:00Z");
-  assert.equal(reviewPhrase(undefined, now, dayKey), "comes up in your next quiz");
+  assert.equal(reviewPhrase(undefined, now, dayKey), "not flagged, so Orca won't schedule it");
+  assert.equal(reviewPhrase({ ...base, status: "verified" }, now, dayKey), "answered right, so Orca won't schedule it");
+  assert.equal(reviewPhrase({ ...base, status: "check-due" }, now, dayKey), "comes up once in your next quick review");
   assert.equal(reviewPhrase({ ...base, status: "mastered", dueAt: "2026-10-07T03:00:00Z" }, now, dayKey), "back in review tomorrow");
   assert.equal(reviewPhrase({ ...base, status: "mastered", dueAt: "2026-10-09T03:00:00Z" }, now, dayKey), "back in review in 3 days");
   assert.equal(reviewPhrase({ ...base, status: "fading", dueAt: "2026-10-05T03:00:00Z" }, now, dayKey), "comes back in your next quick review");

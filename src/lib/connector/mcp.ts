@@ -9,6 +9,9 @@
  * as JSON. No server-to-client stream (nothing here is long-running), no sessions.
  */
 
+import { checkNotes } from "../pipeline/notes.ts";
+import type { ScreenHit } from "../untrusted/screen.ts";
+
 export const PROTOCOL_VERSION = "2025-06-18";
 const KNOWN_VERSIONS = new Set(["2025-06-18", "2025-03-26", "2024-11-05"]);
 export const SERVER_INFO = { name: "orca", version: "0.1" } as const;
@@ -20,7 +23,8 @@ export const INSTRUCTIONS =
   "planning a study session or saying what to work on, call course_state. When the student says " +
   "what an exam covers (from the professor, the syllabus, or a classmate), call set_exam. To check " +
   "the student, ask questions from questions_for and grade them yourself; then call record_answer " +
-  "for each one so Orca's record stays right. Never record an answer you didn't grade.";
+  "for each one so Orca's record stays right. Never record an answer you didn't grade. When the student " +
+  "asks about something or gets it wrong in this chat, call flag_check so Orca checks them on it later.";
 
 /* ── Tool results: plain data the implementations return; the protocol wraps them ── */
 
@@ -34,7 +38,7 @@ export interface ObjectiveLine {
   topicId: string;
   topic: string;
   name: string;
-  /** Orca's derived status: unseen, learning, mixed-up, mastered, fading, retired. */
+  /** Orca's derived status: unseen (not flagged), verified, check-due, learning, mixed-up, mastered, fading, retired. */
   status: string;
   /** Predicted chance of recalling it now, 0–1, or null before any answer. */
   recall: number | null;
@@ -91,13 +95,28 @@ export interface RecordedAnswer {
   note?: string;
 }
 
+export interface FlagCheckResult {
+  /** The objectives flagged (each a live objective of the course), with their status after the flag. */
+  flagged: Array<{ objectiveId: string; status: string }>;
+  /** Ids that aren't live objectives of this course: nothing was recorded for them. */
+  unknown: string[];
+  /** Flagged objectives with no questions yet. */
+  withoutQuestions: string[];
+  note?: string;
+}
+
 /** What the route implements against the student's data. Every method is scoped to one student. */
 export interface ConnectorTools {
   courses(): Promise<CourseSummary[]>;
   courseState(courseId: string): Promise<CourseState | null>;
-  questionsFor(courseId: string, objectiveIds: string[] | null, limit: number): Promise<QuestionLine[] | null>;
+  /** The questions, and which of the objectives asked for have none (deep-review questions don't count). Null: no such course. */
+  questionsFor(courseId: string, objectiveIds: string[] | null, limit: number): Promise<{ questions: QuestionLine[]; withoutQuestions: string[] } | null>;
   recordAnswer(courseId: string, questionId: string, outcome: Outcome, sessionId: string): Promise<RecordedAnswer | { error: string }>;
   setExam(courseId: string, exam: { id?: string; title: string; date: string; topicIds: string[] }): Promise<ExamLine | { error: string }>;
+  /** One check-me flag (source connector) per known live objective. `said` arrives cleaned and screened. */
+  flagCheck(courseId: string, objectiveIds: string[], said: string): Promise<FlagCheckResult | { error: string }>;
+  /** Log the screen's hits on what the student said (refused or not). */
+  screened(hits: ScreenHit[]): Promise<void>;
 }
 
 /* ── Tool list, as Claude sees it ── */
@@ -109,8 +128,10 @@ export const TOOLS = [
     name: "course_state",
     description:
       "The student's courses, or one course in full: its exams and what each covers, its topics, every " +
-      "learning objective with Orca's status for it (unseen, learning, mixed-up, mastered, fading, " +
-      "retired) and predicted recall, and which objectives are due now. Call this before planning " +
+      "learning objective with Orca's status for it (unseen = not flagged, verified, check-due, learning, " +
+      "mixed-up, mastered, fading, retired) and predicted recall, and which objectives are due now. Orca " +
+      "only schedules weak points: objectives the student struggled with, missed or asked to be checked " +
+      "on. Call this before planning " +
       "what to study, and again after recording answers to see where things stand. With no course, " +
       "lists the courses so you can pick one.",
     inputSchema: {
@@ -144,7 +165,8 @@ export const TOOLS = [
       "Questions from Orca's bank to check the student with, each with its objective, the answer and " +
       "how to grade it. Ask them in your own words if you like, but grade against the answer, exact " +
       "forms or rubric given. For a choice question, show the options. Then call record_answer for " +
-      "each one you graded. Leave objectiveIds out to get questions for what's due now.",
+      "each one you graded. Leave objectiveIds out to get questions for what's due now (only weak points are " +
+      "ever due; pass objectiveIds to practise others).",
     inputSchema: {
       type: "object",
       properties: {
@@ -171,6 +193,24 @@ export const TOOLS = [
         outcome: { type: "string", enum: ["correct", "partial", "incorrect"] },
       },
       required: ["courseId", "questionId", "outcome"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "flag_check",
+    description:
+      "Ask Orca to check the student later on objectives they asked about or got wrong in this chat: each gets one " +
+      "check-me question in their next quick review (a miss makes it a weak point Orca keeps practising). Flag only " +
+      "what the student asked about or got wrong, never everything the chat touched. Pass what they said, in their " +
+      "words. Orca writes questions for any objective that has none yet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        courseId: UUID,
+        objectiveIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20, description: "Objective ids from course_state." },
+        said: { type: "string", maxLength: 200, description: "What the student said or asked, in their words (at most 200 characters)." },
+      },
+      required: ["courseId", "objectiveIds", "said"],
       additionalProperties: false,
     },
   },
@@ -269,7 +309,7 @@ async function callTool(params: Record<string, unknown>, tools: ConnectorTools, 
         if (args.objectiveIds !== undefined && (!Array.isArray(args.objectiveIds) || !args.objectiveIds.every(isUuid))) return toolText({ error: "objectiveIds is a list of objective ids from course_state." }, true);
         const limit = typeof args.limit === "number" && Number.isInteger(args.limit) ? Math.min(20, Math.max(1, args.limit)) : 5;
         const questions = await tools.questionsFor(args.courseId, (args.objectiveIds as string[] | undefined) ?? null, limit);
-        return questions ? toolText({ questions }) : toolText({ error: "No such course." }, true);
+        return questions ? toolText(questions) : toolText({ error: "No such course." }, true);
       }
       case "record_answer": {
         if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
@@ -277,6 +317,20 @@ async function callTool(params: Record<string, unknown>, tools: ConnectorTools, 
         if (args.outcome !== "correct" && args.outcome !== "partial" && args.outcome !== "incorrect") return toolText({ error: "outcome is correct, partial or incorrect." }, true);
         const recorded = await tools.recordAnswer(args.courseId, args.questionId, args.outcome, session);
         return toolText(recorded, "error" in recorded);
+      }
+      case "flag_check": {
+        if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
+        if (!Array.isArray(args.objectiveIds) || args.objectiveIds.length < 1 || args.objectiveIds.length > 20 || !args.objectiveIds.every(isUuid)) {
+          return toolText({ error: "objectiveIds is 1 to 20 objective ids from course_state." }, true);
+        }
+        if (typeof args.said !== "string" || args.said.length > 200) return toolText({ error: "said is 1 to 200 characters: what the student said." }, true);
+        // Screened like a reflection note: a strong hit is refused, every hit logged.
+        const said = checkNotes(args.said, 200);
+        if (said.hits.length) await tools.screened(said.hits);
+        if (!said.ok) return toolText({ error: `Orca can't record that note ("${said.quote}"); say what the student asked in plain words.` }, true);
+        if (!said.text) return toolText({ error: "said is 1 to 200 characters: what the student said." }, true);
+        const out = await tools.flagCheck(args.courseId, [...new Set(args.objectiveIds as string[])], said.text);
+        return toolText(out, "error" in out);
       }
       default:
         return toolText({ error: `Orca doesn't have a tool called "${String(name)}".` }, true);

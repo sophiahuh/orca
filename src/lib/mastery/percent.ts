@@ -28,9 +28,12 @@ export function masteryPercent(state: ObjectiveState | undefined): number {
   return Math.round(progress * cap);
 }
 
-/** "back in review tomorrow" / "in 3 days", from the next spaced check; anything not mastered, or due now, waits for the next quick review (never the same day). */
+/** "back in review tomorrow" / "in 3 days", from the next spaced check; a weak point not mastered, or due now, waits for the next quick review (never the same day); unflagged objectives aren't scheduled. */
 export function reviewPhrase(state: ObjectiveState | undefined, now: Date, dayKey: (iso: string) => string): string {
-  if (!state || state.status === "unseen") return "comes up in your next quiz";
+  // Weak points first: only objectives in rotation are scheduled.
+  if (!state || state.status === "unseen") return "not flagged, so Orca won't schedule it";
+  if (state.status === "verified") return "answered right, so Orca won't schedule it";
+  if (state.status === "check-due") return "comes up once in your next quick review";
   if (state.status === "mixed-up") return "comes back in your next quick review to untangle it";
   if (!state.dueAt || state.status !== "mastered") return "comes back in your next quick review";
   const today = dayKey(now.toISOString());

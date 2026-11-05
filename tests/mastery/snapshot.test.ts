@@ -14,7 +14,9 @@ import {
   applyEvidence,
   dayKeyIn,
   replayObjective,
+  stateAt,
 } from "../../src/lib/mastery/objective-state.ts";
+import { FLAG_STRENGTH } from "../../src/lib/mastery/flags.ts";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "../../src/lib/mastery/types.ts";
 
 const day = (n: number, hour = 12) => new Date(Date.UTC(2026, 9, n, hour)).toISOString();
@@ -48,6 +50,8 @@ const confusion = (when: string): ConfusionEvent => ({
   objectiveId: "o",
   materialId: "m",
   note: "I don't get it",
+  flagSource: "homework",
+  page: null,
 });
 
 /**
@@ -77,60 +81,74 @@ const GOLDEN_OPTIONS = { hasMechanismQuestions: true, dayKey: utcDay };
 /* ── RULES_VERSION ────────────────────────────────────────────────────── */
 
 /**
- * The hash of MASTERY_RULES plus the FSRS parameters each RULES_VERSION was released with. When a
- * rule or the scheduler's parameters change, bump RULES_VERSION and add a line here (never edit
- * an old one): every stored snapshot with an older version is then rebuilt from the log.
+ * The hash of MASTERY_RULES, the FSRS parameters and (from version 2) FLAG_STRENGTH each
+ * RULES_VERSION was released with. When any of them changes, bump RULES_VERSION and add a line here
+ * (never edit a released one; the latest may be re-recorded until it's deployed): every stored
+ * snapshot with an older version is then rebuilt from the log. Version 1 was hashed without the
+ * flag strengths, so its line is a record and can't be reproduced by today's formula.
  */
 const RULES_HASHES: Record<number, string> = {
   1: "eb9aeb80f48d781505b46862b41eeb1176b1e06e54dc833f4c95263d0503a2e0",
+  // Weak points first: rotationSince, and the fold's inRotation / checkOpen.
+  2: "e56f02e25b111dcfa67d7ae205524e4ea8dd16e66736fc0efb7aa1aa68c4c60c",
 };
 
 /**
  * The golden log's accumulator under each RULES_VERSION, just before the confusion event and at the
  * end. A change to the fold's logic shows up here even when no constant moved.
  */
-const GOLDEN: Record<number, { beforeConfusion: ObjectiveAccumulator; end: ObjectiveAccumulator }> = {
-  1: {
-    beforeConfusion: {
-      answered: 13,
-      lastAt: "2026-10-29T12:00:00.000Z",
-      attempted: ["q1", "q2", "q3", "q4", "q5", "q6"],
-      credit: 3,
-      gradedCredit: 2.5,
-      creditDays: ["2026-10-01", "2026-10-02"],
-      lastTwo: ["correct", "correct"],
-      mixedUp: false,
-      lastMissQuestion: null,
-      mastered: true,
-      checkDueAt: "2026-11-01T12:00:00.000Z",
-      spacedChecks: 3,
-      missPending: false,
-      missSessionId: null,
-      retired: false,
-      card: { due: "2026-11-01T12:00:00.000Z", stability: 1.85155726, difficulty: 9.75256268, elapsed_days: 1, scheduled_days: 3, learning_steps: 0, reps: 13, lapses: 2, state: 2, last_review: "2026-10-29T12:00:00.000Z" },
-    },
-    end: {
-      answered: 14,
-      lastAt: "2026-10-31T12:00:00.000Z",
-      attempted: ["q9"],
-      credit: 1,
-      gradedCredit: 1,
-      creditDays: ["2026-10-31"],
-      lastTwo: ["correct"],
-      mixedUp: false,
-      lastMissQuestion: null,
-      mastered: false,
-      checkDueAt: null,
-      spacedChecks: 0,
-      missPending: false,
-      missSessionId: null,
-      retired: false,
-      card: { due: "2026-11-04T12:00:00.000Z", stability: 3.03761629, difficulty: 9.73803849, elapsed_days: 2, scheduled_days: 4, learning_steps: 0, reps: 14, lapses: 2, state: 2, last_review: "2026-10-31T12:00:00.000Z" },
-    },
+// Version 1 accumulators predate inRotation and checkOpen.
+type Golden = { beforeConfusion: Partial<ObjectiveAccumulator>; end: Partial<ObjectiveAccumulator> };
+const GOLDEN_V1: Golden = {
+  beforeConfusion: {
+    answered: 13,
+    lastAt: "2026-10-29T12:00:00.000Z",
+    attempted: ["q1", "q2", "q3", "q4", "q5", "q6"],
+    credit: 3,
+    gradedCredit: 2.5,
+    creditDays: ["2026-10-01", "2026-10-02"],
+    lastTwo: ["correct", "correct"],
+    mixedUp: false,
+    lastMissQuestion: null,
+    mastered: true,
+    checkDueAt: "2026-11-01T12:00:00.000Z",
+    spacedChecks: 3,
+    missPending: false,
+    missSessionId: null,
+    retired: false,
+    card: { due: "2026-11-01T12:00:00.000Z", stability: 1.85155726, difficulty: 9.75256268, elapsed_days: 1, scheduled_days: 3, learning_steps: 0, reps: 13, lapses: 2, state: 2, last_review: "2026-10-29T12:00:00.000Z" },
+  },
+  end: {
+    answered: 14,
+    lastAt: "2026-10-31T12:00:00.000Z",
+    attempted: ["q9"],
+    credit: 1,
+    gradedCredit: 1,
+    creditDays: ["2026-10-31"],
+    lastTwo: ["correct"],
+    mixedUp: false,
+    lastMissQuestion: null,
+    mastered: false,
+    checkDueAt: null,
+    spacedChecks: 0,
+    missPending: false,
+    missSessionId: null,
+    retired: false,
+    card: { due: "2026-11-04T12:00:00.000Z", stability: 3.03761629, difficulty: 9.73803849, elapsed_days: 2, scheduled_days: 4, learning_steps: 0, reps: 14, lapses: 2, state: 2, last_review: "2026-10-31T12:00:00.000Z" },
   },
 };
 
-const rulesHash = () => createHash("sha256").update(JSON.stringify({ rules: MASTERY_RULES, fsrs: FSRS_PARAMETERS })).digest("hex");
+const GOLDEN: Record<number, Golden> = {
+  1: GOLDEN_V1,
+  // The same history, unchanged except for the new fields: it opens with misses, so it is in rotation throughout.
+  2: {
+    beforeConfusion: { ...GOLDEN_V1.beforeConfusion, inRotation: true, checkOpen: false },
+    end: { ...GOLDEN_V1.end, inRotation: true, checkOpen: false },
+  },
+};
+
+// Version 1 was hashed before flag strengths existed; from version 2 they're part of the rules.
+const rulesHash = () => createHash("sha256").update(JSON.stringify({ rules: MASTERY_RULES, fsrs: FSRS_PARAMETERS, flags: FLAG_STRENGTH })).digest("hex");
 
 test("MASTERY_RULES and the FSRS parameters hash to what this RULES_VERSION was released with", () => {
   assert.equal(
@@ -155,6 +173,113 @@ test("the golden log replays to the accumulators recorded for this RULES_VERSION
   const recorded = GOLDEN[RULES_VERSION];
   assert.ok(recorded, `No golden accumulators for RULES_VERSION ${RULES_VERSION}. Check this replay is right, then record it:\n${JSON.stringify(replayed)}`);
   assert.deepEqual(replayed, recorded, "The fold's logic changed: bump RULES_VERSION and record the new golden accumulators");
+});
+
+/**
+ * Weak points first (version 2 on): a history after rotationSince touching every flag rule: a check
+ * flag on an unanswered objective, passes that only verify it, the bar met unflagged, a partly right
+ * answer putting it in rotation with its check due, a passed check, a check flag on the mastered
+ * objective, and a struggled flag resetting it. FLAGS_LOG_PARTIAL: a partly right answer that
+ * itself completes the bar on an unflagged objective.
+ */
+const flagEvent = (when: string, flagSource: "connector" | "manual"): ConfusionEvent => ({
+  kind: "confusion",
+  id: `f-${when}`,
+  at: when,
+  courseId: "c",
+  topicId: "t",
+  objectiveId: "o",
+  materialId: null,
+  note: null,
+  flagSource,
+  page: null,
+});
+// Well after any rotationSince (the merge gate moves it to the deploy day), so nothing here is grandfathered into rotation.
+const nov = (n: number, hour = 12) => new Date(Date.UTC(2027, 10, n, hour)).toISOString();
+const FLAGS_LOG: EvidenceEvent[] = [
+  flagEvent(nov(11), "connector"),
+  answer("q1", nov(12)),
+  answer("q2", nov(12)),
+  answer("q3", nov(13)),
+  answer("q4", nov(14), { outcome: "partial" }),
+  answer("q5", nov(15)),
+  flagEvent(nov(16), "connector"),
+  flagEvent(nov(17), "manual"),
+];
+// 2.5 credit from fully right answers (one self-marked) over two days, then a partial adds the last 0.5.
+const FLAGS_LOG_PARTIAL: EvidenceEvent[] = [answer("p1", nov(20)), answer("p2", nov(20), { grader: "self" }), answer("p3", nov(21)), answer("p4", nov(21, 13), { outcome: "partial" })];
+
+test("a partly right answer that completes the bar on an unflagged objective leaves it due for a check, not mastered", () => {
+  const before = replayObjective("o", FLAGS_LOG_PARTIAL.slice(0, -1), GOLDEN_OPTIONS);
+  assert.deepEqual([before.mastered, before.inRotation, before.credit], [false, false, 2.5]);
+  const acc = replayObjective("o", FLAGS_LOG_PARTIAL, GOLDEN_OPTIONS);
+  assert.deepEqual([acc.mastered, acc.inRotation], [true, true]);
+  assert.equal(stateAt("o", acc, new Date(Date.parse(nov(21, 13)) + 60_000)).status, "fading");
+});
+
+const GOLDEN_FLAGS: Record<number, { beforeStruggled: ObjectiveAccumulator; end: ObjectiveAccumulator }> = {
+  2: {
+    beforeStruggled: {
+      answered: 5,
+      lastAt: "2027-11-16T12:00:00.000Z",
+      attempted: ["q1", "q2", "q3"],
+      credit: 3,
+      gradedCredit: 3,
+      creditDays: ["2027-11-12", "2027-11-13"],
+      lastTwo: ["correct", "correct"],
+      mixedUp: false,
+      lastMissQuestion: null,
+      mastered: true,
+      checkDueAt: "2027-11-16T12:00:00.000Z",
+      spacedChecks: 1,
+      missPending: false,
+      missSessionId: null,
+      retired: false,
+      card: { due: "2027-11-28T12:00:00.000Z", stability: 13.30547848, difficulty: 4.73420027, elapsed_days: 1, scheduled_days: 13, learning_steps: 0, reps: 5, lapses: 0, state: 2, last_review: "2027-11-15T12:00:00.000Z" },
+      inRotation: true,
+      checkOpen: false,
+    },
+    end: {
+      answered: 5,
+      lastAt: "2027-11-17T12:00:00.000Z",
+      attempted: [],
+      credit: 0,
+      gradedCredit: 0,
+      creditDays: [],
+      lastTwo: [],
+      mixedUp: false,
+      lastMissQuestion: null,
+      mastered: false,
+      checkDueAt: null,
+      spacedChecks: 0,
+      missPending: false,
+      missSessionId: null,
+      retired: false,
+      card: { due: "2027-11-28T12:00:00.000Z", stability: 13.30547848, difficulty: 4.73420027, elapsed_days: 1, scheduled_days: 13, learning_steps: 0, reps: 5, lapses: 0, state: 2, last_review: "2027-11-15T12:00:00.000Z" },
+      inRotation: true,
+      checkOpen: false,
+    },
+  },
+};
+
+test("the flags log reads check-due, verified, fading, mastered, fading, learning as it goes", () => {
+  const statuses = FLAGS_LOG.map((e, i) => stateAt("o", replayObjective("o", FLAGS_LOG.slice(0, i + 1), GOLDEN_OPTIONS), new Date(Date.parse(e.at) + 60_000)).status);
+  assert.deepEqual(statuses, ["check-due", "verified", "verified", "verified", "fading", "mastered", "fading", "learning"]);
+});
+
+test("the flags log replays to the accumulators recorded for this RULES_VERSION", () => {
+  const replayed = { beforeStruggled: replayObjective("o", FLAGS_LOG.slice(0, -1), GOLDEN_OPTIONS), end: replayObjective("o", FLAGS_LOG, GOLDEN_OPTIONS) };
+  const recorded = GOLDEN_FLAGS[RULES_VERSION];
+  assert.ok(recorded, `No flags golden for RULES_VERSION ${RULES_VERSION}. Check this replay is right, then record it:\n${JSON.stringify(replayed)}`);
+  assert.deepEqual(replayed, recorded, "The fold's logic changed: bump RULES_VERSION and record the new golden accumulators");
+});
+
+test("a stored snapshot plus the flag events after it equals a full replay, split at every point", () => {
+  const full = replayObjective("o", FLAGS_LOG, GOLDEN_OPTIONS);
+  for (let split = 0; split <= FLAGS_LOG.length; split += 1) {
+    const stored: ObjectiveAccumulator = JSON.parse(JSON.stringify(replayObjective("o", FLAGS_LOG.slice(0, split), GOLDEN_OPTIONS)));
+    assert.deepEqual(FLAGS_LOG.slice(split).reduce((acc, e) => applyEvidence(acc, e, GOLDEN_OPTIONS), stored), full, `split at ${split}`);
+  }
 });
 
 /* ── Snapshot plus events equals replay ──────────────────────────────── */

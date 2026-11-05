@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test, FIXTURE_STATE, seedState, stored } from "./fixture";
+import { expect, test, FIXTURE_STATE, fixtureFlags, seedState, stored } from "./fixture";
 
 /** Leaving a quick review partway and coming back offers to pick up where it left off. */
 const SLUG = FIXTURE_STATE.courses[0].slug;
@@ -16,7 +16,8 @@ async function answerOne(page: Page) {
 }
 
 test.beforeEach(async ({ student, page }) => {
-  await seedState(student, FIXTURE_STATE);
+  // Weak points first: the quick review asks only flagged objectives.
+  await seedState(student, { ...FIXTURE_STATE, evidence: fixtureFlags() });
   await page.route("**/api/llm/status", (route) => route.fulfill({ json: { serverModel: null } }));
 });
 

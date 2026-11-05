@@ -11,7 +11,8 @@
  * - generate: for every objective in the prompt's data block, short answers "<objective name>: case
  *   <i>?" with the exact answer "<i>" (as many as asked for, or `perObjective`);
  * - deep: the same for a deep review, "<objective name>: deep case <i>?", tier application;
- * - transcribe: each page named in the prompt as "Handwritten page <n>: x + xy = x by absorption.";
+ * - transcribe: each page named in the prompt as "Handwritten page <n>: x + xy = x by absorption."
+ *   (the passage tagged "[marked: ★] … [/marked]" when the prompt carries the student's marks);
  * - describe: each slide named in the prompt gets "A figure on slide <n>.";
  * - link: the scenario's `links`, by topic name (default: none), each with a reason;
  * - reflect: the scenario's `reflect` matches, by objective name.
@@ -96,7 +97,9 @@ function answer(step: string, prompt: string): unknown {
     case "transcribe": {
       // The prompt names the pages its images are, in order.
       const pages = (/pages ([\d, ]+), in that order/.exec(prompt)?.[1] ?? "").split(",").map((p) => Number(p.trim())).filter(Boolean);
-      return { pages: pages.map((n) => ({ n, text: `Handwritten page ${n}: x + xy = x by absorption.` })) };
+      // With the student's marks described (a student_markers block), the passage is tagged as marked.
+      const marked = prompt.includes('"source":"student_markers"');
+      return { pages: pages.map((n) => ({ n, text: marked ? `Handwritten page ${n}: [marked: ★] x + xy = x by absorption. [/marked]` : `Handwritten page ${n}: x + xy = x by absorption.` })) };
     }
     case "generate":
     case "deep": {

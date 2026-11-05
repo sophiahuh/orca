@@ -19,6 +19,8 @@ export const LIMITS = {
   answerChars: 2000,
   /** Longest Notes for Orca, per account and per course (the columns' check says the same). */
   notesChars: 1000,
+  /** Longest description of how the student marks confusion in their notes (profiles.marker_notes; the column's check says the same). */
+  markerChars: 300,
   /** Weekly class meetings a course's schedule may list. */
   classMeetings: 14,
 

@@ -11,7 +11,8 @@ import { adminClient } from "@/lib/supabase/server";
  * open a server-to-client stream) is refused: nothing here streams; DELETE (end of session) is a no-op.
  */
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// flag_check can start a top-up; with ORCA_JOBS=inline it runs after the response, within this budget.
+export const maxDuration = 300;
 
 const HEADERS = { ...NO_STORE, "content-type": "application/json" };
 const json = (status: number, body: unknown) => new Response(body === null ? null : JSON.stringify(body), { status, headers: HEADERS });

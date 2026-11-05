@@ -6,6 +6,22 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Weak points first, Plans B and C: assumptions (2026-11-06)
+- **Source:** `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md` ("Decisions this plan makes").
+- **Assumed, pending the owner:**
+  - every question-writing run also writes for flagged objectives still without questions, and one
+    that finishes while new flags arrived queues one more;
+  - only pages read from their images, and only with a marker description saved, can carry marks;
+  - a tapped page flags the objectives anchored to it, else its topic's objectives not anchored
+    elsewhere in the file, skipping ones already being learned;
+  - the trail's "N without questions" line is gone (most objectives have none now);
+  - a marked passage that fails to record after a retry is listed on the upload card;
+  - "You're caught up" shows for a course whose objectives have no questions yet (Practice other
+    topics writes them);
+  - the Atlas's "strong" ignores objectives nobody has touched;
+  - a connector *check me* gets 2 questions written (it still asks one).
+- **What would change:** each is one small change in the files the plan names.
+
 ### Who grades a connector answer, and what Claude's tool output shows (2026-11-05)
 - **Source:** the Claude connector (`src/lib/connector/mcp.ts`).
 - **Today:** `questions_for` hands Claude each question with its answer, exact forms or rubric, and
@@ -45,10 +61,11 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### Island looks: art
 - **What an island shows:** one summary of a whole course, computed from its objectives'
-  mastery states: the share of objectives currently held (mastered or retired). The level
+  mastery states: the share of its weak points (objectives in rotation, since 2026-11-05) currently
+  held (mastered or retired). The level
   names (`uncharted`, `sprouting`, `growing`, `thriving`) are only code identifiers for the four
   pictures; students never see them.
-- **Provisional (Phase 1):** no answers yet → look 1; under 1/3 held → look 2; 1/3 or more →
+- **Provisional (Phase 1):** nothing in rotation yet → look 1; under 1/3 held → look 2; 1/3 or more →
   look 3; 2/3 or more → look 4. Fading objectives don't count, so an island loses a look after
   real neglect.
 - **Cut-offs decided** (see Decided).
@@ -358,7 +375,8 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 
 ## Decided (recorded in the roadmap)
 
-- 2026-11-04: weak points first (designed, not built): only objectives in rotation (a struggled
+- 2026-11-04: weak points first (Plan A built 2026-11-05; Plans B and C and the follow-up built
+  2026-11-06): only objectives in rotation (a struggled
   flag, a miss or partly right answer, or mastered before it ships) come due; islands and rings
   count mastered out of those; *check me* flags from AI chats come from the Claude connector's
   `flag_check`; a manual flag on material the class hasn't reached is due now. The full list of

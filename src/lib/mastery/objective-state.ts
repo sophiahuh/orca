@@ -5,6 +5,7 @@
  * applyAnswer is the step; stateAt reads the result against the clock.
  */
 import { type Card, type Grade, Rating, type State, createEmptyCard, fsrs, generatorParameters } from "ts-fsrs";
+import { flagStrength } from "./flags.ts";
 import type { AnswerEvent, ConfusionEvent, EvidenceEvent, ObjectiveState, ObjectiveStatus, Outcome } from "./types.ts";
 
 export const MASTERY_RULES = {
@@ -30,6 +31,12 @@ export const MASTERY_RULES = {
    * estimate stays a Good, so later intervals and retirement aren't inflated.
    */
   deepReviewStretch: 1.5,
+  /**
+   * Weak points first: an objective that reached mastery on an answer before this time stays in
+   * rotation, so nothing a student had already mastered drops off their island. The day the rules
+   * shipped (move it, and record the new hash, if they ship later).
+   */
+  rotationSince: "2026-11-05T00:00:00.000Z",
 } as const;
 
 /**
@@ -37,11 +44,12 @@ export const MASTERY_RULES = {
  * A snapshot with an older version counts as stale and is rebuilt from the evidence log. Bump it
  * whenever the result of the fold could change: a constant in MASTERY_RULES, the FSRS parameters
  * (including a ts-fsrs upgrade that moves its default weights), or the logic of applyAnswer,
- * applyConfusion or a day key. tests/mastery/snapshot.test.ts fails when the constants or the FSRS
- * parameters change without a bump (it hashes them) and when the logic does (a golden replay
- * recorded per version); record the new hash and golden accumulator there with the bump.
+ * applyConfusion or a day key, or FLAG_STRENGTH (src/lib/mastery/flags.ts). tests/mastery/snapshot.test.ts
+ * fails when the constants, the FSRS parameters or the flag strengths change without a bump (it
+ * hashes them) and when the logic does (golden replays recorded per version); record the new hash
+ * and golden accumulators there with the bump.
  */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** Deterministic (no fuzz), day-based (no same-day learning steps; sessions are daily), capped at 60 days. */
 export const FSRS_PARAMETERS = Object.freeze(
@@ -178,6 +186,10 @@ export interface ObjectiveAccumulator {
   retired: boolean;
   /** FSRS memory state; null before the first answer. */
   card: StoredCard | null;
+  /** In rotation: a struggled flag, a wrong or partly right answer, or mastered before rotationSince. Never cleared. */
+  inRotation: boolean;
+  /** A check flag on an objective not in rotation, open until its next answer. */
+  checkOpen: boolean;
 }
 
 export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
@@ -197,6 +209,8 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   missSessionId: null,
   retired: false,
   card: null,
+  inRotation: false,
+  checkOpen: false,
 }) as ObjectiveAccumulator;
 
 function timeOf(e: EvidenceEvent) {
@@ -225,7 +239,14 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
   const before = acc.card === null ? createEmptyCard(new Date(t)) : toCard(acc.card);
   const card = capInterval(scheduler.next(before, new Date(t), gradeOf(e)).card, t);
   const stored = toStored(card);
-  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: stored };
+  const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: stored, checkOpen: false };
+  // Anything short of fully right is a weak point, wherever it was answered.
+  if (e.outcome !== "correct") {
+    next.inRotation = true;
+    // It met the bar unflagged (practice, dives) and now slipped: its check is due now, as a miss's
+    // would be (a miss after mastery is handled below; a partial there doesn't move the check).
+    if (!acc.inRotation && acc.mastered && e.outcome === "partial") next.checkDueAt = e.at;
+  }
 
   if (!next.mastered) {
     if (e.outcome === "incorrect" && !assisted) {
@@ -253,6 +274,9 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
     if (enoughCredit && next.creditDays.length >= R.requiredDays && lastTwoCorrect && !next.mixedUp) {
       next.mastered = true;
       next.checkDueAt = stored.due;
+      if (t < Date.parse(R.rotationSince)) next.inRotation = true;
+      // A partly right answer completed the bar and made it a weak point in the same step: check it now.
+      else if (!acc.inRotation && e.outcome !== "correct") next.checkDueAt = e.at;
     }
     return next;
   }
@@ -278,20 +302,27 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
 }
 
 /**
- * Self-reported confusion: back to learning. Credit, credit days, attempted questions and the
- * mastery check are cleared, so it needs fresh credited answers over separate days again. FSRS's
- * memory estimate is kept (it describes past answers, which still happened). On an objective with
- * no answers yet there is nothing to reset; Phase 3's priority reads the event itself.
+ * A struggle flag. Struggled: back to learning and into rotation (credit, credit days, attempted
+ * questions and the mastery check cleared; FSRS's memory estimate kept, since past answers still
+ * happened), also on an objective never answered. Check: one question for an objective not in
+ * rotation; on a mastered one its spaced check is due now; on one still being learned, nothing.
  */
 export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): ObjectiveAccumulator {
   const t = timeOf(e);
   if (acc.lastAt !== null && t < Date.parse(acc.lastAt)) {
     throw new Error(`Evidence ${e.id} is older than the last event applied to objective ${e.objectiveId}; rebuild its state from the log`);
   }
-  if (acc.answered === 0) return acc;
+  if (flagStrength(e) === "check") {
+    if (!acc.inRotation) return { ...acc, lastAt: e.at, checkOpen: true };
+    // The check is due now, or stays as overdue as it already was.
+    if (acc.mastered) return { ...acc, lastAt: e.at, checkDueAt: acc.checkDueAt !== null && Date.parse(acc.checkDueAt) < t ? acc.checkDueAt : e.at, retired: false };
+    return { ...acc, lastAt: e.at };
+  }
   return {
     ...acc,
     lastAt: e.at,
+    inRotation: true,
+    checkOpen: false,
     attempted: [],
     credit: 0,
     gradedCredit: 0,
@@ -315,7 +346,7 @@ export function applyEvidence(acc: ObjectiveAccumulator, e: EvidenceEvent, optio
 /** Read an accumulator against the clock. Fading is computed here, never by a timer. */
 export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState {
   let status: ObjectiveStatus;
-  if (acc.answered === 0 || acc.card === null) status = "unseen";
+  if (!acc.inRotation) status = acc.checkOpen ? "check-due" : acc.answered === 0 ? "unseen" : "verified";
   else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
   else if (acc.retired) status = "retired";
   else if (acc.missPending || (acc.checkDueAt !== null && now.getTime() >= Date.parse(acc.checkDueAt))) status = "fading";

@@ -10,6 +10,7 @@ import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
 import { Card } from "@/components/ui/Card";
 import { MASTERY_LABEL, OriginPill, Pill, ReviewPill, TextAction } from "@/components/review/parts";
+import { canFlagHard } from "@/lib/mastery/flags";
 import { fadeUp, stagger } from "@/lib/motion";
 
 const weightText = (w: number | null | undefined) => (w === null || w === undefined ? "no objectives yet" : w === 0 ? "0 (not examined)" : w.toFixed(2));
@@ -17,7 +18,7 @@ const weightText = (w: number | null | undefined) => (w === null || w === undefi
 /** Every objective in a course: where it came from, its review status, weight and mastery, with reject, restore and merge. */
 export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/objectives">) {
   const { slug } = use(params);
-  const { hydrated, objectives, relations, editStructure } = useOrca();
+  const { hydrated, objectives, relations, editStructure, flagObjectives } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const catalogue = useMemo(() => (course ? (objectives[course.id] ?? {}) : {}), [course, objectives]);
@@ -73,6 +74,7 @@ export default function ObjectivesPage({ params }: PageProps<"/course/[slug]/obj
             onReject={(id) => edit((s) => rejectObjective(s, id))}
             onRestore={(id) => edit((s) => restoreObjective(s, id))}
             onMerge={(id, into) => edit((s) => mergeObjectives(s, id, into))}
+            onFlag={(id) => flagObjectives(course.id, [id])}
           />
         ))}
         {rejectedTopics.length > 0 && (
@@ -102,6 +104,7 @@ function TopicSection({
   onReject,
   onRestore,
   onMerge,
+  onFlag,
 }: {
   topic: Topic;
   objectives: Objective[];
@@ -113,6 +116,7 @@ function TopicSection({
   onReject: (id: string) => void;
   onRestore: (id: string) => void;
   onMerge: (id: string, into: string) => void;
+  onFlag: (id: string) => void;
 }) {
   const live = objectives.filter((o) => o.review !== "archived");
   const rejected = objectives.filter((o) => o.review === "archived" && !o.mergedInto);
@@ -140,10 +144,20 @@ function TopicSection({
                     <OriginPill origin={o.origin} />
                   </span>
                   <span className="shrink-0 text-right text-[13px] text-prussian/70">
-                    {status ? MASTERY_LABEL[status] : "No questions yet"} · weight {weightText(weightOf(o.id))}
+                    {status ? `${MASTERY_LABEL[status]} · ` : ""}weight {weightText(weightOf(o.id))}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-[14px]">
+                  {/* Every live objective has state (with or without questions); one without is rejected or merged away. */}
+                  {status !== undefined && (
+                    <span data-part="flag-hard">
+                      {canFlagHard(status) ? (
+                        <TextAction onClick={() => onFlag(o.id)}>This is hard</TextAction>
+                      ) : (
+                        <span className="text-[13px] font-bold text-wisteria-deep">In review</span>
+                      )}
+                    </span>
+                  )}
                   {o.review === "proposed" && <TextAction onClick={() => onConfirm(o.id)}>Confirm</TextAction>}
                   <TextAction tone="danger" onClick={() => onReject(o.id)}>
                     Reject

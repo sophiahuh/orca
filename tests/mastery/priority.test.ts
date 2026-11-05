@@ -67,7 +67,19 @@ test("a fading objective with no due time is a bug, not a guess", () => {
   assert.throws(() => objectivePriority(s("fading"), 1, null, now), /no check due time/);
 });
 
-const confusion = (at: string): ConfusionEvent => ({ kind: "confusion", id: at, at, courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost" });
+const confusion = (at: string): ConfusionEvent => ({ kind: "confusion", id: at, at, courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost", flagSource: "homework", page: null });
+
+test("only struggled flags open the confusion term; a check flag doesn't", () => {
+  const check: ConfusionEvent = { ...confusion("2026-10-04T00:00:00Z"), id: "chk", flagSource: "connector", materialId: null };
+  assert.equal(openConfusion("o", [check]), null);
+  assert.notEqual(openConfusion("o", [confusion("2026-10-04T00:00:00Z")]), null);
+});
+
+test("an open check is ranked like a new objective, with its own reason", () => {
+  const p = objectivePriority(s("check-due"), 1, null, now);
+  assert.equal(termsOf(p).overdue, 1);
+  assert.ok(reasonsOf(p).includes("Flagged for a quick check"));
+});
 const answer = (at: string, outcome: AnswerEvent["outcome"], grader: AnswerEvent["grader"] = "exact"): AnswerEvent => ({
   kind: "answer",
   id: at,

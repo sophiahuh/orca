@@ -84,13 +84,13 @@ isOneToOne: false
                   ]
                 },"evidence_events": {
                   Row: {
-                    "at": string,"course_id": string,"grader": string | null,"id": string,"kind": string,"material_id": string | null,"note": string | null,"objective_id": string,"outcome": string | null,"owner_id": string,"question_id": string | null,"session_id": string | null,"source": string | null,"tier": string | null,"topic_id": string
+                    "at": string,"course_id": string,"flag_source": string | null,"grader": string | null,"id": string,"kind": string,"material_id": string | null,"note": string | null,"objective_id": string,"outcome": string | null,"owner_id": string,"page": number | null,"question_id": string | null,"session_id": string | null,"source": string | null,"tier": string | null,"topic_id": string
                   }
                   Insert: {
-                    "at": string,"course_id": string,"grader"?: string | null,"id": string,"kind": string,"material_id"?: string | null,"note"?: string | null,"objective_id": string,"outcome"?: string | null,"owner_id": string,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id": string
+                    "at": string,"course_id": string,"flag_source"?: string | null,"grader"?: string | null,"id": string,"kind": string,"material_id"?: string | null,"note"?: string | null,"objective_id": string,"outcome"?: string | null,"owner_id": string,"page"?: number | null,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id": string
                   }
                   Update: {
-                    "at"?: string,"course_id"?: string,"grader"?: string | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"note"?: string | null,"objective_id"?: string,"outcome"?: string | null,"owner_id"?: string,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id"?: string
+                    "at"?: string,"course_id"?: string,"flag_source"?: string | null,"grader"?: string | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"note"?: string | null,"objective_id"?: string,"outcome"?: string | null,"owner_id"?: string,"page"?: number | null,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id"?: string
                   }
                   Relationships: [
                     {
@@ -290,13 +290,13 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "avatar": string,"created_at": string,"default_review_config": Json | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
+                    "avatar": string,"created_at": string,"default_review_config": Json | null,"marker_notes": string | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
                   }
                   Insert: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
                   }
                   Update: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
                     

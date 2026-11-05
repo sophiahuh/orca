@@ -5,7 +5,8 @@
  */
 import type { MapOutput, ObjectivesOutput } from "../../src/lib/pipeline/schemas.ts";
 
-type ScenarioObjective = ObjectivesOutput["objectives"][number] & { topicRef: string };
+/** `struggled` (marked passages about it, weak points first Plan B) defaults to none. */
+type ScenarioObjective = Omit<ObjectivesOutput["objectives"][number], "struggled"> & { topicRef: string; struggled?: ObjectivesOutput["objectives"][number]["struggled"] };
 
 /** What a whole file holds: topics with a slide range, objectives naming their topic. */
 export interface ExtractOutput {
@@ -36,6 +37,6 @@ export function objectivesAnswer(s: ExtractScenario, input: { topic: { id: strin
   return {
     objectives: (s.objectives ?? [])
       .filter((o) => refs.has(o.topicRef))
-      .map((o) => ({ localId: o.localId, existingId: o.existingId, name: o.name, description: o.description, origin: o.origin, places: o.places, emphasis: o.emphasis })),
+      .map((o) => ({ localId: o.localId, existingId: o.existingId, name: o.name, description: o.description, origin: o.origin, places: o.places, emphasis: o.emphasis, struggled: o.struggled ?? [] })),
   };
 }

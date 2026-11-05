@@ -1,8 +1,10 @@
 # Weak points first — design
 
 Status: design agreed with the owner in brainstorming, 2026-11-04; revised the same day after an
-audit against the code (every open point below was decided by the owner). Not built. Plans A, B
-and C (section 5) follow from it.
+audit against the code (every open point below was decided by the owner). **Plan A built
+2026-11-05** (`docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`, whose status block lists
+what moved out); Plans B and C, with the follow-up that lets objectives without questions hold state, **built 2026-11-06** (`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`; its decisions are listed there and in `docs/TO-DISCUSS.md`). Where this spec and the code differ, the plan's status
+block says which wins.
 
 ## Why
 
@@ -93,9 +95,10 @@ Consequence, accepted: an objective that was `verified` and reached the bar thro
 Bump `RULES_VERSION` and record the new hash in `tests/mastery/snapshot.test.ts`
 (`rotationSince` is in `MASTERY_RULES`, so it's hashed).
 
-The Atlas's topic strength `unverified` ("New", `src/lib/course/topic-graph.ts:22`) keeps its name
-and meaning. `verified` objectives count as evidence there; strong, developing and fragile come
-only from objectives in rotation.
+The Atlas's topic strength `unverified` ("New", `src/lib/course/topic-graph.ts`) keeps its name
+and meaning. `verified` objectives count as evidence there: a topic whose objectives are all
+verified, mastered or retired is "strong"; an open check is "developing"; fading or mixed-up is
+"fragile".
 
 The other two status axes stay as they are:
 - **Review state** (`proposed` = "Unreviewed"): whether the extraction is right, not what the
@@ -110,10 +113,10 @@ The other two status axes stay as they are:
 There's no new table and no new event kind. `evidence_events` rows with `kind = 'confusion'` gain
 two columns:
 
-- `flag_source text not null default 'homework'`: `'homework' | 'handwritten-marker' |
-  'connector' | 'slide' | 'manual'`. The default fills existing rows when the column is added,
-  so the fold has no null case. It's named `flag_source` because `source` already exists, for
-  answers.
+- `flag_source text`: `'homework' | 'handwritten-marker' | 'connector' | 'slide' | 'manual'`,
+  required on confusion rows and null on answers (check constraints). The migration fills
+  `'homework'` into the existing confusion rows once, so the fold has no null case. It's named
+  `flag_source` because `source` already exists, for answers.
 - `page integer`, nullable: the page in `material_id`. For a .pptx this is the slide number,
   since Orca stores one page per slide.
 
@@ -128,8 +131,9 @@ These are called **struggle flags** in code and docs. Objectives' existing `sign
 (weight inputs) is a different thing, and flags never change an objective's weight.
 
 Who writes them (the browser never writes evidence directly, as today):
-- `POST /api/evidence`: homework (as today, after `/api/reflect`), slide and manual. The route
-  accepts only these three sources from the browser.
+- `POST /api/evidence`: homework (as today, after `/api/reflect`; the store sends the source,
+  and the route defaults to it), slide and manual. The route accepts only these three sources
+  from the browser.
 - The upload job on the server: handwritten markers.
 - The connector's `flag_check` tool: connector.
 
@@ -197,8 +201,9 @@ objective directly; no model call or quote check is needed on Orca's side.
   student asked about or got wrong in the chat, never everything the chat touched. Claude can't
   record *struggled* flags.
 - A second *check me* on an objective whose check is still open changes nothing (the fold).
-- A flagged objective with no question starts the top-up (below). Until it lands,
-  `questions_for` returns nothing for it, and the reply says questions are being written.
+- A flagged objective with no question needs the flag-triggered top-up, which moved to the
+  follow-up plan ("Writing questions"): Plan B depends on it for that case. Until then such an
+  objective has no questions for `questions_for`, and the reply should say so.
 - The connector keeps its own copy of the due statuses (`src/lib/server/connector.ts`); it follows
   the new due list.
 - Pasted transcripts and shared chat links (`/api/materials/chat`) are still uploaded as material
@@ -208,9 +213,10 @@ objective directly; no model call or quote check is needed on Orca's side.
 
 Unchanged in flow: the upload page sends the note to `/api/reflect` as soon as the file is read,
 and records the matches through `POST /api/evidence` (`recordReflection`, `src/lib/store.tsx`).
-The rows get `flag_source = 'homework'` from the column default. Because the reflection is matched
-before the upload job builds anything, it matches only objectives the course already had; the
-flagged objectives get questions from the top-up.
+The rows carry `flag_source = 'homework'`. Because the reflection is matched
+before the upload job builds anything, it matches only objectives the course already had, which
+already have their questions from their own upload (a match without questions is folded once one
+arrives: migration `20261105090000`).
 
 ### Slides tapped (light, struggled)
 
@@ -227,19 +233,29 @@ flagged objectives get questions from the top-up.
 
 ### Manual (deliberate, struggled)
 
-- **"This is hard"** on an objective (objectives page): one *struggled* flag from `manual`.
-- **On a topic** (its trail node menu): one flag for each live objective in the topic.
+- **"This is hard"** on an objective (objectives page): one *struggled* flag from `manual`. Offered
+  on objectives that have questions, except ones already being learned (`learning`, `mixed-up`:
+  shown as "In review", since a flag would only wipe their progress). A mastered, fading or retired
+  weak point can be flagged again, which resets it.
+- **On a topic** ("This topic is hard" in the topic popup that opens a dive): one flag for each
+  objective in the topic with questions, with the same exceptions; no button when that's none.
+- A manual flag makes the objective due even when its material is marked not covered yet.
 
 ### Writing questions
 
-- The upload job writes questions only for objectives flagged in that same job (markers): 2 per
-  objective.
-- Every other flag (homework, slide, manual, connector) starts the existing top-up job
-  (`topup.ts`, the `topUp` rate limit) for the flagged objectives that are short of questions:
-  2 for *struggled*, 1 for *check me*. `POST /api/top-up` takes `sessionId` today; it becomes
-  optional for a flag-triggered top-up.
-- Practice other topics and Practice exam topics are dives, which write their questions when
-  they start.
+**As built in Plan A:** uploads still write 2 questions per objective, so a flagged objective
+already has questions; the post-session top-up writes 2 more only for weak points still being
+learned (unflagged objectives get none). Practice other topics and Practice exam topics are dives,
+which write their questions when they start.
+
+**Moved to a follow-up plan.** An audit found that an objective with no questions holds no state
+(objectives are grouped by their questions, `objectivesForTopic`), so writing questions only for
+flagged objectives would leave new objectives unflaggable, undivable and invisible to the
+connector. The follow-up plan first makes catalogue objectives hold state, then: uploads write
+questions only for flagged objectives, and a flag starts a top-up (`POST /api/top-up` without a
+session). Already done toward it: a question inserted for an objective that has evidence but no
+snapshot leaves a stale placeholder, so a flag recorded before its objective had questions is
+folded once the first arrives (migration `20261105090000`).
 
 ## 3. Scheduling and screens
 
@@ -256,7 +272,9 @@ breaks ties inside a group, as today. A check-due objective gets one question pe
 
 - Weak points only, sized to the course's time budget as today. The sidebar's "Covers N
   objectives" (`askable.ts` + `assembleQuickReview`) counts only those.
-- **Nothing due:** the card reads "You're caught up" with a **Practice other topics** button. It
+- **Nothing due** (nothing in the course's due list, whatever the cadence, and the course has
+  objectives with questions): the card reads "You're caught up" with a **Practice other topics**
+  button. A due weak point with nothing a quick review can ask shows no quick-review card. It
   opens the dive setup (`DeepReviewSetup`) scoped to the course's `verified` and `unseen`
   objectives, highest weight first: `POST /api/deep-review` already takes `objectiveIds`. No new
   session kind and no new pipeline step. Answers follow the rotation rule.
@@ -272,10 +290,12 @@ something in rotation that isn't retired (`deepReview.candidates` counts those).
 
 ### Exams
 
-- In the "1 wk before exam" window, that exam's weak points come first (the exam's topics, if
-  it lists any).
+- In the "1 wk before exam" window of an exam on the exams table, that exam's weak points come
+  first inside each quick-review group (its topics, following merges).
 - The caught-up card then offers **Practice exam topics**: the same scoped dive, over `verified`
-  and `unseen` objectives in those topics only.
+  and `unseen` objectives in those topics only. It shows only when the exam names topics with such
+  objectives left (an uploaded exam's calendar entry has no topics, so it would only repeat
+  Practice other topics).
 
 Nothing comes due on its own.
 
@@ -303,8 +323,6 @@ Orca. The Claude connector's answers follow the rotation rule; it gains `flag_ch
 No silent placeholders (CLAUDE.md invariant).
 - **Invalid model output** (a quote not inside a marked span on its page): the item is dropped
   and listed in the run's `dropped`.
-- **A top-up for a new flag fails:** the weak spot shows "Couldn't write questions for this yet"
-  with Try again, never an empty session.
 - **A refused marker description:** 400 with the span, as Notes for Orca.
 - **`flag_check` with unknown objective ids:** refused per id, listed in the reply; the known
   ones are still recorded.
@@ -321,12 +339,12 @@ No silent placeholders (CLAUDE.md invariant).
    `RULES_VERSION` bump.
 3. The agenda, `quickGroup`, the topic ring and island share, the Atlas strength, the
    connector's due statuses, manual flags past `upcoming`.
-4. Manual "This is hard" on objectives and topics; homework rows with their source; a top-up on
-   every later flag (`sessionId` optional).
+4. Manual "This is hard" on objectives and topics; homework rows with their source.
 5. The caught-up card, Practice other topics, the dive changes, Practice exam topics.
 6. The copy.
-7. Last: upload question writing limited to flagged objectives (a cost saving; everything above
-   works without it).
+
+Moved out of Plan A to a follow-up plan (see "Writing questions"): flag-triggered top-ups and
+upload question writing limited to flagged objectives.
 
 **Plan B: passive flags.** The marker setting (column, route, screening, Settings field); the
 `transcribe` data block and inline `[marked]` tags; `struggled` on the objectives step's

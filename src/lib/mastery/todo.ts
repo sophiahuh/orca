@@ -32,6 +32,9 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
   const cards: TodoCard[] = [];
   if (agenda.quickReviewDue) {
     if (covered === undefined) throw new Error(`Quick review due in course ${c} without its planned size`);
+  }
+  // A due weak point whose questions are all dive-only or thumbed down has nothing a quick review can ask yet.
+  if (agenda.quickReviewDue && covered !== undefined && covered > 0) {
     cards.push({
       id: `${c}:quick`,
       courseId: c,

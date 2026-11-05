@@ -86,9 +86,22 @@ test("strength: nothing answered is unverified; fading or mixed up is fragile; e
   assert.equal(topicStrength([], states), "unverified");
   assert.equal(topicStrength(["u"], states), "unverified");
   assert.equal(topicStrength(["m1", "m2"], states), "strong");
-  assert.equal(topicStrength(["m1", "u"], states), "developing");
+  assert.equal(topicStrength(["m1", "u"], states), "strong", "an objective nobody touched doesn't count against it");
   assert.equal(topicStrength(["m1", "l"], states), "developing");
   assert.equal(topicStrength(["m1", "f"], states), "fragile");
+});
+
+test("strength: verified objectives count as evidence, so a topic of them is strong, not new", () => {
+  const state = (status: ObjectiveState["status"]) => ({ status }) as ObjectiveState;
+  const states = new Map([
+    ["v", state("verified")],
+    ["m", state("mastered")],
+    ["u", state("unseen")],
+    ["c", state("check-due")],
+  ]);
+  assert.equal(topicStrength(["v", "m"], states), "strong");
+  assert.equal(topicStrength(["v", "u", "u"], states), "strong", "one verified and untouched ones: strong");
+  assert.equal(topicStrength(["c"], states), "developing");
 });
 
 test("long names wrap at spaces into at most three lines, and edges leave from under the name", () => {

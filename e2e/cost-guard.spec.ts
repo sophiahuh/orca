@@ -98,7 +98,8 @@ test("a second upload queues behind the first and runs when it finishes; one job
 test("a queued upload can be paused from the Uploads tab: it sits out while the others finish, and Resume puts it back in line", async ({ page, student }) => {
   test.setTimeout(300_000); // six uploads, each a few slow fake model calls
   // Slow enough that the first job is still running when the page has loaded and been read (three
-  // model calls at 1.5 s lost that race once the review route was already compiled, 2026-11-05).
+  // model calls at 1.5 s lost that race once the review route was already compiled, 2026-11-05; an
+  // upload makes two calls since weak points first, map and objectives).
   await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 4000 });
   const courseId = await newCourse(student);
   const first = await sendDeck(page, student, courseId, "first.pdf", "Absorption");
