@@ -109,8 +109,10 @@ export const TOOLS = [
     name: "course_state",
     description:
       "The student's courses, or one course in full: its exams and what each covers, its topics, every " +
-      "learning objective with Orca's status for it (unseen, learning, mixed-up, mastered, fading, " +
-      "retired) and predicted recall, and which objectives are due now. Call this before planning " +
+      "learning objective with Orca's status for it (unseen = not flagged, verified, check-due, learning, " +
+      "mixed-up, mastered, fading, retired) and predicted recall, and which objectives are due now. Orca " +
+      "only schedules weak points: objectives the student struggled with, missed or asked to be checked " +
+      "on. Call this before planning " +
       "what to study, and again after recording answers to see where things stand. With no course, " +
       "lists the courses so you can pick one.",
     inputSchema: {

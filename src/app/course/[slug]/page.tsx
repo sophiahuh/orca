@@ -125,7 +125,8 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         <button type="button" onClick={() => setEditingExams(true)} data-part="edit-exams" className="pressable rounded-pill bg-prussian px-[14px] py-[7px] text-[13px] font-bold text-parchment lip-2 lip-ink">
           Edit Exams
         </button>
-        {agenda.deepReview.candidates > 0 && (
+        {/* A dive can always be started; the cadence only adds "due" when there are weak points. */}
+        {agenda.ranked.length > 0 && (
           <div className="group relative">
             <Link href={`/session/${course.slug}?kind=deep`} data-part="start-deep" aria-describedby="dive-in-info" className="pressable rounded-pill bg-parchment px-[14px] py-[7px] text-[13px] font-bold text-prussian ring-2 ring-inset ring-alice-deep lip-2 lip-alice">
               Dive in{agenda.deepReview.due ? " · due" : ""}

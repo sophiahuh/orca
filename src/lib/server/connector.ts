@@ -48,7 +48,8 @@ export async function studentForToken(db: OrcaSupabase, token: string): Promise<
 /* ── The tools ── */
 
 const DUE_ORDER: Record<ObjectiveStatus, number> = { fading: 0, "mixed-up": 1, learning: 2, "check-due": 3, unseen: 4, verified: 5, mastered: 6, retired: 7 };
-const DUE_STATUSES: ReadonlySet<ObjectiveStatus> = new Set(["fading", "mixed-up", "learning", "unseen"]);
+// Weak points first: only objectives in rotation and open checks come due (the agenda's DUE_TODAY).
+const DUE_STATUSES: ReadonlySet<ObjectiveStatus> = new Set(["fading", "mixed-up", "learning", "check-due"]);
 const DUE_LIMIT = 20;
 
 export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Date = () => new Date()): ConnectorTools {
@@ -61,16 +62,18 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
   const courseState = async (courseId: string): Promise<CourseState | null> => {
     const course = await owns(courseId);
     if (!course) return null;
-    const [topics, objectives, questions, exams, materials, profile, snapshots] = await Promise.all([
+    const [topics, objectives, questions, exams, materials, profile, manualFlags, snapshots] = await Promise.all([
       db.from("topics").select("id, name, review, merged_into, sort_order").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("objectives").select("id, topic_id, name, review, merged_into, material_id").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("questions").select("objective_id").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("exams").select("id, title, date, topic_ids").eq("owner_id", ownerId).eq("course_id", courseId).order("date"),
       db.from("materials").select("id, upcoming").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle(),
+      // A manual flag is due even before the class reaches its material (as in the agenda).
+      db.from("evidence_events").select("objective_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "confusion").eq("flag_source", "manual"),
       readCourseState(supabaseSnapshotStore(db, ownerId, courseId)),
     ]);
-    for (const r of [topics, objectives, questions, exams, materials, profile]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
+    for (const r of [topics, objectives, questions, exams, materials, profile, manualFlags]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
 
     const at = now();
     const topicById = new Map((topics.data ?? []).map((t) => [t.id, t]));
@@ -86,6 +89,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const questionCount = new Map<string, number>();
     for (const q of questions.data ?? []) if (q.objective_id) questionCount.set(q.objective_id, (questionCount.get(q.objective_id) ?? 0) + 1);
     const upcoming = new Set((materials.data ?? []).filter((m) => m.upcoming).map((m) => m.id));
+    const manual = new Set((manualFlags.data ?? []).map((f) => f.objective_id));
     const stateOf = new Map(snapshots.objectives.map((s) => [s.objectiveId, stateAt(s.objectiveId, s.accumulator, at)]));
 
     const lines: ObjectiveLine[] = [];
@@ -102,7 +106,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         status: state?.status ?? "unseen",
         recall: state?.recall ?? null,
         questions: questionCount.get(o.id) ?? 0,
-        upcoming: o.material_id !== null && upcoming.has(o.material_id),
+        upcoming: o.material_id !== null && upcoming.has(o.material_id) && !manual.has(o.id),
       });
     }
     const dueNow = lines

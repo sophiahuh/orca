@@ -9,6 +9,7 @@ import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { EvidenceSource, Grader, Outcome } from "@/lib/mastery/types";
 import { useDayKey, useMasteryByCourse, useOrca, useStreak, useTodos } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
+import { isInRotation } from "@/lib/mastery/flags";
 import { masteryPercent, reviewPhrase } from "@/lib/mastery/percent";
 import { todoHref } from "@/components/layout/Sidebar";
 import { Feedback } from "@/components/quiz/Feedback";
@@ -156,8 +157,9 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
     if (total > 0) recordQuiz({ courseId: course.id, topicId: mode === "topic" ? (allItems[0]?.topicId ?? null) : null, mode, sessionId: sessionId.current, correct, total, seconds });
   }, [finished, course, mode, allItems, correct, ungraded, skipped, questions.length, seconds, recordQuiz, progressKind, saveProgress]);
 
-  // Then write more questions for the objectives this run asked about that the student is still
-  // working on (waits for the server-model check); a mastered one gets none until it fades.
+  // Then write more questions for the weak points this run asked about that the student is still
+  // working on (waits for the server-model check); a mastered one gets none until it fades, and an
+  // unflagged one none at all.
   const { start: startTopUp } = topUp;
   useEffect(() => {
     if (!finished) return;
@@ -165,7 +167,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
     const ids = allItems.flatMap((i) => {
       const o = liveObjectiveOf(i.question, catalogue ?? {});
       const status = o ? states?.get(o.id)?.status : undefined;
-      return o && status !== "mastered" && status !== "retired" ? [o.id] : [];
+      return o && status !== undefined && isInRotation(status) && status !== "mastered" && status !== "retired" ? [o.id] : [];
     });
     // The session id was set when the result was recorded (the effect above).
     if (sessionId.current && ids.length) startTopUp(course.id, sessionId.current, ids);

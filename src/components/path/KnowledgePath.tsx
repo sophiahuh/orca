@@ -19,12 +19,13 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 640, y: 150, w: 60 },
 ];
 
+/** The topic's weak points (objectives in rotation): how many are mastered. */
 function statusLine(p: TopicProgress, needing: number) {
   if (p.objectives === 0) return "No questions yet";
   const gap = needing > 0 ? ` · ${needing} without questions` : "";
-  if (p.status === "done") return `Complete${gap}`;
-  if (p.status === "not-started") return `${p.objectives} ${p.objectives === 1 ? "objective" : "objectives"}${gap}`;
-  return `${p.mastered} of ${p.objectives} objectives mastered${gap}`;
+  if (p.inRotation === 0) return `No weak spots flagged${gap}`;
+  if (p.status === "done") return `Weak spots mastered${gap}`;
+  return `${p.mastered} of ${p.inRotation} mastered${gap}`;
 }
 
 /** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
@@ -108,6 +109,7 @@ export function KnowledgePath({ course, progress, needingQuestions, onStart }: {
             y={t.pos.y}
             name={t.name}
             sub={statusLine(progressOf(t), needingOf(t))}
+            ring={progressOf(t).inRotation > 0 ? { mastered: progressOf(t).mastered, of: progressOf(t).inRotation } : undefined}
             onClick={() => onStart(t)}
           />
         ))}
