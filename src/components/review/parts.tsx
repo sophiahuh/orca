@@ -34,7 +34,9 @@ export function OriginPill({ origin }: { origin: Objective["origin"] }) {
 }
 
 export const MASTERY_LABEL: Record<ObjectiveStatus, string> = {
-  unseen: "Not started",
+  unseen: "Not flagged",
+  verified: "Verified ✓",
+  "check-due": "Check",
   learning: "Learning",
   "mixed-up": "Mixed up",
   mastered: "Mastered",

@@ -69,7 +69,7 @@ test("answers on a merged objective count for the survivor; answers on an archiv
     "t2/c": { id: "t2/c", topicId: "t2", name: "C", review: "confirmed" as const },
   };
   const m = courseMastery({ ...base, catalogue: merged, evidence: day1, now: new Date("2026-10-01T13:00:00Z") });
-  assert.equal(m.objectives.get("t2/c")!.status, "learning");
+  assert.equal(m.objectives.get("t2/c")!.status, "verified");
   assert.equal(m.objectives.has("t2/b"), false);
 
   const archived = { ...catalogue, "t2/b": { ...catalogue["t2/b"], review: "archived" as const } };

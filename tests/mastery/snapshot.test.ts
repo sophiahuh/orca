@@ -85,50 +85,61 @@ const GOLDEN_OPTIONS = { hasMechanismQuestions: true, dayKey: utcDay };
  */
 const RULES_HASHES: Record<number, string> = {
   1: "eb9aeb80f48d781505b46862b41eeb1176b1e06e54dc833f4c95263d0503a2e0",
+  // Weak points first: rotationSince, and the fold's inRotation / checkOpen.
+  2: "ff9ea4c835b8a561dcb8c9c779c5d8a39413a553cb1e92e1056028b1a15b2327",
 };
 
 /**
  * The golden log's accumulator under each RULES_VERSION, just before the confusion event and at the
  * end. A change to the fold's logic shows up here even when no constant moved.
  */
-const GOLDEN: Record<number, { beforeConfusion: ObjectiveAccumulator; end: ObjectiveAccumulator }> = {
-  1: {
-    beforeConfusion: {
-      answered: 13,
-      lastAt: "2026-10-29T12:00:00.000Z",
-      attempted: ["q1", "q2", "q3", "q4", "q5", "q6"],
-      credit: 3,
-      gradedCredit: 2.5,
-      creditDays: ["2026-10-01", "2026-10-02"],
-      lastTwo: ["correct", "correct"],
-      mixedUp: false,
-      lastMissQuestion: null,
-      mastered: true,
-      checkDueAt: "2026-11-01T12:00:00.000Z",
-      spacedChecks: 3,
-      missPending: false,
-      missSessionId: null,
-      retired: false,
-      card: { due: "2026-11-01T12:00:00.000Z", stability: 1.85155726, difficulty: 9.75256268, elapsed_days: 1, scheduled_days: 3, learning_steps: 0, reps: 13, lapses: 2, state: 2, last_review: "2026-10-29T12:00:00.000Z" },
-    },
-    end: {
-      answered: 14,
-      lastAt: "2026-10-31T12:00:00.000Z",
-      attempted: ["q9"],
-      credit: 1,
-      gradedCredit: 1,
-      creditDays: ["2026-10-31"],
-      lastTwo: ["correct"],
-      mixedUp: false,
-      lastMissQuestion: null,
-      mastered: false,
-      checkDueAt: null,
-      spacedChecks: 0,
-      missPending: false,
-      missSessionId: null,
-      retired: false,
-      card: { due: "2026-11-04T12:00:00.000Z", stability: 3.03761629, difficulty: 9.73803849, elapsed_days: 2, scheduled_days: 4, learning_steps: 0, reps: 14, lapses: 2, state: 2, last_review: "2026-10-31T12:00:00.000Z" },
-    },
+// Version 1 accumulators predate inRotation and checkOpen.
+type Golden = { beforeConfusion: Partial<ObjectiveAccumulator>; end: Partial<ObjectiveAccumulator> };
+const GOLDEN_V1: Golden = {
+  beforeConfusion: {
+    answered: 13,
+    lastAt: "2026-10-29T12:00:00.000Z",
+    attempted: ["q1", "q2", "q3", "q4", "q5", "q6"],
+    credit: 3,
+    gradedCredit: 2.5,
+    creditDays: ["2026-10-01", "2026-10-02"],
+    lastTwo: ["correct", "correct"],
+    mixedUp: false,
+    lastMissQuestion: null,
+    mastered: true,
+    checkDueAt: "2026-11-01T12:00:00.000Z",
+    spacedChecks: 3,
+    missPending: false,
+    missSessionId: null,
+    retired: false,
+    card: { due: "2026-11-01T12:00:00.000Z", stability: 1.85155726, difficulty: 9.75256268, elapsed_days: 1, scheduled_days: 3, learning_steps: 0, reps: 13, lapses: 2, state: 2, last_review: "2026-10-29T12:00:00.000Z" },
+  },
+  end: {
+    answered: 14,
+    lastAt: "2026-10-31T12:00:00.000Z",
+    attempted: ["q9"],
+    credit: 1,
+    gradedCredit: 1,
+    creditDays: ["2026-10-31"],
+    lastTwo: ["correct"],
+    mixedUp: false,
+    lastMissQuestion: null,
+    mastered: false,
+    checkDueAt: null,
+    spacedChecks: 0,
+    missPending: false,
+    missSessionId: null,
+    retired: false,
+    card: { due: "2026-11-04T12:00:00.000Z", stability: 3.03761629, difficulty: 9.73803849, elapsed_days: 2, scheduled_days: 4, learning_steps: 0, reps: 14, lapses: 2, state: 2, last_review: "2026-10-31T12:00:00.000Z" },
+  },
+};
+
+const GOLDEN: Record<number, Golden> = {
+  1: GOLDEN_V1,
+  // The same history, unchanged except for the new fields: it opens with misses, so it is in rotation throughout.
+  2: {
+    beforeConfusion: { ...GOLDEN_V1.beforeConfusion, inRotation: true, checkOpen: false },
+    end: { ...GOLDEN_V1.end, inRotation: true, checkOpen: false },
   },
 };
 

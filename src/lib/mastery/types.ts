@@ -64,7 +64,12 @@ export type EvidenceEvent = AnswerEvent | ConfusionEvent;
 /** The part of an objective the mastery code reads. */
 export type ObjectiveInfo = Pick<Objective, "id" | "topicId" | "name" | "review" | "mergedInto">;
 
-export type ObjectiveStatus = "unseen" | "learning" | "mixed-up" | "mastered" | "fading" | "retired";
+/**
+ * unseen / verified / check-due: not in rotation (never due, except check-due's one question).
+ * The rest: in rotation (a struggled flag, a wrong or partly right answer, or mastered before
+ * MASTERY_RULES.rotationSince), under the mastery bar and FSRS spacing.
+ */
+export type ObjectiveStatus = "unseen" | "verified" | "check-due" | "learning" | "mixed-up" | "mastered" | "fading" | "retired";
 
 export interface ObjectiveState {
   objectiveId: string;

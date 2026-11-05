@@ -105,11 +105,12 @@ test("missed (or practiced) today waits for the next quick review, never the sam
   const evidence = [ans("a1", "2026-10-05T10:00:00Z", "incorrect"), ans("b1", "2026-10-05T10:01:00Z", "incorrect"), ans("c1", "2026-10-05T10:02:00Z")];
   const today = agenda(evidence, "2026-10-05T12:00:00Z");
   assert.deepEqual(today.dueToday.map((r) => r.objectiveId), []);
-  assert.deepEqual(today.heldForNext.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
+  // c was answered right and never flagged: verified, so never due (weak points first).
+  assert.deepEqual(today.heldForNext.map((r) => r.objectiveId).sort(), ["a", "b"]);
   assert.equal(today.quickReviewDue, false);
   assert.equal(today.nextQuickDay, "2026-10-06");
   const tomorrow = agenda(evidence, "2026-10-06T08:00:00Z");
-  assert.deepEqual(tomorrow.dueToday.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
+  assert.deepEqual(tomorrow.dueToday.map((r) => r.objectiveId).sort(), ["a", "b"]);
   assert.equal(tomorrow.quickReviewDue, true);
 });
 

@@ -47,7 +47,7 @@ export async function studentForToken(db: OrcaSupabase, token: string): Promise<
 
 /* ── The tools ── */
 
-const DUE_ORDER: Record<ObjectiveStatus, number> = { fading: 0, "mixed-up": 1, learning: 2, unseen: 3, mastered: 4, retired: 5 };
+const DUE_ORDER: Record<ObjectiveStatus, number> = { fading: 0, "mixed-up": 1, learning: 2, "check-due": 3, unseen: 4, verified: 5, mastered: 6, retired: 7 };
 const DUE_STATUSES: ReadonlySet<ObjectiveStatus> = new Set(["fading", "mixed-up", "learning", "unseen"]);
 const DUE_LIMIT = 20;
 
