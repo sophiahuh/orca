@@ -16,6 +16,10 @@ The model is in `docs/MASTERY-PLAN.md`; the code is `src/lib/mastery/`.
   per-student state on a topic, objective or question record.
 - A grading failure is not evidence. If an answer couldn't be graded, record nothing.
 - Self-marked answers (`grader: "self"`) count half and never clear a mix-up.
+- The browser writes only `homework`, `slide` and `manual` flags (`BROWSER_FLAG_SOURCES`);
+  `handwritten-marker` (the upload job) and `connector` (`flag_check`) are written on the server.
+  A flag never adds credit. Every live objective holds state with or without questions
+  (`src/lib/mastery/attribution.ts`).
 - Connector activity, upload and reading signals may raise priority later; they never produce
   mastery. An answer Claude grades through the connector is evidence, recorded self-marked
   (`grader: "self"`, `source: "connector"`).

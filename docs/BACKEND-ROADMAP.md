@@ -264,7 +264,9 @@ Phase 4), exam proximity in priority (Phase 5). Never run against a real model y
   question. An objective with no unseen questions reuses its oldest-seen one, says so, and queues
   a top-up.
 - **Top-up** after each session for objectives below 3 unseen questions. *Changed 2026-10-18
-  (owner):* questions follow practice instead of a stock. An upload writes 2 per objective (one that
+  (owner):* questions follow practice instead of a stock. *Changed again 2026-11-06 (weak points
+  first):* an upload writes questions only for objectives marked in it; a flag writes them for its
+  objectives (a flag top-up). An upload writes 2 per objective (one that
   does the skill, one "why or how" where there is one), so it finishes sooner and objectives never
   studied cost nothing more; after a session, objectives still being learned (not mastered or
   retired) get 2 more once they have fewer than 2 unseen (`TOP_UP_RULES`). Dive In still writes its
@@ -446,19 +448,24 @@ a material type. Pasted AI chats are kept whole and stored as ~12,000-character 
 and objectives and topics only it taught are archived with `archived_with_material`). Migrations
 `20261031100000`–`20261031120000`.
 
-**Weak points first (designed 2026-11-04, Plan A built 2026-11-05).** Only objectives in rotation
-come due: a struggled flag (a homework reflection, "This is hard" on an objective or a topic), an
+**Weak points first (designed 2026-11-04, Plan A built 2026-11-05, Plans B and C 2026-11-06).** Only
+objectives in rotation come due: a struggled flag (a homework reflection, "This is hard" on an
+objective or a topic, a passage marked in handwritten notes, a tapped slide), an
 answer short of fully right anywhere, or mastery reached before `MASTERY_RULES.rotationSince`.
 Unflagged objectives are `unseen` ("Not flagged") or `verified` (answered right) and are never due;
-a *check me* flag (`check-due`, the connector's, Plan B) asks one question. Islands, topic rows and
+a *check me* flag (`check-due`, from the connector's `flag_check`) asks one question. Islands, topic rows and
 the course header count weak points mastered. With nothing due, "You're caught up" offers Practice
 other topics (and Practice exam topics in an exam's week): dives over unflagged objectives. Flags are
 `confusion` evidence with `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2.
-Uploads still write questions for every objective: limiting them to flagged objectives, and
-flag-triggered top-ups, wait for a follow-up plan that first makes objectives without questions hold
-state. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`; plan:
-`docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`. Plans B (handwritten markers, the
-connector's `flag_check`) and C (tapped slides) are next.
+Every live objective holds state with or without questions. Uploads write questions only for
+objectives marked in them; any other flag starts a top-up for its objectives with none (one per
+batch, `POST /api/top-up` without a session), and every top-up catches up flagged objectives still
+without questions. Handwritten markers: Settings describes the student's marks
+(`profiles.marker_notes`), the page reader tags marked passages and the objectives step names them
+(checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the objectives
+taught on each tapped page. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
+plans: `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`,
+`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `phase-4`, shipping together.
 
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not

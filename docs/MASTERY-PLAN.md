@@ -11,7 +11,8 @@
 > created at upload (§2.1); there is no in-app chat (§2.2). §6 and §7 are superseded by the
 > roadmap and TO-DISCUSS.
 >
-> **Changes since (checked 2026-11-04):** question supply is 2 per objective at upload, and 2 more
+> **Changes since (checked 2026-11-06):** question supply is 2 per objective when it's flagged (marked
+> in an upload, or a flag top-up; uploads write none for unflagged objectives), and 2 more
 > after a session once a weak point still being learned has fewer than 2 unseen (§2.4, §4;
 > `QUESTIONS_PER_OBJECTIVE`, `TOP_UP_RULES`); evidence `source` is `quiz | quick-review |
 > deep-review | requiz | connector` (§2.2); relations are between topics, so `implies` shielding
@@ -101,8 +102,10 @@ Skipped questions and grading failures record nothing.
 `flag_source` (homework, handwritten-marker, connector, slide, manual) and an optional `page`. Its
 strength follows from the source (`src/lib/mastery/flags.ts`): the connector's flags are *check me*
 (one question), every other source's are *struggled* (the reset below). Today the browser records
-homework reflections and manual "This is hard" flags; markers, the connector's `flag_check` and
-tapped slides are Plans B and C.
+homework reflections, manual "This is hard" flags and tapped slides ("Which slides were hard?"); the
+server records handwritten markers (the upload job) and the connector's `flag_check`. Every live
+objective holds state with or without questions, and a flag on one with none writes its questions
+(a flag top-up).
 
 **Self-reported confusion** (Phase 2): when a homework reflection says the student doesn't
 understand something, the note is matched to objectives (uncertain matches are confirmed by the

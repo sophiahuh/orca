@@ -3,7 +3,7 @@
 Status: design agreed with the owner in brainstorming, 2026-11-04; revised the same day after an
 audit against the code (every open point below was decided by the owner). **Plan A built
 2026-11-05** (`docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`, whose status block lists
-what moved out); Plans B and C, with the follow-up that lets objectives without questions hold state, are planned in `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md` (not built). Where this spec and the code differ, the plan's status
+what moved out); Plans B and C, with the follow-up that lets objectives without questions hold state, **built 2026-11-06** (`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`; its decisions are listed there and in `docs/TO-DISCUSS.md`). Where this spec and the code differ, the plan's status
 block says which wins.
 
 ## Why

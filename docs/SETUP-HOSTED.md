@@ -232,7 +232,9 @@ where f.rating = 'down' order by f.created_at desc limit 50;
 2. In Claude (web or desktop): Settings → Connectors → **Add custom connector**. Name it Orca, paste
    the link as the URL, leave authentication off, save.
 3. In a chat, turn the Orca connector on and say what you're studying for. Claude calls
-   `course_state` on its own; approve its tool calls the first time.
+   `course_state` on its own; approve its tool calls the first time. Its five tools: `course_state`,
+   `set_exam`, `questions_for`, `record_answer` and `flag_check` (what the student asked about or
+   got wrong in the chat becomes a *check me* flag; Orca writes questions for any objective without them).
 
 The link is the secret: anyone who has it can read and change that student's record. **Disconnect**
 in Settings revokes it. `SITE_URL` must be set in production, since the link is built from it. The

@@ -23,5 +23,7 @@ description: Use when building or changing question generation, question validat
   objective, anchors to pages that exist, untrusted-text rules). There is no model check (dropped
   2026-10-06). A question that fails is dropped with a reason, never shown.
 - The quiz records evidence only after grading finishes. A grading error records nothing.
-- Never show a placeholder question. A topic with no questions shows an empty state that points
-  to adding material.
+- Questions are written only for flagged objectives (weak points first, 2026-11-06): marked in an
+  upload, a flag top-up (`POST /api/top-up` without a session), the post-session top-up for weak
+  points still being learned, or a dive when it starts. Most objectives have none until then.
+- Never show a placeholder question. A topic with no questions shows an empty state.

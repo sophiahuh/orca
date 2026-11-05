@@ -1,33 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRun } from "@/hooks/useRun";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
 
 /**
- * Follows the question writing a batch of struggle flags started (weak points first), so its questions
- * load without a reload: `useRun` refreshes the store once the run finishes. A top-up that finishes
- * while new flags arrived queues one more only after it's done, so the store's runs usually don't have
- * it yet: newly inserted top-up runs are followed too (RLS limits Realtime to the student's own rows).
- * Following a session's own top-up here as well is harmless (one refresh per finished run). Renders nothing.
+ * Loads the questions a batch of struggle flags had written, without a reload (weak points first).
+ * - The top-up this tab's flags started (`flagTopUpRun`) is followed with `useRun`, which refreshes
+ *   the store once it finishes (and polls if Realtime misses it).
+ * - A follow-up top-up (queued by a finishing one for flags that arrived meanwhile) is inserted only
+ *   after the followed run is done, so it's caught here when it finishes: one Realtime subscription to
+ *   the student's top-ups (RLS limits it to their rows), refreshing once per finished run. It never
+ *   follows a run with `useRun`, so it can't open a second channel for a run the session's end card
+ *   is already following (two channels on one run's topic stop each other's updates).
+ * Renders nothing.
  */
 export function FlagTopUpWatcher() {
-  const { flagTopUpRun } = useOrca();
-  const [inserted, setInserted] = useState<string | null>(null);
+  const { flagTopUpRun, refresh } = useOrca();
+  useRun(flagTopUpRun);
   useEffect(() => {
     const db = browserSupabase();
+    const finished = new Set<string>();
     const channel = db
-      .channel("flag-top-ups")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "pipeline_runs", filter: "kind=eq.top-up" }, (payload) => {
-        const id = (payload.new as { id?: string }).id;
-        if (id) setInserted(id);
+      .channel("top-ups-finished")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pipeline_runs", filter: "kind=eq.top-up" }, (payload) => {
+        const row = payload.new as { id?: string; status?: string };
+        if (!row.id || (row.status !== "done" && row.status !== "failed") || finished.has(row.id)) return;
+        finished.add(row.id);
+        void refresh();
       })
       .subscribe();
     return () => void db.removeChannel(channel);
-  }, []);
-  // Every top-up a flag starts is inserted, so the subscription sees it too; the run the route named
-  // covers the moment before the subscription is up (and a busy answer's in-flight run).
-  useRun(inserted ?? flagTopUpRun);
+  }, [refresh]);
   return null;
 }

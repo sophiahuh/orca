@@ -93,6 +93,20 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   objectives in rotation come due (see "Product model"); flags are `confusion` evidence with
   `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2, with
   `MASTERY_RULES.rotationSince` = 2026-11-05 (set by the owner).
+- **Since 2026-11-06: weak points first, Plans B and C** (plan
+  `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`; on `phase-4`, not merged; ships with
+  Plan A in one PR). Every live objective holds state with or without questions (attribution; migration
+  `20261106090000` left placeholders for older evidence). Uploads write questions only for objectives
+  marked in them; any other flagged objective gets its questions from a flag top-up
+  (`POST /api/top-up` without a session, one per batch of flags; `FlagTopUpWatcher` follows it), and
+  every top-up catches up flagged objectives still without questions and queues one more (`followUp`)
+  for flags that arrived while it ran. Passive flags: handwritten markers (Settings → "How do you mark
+  confusion in your notes?", `profiles.marker_notes`, migration `20261106090200`; the page reader tags
+  `[marked: …] … [/marked]`, the objectives step returns `struggled`, `src/lib/pipeline/marked.ts`
+  checks them, the upload records `handwritten-marker` flags), the connector's `flag_check` (*check
+  me*), and "Which slides were hard?" on an upload card (`src/components/review/HardSlides.tsx`,
+  `objectivesOnPage` in `src/lib/course/slides.ts`; `slide` flags). The decisions this made are listed
+  in the plan and in `docs/TO-DISCUSS.md`.
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
   uses for development. `.env` may point at either (it has pointed at each at different times):
@@ -126,10 +140,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Weak points first: Plan A is built on `phase-4` (`rotationSince` 2026-11-05, merge gate
-   green). Then Plan B (handwritten markers, the connector's
-   `flag_check`), Plan C (tapped slides) and the follow-up that makes objectives without questions
-   hold state (then uploads write questions only for flagged objectives). None is written yet.
+1. Weak points first: Plans A, B and C and the state-without-questions follow-up are built on
+   `phase-4` (`rotationSince` 2026-11-05). Next: push access to `sophiahuh/orca`, then one PR to
+   `main`; if the deploy is much later than 2026-11-05, ask the owner whether to move `rotationSince`
+   (and re-record `RULES_HASHES[2]`).
 2. Activity logs, edit history and soft delete: planned
    (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`), not started; read its status
    block first (migration numbers and newer hard deletes changed since it was written).
@@ -245,14 +259,17 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   sentence reason shown on hover in the Atlas; used-in/has-a-kind never form a loop. They are the
   Concept Atlas's edges and feed the weights.
 - **Weak points first (2026-11-05).** Only objectives *in rotation* come due: a struggled flag (a
-  homework reflection, "This is hard" on an objective or a topic), an answer short of fully right
+  homework reflection, "This is hard" on an objective or a topic, a passage marked in handwritten
+  notes, a tapped slide), an answer short of fully right
   anywhere, or mastery reached before `MASTERY_RULES.rotationSince`. Unflagged objectives are
   `unseen` ("Not flagged") or `verified` (answered right) and are never due; a *check me* flag
-  (`check-due`) asks one question. Flag strength follows the source (`src/lib/mastery/flags.ts`).
+  (`check-due`, from the Claude connector's `flag_check`) asks one question. Flag strength follows
+  the source (`src/lib/mastery/flags.ts`). Every live objective holds state, with or without questions.
 - **Practice.** Missed questions have no review of their own: the objective joins the course's
   quick-review queue and isn't due again the same day. Quick reviews draw from questions written
-  ahead: 2 per objective at upload, then 2 more after a session for a weak point still being learned
-  once it's under 2 unseen; assembled instantly and sized to the course's time budget. With nothing
+  ahead: 2 per objective when it's flagged (marked in an upload, or a flag top-up), then 2 more after
+  a session for a weak point still being learned once it's under 2 unseen; unflagged objectives get
+  questions only from dives; assembled instantly and sized to the course's time budget. With nothing
   due, "You're caught up" offers Practice other topics (and Practice exam topics in an exam's week):
   dives over unflagged objectives (`src/lib/mastery/practice.ts`).
   **Dive in** (deep review) writes harder questions when it starts, for the whole course or one
@@ -380,7 +397,8 @@ All 11 Figma screens are built. Where things live:
   "Find connections" on the Atlas, `POST /api/relink`).
 - `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
   Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
-  (one JSON-RPC message per POST, no stream) with four tools: `course_state` (exams, topics, every objective's derived
+  (one JSON-RPC message per POST, no stream) with five tools: `flag_check` (a *check me* flag per objective the student
+  asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics, every objective's derived
   status and recall, what's due now), `set_exam` (date + topic ids = the exam's scope), `questions_for` (Orca's own
   questions with their answers and rubrics, for Claude to ask and grade) and `record_answer` (an answer Claude graded,
   recorded as `grader: "self"`, `source: "connector"`: half credit, never clears a mix-up). The token is minted in
@@ -465,8 +483,7 @@ All 11 Figma screens are built. Where things live:
 
 `docs/BACKEND-ROADMAP.md` is the plan. Phases 1–4 are built and live; Phase 7 (the MCP connector)
 has a first version and Canvas import is built (2026-11-04); Phases 5 and 6 haven't started. Next
-by the owner's priorities: weak points first (Plan A built on `phase-4`; then Plans B and C and the follow-up that makes objectives without questions
-hold state), then the open items above. Before
+by the owner's priorities: weak points first (Plans A, B and C built on `phase-4`: push and one PR to `main`), then the open items above. Before
 tuning extraction, run `npm run score:extraction` with a key (and the local ALD decks) and record a
 baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase
