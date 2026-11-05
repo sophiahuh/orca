@@ -240,7 +240,12 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
   const stored = toStored(card);
   const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: stored, checkOpen: false };
   // Anything short of fully right is a weak point, wherever it was answered.
-  if (e.outcome !== "correct") next.inRotation = true;
+  if (e.outcome !== "correct") {
+    next.inRotation = true;
+    // It met the bar unflagged (practice, dives) and now slipped: its check is due now, as a miss's
+    // would be (a miss after mastery is handled below; a partial there doesn't move the check).
+    if (!acc.inRotation && acc.mastered && e.outcome === "partial") next.checkDueAt = e.at;
+  }
 
   if (!next.mastered) {
     if (e.outcome === "incorrect" && !assisted) {
@@ -306,7 +311,8 @@ export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): Ob
   }
   if (flagStrength(e) === "check") {
     if (!acc.inRotation) return { ...acc, lastAt: e.at, checkOpen: true };
-    if (acc.mastered) return { ...acc, lastAt: e.at, checkDueAt: e.at, retired: false };
+    // The check is due now, or stays as overdue as it already was.
+    if (acc.mastered) return { ...acc, lastAt: e.at, checkDueAt: acc.checkDueAt !== null && Date.parse(acc.checkDueAt) < t ? acc.checkDueAt : e.at, retired: false };
     return { ...acc, lastAt: e.at };
   }
   return {

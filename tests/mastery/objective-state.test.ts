@@ -491,3 +491,17 @@ test("old homework confusion replays as a struggled flag", () => {
   const missedCheck = [...masteredOnDay2(), ev("q1", day(30), { outcome: "incorrect" })];
   assert.equal(statusOf([...missedCheck, flag(day(31), "homework")], at(31)), "learning");
 });
+
+test("a partly right answer after reaching the bar unflagged makes its check due now", () => {
+  const after = Date.parse(MASTERY_RULES.rotationSince);
+  const d = (n: number) => new Date(after + n * 86_400_000).toISOString();
+  const practised = [ev("q1", d(1)), ev("q2", d(1)), ev("q3", d(2))];
+  assert.equal(statusOf([...practised, ev("q4", d(3), { outcome: "partial" })], new Date(after + 3.1 * 86_400_000)), "fading");
+});
+
+test("a check flag never makes an overdue check look less urgent", () => {
+  const mastered = [flag(day(20)), ev("q1", day(21)), ev("q2", day(21)), ev("q3", day(22))];
+  const overdueAt = replayed(mastered).checkDueAt!;
+  const late = new Date(Date.parse(overdueAt) + 5 * 86_400_000).toISOString();
+  assert.equal(replayed([...mastered, flag(late, "connector")]).checkDueAt, overdueAt);
+});
