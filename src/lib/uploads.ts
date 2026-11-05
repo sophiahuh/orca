@@ -46,14 +46,22 @@ export type UploadOutcome =
   | { kind: "read"; material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation }
   | { kind: "duplicate"; id: string; filename: string; generation: Generation };
 
-/** Read one public, server-rendered course website as material. */
-export async function importWebsite(url: string, meta: UploadMeta): Promise<Extract<UploadOutcome, { kind: "read" }>> {
-  return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/web", { ...meta, url });
+/** The import routes answer a new material, or `{ duplicate }` when the course already has the same text. */
+type Imported = { material: Material; pages: MaterialPages; hidden?: { items: number; pages: number[] }; generation: Generation } | { duplicate: { id: string; filename: string }; generation: Generation };
+
+function importOutcome(out: Imported): UploadOutcome {
+  if ("duplicate" in out) return { kind: "duplicate", ...out.duplicate, generation: out.generation };
+  return { kind: "read", material: out.material, pages: out.pages, hidden: out.hidden ?? { items: 0, pages: [] }, generation: out.generation };
 }
 
-/** Save a pasted AI-chat export or scrape a public shared-chat snapshot as one material page. */
-export async function importAIChat(input: { text?: string; url?: string }, meta: UploadMeta): Promise<Extract<UploadOutcome, { kind: "read" }>> {
-  return post<Extract<UploadOutcome, { kind: "read" }>>("/api/materials/chat", { ...meta, ...input });
+/** Read one public, server-rendered course website as material. */
+export async function importWebsite(url: string, meta: UploadMeta): Promise<UploadOutcome> {
+  return importOutcome(await post<Imported>("/api/materials/web", { ...meta, url }));
+}
+
+/** Save a pasted AI-chat export or scrape a public shared-chat snapshot as one material page (or recognise it as one already in the course). */
+export async function importAIChat(input: { text?: string; url?: string }, meta: UploadMeta): Promise<UploadOutcome> {
+  return importOutcome(await post<Imported>("/api/materials/chat", { ...meta, ...input }));
 }
 
 /**
