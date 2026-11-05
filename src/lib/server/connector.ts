@@ -1,13 +1,14 @@
 /**
  * The Claude connector against Supabase: the student's secret link (one per account, only its hash
- * stored) and the four tools in `src/lib/connector/mcp.ts` read and written with the service-role
+ * stored) and the five tools in `src/lib/connector/mcp.ts` read and written with the service-role
  * client, every query scoped to that student.
  */
 import { createHash, randomBytes } from "node:crypto";
-import type { ConnectorTools, CourseState, ExamLine, ObjectiveLine, QuestionLine, RecordedAnswer } from "@/lib/connector/mcp";
+import type { ConnectorTools, CourseState, ExamLine, FlagCheckResult, ObjectiveLine, QuestionLine, RecordedAnswer } from "@/lib/connector/mcp";
 import { dayKeyIn, stateAt } from "@/lib/mastery/objective-state";
 import { NewerRulesError, VersionConflictError, readCourseState, recordEvent } from "@/lib/mastery/snapshots";
-import type { AnswerEvent, ObjectiveStatus } from "@/lib/mastery/types";
+import type { AnswerEvent, ConfusionEvent, ObjectiveStatus } from "@/lib/mastery/types";
+import { recordSecurityEvents } from "@/lib/server/security";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
 import { questionFromRow } from "@/lib/supabase/app-rows";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -141,17 +142,20 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
 
     courseState,
 
-    async questionsFor(courseId, objectiveIds, limit): Promise<QuestionLine[] | null> {
+    async questionsFor(courseId, objectiveIds, limit) {
       const state = await courseState(courseId);
       if (!state) return null;
       const wanted = objectiveIds ?? state.dueNow;
-      if (wanted.length === 0) return [];
+      if (wanted.length === 0) return { questions: [], withoutQuestions: [] };
       const { data, error } = await db.from("questions").select("*").eq("owner_id", ownerId).eq("course_id", courseId).in("objective_id", wanted).order("sort_order");
       if (error) throw new Error(`Couldn't read the questions: ${error.message}`);
       // Spread across the objectives asked for, in the order they were asked for.
       const byObjective = new Map<string, QuestionLine[]>();
+      // Deep-review questions can be asked here too, but an objective with only those still needs its own (as in flag_check).
+      const quickAsked = new Set<string>();
       for (const row of data) {
         if (!row.objective_id) continue;
+        if (!row.deep) quickAsked.add(row.objective_id);
         const q = questionFromRow(row);
         const line: QuestionLine = {
           id: q.id,
@@ -179,7 +183,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         }
         if (!added) break;
       }
-      return out;
+      return { questions: out, withoutQuestions: wanted.filter((id) => !quickAsked.has(id)) };
     },
 
     async recordAnswer(courseId, questionId, outcome, sessionId): Promise<RecordedAnswer | { error: string }> {
@@ -216,6 +220,59 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         if (e instanceof RecordError) return { error: `Orca couldn't record the answer: ${e.message}` };
         throw e;
       }
+    },
+
+    async screened(hits) {
+      await recordSecurityEvents(db, ownerId, "reflection_note", hits);
+    },
+
+    async flagCheck(courseId, objectiveIds, said): Promise<FlagCheckResult | { error: string }> {
+      if (!(await owns(courseId))) return { error: "No such course." };
+      const [objectives, topics] = await Promise.all([
+        db.from("objectives").select("id, topic_id, review, merged_into").eq("owner_id", ownerId).eq("course_id", courseId),
+        db.from("topics").select("id, review, merged_into").eq("owner_id", ownerId).eq("course_id", courseId),
+      ]);
+      if (objectives.error || topics.error) throw new Error(`Couldn't read the course: ${(objectives.error ?? topics.error)!.message}`);
+      const objectiveById = new Map(objectives.data.map((o) => [o.id, o]));
+      const topicById = new Map(topics.data.map((t) => [t.id, t]));
+      const survivor = <T extends { merged_into: string | null }>(byId: Map<string, T>, id: string): T | undefined => {
+        let x = byId.get(id);
+        for (let i = 0; x?.merged_into && i < 50; i++) x = byId.get(x.merged_into);
+        return x;
+      };
+      // A flag counts only on a live objective in a live topic; anything else is listed, not recorded.
+      const live = new Map<string, { id: string; topic_id: string }>();
+      const unknown: string[] = [];
+      for (const id of objectiveIds) {
+        const o = survivor(objectiveById, id);
+        const topic = o ? survivor(topicById, o.topic_id) : undefined;
+        if (!o || o.review === "archived" || !topic || topic.review === "archived") unknown.push(id);
+        else live.set(o.id, o);
+      }
+      const at = now();
+      const flagged: FlagCheckResult["flagged"] = [];
+      for (const o of live.values()) {
+        const event: ConfusionEvent = { kind: "confusion", id: crypto.randomUUID(), at: at.toISOString(), courseId, topicId: o.topic_id, objectiveId: o.id, materialId: null, note: said, flagSource: "connector", page: null };
+        try {
+          const r = await recordEvent(supabaseSnapshotStore(db, ownerId, courseId), event);
+          flagged.push({ objectiveId: o.id, status: r.objectiveId && r.accumulator ? stateAt(r.objectiveId, r.accumulator, at).status : "unseen" });
+        } catch (e) {
+          if (e instanceof VersionConflictError) return { error: "Another answer was being saved at the same moment; not every flag was recorded. Try again." };
+          if (e instanceof NewerRulesError) return { error: "Orca is being updated; the flags weren't recorded. Try again in a moment." };
+          if (e instanceof RecordError) return { error: `Orca couldn't record the flags: ${e.message}` };
+          throw e;
+        }
+      }
+      const ids = flagged.map((f) => f.objectiveId);
+      const asked = new Set<string>();
+      if (ids.length) {
+        // Questions of objectives merged into these count for them.
+        const sources = objectives.data.filter((o) => ids.includes(survivor(objectiveById, o.id)?.id ?? o.id)).map((o) => o.id);
+        const { data, error } = await db.from("questions").select("objective_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("deep", false).in("objective_id", sources);
+        if (error) throw new Error(`Couldn't read the questions: ${error.message}`);
+        for (const q of data) if (q.objective_id) asked.add(survivor(objectiveById, q.objective_id)?.id ?? q.objective_id);
+      }
+      return { flagged, unknown, withoutQuestions: ids.filter((id) => !asked.has(id)) };
     },
 
     async setExam(courseId, exam): Promise<ExamLine | { error: string }> {

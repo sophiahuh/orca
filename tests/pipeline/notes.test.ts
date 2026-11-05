@@ -65,3 +65,9 @@ test("steps that don't write content never take notes", () => {
   assert.equal("notes" in link, false, "the schema strips them");
   assert.doesNotMatch(linkPrompt(link).prompt, /student_notes/);
 });
+
+test("checkNotes cuts to the limit it is given", () => {
+  const out = checkNotes("★ lost ".repeat(100), 300);
+  assert.equal(out.ok, true);
+  assert.ok(out.ok && out.text !== null && out.text.length <= 300);
+});

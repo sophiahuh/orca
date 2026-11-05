@@ -17,10 +17,10 @@ export interface OrcaNotes {
 
 export type NotesCheck = { ok: true; text: string | null; hits: ScreenHit[] } | { ok: false; quote: string; hits: ScreenHit[] };
 
-/** One note: cleaned text (null when blank), or refused with the span that tries to instruct the model. */
-export function checkNotes(raw: string | null): NotesCheck {
+/** One note (or another short text from the student, cut to `maxChars`): cleaned text (null when blank), or refused with the span that tries to instruct the model. */
+export function checkNotes(raw: string | null, maxChars: number = LIMITS.notesChars): NotesCheck {
   if (raw === null) return { ok: true, text: null, hits: [] };
-  const text = sanitize(raw, LIMITS.notesChars).text;
+  const text = sanitize(raw, maxChars).text;
   if (!text) return { ok: true, text: null, hits: [] };
   const screened = screen(text);
   if (screened.strong) return { ok: false, quote: screened.hits.find((h) => h.severity === "strong")!.quote, hits: screened.hits };
