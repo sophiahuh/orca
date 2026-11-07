@@ -50,10 +50,14 @@ async function readFromImages(
       const batch = batches[next++];
       const ready: Array<{ n: number; text: string; image: string }> = [];
       for (const p of batch) {
-        const url = await render(p.n).catch(() => null);
+        let why = "";
+        const url = await render(p.n).catch((e: unknown) => {
+          why = `: ${e instanceof Error ? e.message : String(e)}`;
+          return null;
+        });
         const image = url?.replace(/^data:image\/[a-z]+;base64,/, "");
         if (image) ready.push({ n: p.n, text: p.text, image });
-        else result.kept.push({ n: p.n, reason: "the page couldn't be drawn as an image" });
+        else result.kept.push({ n: p.n, reason: `the page couldn't be drawn as an image${why}` });
       }
       if (!ready.length) continue;
       try {

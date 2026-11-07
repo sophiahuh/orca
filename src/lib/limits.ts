@@ -7,7 +7,7 @@
  */
 export const LIMITS = {
   /** Largest file a student can upload (the `materials` bucket enforces the same). */
-  uploadBytes: 30 * 1024 * 1024,
+  uploadBytes: 50 * 1024 * 1024,
   /** Most pages (or slides) read from one file. */
   pagesPerFile: 150,
   /** Longest the server spends reading one file (the process route may run 60 s). */

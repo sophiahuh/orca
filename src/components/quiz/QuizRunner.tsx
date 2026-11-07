@@ -4,7 +4,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import type { Course, FeedbackReason, QuizQuestion, SessionMode, SessionProgress } from "@/lib/data";
+import type { Course, FeedbackReason, NotRelevantScope, QuizQuestion, SessionMode, SessionProgress } from "@/lib/data";
+import { rejectObjective } from "@/lib/course/ops";
 import { liveObjectiveOf } from "@/lib/mastery/catalogue";
 import type { EvidenceSource, Grader, Outcome } from "@/lib/mastery/types";
 import { useDayKey, useMasteryByCourse, useOrca, useStreak, useTodos } from "@/lib/store";
@@ -68,7 +69,7 @@ export interface QuizRunnerProps {
 export function QuizRunner({ course, items: firstItems, mode, title, backHref, again, replacementFor, progressKind, resume }: QuizRunnerProps) {
   const router = useRouter();
   const streak = useStreak();
-  const { recordQuiz, recordEvidence, objectives, feedback, rateQuestion, saveProgress } = useOrca();
+  const { recordQuiz, recordEvidence, objectives, feedback, rateQuestion, saveProgress, editStructure } = useOrca();
   const masteryByCourse = useMasteryByCourse();
   const todos = useTodos();
   const dayKey = useDayKey();
@@ -288,18 +289,45 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
   }, [item, checked, grading, settle]);
 
   /**
+   * "Not relevant" for a whole objective: the objective is removed from the course (archived, as
+   * rejecting it on the Objectives page does; restorable there), and its questions still to come in
+   * this session, including missed ones waiting for "review missed", are dropped. Answers already
+   * given stay. Returns how many questions the session now has.
+   */
+  const dropObjective = useCallback(
+    (objectiveId: string) => {
+      const other = (i: RunnerItem) => liveObjectiveOf(i.question, catalogue ?? {})?.id !== objectiveId;
+      editStructure(course.id, (s) => rejectObjective(s, objectiveId));
+      const next = [...items.slice(0, index + 1), ...items.slice(index + 1).filter(other)];
+      if (subset) setSubset(next);
+      else setAllItems(next);
+      setMissed((m) => m.filter(other));
+      return next.length;
+    },
+    [catalogue, editStructure, course.id, items, index, subset],
+  );
+
+  /**
    * A thumbs down before answering: the rating is saved, the question is skipped without being
    * offered again in "review missed" (nothing is recorded), and another question for the same
-   * objective comes next when the stock has one.
+   * objective comes next when the stock has one; "Not relevant" for the whole objective drops it
+   * instead (`dropObjective`).
    */
   const skipBad = useCallback(
-    (reason: FeedbackReason | null, note: string | null) => {
+    (reason: FeedbackReason | null, note: string | null, scope: NotRelevantScope) => {
       if (!item) return;
       rateQuestion(course.id, item.question.id, "down", reason, note);
-      const replacement = !subset && replacementFor ? replacementFor(item, new Set(allItems.map((i) => i.question.id))) : null;
-      if (replacement) setAllItems((xs) => [...xs.slice(0, index + 1), { ...replacement, question: shuffleChoices(replacement.question) }, ...xs.slice(index + 1)]);
+      let length = total;
+      if (scope === "objective" && objective) length = dropObjective(objective.id);
+      else {
+        const replacement = !subset && replacementFor ? replacementFor(item, new Set(allItems.map((i) => i.question.id))) : null;
+        if (replacement) {
+          setAllItems((xs) => [...xs.slice(0, index + 1), { ...replacement, question: shuffleChoices(replacement.question) }, ...xs.slice(index + 1)]);
+          length += 1;
+        }
+      }
       setSkipped((n) => n + 1);
-      if (index + 1 >= total + (replacement ? 1 : 0)) {
+      if (index + 1 >= length) {
         setFinished(true);
         window.scrollTo(0, 0);
         return;
@@ -311,7 +339,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
       setDeepResponse("");
       bodyRef.current?.scrollTo({ top: 0 });
     },
-    [item, subset, replacementFor, allItems, index, total, rateQuestion, course.id],
+    [item, subset, replacementFor, allItems, index, total, rateQuestion, course.id, objective, dropObjective],
   );
 
   const advance = useCallback(() => {
@@ -496,7 +524,15 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
                 />
               )}
             </AnimatePresence>
-            {checked && <RateAnswered key={q.id} rating={feedback[q.id]} onRate={(rating, reason, note) => rateQuestion(course.id, q.id, rating, reason ?? null, note ?? null)} />}
+            {checked && (
+              <RateAnswered
+                key={q.id}
+                rating={feedback[q.id]}
+                objectiveName={objective?.name}
+                onRate={(rating, reason, note) => rateQuestion(course.id, q.id, rating, reason ?? null, note ?? null)}
+                onNotRelevant={objective ? () => dropObjective(objective.id) : undefined}
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -511,7 +547,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
             <Button variant="ghost" size="sm" onClick={advance}>
               Skip
             </Button>
-            <RateUnanswered key={q.id} onDown={skipBad} />
+            <RateUnanswered key={q.id} objectiveName={objective?.name} onDown={skipBad} />
           </div>
         )}
         {checked ? (

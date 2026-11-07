@@ -172,6 +172,21 @@ test("handwritten pages are read from their images first: the text is stored, ma
   assert.ok(dropped.some((d) => d.prompt === "Page 3" && /kept the file's own text: the page couldn't be drawn/.test(d.reason)));
 });
 
+test("a file read only from its images, none of which can be drawn, fails with the reason instead of finishing with nothing built", async () => {
+  const handwritten: Record<string, MaterialPages> = { m1: [{ n: 1, text: "", source: "needs-vision" }, { n: 2, text: "", source: "needs-vision" }] };
+  const mem = memoryStore({ run: queued(), pages: handwritten });
+  const honest = honestModel();
+  const render = async () => {
+    throw new Error("Cannot find module '@napi-rs/canvas'");
+  };
+  const out = await processMaterial({ store: mem.store, call: honest.call, newId, renderPage: render }, { runId: "run1", materialId: "m1" });
+  assert.equal(out.status, "failed");
+  assert.match(out.status === "failed" ? out.error : "", /none of its 2 pages could be read from their images \(the page couldn't be drawn as an image: Cannot find module '@napi-rs\/canvas'\)/);
+  assert.equal(mem.state.status, "failed");
+  assert.equal(mem.saves.length, 0);
+  assert.ok(!honest.steps.includes("map"), "nothing is mapped from empty pages");
+});
+
 test("with the student's marks described, marked passages become handwritten-marker flags, recorded after the save with stable ids", async () => {
   const handwritten: Record<string, MaterialPages> = { m1: [{ n: 1, text: "", source: "needs-vision" }, { n: 2, text: "x + xy = x", source: "text" }] };
   const mem = memoryStore({ run: queued(), pages: handwritten, markers: "★ = lost" });

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { FEEDBACK_REASONS, type FeedbackReason, type QuestionRating } from "@/lib/data";
+import { FEEDBACK_REASONS, type FeedbackReason, type NotRelevantScope, type QuestionRating } from "@/lib/data";
 import { IconClose } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { RoundButton } from "@/components/ui/RoundButton";
@@ -30,13 +30,20 @@ function Thumb({ up, active, onClick, label }: { up: boolean; active: boolean; o
   );
 }
 
+/** What a thumbs down reports back: the reason, the note and, for "Not relevant", what it covers. */
+export type OnFlag = (reason: FeedbackReason | null, note: string | null, scope: NotRelevantScope) => void;
+
 /**
  * The thumbs-down popup: why (optional reason chips) and what was wrong (an optional note, which
- * Orca's question writing reads for this course). Save applies it; Cancel or Esc changes nothing.
+ * Orca's question writing reads for this course). "Not relevant" asks whether it's just this
+ * question or everything on its objective (`objectiveName`; without one, just the question). Save
+ * applies it; Cancel or Esc changes nothing.
  */
-export function FlagDialog({ open, saveLabel, initial, onSave, onClose }: { open: boolean; saveLabel: string; initial?: QuestionRating; onSave: (reason: FeedbackReason | null, note: string | null) => void; onClose: () => void }) {
+export function FlagDialog({ open, saveLabel, initial, objectiveName, onSave, onClose }: { open: boolean; saveLabel: string; initial?: QuestionRating; objectiveName?: string; onSave: OnFlag; onClose: () => void }) {
   const [reason, setReason] = useState<FeedbackReason | null>(initial?.reason ?? null);
   const [note, setNote] = useState(initial?.note ?? "");
+  const [scope, setScope] = useState<NotRelevantScope>("question");
+  const asksScope = reason === "not-relevant" && !!objectiveName;
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -85,6 +92,23 @@ export function FlagDialog({ open, saveLabel, initial, onSave, onClose }: { open
                 </button>
               ))}
             </div>
+            {asksScope && (
+              <div className="flex flex-col gap-[8px] rounded-[16px] bg-alice px-[14px] py-[12px]" data-part="not-relevant-scope">
+                <span className="text-[14px] font-bold text-prussian">What isn&apos;t relevant?</span>
+                {(
+                  [
+                    ["question", "Just this question"],
+                    ["objective", `Everything on "${objectiveName}"`],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="flex cursor-pointer items-center gap-[8px] text-[14px] font-semibold text-prussian">
+                    <input type="radio" name="not-relevant-scope" value={key} checked={scope === key} onChange={() => setScope(key)} className="accent-wisteria-deep" data-part={`scope-${key}`} />
+                    {label}
+                  </label>
+                ))}
+                {scope === "objective" && <span className="text-[13px] font-medium text-prussian/70">Orca will stop asking about it. You can bring it back from the course&apos;s Objectives page.</span>}
+              </div>
+            )}
             <label className="flex flex-col gap-[6px]">
               <span className="text-[14px] font-bold text-prussian">Tell us more</span>
               <textarea
@@ -103,7 +127,7 @@ export function FlagDialog({ open, saveLabel, initial, onSave, onClose }: { open
               <Button variant="ghost" size="sm" onClick={onClose}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={() => onSave(reason, note.trim() || null)} data-part="flag-save">
+              <Button size="sm" onClick={() => onSave(reason, note.trim() || null, asksScope ? scope : "question")} data-part="flag-save">
                 {saveLabel}
               </Button>
             </div>
@@ -118,7 +142,7 @@ export function FlagDialog({ open, saveLabel, initial, onSave, onClose }: { open
  * After an answer: thumbs up or down on the question. A thumbs down opens the popup; tapping a lit
  * thumb clears the rating. A thumbs-down question isn't asked again.
  */
-export function RateAnswered({ rating, onRate }: { rating: QuestionRating | undefined; onRate: (rating: "up" | "down" | null, reason?: FeedbackReason | null, note?: string | null) => void }) {
+export function RateAnswered({ rating, objectiveName, onRate, onNotRelevant }: { rating: QuestionRating | undefined; objectiveName?: string; onRate: (rating: "up" | "down" | null, reason?: FeedbackReason | null, note?: string | null) => void; onNotRelevant?: () => void }) {
   const [flagging, setFlagging] = useState(false);
   return (
     <div className="mt-[14px] flex flex-col gap-[8px]" data-part="rate-question">
@@ -132,10 +156,12 @@ export function RateAnswered({ rating, onRate }: { rating: QuestionRating | unde
         open={flagging}
         saveLabel="Save"
         initial={rating}
+        objectiveName={objectiveName}
         onClose={() => setFlagging(false)}
-        onSave={(reason, note) => {
+        onSave={(reason, note, scope) => {
           setFlagging(false);
           onRate("down", reason, note);
+          if (scope === "objective") onNotRelevant?.();
         }}
       />
     </div>
@@ -146,7 +172,7 @@ export function RateAnswered({ rating, onRate }: { rating: QuestionRating | unde
  * Before answering: a thumbs down opens the popup; saving it skips the question (nothing is
  * recorded), and the quiz brings in another question for the same objective when there is one.
  */
-export function RateUnanswered({ onDown }: { onDown: (reason: FeedbackReason | null, note: string | null) => void }) {
+export function RateUnanswered({ objectiveName, onDown }: { objectiveName?: string; onDown: OnFlag }) {
   const [flagging, setFlagging] = useState(false);
   return (
     <>
@@ -154,10 +180,11 @@ export function RateUnanswered({ onDown }: { onDown: (reason: FeedbackReason | n
       <FlagDialog
         open={flagging}
         saveLabel="Save and skip"
+        objectiveName={objectiveName}
         onClose={() => setFlagging(false)}
-        onSave={(reason, note) => {
+        onSave={(reason, note, scope) => {
           setFlagging(false);
-          onDown(reason, note);
+          onDown(reason, note, scope);
         }}
       />
     </>
