@@ -17,6 +17,7 @@ function fakeDb(tables: Record<string, Row[]>, opts: { uniqueInFlight?: boolean 
     let values: Row = {};
     let head = false;
     let single = false;
+    let sort: { key: string; ascending: boolean } | null = null;
     const run = () => {
       if (op === "insert") {
         const live = (r: Row) => r.kind === values.kind && ["queued", "waiting", "running"].includes(r.status as string) && (r.kind === "upload" ? r.material_id === values.material_id : r.course_id === values.course_id);
@@ -26,6 +27,10 @@ function fakeDb(tables: Record<string, Row[]>, opts: { uniqueInFlight?: boolean 
         return { data: null, error: null };
       }
       const hit = rows.filter((r) => filters.every((f) => f(r)));
+      if (sort) {
+        const { key, ascending } = sort;
+        hit.sort((a, b) => (String(a[key] ?? "") < String(b[key] ?? "") ? -1 : String(a[key] ?? "") > String(b[key] ?? "") ? 1 : 0) * (ascending ? 1 : -1));
+      }
       if (op === "update") {
         for (const r of hit) Object.assign(r, values);
         for (const r of hit) writes.push({ table, op, row: { ...r } });
@@ -55,7 +60,7 @@ function fakeDb(tables: Record<string, Row[]>, opts: { uniqueInFlight?: boolean 
       gte: (k: string, v: string) => (filters.push((r) => (r[k] as string) >= v), q),
       in: (k: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[k])), q),
       lt: (k: string, v: string) => (filters.push((r) => (r[k] as string) < v), q),
-      order: () => q,
+      order: (key: string, o?: { ascending?: boolean }) => ((sort = { key, ascending: o?.ascending ?? true }), q),
       limit: () => q,
       maybeSingle() {
         single = true;
@@ -102,6 +107,18 @@ test("with a key an upload queues one run and hands it off", async () => {
   assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-new" });
   assert.equal(f.tables.pipeline_runs.length, 1);
   assert.deepEqual(sent, [{ kind: "material", job: { ownerId: OWNER, runId: "run-new", materialId: "m1" } }]);
+});
+
+test("a retry keeps the failed run's place in line: the new run carries its time, so it isn't queued behind later uploads", async () => {
+  const at = new Date(now.getTime() - 3_600_000).toISOString();
+  const failed = { id: "run-old", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "failed", at, started_at: at, error: "boom" };
+  const later = { id: "run-later", owner_id: OWNER, course_id: "c1", material_id: "m2", kind: "upload", status: "queued", at: new Date(now.getTime() - 60_000).toISOString(), started_at: null };
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: [failed, later] });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  assert.deepEqual(await startUploadJob(d, OWNER, "m1"), { state: "started", runId: "run-new" });
+  const fresh = f.tables.pipeline_runs.find((r) => r.id === "run-new")!;
+  assert.equal(fresh.at, at, "the retried run keeps the failed run's time");
+  assert.deepEqual(sent.map((x) => x.job.runId), ["run-new"], "it is older than the queued run, so it is the one handed off");
 });
 
 test("a run that died long ago is failed, and uploading again starts a new one", async () => {

@@ -111,19 +111,16 @@ work):
 
 The full list with explanations is `.env.example`.
 
-**Dead-run sweep (optional, added 2026-10-17).** A run still "running" 40 minutes after its job
-claimed it (an upload's 30-minute limit plus 10) has died, e.g. the server restarted. Pages that
-follow a run already ask the server to mark it failed (`POST /api/runs/check`); this sweep catches
-the ones nobody is looking at. With `CRON_SECRET` set, register the cron in a `vercel.json` at the
-repo root:
-
-```json
-{ "crons": [{ "path": "/api/cron/runs", "schedule": "*/15 * * * *" }] }
-```
-
-Every 15 minutes needs a Pro plan; Hobby allows one run a day (e.g. `"0 9 * * *"`), and Vercel
-refuses a deploy with a more frequent schedule on Hobby, so it isn't committed until the plan is
-known.
+**Dead-run sweep and daily resume (added 2026-10-17; registered 2026-11-07).** A run still
+"running" 40 minutes after its job claimed it (an upload's 30-minute limit plus 10) has died, e.g.
+the server restarted. Pages that follow a run already ask the server to mark it failed
+(`POST /api/runs/check`); this sweep catches the ones nobody is looking at. It also starts every
+student's next queued or waiting job, which is what resumes uploads held by the daily page or token
+limit ("processing resumes tomorrow"): without it they only resume when the student starts another
+job. `vercel.json` registers it at 05:10 UTC daily (just after midnight Eastern, when the limit has
+reset for students there); Hobby allows one run a day and refuses a deploy with a more frequent
+schedule, so move it to `*/15 * * * *` on a Pro plan. **The route answers 503 until `CRON_SECRET`
+is set on Vercel**, so set it (above) or the sweep does nothing.
 
 **Auto-deploy (added 2026-10-25).** `.github/workflows/deploy.yml` deploys every change that
 reaches `main`: once CI on `main` passes, it pushes any new migration to the hosted project and

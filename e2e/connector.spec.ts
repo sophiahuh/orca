@@ -81,6 +81,12 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   await page.reload();
   await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Connected/);
   await card.locator('[data-part="connector-revoke"]').click();
+  // Disconnect asks first; Keep it backs out, Yes, disconnect revokes.
+  await card.locator('[data-part="connector-revoke-cancel"]').click();
+  await expect(card.locator('[data-part="connector-revoke-confirm"]')).toHaveCount(0);
+  await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Connected/);
+  await card.locator('[data-part="connector-revoke"]').click();
+  await card.locator('[data-part="connector-revoke-yes"]').click();
   await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Not connected/);
   const revoked = await rpc(page, url, "ping");
   expect(revoked.status).toBe(401);

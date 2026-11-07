@@ -24,8 +24,12 @@ export const LIMITS = {
   /** Weekly class meetings a course's schedule may list. */
   classMeetings: 14,
 
-  /** Pages of material one student may put through the model in one of their days (uploads). */
-  pagesPerDay: 300,
+  /**
+   * Pages of material one student may put through the model in one of their days (uploads). 1,000
+   * since 2026-11-07 (owner): a Canvas import brings a whole course's decks in one day, and 300 left
+   * most of ALD waiting; the token cap below is the backstop.
+   */
+  pagesPerDay: 1000,
   /** Tokens (input, output and cache) one student's calls may use in one of their days; a cap on pages can't be dodged with dense pages. */
   tokensPerDay: 2_000_000,
 

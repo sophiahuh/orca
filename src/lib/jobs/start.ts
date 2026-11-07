@@ -202,7 +202,7 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   await failDeadRuns(deps, ownerId);
   const { data: runs, error } = await db
     .from("pipeline_runs")
-    .select("id, status")
+    .select("id, status, at")
     .eq("owner_id", ownerId)
     .eq("material_id", materialId)
     .eq("kind", "upload")
@@ -225,7 +225,10 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   }
   const built = runs.find((r) => r.status === "done");
   if (built) return { state: "built", runId: built.id };
-  // A failed run is tried again: uploading the file again is how a student retries.
+  // A failed run is tried again: uploading the file again (or Try again) is how a student retries.
+  // The new run keeps the failed one's time, so it goes back to its place in line (a Canvas import's
+  // decks stay in course order) instead of behind everything uploaded since (owner, 2026-11-07).
+  const failed = runs.find((r) => r.status === "failed");
 
   const { model } = deps;
   if (!model) return { state: "no-model" };
@@ -243,7 +246,7 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
     course_id: material.course_id,
     material_id: materialId,
     kind: "upload",
-    at: (deps.now?.() ?? new Date()).toISOString(),
+    at: failed?.at ?? (deps.now?.() ?? new Date()).toISOString(),
     model,
     status: "queued",
   });

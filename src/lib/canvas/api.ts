@@ -112,7 +112,8 @@ export interface PickedFile {
 
 /**
  * The course's readable files (PDF and .pptx), modules first in their order (that's how the class
- * met them), then the rest of the file list by creation date; one entry per Canvas file. A module
+ * met them), then the rest of the file list by the number in their names, then creation date (see
+ * `sequenceNumber`); one entry per Canvas file. A module
  * item whose file isn't in the list (the Files tab is hidden, say) is kept with `file: null` for
  * the caller to look up.
  */
@@ -143,10 +144,24 @@ export function pickFiles(modules: readonly CanvasModule[], files: readonly Canv
       add(it.content_id, file?.display_name ?? it.title, file, m);
     }
   }
-  const loose = [...files].sort((a, b) => (Date.parse(a.created_at ?? "") || 0) - (Date.parse(b.created_at ?? "") || 0) || a.id - b.id);
+  const loose = [...files].sort((a, b) => looseOrder(a) - looseOrder(b) || (Date.parse(a.created_at ?? "") || 0) - (Date.parse(b.created_at ?? "") || 0) || a.id - b.id);
   for (const f of loose) if (!f.locked_for_user) add(f.id, f.display_name, f, null);
   return out;
 }
+
+/**
+ * The lecture or week number a filename carries ("L03_Counters.pdf", "Lecture 3", "Week 2 slides",
+ * "03-karnaugh.pdf"), or null. Files not in a module are imported in this order before their
+ * posting date (owner, 2026-11-07): a professor who posts Lecture 5 before 4, or re-posts an early
+ * one, shouldn't reorder the course. Files with no number keep their posting-date order after them.
+ */
+export function sequenceNumber(name: string): number | null {
+  const stem = name.replace(/\.[A-Za-z0-9]+$/, "");
+  const m = /(?:^|[\s_-])(?:l|lec|lecture|lect|w|wk|week|ch|chapter|class|day|session|unit|module|part)[\s_-]?0*(\d{1,3})(?=$|[\s_.)-])/i.exec(stem) ?? /^\s*0*(\d{1,3})(?=[\s_.)-])/.exec(stem);
+  return m ? Number(m[1]) : null;
+}
+
+const looseOrder = (f: CanvasFile) => sequenceNumber(f.display_name) ?? Number.POSITIVE_INFINITY;
 
 /**
  * Whether the course's files were posted all at once (three or more, created within three days of

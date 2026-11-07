@@ -339,8 +339,10 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `ANTHROPIC_BASE_URL` for a proxy or the tests' fake API), `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
   service-wide daily ceiling; unset = none), `TRIGGER_*`, `CRON_SECRET` (the dead-run sweep,
-  `GET /api/cron/runs`; pages following a run also ask `POST /api/runs/check` once it's past its
-  40-minute limit).
+  `GET /api/cron/runs`, registered daily at 05:10 UTC in `vercel.json` since 2026-11-07: it also
+  resumes uploads held by the daily limit; pages following a run also ask `POST /api/runs/check`
+  once it's past its 40-minute limit). Per-student daily caps are in `src/lib/limits.ts`
+  (1,000 pages and 2M tokens a day since 2026-11-07; a Canvas import of a whole course is one day).
 - The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
   (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
   `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
@@ -413,7 +415,8 @@ All 11 Figma screens are built. Where things live:
   `canvas_connections`, service-role only). `/import/canvas` lists their active Canvas courses (`GET /api/canvas/courses`)
   and `POST /api/canvas/import { canvasCourseId }` creates or updates the Orca course: assignments with a due date become
   exams (name says exam/midterm/final/quiz/test) or `hw`/`lab` calendar entries, the syllabus becomes a ready material,
-  and every PDF/.pptx in the modules (in order) and the file list goes through `startUpload` → Storage →
+  and every PDF/.pptx in the modules (in order) and then the file list (by the number in the name, `sequenceNumber`,
+  then posting date) goes through `startUpload` → Storage →
   `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date).
   Posting isn't reaching (owner): files posted over the weeks count as covered, three or more posted within three
   days (`postedAtOnce`) are imported `upcoming` and the page asks "How far has the class got?" (the bulk-upload
@@ -427,7 +430,9 @@ All 11 Figma screens are built. Where things live:
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and
   Resume puts it back in line by upload time; re-uploading a paused file resumes its run instead of starting a second.
   A running upload can be **stopped** (`POST /api/runs/stop`, `stopRun`: failed with `STOPPED_ERROR`, the queue moves
-  on; a job still alive can't revive it, its final save checks the run is still running). Material can be **removed**
+  on; a job still alive can't revive it, its final save checks the run is still running). A retried upload (Try again,
+  or the file uploaded again after a failure) keeps the failed run's `at`, so it goes back to its place in line.
+  Settings' Disconnect buttons (Canvas, Claude connector) ask first (2026-11-07). Material can be **removed**
   from a course (`DELETE /api/materials/:id`, `removeMaterial`): file, pages and calendar entry go, the row stays with
   status `removed` (not loaded; hash cleared so the file can be uploaded again), the objectives only it taught and a
   topic it created that has no live objective left are archived with `archived_with_material` (migrations
