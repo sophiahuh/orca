@@ -192,14 +192,16 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     const patch = (id: string, p: Partial<BatchItem>) => setBatch((b) => b && b.map((it) => (it.id === id ? { ...it, ...p } : it)));
     let firstRun: string | null = null;
     let failed = 0;
+    let duplicates = 0;
     for (const it of batchPending) {
-      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", upcoming: isUpcoming(it) };
+      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", upcoming: isUpcoming(it), again: it.again === true };
       try {
         const outcome = await uploadMaterial(it.file, meta, (stage) => patch(it.id, { status: { kind: "sending", message: STAGE_MESSAGE[stage] } }));
         if (outcome.kind === "read") addMaterial(outcome.material, { saved: true });
         const g = outcome.generation;
         if ("runId" in g && firstRun === null) firstRun = g.runId;
-        patch(it.id, { status: { kind: outcome.kind === "duplicate" ? "duplicate" : "done" } });
+        if (outcome.kind === "duplicate") duplicates++;
+        patch(it.id, { status: { kind: outcome.kind === "duplicate" ? "duplicate" : "done" }, again: false });
       } catch (error) {
         failed++;
         patch(it.id, { status: { kind: "failed", message: error instanceof Error ? error.message : "The upload failed." } });
@@ -209,15 +211,21 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
       setPhase({ kind: "error", message: `${failed} of ${batchPending.length} files didn't go through. Fix what each one says and send them again, or go on to the review.` });
       return;
     }
+    // Files the course already has: nothing is added for them unless the student picks Upload again on the row.
+    if (duplicates > 0) {
+      setPhase({ kind: "error", message: `${course.name} already has ${duplicates === 1 ? "1 of these files" : `${duplicates} of these files`}. Choose Upload again on any you want added as a new copy, or go on to the review.` });
+      return;
+    }
     setPhase({ kind: "working", message: firstRun ? "Orca is building topics and questions from them." : `Saved to ${course.name}.` });
     window.setTimeout(() => router.replace(firstRun ? `/course/${course.slug}/review?run=${firstRun}` : `/course/${course.slug}`), 1200);
   };
 
-  const submit = async () => {
+  /** `again`: the student chose "Upload again" for a file the course already has (a new copy). */
+  const submit = async (again = false) => {
     if (batch) return submitBatch();
     if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
-    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf };
+    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf, again };
     // The form is done with: it gives way to where the student goes next, so Back from there skips it.
     const leave = () => router.replace(due ? "/calendar" : `/course/${course.slug}`);
     // A pasted chat or a website: new material, or one the course already has (then nothing is added again).
@@ -430,6 +438,10 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                   compact={bulk}
                   onChange={(id, p) => setBatch((b) => b && b.map((it) => (it.id === id ? { ...it, ...p, edited: true } : it)))}
                   onRemove={(id) => setBatch((b) => (b && b.length > 1 ? b.filter((it) => it.id !== id) : null))}
+                  onUploadAgain={(id) => {
+                    setBatch((b) => b && b.map((it) => (it.id === id ? { ...it, again: true, status: { kind: "waiting" } } : it)));
+                    setPhase({ kind: "idle" });
+                  }}
                 />
               </div>
             ) : doc ? (
@@ -527,7 +539,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
           )}
 
           <motion.div variants={fadeUp} className="flex flex-col gap-[10px]">
-            <Button onClick={submit} className={DATE_ROW} disabled={busy || Boolean(file && unreadable) || (batch ? batchPending.length === 0 : !chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
+            <Button onClick={() => void submit()} className={DATE_ROW} disabled={busy || Boolean(file && unreadable) || (batch ? batchPending.length === 0 : !chosenName && !websiteUrl.trim() && !aiChatUrl.trim() && !aiChatText.trim())}>
               {phase.kind === "working"
                 ? `Building ${course.name}…`
                 : batch
@@ -536,7 +548,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
                     : `Add ${batchPending.length} file${batchPending.length === 1 ? "" : "s"} to course`
                   : "Add to course"}
             </Button>
-            {batch && phase.kind === "error" && batchFailed.length > 0 && (
+            {batch && phase.kind === "error" && (batchFailed.length > 0 || batch.some((it) => it.status.kind === "duplicate")) && (
               <Link href={`/course/${course.slug}/review`} className="text-center text-[14px] font-bold text-wisteria-deep hover:underline">
                 Go on to the review
               </Link>
@@ -555,7 +567,12 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
               )}
               {phase.kind === "duplicate" && (
                 <motion.span key="dup" variants={fadeUp} initial="hidden" animate="show" exit="exit" className="text-[14px] font-bold text-prussian" role="status">
-                  {course.name} already has this file ({phase.filename}), so there&apos;s nothing new to add.
+                  {course.name} already has this file ({phase.filename}), so nothing was added.{" "}
+                  {file && (
+                    <button type="button" onClick={() => void submit(true)} className="font-bold text-wisteria-deep underline underline-offset-2" data-part="upload-again">
+                      Upload it again
+                    </button>
+                  )}
                 </motion.span>
               )}
               {phase.kind === "error" && (

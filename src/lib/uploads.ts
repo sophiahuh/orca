@@ -31,6 +31,8 @@ export interface UploadMeta {
   handwritten?: boolean;
   /** The class hasn't reached this file yet: its objectives wait until it's marked covered. */
   upcoming?: boolean;
+  /** "Upload again": the course already has this file, and the student wants it added anyway. */
+  again?: boolean;
 }
 
 /** What happens to an upload's questions (`Generation` in src/lib/server/jobs/start.ts). */
@@ -166,7 +168,7 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
 
   onStage("reading");
   type Processed = { material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation } | Duplicate;
-  const processed = await post<Processed>(`/api/materials/${started.material.id}/process`);
+  const processed = await post<Processed>(`/api/materials/${started.material.id}/process`, meta.again ? { again: true } : undefined);
   if ("duplicate" in processed) return { kind: "duplicate", ...processed.duplicate, generation: processed.generation };
   return { kind: "read", ...processed };
 }

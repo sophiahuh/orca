@@ -285,19 +285,27 @@ test("an upload keeps its place in the URL: a reload follows it to its review, o
   await expect(page.locator("[data-part=resume-upload]")).toContainText("half.pdf didn't finish uploading before the page reloaded.", { timeout: 15_000 });
 });
 
-test("re-uploading the same deck is recognised by its content and adds nothing", async ({ page, student }) => {
+test("re-uploading the same deck is recognised by its content and adds nothing, unless the student chooses Upload it again", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
   await upload(page);
-  await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so there's nothing new to add.`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so nothing was added.`)).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "map")).toHaveLength(1);
   const state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
   expect(state.runs).toHaveLength(1);
   const { count } = await student.db.from("materials").select("id", { count: "exact", head: true });
   expect(count).toBe(1);
+
+  // The student wants it anyway: a second copy, read and built like any upload.
+  await page.locator("[data-part=upload-again]").click();
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  await expect.poll(async () => (await student.db.from("materials").select("filename, status, content_hash")).data?.length, { timeout: 30_000 }).toBe(2);
+  const { data: copies } = await student.db.from("materials").select("status, content_hash");
+  expect(new Set(copies!.map((c) => c.content_hash)).size).toBe(1);
+  await expect.poll(async () => (await student.db.from("pipeline_runs").select("id")).data?.length, { timeout: 30_000 }).toBe(2);
 });
 
 test("a job that fails says why on the review screen, saves nothing, and uploading again retries it", async ({ page, student }) => {

@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     if (pages.length > LIMITS.pagesPerFile) return reply(413, { error: `This chat is too long to read in one go (${pages.length} pages; Orca reads at most ${LIMITS.pagesPerFile}). Paste it in parts.` });
     const filename = aiChatFilename(sourceUrl);
     const hash = createHash("sha256").update(text).digest("hex");
-    const { data: same, error: sameError } = await db.from("materials").select("id, filename").eq("owner_id", student.id).eq("course_id", parsed.data.courseId).eq("content_hash", hash).maybeSingle();
+    const { data: same, error: sameError } = await db.from("materials").select("id, filename").eq("owner_id", student.id).eq("course_id", parsed.data.courseId).eq("content_hash", hash).order("created_at").limit(1).maybeSingle();
     if (sameError) return reply(500, { error: "Orca couldn't check that chat." });
     if (same) return reply(200, { duplicate: same, generation: await startUploadJob(db, student.id, same.id) });
     const id = crypto.randomUUID();
