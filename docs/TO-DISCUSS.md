@@ -6,6 +6,20 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### "Not relevant" on a question: what it does (2026-11-07)
+- **Source:** the thumbs-down popup (`src/components/quiz/RateQuestion.tsx`, `QuizRunner.tsx`).
+- **Assumed, pending the owner:**
+  - "Not relevant" differs from "Not from my course": the question is from the material, but about
+    something the student doesn't need;
+  - picking it asks "Just this question" (the default: hidden and replaced, like any thumbs down) or
+    "Everything on [objective]";
+  - the whole objective is removed as rejecting it on the Objectives page does (archived, never
+    quizzed or due, later uploads don't propose it again, restorable there); answers already given
+    stay, and its remaining questions in the session are skipped;
+  - question writing is told to test the objective's core skill and leave out that angle.
+- **Not done:** a topic-wide "not relevant", or lowering an objective's weight instead of removing it.
+- **What would change:** the scope choice in the popup, and `dropObjective` in the quiz.
+
 ### Weak points first, Plans B and C: assumptions (2026-11-06)
 - **Source:** `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md` ("Decisions this plan makes").
 - **Assumed, pending the owner:**
