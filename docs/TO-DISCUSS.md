@@ -46,8 +46,9 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   - every question-writing run also writes for flagged objectives still without questions, and one
     that finishes while new flags arrived queues one more;
   - only pages read from their images, and only with a marker description saved, can carry marks;
-  - a tapped page flags the objectives anchored to it, else its topic's objectives not anchored
-    elsewhere in the file, skipping ones already being learned;
+  - a tapped page flags whole topics (owner, 2026-11-07): every live objective of the topics taught
+    on it and of the objectives anchored to it, wherever they're taught, skipping ones already being
+    learned;
   - the trail's "N without questions" line is gone (most objectives have none now);
   - a marked passage that fails to record after a retry is listed on the upload card;
   - "You're caught up" shows for a course whose objectives have no questions yet (Practice other

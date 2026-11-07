@@ -464,8 +464,8 @@ objectives marked in them; any other flag starts a top-up for its objectives wit
 batch, `POST /api/top-up` without a session), and every top-up catches up flagged objectives still
 without questions. Handwritten markers: Settings describes the student's marks
 (`profiles.marker_notes`), the page reader tags marked passages and the objectives step names them
-(checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the objectives
-taught on each tapped page. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
+(checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the whole topics
+taught on each tapped page, every objective of each (owner, 2026-11-07). Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
 plans: `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`,
 `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `phase-4`, shipping together.
 
