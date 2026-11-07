@@ -101,12 +101,16 @@ function Form({ action, submit, children, actions, hideOnNotice, prepare }: { ac
   );
 }
 
-/** Seconds between confirmation emails: Supabase refuses a second one sooner than this (its default interval). */
-const RESEND_COOLDOWN_S = 60;
+/**
+ * Seconds between confirmation emails (owner, 2026-11-07; was 60). Supabase refuses a second one
+ * sooner than its own interval per user (Auth → Rate Limits / SMTP "minimum interval"), which must
+ * be at most this, or a resend after the wait is refused with "We sent one a moment ago".
+ */
+const RESEND_COOLDOWN_S = 10;
 
 /**
  * "Didn't get the email?" under a sign-up notice or an unconfirmed log-in: sends the confirmation
- * link again, then waits a minute before offering once more (right after sign-up the wait is
+ * link again, then waits 10 seconds before offering once more (right after sign-up the wait is
  * already running, since one just went out). The address comes from the form that was just
  * submitted, so nothing is typed twice.
  */

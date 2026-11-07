@@ -98,7 +98,7 @@ export async function resendConfirmation(_: AuthState, data: FormData): Promise<
   if (!validEmail(email)) return { error: "Enter a valid email address." };
   return withClient(async (client) => {
     const { error } = await client.auth.resend({ type: "signup", email, options: { emailRedirectTo: `${await origin()}/auth/callback` } });
-    if (error?.code === "over_email_send_rate_limit") return { error: "We sent one a moment ago. Wait a minute, then try again." };
+    if (error?.code === "over_email_send_rate_limit") return { error: "We sent one a moment ago. Wait a few seconds, then try again." };
     if (error && error.status !== undefined && error.status >= 500) return { error: "Couldn't send the email. Try again in a moment." };
     return { notice: "If that address is waiting to be confirmed, we sent a new link." };
   });

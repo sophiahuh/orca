@@ -312,7 +312,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   the browser client; `cookieClient()` is for server actions. Auth (Task 4): `src/proxy.ts`
   (session refresh, signed-out redirect, CSP with a nonce; `src/lib/csp.ts`, `src/lib/auth/` are
   pure), actions in `src/app/auth/actions.ts` (sign-up and an unconfirmed log-in offer to resend
-  the confirmation email: `resendConfirmation`, a minute between sends), screens `/sign-in`, `/sign-up`, `/forgot-password`,
+  the confirmation email: `resendConfirmation`, 10 s between sends; production Supabase's per-user email interval must be no longer), screens `/sign-in`, `/sign-up`, `/forgot-password`,
   `/reset-password`, callback `/auth/callback`, Account card in Settings, and the root layout shows
   "isn't connected" without the env vars. `react/no-danger` is an error. e2e specs import `test`
   from `e2e/fixture.ts`, which signs in a throwaway student; Playwright reads the Supabase URL and
