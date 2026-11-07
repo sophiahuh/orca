@@ -300,7 +300,7 @@ the plan; `docs/SETUP-HOSTED.md` §5).
   (no student UPDATE policy; `status` excluded from the column grant) are the checklist. The
   source-anchor check constraint becomes "at least one unless inferred".
 - **Files in Supabase Storage**: private bucket, signed uploads from the browser, filename
-  sanitising (ported). Since 2026-10-18: stored at `<owner>/<material id>`, 30 MB limit (uploads
+  sanitising (ported). Since 2026-10-18: stored at `<owner>/<material id>`, 50 MB limit since 2026-11-07, was 30 (uploads
   over it are refused before sending), PDFs and .pptx decks.
 - **Snapshots:** an `objective_state` row per objective holding the accumulator, updated in the
   same transaction as each evidence insert, with a rules version. A rules change marks every

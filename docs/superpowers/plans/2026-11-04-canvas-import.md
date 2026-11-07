@@ -16,7 +16,7 @@ active Canvas courses; Import on one creates the Orca course (or fills the one a
 adds its assignments to the calendar and its exams to the exams table, saves the syllabus as a
 material, and pulls every PDF and .pptx from the course's modules and files into the normal
 upload pipeline (same `startUpload` → Storage → `processUpload` → job as the browser, so
-duplicates, the 30 MB limit, reading, pause/stop/remove and Try again all apply). Import again
+duplicates, the upload size limit, reading, pause/stop/remove and Try again all apply). Import again
 later to pick up new files: everything is linked by Canvas id, so nothing is imported twice.
 
 **Assumptions (recorded in `docs/TO-DISCUSS.md`).**

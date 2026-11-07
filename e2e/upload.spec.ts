@@ -365,7 +365,7 @@ test("a file Orca can't take is refused on the page: it says why and nothing can
 test("oversize and non-PDF files are refused before anything is stored", async ({ page, student }) => {
   const courseId = await newCourse(student);
   const pdf = makePdf([lines("Hello")]);
-  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 30 * 1024 * 1024 + 1 } });
+  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 50 * 1024 * 1024 + 1 } });
   expect(big.status()).toBe(413);
   const text = await page.request.post("/api/materials", { data: { ...details(courseId, pdf, "notes.txt"), mime: "text/plain" } });
   expect(text.status()).toBe(415);
