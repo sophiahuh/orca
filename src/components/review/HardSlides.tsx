@@ -76,8 +76,8 @@ function usePages(material: Material) {
 /**
  * "Which slides were hard?" (weak points first, Plan C): the material's pages as a grid (a .pptx as a
  * list of its slides); tapping pages and Flag records a struggle flag (source `slide`) on every
- * objective taught on each page (`objectivesOnPage`), except ones already being learned. A page with
- * nothing to flag can't be tapped.
+ * objective of the topics each page teaches (`objectivesOnPage`: whole topics, wherever their
+ * objectives are taught), except ones already being learned. A page with nothing to flag can't be tapped.
  */
 export function HardSlides({ course, material, open, onClose }: { course: Course; material: Material; open: boolean; onClose: () => void }) {
   const { objectives, flagSlides } = useOrca();

@@ -172,7 +172,7 @@ test("handwritten notes with the student's marks described: a marked passage bec
   expect(flags[0].objectiveId).toBe(objectiveId);
 });
 
-test("which slides were hard: the deck's pages as a grid; tapping a page flags the objectives taught there", async ({ page, student }) => {
+test("which slides were hard: the deck's pages as a grid; tapping a page flags the whole topic it teaches", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");
   await upload(page);
@@ -184,14 +184,15 @@ test("which slides were hard: the deck's pages as a grid; tapping a page flags t
   await expect.poll(() => tiles.count(), { timeout: 30_000 }).toBeGreaterThan(12);
   // Drawn from the stored file in the browser.
   await expect.poll(() => tiles.first().locator("canvas").evaluate((c: HTMLCanvasElement) => c.width), { timeout: 30_000 }).toBeGreaterThan(0);
-  // Slide 1 is in the topic's range, but its one objective is anchored to slide 12: nothing to flag there.
-  await expect(modal.locator("[data-part=slide-tile][data-page='1']")).toBeDisabled();
-  await modal.locator("[data-part=slide-tile][data-page='12']").click();
+  // Slide 5 teaches no topic and no objective cites it: nothing to flag.
+  await expect(modal.locator("[data-part=slide-tile][data-page='5']")).toBeDisabled();
+  // Slide 1 only opens the topic (slides 1-2); its one objective is taught on slide 12. Tapping it flags the whole topic anyway.
+  await modal.locator("[data-part=slide-tile][data-page='1']").click();
   await modal.locator("[data-part=flag-slides]").click();
   await expect(modal.locator("[data-part=slides-flagged]")).toHaveText("Orca will practise these with you.");
   const after = await stored(page, student);
   const flags = after.evidence.filter((e) => e.kind === "confusion");
-  expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.materialId])).toEqual([["slide", 12, after.materials[0].id]]);
+  expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.materialId])).toEqual([["slide", 1, after.materials[0].id]]);
   await page.goto("/course/logic/objectives");
   await expect(page.locator("li[data-objective='Simplify with absorption']")).toContainText("Learning");
 });

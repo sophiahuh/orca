@@ -1,9 +1,10 @@
 /**
- * Which objectives a tapped page is about (weak points first, Plan C: "Which slides were hard?").
- * The objectives whose places name that page of the material; when none do, the objectives of the
- * topics taught on that page that aren't anchored anywhere else in the material. Not `pagesFor`
- * (src/lib/pipeline/topup.ts): its neighbouring pages and whole-file fallback would flag far too
- * much. Rejected and merged-away objectives and topics are left out. Pure.
+ * Which objectives a tapped page flags (weak points first, Plan C: "Which slides were hard?").
+ * Owner, 2026-11-07: a tapped slide flags whole topics. The topics are the ones taught on that page
+ * of the material (its `source` ranges) and the topics of objectives whose places name that page;
+ * every live objective of those topics is flagged, wherever in the course it's taught, so a slide
+ * that only gives an overview of a topic still flags all of it. Rejected and merged-away objectives
+ * and topics are left out. Pure.
  */
 import type { Objective, Topic } from "../data.ts";
 import { pagesIn } from "./places.ts";
@@ -16,9 +17,9 @@ function anchoredPages(o: Objective, materialId: string): Set<number> {
 }
 
 export function objectivesOnPage(materialId: string, page: number, objectives: Readonly<Record<string, Objective>>, topics: readonly Topic[]): string[] {
-  const all = Object.values(objectives).filter(live);
-  const anchored = all.filter((o) => anchoredPages(o, materialId).has(page)).map((o) => o.id);
-  if (anchored.length) return anchored;
-  const taughtHere = new Set(topics.filter((t) => live(t) && pagesIn(t.source ?? [], materialId).has(page)).map((t) => t.id));
-  return all.filter((o) => taughtHere.has(o.topicId) && anchoredPages(o, materialId).size === 0).map((o) => o.id);
+  const liveTopics = new Set(topics.filter(live).map((t) => t.id));
+  const all = Object.values(objectives).filter((o) => live(o) && liveTopics.has(o.topicId));
+  const onPage = new Set(topics.filter((t) => live(t) && pagesIn(t.source ?? [], materialId).has(page)).map((t) => t.id));
+  for (const o of all) if (anchoredPages(o, materialId).has(page)) onPage.add(o.topicId);
+  return all.filter((o) => onPage.has(o.topicId)).map((o) => o.id);
 }
