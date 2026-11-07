@@ -25,9 +25,11 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /**
  * `covered`: how many of today's due objectives the quick review's time budget fits (the session
- * plans the same way); required when a quick review is due.
+ * plans the same way); required when a quick review is due. `coveredTomorrow`: the same for the
+ * next quick review when it's tomorrow (`upNext`); required then. Tomorrow's card can be started
+ * early (owner, 2026-11-07).
  */
-export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames, covered?: number): TodoCard[] {
+export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: TodoNames, covered?: number, coveredTomorrow?: number): TodoCard[] {
   const c = agenda.courseId;
   const cards: TodoCard[] = [];
   if (agenda.quickReviewDue) {
@@ -47,6 +49,12 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
   }
   if (agenda.deepReview.due) {
     cards.push({ id: `${c}:deep`, courseId: c, kind: "deep", when: "today", title: "Dive in", detail: null, ref: null });
+  }
+  if (agenda.quickTomorrow) {
+    if (coveredTomorrow === undefined) throw new Error(`Quick review due tomorrow in course ${c} without its planned size`);
+    if (coveredTomorrow > 0) {
+      cards.push({ id: `${c}:quick:tomorrow`, courseId: c, kind: "quick", when: "tomorrow", title: `Quick review · ${config.quick.duration}`, detail: `Covers ${plural(coveredTomorrow, "objective")} · start early anytime`, ref: null });
+    }
   }
   const byTopic = new Map<string, number>();
   for (const r of agenda.dueTomorrow) byTopic.set(r.topicId, (byTopic.get(r.topicId) ?? 0) + 1);

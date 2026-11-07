@@ -1026,11 +1026,14 @@ export function useTodos(): TodoCard[] {
         const config = configs[c.id] ?? DEFAULT_CONFIG;
         // Plan the quick review as the session will, to say how many due objectives it fits.
         let covered: number | undefined;
-        if (a.quickReviewDue) {
+        let coveredTomorrow: number | undefined;
+        const plannedFor = (list: typeof a.dueToday) => {
           const { byObjective } = askableQuestions(c, questionBank[c.id], catalogue, feedback);
-          const plan = assembleQuickReview(sessionCandidates(a.dueToday, m.objectives, byObjective), { lastSeen: lastSeenOf(m.events), now: new Date(nowMs), dayKey, budgetSeconds: durationSeconds(config.quick.duration) });
-          covered = new Set(plan.items.map((i) => i.objectiveId)).size;
-        }
+          const plan = assembleQuickReview(sessionCandidates(list, m.objectives, byObjective), { lastSeen: lastSeenOf(m.events), now: new Date(nowMs), dayKey, budgetSeconds: durationSeconds(config.quick.duration) });
+          return new Set(plan.items.map((i) => i.objectiveId)).size;
+        };
+        if (a.quickReviewDue) covered = plannedFor(a.dueToday);
+        if (a.quickTomorrow) coveredTomorrow = plannedFor(a.upNext);
         return todoCards(a, config, {
           objective: (id) => {
             const o = catalogue[id];
@@ -1042,7 +1045,7 @@ export function useTodos(): TodoCard[] {
             if (!t) throw new Error(`Topic ${id} is not in course ${c.id}`);
             return t.name;
           },
-        }, covered);
+        }, covered, coveredTomorrow);
       }),
     [courses, objectives, configs, agenda, mastery, questionBank, feedback, nowMs, dayKey],
   );

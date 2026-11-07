@@ -16,6 +16,8 @@ export const SIDEBAR_W = 340;
 export function todoHref(card: TodoCard, course: Course): string {
   switch (card.kind) {
     case "quick":
+      // Tomorrow's quick review, started early: it covers what's waiting for it.
+      return `/session/${course.slug}?kind=quick${card.when === "tomorrow" ? "&early=1" : ""}`;
     case "deep":
       return `/session/${course.slug}?kind=${card.kind}`;
     case "checks":

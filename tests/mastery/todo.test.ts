@@ -21,6 +21,8 @@ const empty: CourseAgenda = {
   dueTomorrow: [],
   quickReviewDue: false,
   nextQuickDay: null,
+  upNext: [],
+  quickTomorrow: false,
   deepReview: { due: false, dueDay: null, tomorrow: false, candidates: 0 },
 };
 
@@ -58,4 +60,11 @@ test("deep review today or tomorrow and tomorrow's checks", () => {
 test("a quick review that can't fit every due objective says only how many it covers", () => {
   const agenda = { ...empty, quickReviewDue: true, dueToday: [ranked("a", "t", ""), ranked("b", "t", ""), ranked("c", "t", "")] };
   assert.equal(todoCards(agenda, DEFAULT_CONFIG, names, 1)[0].detail, "Covers 1 objective");
+});
+
+test("tomorrow's quick review: a card under Due tomorrow, sized like the session, that can be started early", () => {
+  const agenda = { ...empty, heldForNext: [ranked("a", "t", ""), ranked("b", "t", "")], upNext: [ranked("a", "t", ""), ranked("b", "t", "")], quickTomorrow: true };
+  assert.deepEqual(todoCards(agenda, DEFAULT_CONFIG, names, undefined, 2).map((c) => [c.kind, c.when, c.title, c.detail]), [["quick", "tomorrow", "Quick review · 10 min", "Covers 2 objectives · start early anytime"]]);
+  assert.deepEqual(todoCards(agenda, DEFAULT_CONFIG, names, undefined, 0), [], "nothing it can ask, no card");
+  assert.throws(() => todoCards(agenda, DEFAULT_CONFIG, names));
 });

@@ -56,6 +56,13 @@ export interface CourseAgenda {
   quickReviewDue: boolean;
   /** The next quick-review day on the course's cadence after today; null when none is coming (exam cadence, no exam ahead). */
   nextQuickDay: string | null;
+  /**
+   * What the next quick review will cover: the weak points held for it, then (when today has no
+   * quick review) today's due ones, highest priority first. A student may start it early.
+   */
+  upNext: RankedObjective[];
+  /** The next quick review is tomorrow and has something to cover (the sidebar's "Due tomorrow"). */
+  quickTomorrow: boolean;
   deepReview: DeepReviewDue;
 }
 
@@ -214,6 +221,8 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
     nextQuickDay = afterLast > tomorrow ? afterLast : tomorrow;
   }
   const quickReviewDue = dueToday.length > 0 && quickCadenceDue;
+  const upNext = [...heldForNext, ...(quickReviewDue ? [] : dueToday)].sort(byPriority);
+  const quickTomorrow = upNext.length > 0 && nextQuickDay === tomorrow;
 
   /* Deep review cadence: one cadence after the last finished one (or the course's first answer); stays due if missed */
   const candidates = ranked.filter((r) => isInRotation(r.status) && r.status !== "retired" && r.reached).length;
@@ -240,5 +249,5 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   }
   const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, tomorrow: dueDay === tomorrow, candidates };
 
-  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewDue, nextQuickDay, deepReview };
+  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewDue, nextQuickDay, upNext, quickTomorrow, deepReview };
 }

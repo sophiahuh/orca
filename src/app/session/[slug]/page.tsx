@@ -52,7 +52,9 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
   const picked = Number(sp.minutes);
   const minutes = Number.isInteger(picked) && picked >= 1 ? picked : undefined;
   const scope: DiveScope = SCOPES.find((s) => s === sp.scope) ?? "course";
-  return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}:${scope}`} course={course} kind={kind} topicId={topicId} minutes={minutes} scope={scope} />;
+  // Tomorrow's quick review started early (the sidebar's "Due tomorrow").
+  const early = kind === "quick" && sp.early === "1";
+  return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}:${scope}:${early}`} course={course} kind={kind} topicId={topicId} minutes={minutes} scope={scope} early={early} />;
 }
 
 /** How long an unfinished session can be picked up again. */
@@ -63,7 +65,7 @@ const RESUME_WITHIN_MS = 24 * 60 * 60 * 1000;
  * first ("Pick up where you left off?"). A deep review asks for its length first and can be run
  * again from its end card.
  */
-function SessionBody({ course, kind, topicId, minutes, scope }: { course: Course; kind: Kind; topicId?: string; minutes?: number; scope: DiveScope }) {
+function SessionBody({ course, kind, topicId, minutes, scope, early }: { course: Course; kind: Kind; topicId?: string; minutes?: number; scope: DiveScope; early: boolean }) {
   const [round, setRound] = useState(0);
   const { progress, saveProgress } = useOrca();
   const saved = progress[progressKey(course.id, kind)];
@@ -91,7 +93,7 @@ function SessionBody({ course, kind, topicId, minutes, scope }: { course: Course
     );
   }
   if (kind === "deep") return <DeepReview key={round} course={course} topicId={topicId} startMinutes={minutes} scope={scope} onAgain={() => setRound((r) => r + 1)} />;
-  return <QuickReview course={course} />;
+  return <QuickReview course={course} early={early} />;
 }
 
 /**
@@ -179,7 +181,11 @@ function useSessionSources(course: Course) {
   return sources;
 }
 
-function QuickReview({ course }: { course: Course }) {
+/**
+ * Today's quick review, or (`early`) the next one started ahead of its day: it covers what's waiting
+ * for it (`upNext`), weak points practiced today included, so a student who wants to go again can.
+ */
+function QuickReview({ course, early = false }: { course: Course; early?: boolean }) {
   const router = useRouter();
   const { configs } = useOrca();
   const { agenda, ctx, toItems, candidates, replacementFor } = useSessionSources(course);
@@ -188,7 +194,7 @@ function QuickReview({ course }: { course: Course }) {
 
   const [items] = useState(() => {
     const budgetSeconds = durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).quick.duration);
-    return toItems(assembleQuickReview(candidates(agenda.dueToday), { ...ctx, budgetSeconds }));
+    return toItems(assembleQuickReview(candidates(early ? agenda.upNext : agenda.dueToday), { ...ctx, budgetSeconds }));
   });
 
   if (items.length === 0) {
