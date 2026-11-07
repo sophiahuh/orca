@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
-import { pathCanvasHeight, trailFromPoints, trailTopics } from "@/lib/data";
+import { defaultTopicPositions, pathCanvasHeight, trailFromPoints, trailTopics } from "@/lib/data";
+import { Button } from "@/components/ui/Button";
 import { Wave } from "@/components/brand/Decor";
 import type { TopicProgress } from "@/lib/mastery/progress";
 import { type NodeVisual, PathNode } from "@/components/ui/PathNode";
@@ -27,7 +28,12 @@ function statusLine(p: TopicProgress) {
   return `${p.mastered} of ${p.inRotation} mastered`;
 }
 
-/** Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. */
+/**
+ * Dotted trail + nodes, in a fixed 854×834 canvas scaled to fit. Weak points first (owner,
+ * 2026-11-07): only topics with weak spots (an objective in rotation, or an open check) are on the
+ * trail, laid out again in their order; "Show all N topics" brings back the whole course on its
+ * stored layout. With no weak spots anywhere, the trail says so and offers the same.
+ */
 export function KnowledgePath({ course, progress, onStart }: {
   course: Course;
   progress: ReadonlyMap<string, TopicProgress>;
@@ -38,7 +44,13 @@ export function KnowledgePath({ course, progress, onStart }: {
     if (!p) throw new Error(`No progress computed for topic ${t.id}`);
     return p;
   };
-  const topics = trailTopics(course);
+  const all = trailTopics(course);
+  const [showAll, setShowAll] = useState(false);
+  const weak = all.filter((t) => progressOf(t).status !== "not-started");
+  const filtered = !showAll && weak.length < all.length;
+  // The weak topics take the first spots of the default layout, so the trail has no gaps.
+  const spots = filtered ? defaultTopicPositions(weak.length) : null;
+  const topics = filtered ? weak.map((t, i) => ({ ...t, pos: spots![i] })) : all;
   // START goes to the first topic in progress, else the first not started; none when everything is done.
   const firstInProgress = topics.findIndex((t) => progressOf(t).status === "in-progress");
   const current = firstInProgress >= 0 ? firstInProgress : topics.findIndex((t) => progressOf(t).status === "not-started");
@@ -54,7 +66,7 @@ export function KnowledgePath({ course, progress, onStart }: {
   const PATH_H = pathCanvasHeight(topics.length);
   // Fit the 854×834 design frame as before; longer trails keep that scale and scroll.
   const { ref, scale, x } = useFitScale(PATH_W, 834, "contain");
-  const d = course.trail ?? trailFromPoints(topics.map((t) => t.pos));
+  const d = filtered ? trailFromPoints(topics.map((t) => t.pos)) : (course.trail ?? trailFromPoints(topics.map((t) => t.pos)));
 
   // Opening a course should put the pulsing START/play node in view, even when a long path has
   // already scrolled far past it. Coordinates inside the fixed canvas need the same fit scale.
@@ -67,7 +79,26 @@ export function KnowledgePath({ course, progress, onStart }: {
     return () => cancelAnimationFrame(frame);
   }, [course.id, currentTopicId, currentTopicY, ref, scale]);
 
+  const toggle =
+    weak.length < all.length ? (
+      <Button size="sm" variant="ghost" onClick={() => setShowAll((v) => !v)} data-part="path-show-all">
+        {showAll ? "Show weak spots only" : `Show all ${all.length} topics`}
+      </Button>
+    ) : null;
+
+  if (filtered && weak.length === 0) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] px-[80px] text-center" data-part="path-no-weak-spots">
+        <p className="text-[22px] font-bold text-prussian">No weak spots flagged yet.</p>
+        <p className="max-w-[460px] text-[16px] text-wisteria-deep">Topics show up here once something is flagged as hard: tap the slides that were hard on the Uploads tab, or show all topics and pick one.</p>
+        {toggle}
+      </div>
+    );
+  }
+
   return (
+    <>
+    {toggle && <div className="absolute bottom-[24px] left-1/2 z-10 -translate-x-1/2">{toggle}</div>}
     <div ref={ref} className="absolute inset-0 overflow-y-auto overflow-x-hidden">
       <div style={{ width: PATH_W * scale, height: PATH_H * scale, marginLeft: x }}>
       <div className="origin-top-left" style={{ width: PATH_W, height: PATH_H, transform: `scale(${scale})` }}>
@@ -109,5 +140,6 @@ export function KnowledgePath({ course, progress, onStart }: {
       </div>
       </div>
     </div>
+    </>
   );
 }
