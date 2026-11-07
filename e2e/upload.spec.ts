@@ -361,7 +361,9 @@ test("a job that fails says why on the review screen, saves nothing, and uploadi
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
   state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
-  expect(state.runs.map((r) => r.status)).toEqual(["failed", "done"]);
+  // The retry keeps the failed run's time (its place in line), so the two share it: compare as a set.
+  expect(state.runs.map((r) => r.status).sort()).toEqual(["done", "failed"]);
+  expect(new Set(state.runs.map((r) => r.at)).size).toBe(1);
 });
 
 /* ── The routes directly: limits, a failed read, hidden text, another student ── */
