@@ -6,14 +6,49 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Tomorrow's quick review, startable early (2026-11-07)
+- **Source:** owner, 2026-11-07; `upNext` / `quickTomorrow` in `src/lib/mastery/agenda.ts`, `todoCards`.
+- **Built:** "Due tomorrow" lists the quick review only when the course's cadence puts the next one
+  on tomorrow and something will be due in it (weak points practiced today, plus today's due ones
+  when today has no review). Its card says "start early anytime" and opens it now
+  (`?kind=quick&early=1`), over the same objectives.
+- **Assumed, pending the owner:** answers given early count like any others, so a weak point done
+  early is held again and comes back in the next review after that (same-day spacing isn't skipped).
+
+### The course trail shows only topics with weak spots (2026-11-07)
+- **Source:** owner, 2026-11-07 ("too visually overwhelming"); `src/components/path/KnowledgePath.tsx`.
+- **Assumed, pending the owner:**
+  - a topic is on the trail when it has an objective in rotation or an open check (any status but
+    not-started), mastered weak spots included, so a finished topic stays visible as done;
+  - they're laid out again in course order with no gaps; "Show all N topics" brings back the full
+    trail on its stored layout, until the page is left;
+  - with no weak spots at all, the trail says "No weak spots flagged yet." with Show all (the way to
+    flag a topic from the trail).
+- **What would change:** the filter in `KnowledgePath`, or remembering Show all per course.
+
+### "Not relevant" on a question: what it does (2026-11-07)
+- **Source:** the thumbs-down popup (`src/components/quiz/RateQuestion.tsx`, `QuizRunner.tsx`).
+- **Assumed, pending the owner:**
+  - "Not relevant" differs from "Not from my course": the question is from the material, but about
+    something the student doesn't need;
+  - picking it asks "Just this question" (the default: hidden and replaced, like any thumbs down) or
+    "Everything on [objective]";
+  - the whole objective is removed as rejecting it on the Objectives page does (archived, never
+    quizzed or due, later uploads don't propose it again, restorable there); answers already given
+    stay, and its remaining questions in the session are skipped;
+  - question writing is told to test the objective's core skill and leave out that angle.
+- **Not done:** a topic-wide "not relevant", or lowering an objective's weight instead of removing it.
+- **What would change:** the scope choice in the popup, and `dropObjective` in the quiz.
+
 ### Weak points first, Plans B and C: assumptions (2026-11-06)
 - **Source:** `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md` ("Decisions this plan makes").
 - **Assumed, pending the owner:**
   - every question-writing run also writes for flagged objectives still without questions, and one
     that finishes while new flags arrived queues one more;
   - only pages read from their images, and only with a marker description saved, can carry marks;
-  - a tapped page flags the objectives anchored to it, else its topic's objectives not anchored
-    elsewhere in the file, skipping ones already being learned;
+  - a tapped page flags whole topics (owner, 2026-11-07): every live objective of the topics taught
+    on it and of the objectives anchored to it, wherever they're taught, skipping ones already being
+    learned;
   - the trail's "N without questions" line is gone (most objectives have none now);
   - a marked passage that fails to record after a retry is listed on the upload card;
   - "You're caught up" shows for a course whose objectives have no questions yet (Practice other

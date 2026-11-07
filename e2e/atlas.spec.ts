@@ -37,6 +37,7 @@ test("a topic's dive: the popup picks the length and the session writes harder q
   // The deck's stored pages: dive questions are written from where each objective is taught.
   await seedPages(student, { [F.material]: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ n, text: `Slide ${n}: logic.` })) });
   await page.goto(`/course/${SLUG}`);
+  await page.locator("[data-part=path-show-all]").click();
   await page.locator(`[data-visual] [data-part=node]`).first().click();
   const modal = page.locator("[data-part=dive-modal]");
   await expect(modal).toContainText("Dive into Boolean Algebra");
@@ -51,6 +52,7 @@ test("a topic's dive: the popup picks the length and the session writes harder q
 
   // Leaving without answering keeps those questions: diving into the topic again asks them, with no new model call.
   await page.goto(`/course/${SLUG}`);
+  await page.locator("[data-part=path-show-all]").click();
   await page.locator(`[data-visual] [data-part=node]`).first().click();
   await page.locator('[data-part=dive-modal] [data-part=dive-minutes][data-minutes="10"]').click();
   await page.locator("[data-part=dive-modal] [data-part=dive-start]").click();

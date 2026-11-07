@@ -185,14 +185,22 @@ export interface QuizResult {
 export type MaterialPages = Array<{ n: number; text: string; source?: "text" | "needs-vision" | "vision" | "needs-figure" | "figure" }>;
 
 /** Why a student gave a question a thumbs down (optional). */
-export type FeedbackReason = "wrong-answer" | "unclear" | "too-easy" | "too-hard" | "not-my-course";
+export type FeedbackReason = "wrong-answer" | "unclear" | "too-easy" | "too-hard" | "not-my-course" | "not-relevant";
 export const FEEDBACK_REASONS: Record<FeedbackReason, string> = {
   "wrong-answer": "Wrong answer",
   unclear: "Unclear",
   "too-easy": "Too easy",
   "too-hard": "Too hard",
   "not-my-course": "Not from my course",
+  "not-relevant": "Not relevant",
 };
+
+/**
+ * What a "Not relevant" thumbs down covers: just this question (hidden, like any thumbs down), or
+ * everything on its objective (the objective is removed from the course, restorable on the
+ * Objectives page). Not stored on the rating: the removal is the record.
+ */
+export type NotRelevantScope = "question" | "objective";
 
 /** A student's thumbs up or down on one question; a thumbs-down question isn't asked again. */
 export interface QuestionRating {

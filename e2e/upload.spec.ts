@@ -101,6 +101,9 @@ test("a lecture upload is built by a job on the server; the review screen follow
   expect(forged.data ?? []).toEqual([]);
 
   await page.goto("/course/logic");
+  // Weak points first: nothing is flagged yet, so the trail is empty until Show all.
+  await expect(page.locator("[data-part=path-no-weak-spots]")).toContainText("No weak spots flagged yet.");
+  await page.locator("[data-part=path-show-all]").click();
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
 });
 
@@ -172,7 +175,7 @@ test("handwritten notes with the student's marks described: a marked passage bec
   expect(flags[0].objectiveId).toBe(objectiveId);
 });
 
-test("which slides were hard: the deck's pages as a grid; tapping a page flags the objectives taught there", async ({ page, student }) => {
+test("which slides were hard: the deck's pages as a grid; tapping a page flags the whole topic it teaches", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");
   await upload(page);
@@ -184,14 +187,15 @@ test("which slides were hard: the deck's pages as a grid; tapping a page flags t
   await expect.poll(() => tiles.count(), { timeout: 30_000 }).toBeGreaterThan(12);
   // Drawn from the stored file in the browser.
   await expect.poll(() => tiles.first().locator("canvas").evaluate((c: HTMLCanvasElement) => c.width), { timeout: 30_000 }).toBeGreaterThan(0);
-  // Slide 1 is in the topic's range, but its one objective is anchored to slide 12: nothing to flag there.
-  await expect(modal.locator("[data-part=slide-tile][data-page='1']")).toBeDisabled();
-  await modal.locator("[data-part=slide-tile][data-page='12']").click();
+  // Slide 5 teaches no topic and no objective cites it: nothing to flag.
+  await expect(modal.locator("[data-part=slide-tile][data-page='5']")).toBeDisabled();
+  // Slide 1 only opens the topic (slides 1-2); its one objective is taught on slide 12. Tapping it flags the whole topic anyway.
+  await modal.locator("[data-part=slide-tile][data-page='1']").click();
   await modal.locator("[data-part=flag-slides]").click();
   await expect(modal.locator("[data-part=slides-flagged]")).toHaveText("Orca will practise these with you.");
   const after = await stored(page, student);
   const flags = after.evidence.filter((e) => e.kind === "confusion");
-  expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.materialId])).toEqual([["slide", 12, after.materials[0].id]]);
+  expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.materialId])).toEqual([["slide", 1, after.materials[0].id]]);
   await page.goto("/course/logic/objectives");
   await expect(page.locator("li[data-objective='Simplify with absorption']")).toContainText("Learning");
 });
@@ -285,19 +289,27 @@ test("an upload keeps its place in the URL: a reload follows it to its review, o
   await expect(page.locator("[data-part=resume-upload]")).toContainText("half.pdf didn't finish uploading before the page reloaded.", { timeout: 15_000 });
 });
 
-test("re-uploading the same deck is recognised by its content and adds nothing", async ({ page, student }) => {
+test("re-uploading the same deck is recognised by its content and adds nothing, unless the student chooses Upload it again", async ({ page, student }) => {
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
   await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
   await upload(page);
-  await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so there's nothing new to add.`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so nothing was added.`)).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "map")).toHaveLength(1);
   const state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
   expect(state.runs).toHaveLength(1);
   const { count } = await student.db.from("materials").select("id", { count: "exact", head: true });
   expect(count).toBe(1);
+
+  // The student wants it anyway: a second copy, read and built like any upload.
+  await page.locator("[data-part=upload-again]").click();
+  await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
+  await expect.poll(async () => (await student.db.from("materials").select("filename, status, content_hash")).data?.length, { timeout: 30_000 }).toBe(2);
+  const { data: copies } = await student.db.from("materials").select("status, content_hash");
+  expect(new Set(copies!.map((c) => c.content_hash)).size).toBe(1);
+  await expect.poll(async () => (await student.db.from("pipeline_runs").select("id")).data?.length, { timeout: 30_000 }).toBe(2);
 });
 
 test("a job that fails says why on the review screen, saves nothing, and uploading again retries it", async ({ page, student }) => {
@@ -365,7 +377,7 @@ test("a file Orca can't take is refused on the page: it says why and nothing can
 test("oversize and non-PDF files are refused before anything is stored", async ({ page, student }) => {
   const courseId = await newCourse(student);
   const pdf = makePdf([lines("Hello")]);
-  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 30 * 1024 * 1024 + 1 } });
+  const big = await page.request.post("/api/materials", { data: { ...details(courseId, pdf), size: 50 * 1024 * 1024 + 1 } });
   expect(big.status()).toBe(413);
   const text = await page.request.post("/api/materials", { data: { ...details(courseId, pdf, "notes.txt"), mime: "text/plain" } });
   expect(text.status()).toBe(415);

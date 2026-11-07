@@ -18,6 +18,8 @@ export interface BatchItem {
   due: string | null;
   /** Its details were changed by hand, so a change to the shared defaults leaves it alone. */
   edited: boolean;
+  /** The course already had it and the student chose "Upload again": sent as a new copy. */
+  again?: boolean;
   /** Why Orca can't take this file (it's listed, greyed, and never sent), or null. */
   problem: string | null;
   status: BatchStatus;
@@ -55,6 +57,7 @@ export function BatchList({
   compact = false,
   onChange,
   onRemove,
+  onUploadAgain,
 }: {
   items: BatchItem[];
   busy: boolean;
@@ -64,6 +67,8 @@ export function BatchList({
     patch: Partial<Pick<BatchItem, "type" | "assigned" | "due">>,
   ) => void;
   onRemove: (id: string) => void;
+  /** "Upload again" on a row the course already had. */
+  onUploadAgain?: (id: string) => void;
 }) {
   const [dated, setDated] = useState<Set<string>>(() => new Set());
   return (
@@ -175,6 +180,11 @@ export function BatchList({
                   >
                     {statusLine(it.status)}
                   </span>
+                )}
+                {it.status.kind === "duplicate" && !busy && onUploadAgain && (
+                  <button type="button" onClick={() => onUploadAgain(it.id)} className="shrink-0 text-[12px] font-bold text-wisteria-deep underline underline-offset-2" data-part="upload-again">
+                    Upload again
+                  </button>
                 )}
               </div>
             )}

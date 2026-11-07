@@ -2,7 +2,7 @@
  * Uploads (Phase 4 plan, decisions 7, 10 and 13). Two steps, each a route:
  *
  * 1. `startUpload` (POST /api/materials): checks what the browser says about the file (PDF or .pptx, at most
- *    30 MB), recognises a file already in the course by its SHA-256, and otherwise records the
+ *    50 MB), recognises a file already in the course by its SHA-256, and otherwise records the
  *    material (status `uploaded`) and hands back a signed upload URL for
  *    `<owner>/<material id>` in the private `materials` bucket.
  * 2. `processUpload` (POST /api/materials/:id/process): once the file is in Storage, the server
@@ -60,6 +60,8 @@ export const UploadRequest = z.object({
   handwritten: z.boolean().default(false),
   /** The class hasn't reached this file yet: its objectives wait until it's marked covered. */
   upcoming: z.boolean().default(false),
+  /** The student chose "Upload again" for a file the course already has: it's added as a new copy. */
+  again: z.boolean().optional(),
 });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 
@@ -76,10 +78,11 @@ export interface Processed {
 
 const fail = (what: string, error: { message: string }) => new Error(`Couldn't ${what}: ${error.message}`);
 
+/** The course's first copy of this file (the student may have uploaded it again since), or null. */
 async function sameFile(db: OrcaSupabase, ownerId: string, courseId: string, hash: string, except?: string): Promise<Duplicate | null> {
   let query = db.from("materials").select("id, filename").eq("owner_id", ownerId).eq("course_id", courseId).eq("content_hash", hash);
   if (except) query = query.neq("id", except);
-  const { data, error } = await query.maybeSingle();
+  const { data, error } = await query.order("created_at").limit(1).maybeSingle();
   if (error) throw fail("look for the same file", error);
   return data ? { duplicate: { id: data.id, filename: data.filename } } : null;
 }
@@ -89,7 +92,8 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
   if (!kind) return reply(415, { error: UNSUPPORTED_UPLOAD });
   if (body.size > LIMITS.uploadBytes) return reply(413, { error: `This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.` });
   if (!(await ownsCourse(db, ownerId, body.courseId))) return reply(404, { error: "No such course." });
-  const known = await sameFile(db, ownerId, body.courseId, body.hash);
+  // A file the course already has is answered as such, unless the student asked to upload it again.
+  const known = body.again ? null : await sameFile(db, ownerId, body.courseId, body.hash);
   if (known) return reply(200, known);
 
   const id = crypto.randomUUID();
@@ -134,7 +138,11 @@ async function discard(db: OrcaSupabase, ownerId: string, id: string, path: stri
   if (error) throw fail("remove the duplicate upload", error);
 }
 
-export async function processUpload(db: OrcaSupabase, ownerId: string, id: string): Promise<Outcome> {
+/**
+ * `again`: the student chose "Upload again" for a file the course already has, so the same bytes
+ * become a second material instead of being recognised as the first.
+ */
+export async function processUpload(db: OrcaSupabase, ownerId: string, id: string, opts: { again?: boolean } = {}): Promise<Outcome> {
   const { data: m, error } = await db.from("materials").select().eq("owner_id", ownerId).eq("id", id).maybeSingle();
   if (error) throw fail("read the upload", error);
   if (!m) return reply(404, { error: "No such upload." });
@@ -179,7 +187,7 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
     }
     const bytes = new Uint8Array(await file.data.arrayBuffer());
     const hash = createHash("sha256").update(bytes).digest("hex");
-    const known = await sameFile(db, ownerId, m.course_id, hash, id);
+    const known = opts.again ? null : await sameFile(db, ownerId, m.course_id, hash, id);
     if (known) {
       await discard(db, ownerId, id, path);
       return reply(200, known);
@@ -201,7 +209,8 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
       if (inserted.error) throw fail("store the pages", inserted.error);
     }
     // The hash is taken only now, with the row going ready: a read that dies leaves no hash behind
-    // to block the file, and the unique index settles a race between two uploads of the same file.
+    // to block the file. Copies are allowed ("Upload again"), so the index on it isn't unique; a race
+    // between two ordinary uploads of the same file is settled after the fact: the later one goes.
     const done = await db
       .from("materials")
       .update({ status: "ready", reading_since: null, content_hash: hash, size_bytes: bytes.byteLength, mime: UPLOAD_MIMES[kind], hidden_text: read.hidden as unknown as Json })
@@ -209,12 +218,24 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
       .eq("id", id)
       .select()
       .single();
-    if (done.error?.code === "23505") {
-      const winner = await sameFile(db, ownerId, m.course_id, hash, id);
-      await discard(db, ownerId, id, path); // its pages go with it
-      if (winner) return reply(200, winner);
-    }
     if (done.error) throw fail("finish the upload", done.error);
+    if (!opts.again) {
+      const { data: earlier, error: raceError } = await db
+        .from("materials")
+        .select("id, filename")
+        .eq("owner_id", ownerId)
+        .eq("course_id", m.course_id)
+        .eq("content_hash", hash)
+        .neq("id", id)
+        .lt("created_at", done.data.created_at)
+        .order("created_at")
+        .limit(1);
+      if (raceError) throw fail("look for the same file", raceError);
+      if (earlier.length) {
+        await discard(db, ownerId, id, path); // its pages go with it
+        return reply(200, { duplicate: earlier[0] });
+      }
+    }
     const out: Processed = { material: materialFromRow(done.data), pages: read.pages, hidden: read.hidden };
     return reply(200, out);
   } catch (e) {

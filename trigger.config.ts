@@ -14,8 +14,9 @@ import { defineConfig } from "@trigger.dev/sdk";
 
 for (const file of [".env.local", ".env"]) if (existsSync(file)) process.loadEnvFile(file);
 
-const project = process.env.TRIGGER_PROJECT_REF;
-if (!project) throw new Error("Set TRIGGER_PROJECT_REF (the Trigger.dev project, proj_…) to build or deploy Orca's tasks; see docs/SETUP-HOSTED.md.");
+// The project ref isn't a secret. The deployed image imports this file again when it indexes the
+// tasks, where no .env exists and TRIGGER_PROJECT_REF isn't set, so Orca's own project is the default.
+const project = process.env.TRIGGER_PROJECT_REF || "proj_cafvbqanvngbcfvnpmqv";
 
 export default defineConfig({
   project,
@@ -24,4 +25,8 @@ export default defineConfig({
   // A long upload: extraction, then question writing and checking for every objective.
   maxDuration: 1800,
   retries: { enabledInDev: false, default: { maxAttempts: 1 } },
+  // Installed in the image instead of bundled: pdf.js loads its worker by package name and draws
+  // pages with @napi-rs/canvas, a native module whose Linux build only an install brings (bundled,
+  // every handwritten page failed to draw, 2026-11-07).
+  build: { external: ["pdfjs-dist", "@napi-rs/canvas"] },
 });

@@ -300,8 +300,10 @@ the plan; `docs/SETUP-HOSTED.md` §5).
   (no student UPDATE policy; `status` excluded from the column grant) are the checklist. The
   source-anchor check constraint becomes "at least one unless inferred".
 - **Files in Supabase Storage**: private bucket, signed uploads from the browser, filename
-  sanitising (ported). Since 2026-10-18: stored at `<owner>/<material id>`, 30 MB limit (uploads
-  over it are refused before sending), PDFs and .pptx decks.
+  sanitising (ported). Since 2026-10-18: stored at `<owner>/<material id>`, 50 MB limit since 2026-11-07, was 30 (uploads
+  over it are refused before sending), PDFs and .pptx decks. A file the course already has (same SHA-256) is answered
+  "already has this file" with **Upload again** (owner, 2026-11-07): the copy is a second material,
+  read and built like any upload (migration `20261107110000` made the hash index non-unique).
 - **Snapshots:** an `objective_state` row per objective holding the accumulator, updated in the
   same transaction as each evidence insert, with a rules version. A rules change marks every
   snapshot stale (rebuilt lazily on read); a merge or re-tag marks only the objectives involved.
@@ -462,8 +464,8 @@ objectives marked in them; any other flag starts a top-up for its objectives wit
 batch, `POST /api/top-up` without a session), and every top-up catches up flagged objectives still
 without questions. Handwritten markers: Settings describes the student's marks
 (`profiles.marker_notes`), the page reader tags marked passages and the objectives step names them
-(checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the objectives
-taught on each tapped page. Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
+(checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the whole topics
+taught on each tapped page, every objective of each (owner, 2026-11-07). Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
 plans: `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`,
 `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `phase-4`, shipping together.
 

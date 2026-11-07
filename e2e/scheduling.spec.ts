@@ -82,7 +82,7 @@ test.describe("scheduling", () => {
     expect(evidence.every((e) => (e as AnswerEvent).sessionId === results[0].sessionId)).toBe(true);
 
     await page.goto("/");
-    await expect(page.locator('[data-todo="quick"]')).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Due today" }).locator("..").locator('[data-todo="quick"]')).toHaveCount(0);
   });
 
   test("questions missed today wait for the next quick review: no same-day review or re-quiz", async ({ page, student }) => {
@@ -93,9 +93,17 @@ test.describe("scheduling", () => {
     await expect(page.getByText("You answered 0 of 6 correctly.")).toBeVisible();
 
     await page.goto("/");
-    await expect(page.locator('[data-todo="quick"]')).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Due today" }).locator("..").locator('[data-todo="quick"]')).toHaveCount(0);
     await page.goto(`/session/${COURSE}?kind=quick`);
     await expect(page.getByText("What you practiced today comes back in your next quick review.")).toBeVisible();
+
+    // Tomorrow's quick review is listed under Due tomorrow, and a student who wants to go again can start it now.
+    await page.goto("/");
+    const tomorrow = page.getByRole("heading", { name: "Due tomorrow" }).locator("..").locator('[data-todo="quick"]');
+    await expect(tomorrow).toContainText("start early anytime");
+    await tomorrow.click();
+    await expect(page).toHaveURL(/kind=quick&early=1/);
+    await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
   });
 
   test("yesterday's misses are in today's quick review", async ({ page, student }) => {

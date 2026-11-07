@@ -71,6 +71,10 @@ test.describe("a course with uploaded questions", () => {
 
   test("the trail has nothing locked, START on the first topic, and says when nothing is flagged", async ({ page }) => {
     await page.goto("/course/logic-e2e");
+    // Weak points first: with nothing flagged the trail is empty, and Show all brings every topic back.
+    await expect(page.locator("[data-part=path-no-weak-spots]")).toContainText("No weak spots flagged yet.");
+    await expect(page.locator("[data-visual]")).toHaveCount(0);
+    await page.locator("[data-part=path-show-all]").click();
     await expect(page.locator('[data-part="start"]')).toHaveCount(1);
     await expect(page.locator("[data-visual]").first()).toHaveAttribute("data-visual", "current");
     await expect(page.locator('[data-visual="current"]')).toContainText("Boolean Algebra");
@@ -119,6 +123,8 @@ test.describe("a course with uploaded questions", () => {
     expect(new Set(evidence.map((e) => e.sessionId)).size, "each quiz visit is its own session").toBe(2);
 
     await page.goto("/course/logic-e2e");
+    // Both topics have weak spots now, so both are on the trail without Show all.
+    await expect(page.locator("[data-visual]")).toHaveCount(2);
     for (const name of ["Boolean Algebra", "Two's Complement"]) {
       const label = page.locator('[data-part="label"]').filter({ hasText: name });
       await expect(label).toContainText(/\d+ of \d+ mastered/);

@@ -50,3 +50,25 @@ test("Don't know counts as a wrong answer, recorded as the student's own, and sh
   await expect(page.getByRole("button", { name: "Continue" })).toBeVisible();
   await expect.poll(async () => (await student.db.from("evidence_events").select("outcome, grader").eq("kind", "answer")).data).toEqual([{ outcome: "incorrect", grader: "self" }]);
 });
+
+test("Not relevant for the whole objective removes it from the course (restorable) and skips its other questions in the session", async ({ page, student }) => {
+  await page.goto(`/session/${SLUG}?kind=quick`);
+  await expect(page.getByPlaceholder("Type your answer")).toBeEnabled();
+  const first = (await page.locator("h1").first().textContent())!.trim();
+  const question = bank.find((q) => q.prompt === first)!;
+  await page.getByRole("button", { name: "Flag as a bad question" }).click();
+  const dialog = page.locator("[data-part=flag-dialog]");
+  await dialog.getByRole("button", { name: "Not relevant" }).click();
+  // Just this question is the default; the choice names the objective.
+  await expect(dialog.locator("[data-part=scope-question]")).toBeChecked();
+  await dialog.locator("[data-part=scope-objective]").check();
+  await dialog.getByRole("button", { name: "Save and skip" }).click();
+  await expect.poll(async () => (await student.db.from("question_feedback").select("question_id, rating, reason")).data).toEqual([{ question_id: question.id, rating: "down", reason: "not-relevant" }]);
+  await expect.poll(async () => (await student.db.from("objectives").select("review").eq("id", question.objectiveId)).data).toEqual([{ review: "archived" }]);
+  // Whatever comes next (if anything) is on another objective.
+  const next = page.locator("h1").first();
+  await expect(next).not.toHaveText(first);
+  const shown = (await next.textContent())!.trim();
+  const after = bank.find((q) => q.prompt === shown);
+  if (after) expect(after.objectiveId).not.toBe(question.objectiveId);
+});

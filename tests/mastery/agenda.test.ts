@@ -116,6 +116,9 @@ test("missed (or practiced) today waits for the next quick review, never the sam
   assert.deepEqual(today.heldForNext.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
   assert.equal(today.quickReviewDue, false);
   assert.equal(today.nextQuickDay, "2026-10-06");
+  // Tomorrow's quick review covers them, and can be started early.
+  assert.deepEqual(today.upNext.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
+  assert.equal(today.quickTomorrow, true);
   const tomorrow = agenda(evidence, "2026-10-06T08:00:00Z");
   assert.deepEqual(tomorrow.dueToday.map((r) => r.objectiveId).sort(), ["a", "b", "c"]);
   assert.equal(tomorrow.quickReviewDue, true);
@@ -128,6 +131,19 @@ test("the next quick review follows the cadence: weekly after the last one, exam
   const exam: ReviewConfig = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "1 wk before exam" } };
   assert.equal(agenda([], "2026-10-05T12:00:00Z", { config: exam, examDays: ["2026-10-20"] }).nextQuickDay, "2026-10-13");
   assert.equal(agenda([], "2026-10-05T12:00:00Z", { config: exam }).nextQuickDay, null);
+});
+
+test("tomorrow's quick review is listed only when the cadence puts one on tomorrow and something will be due in it", () => {
+  const missed = [ans("a1", "2026-10-05T10:00:00Z", "incorrect")];
+  const weekly: ReviewConfig = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "Weekly" } };
+  // Weekly, last one on 10-03: the next is 10-10, so nothing is listed for tomorrow.
+  const notTomorrow = agenda(missed, "2026-10-05T12:00:00Z", { config: weekly, results: [finished("q", "2026-10-03T10:00:00Z")], unflagged: true });
+  assert.deepEqual(notTomorrow.upNext.map((r) => r.objectiveId), ["a"]);
+  assert.equal(notTomorrow.quickTomorrow, false);
+  // Daily, nothing missed or due: nothing to list.
+  assert.equal(agenda([], "2026-10-05T12:00:00Z", { unflagged: true }).quickTomorrow, false);
+  // Daily, a miss today: tomorrow's review has it.
+  assert.equal(agenda(missed, "2026-10-05T12:00:00Z", { unflagged: true }).quickTomorrow, true);
 });
 
 test("a missing weight is a bug", () => {

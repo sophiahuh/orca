@@ -11,7 +11,7 @@ const topics: Topic[] = [
   { id: "gone", name: "Gone", review: "archived", pos: { x: 0, y: 0 }, source: [{ materialId: "m", from: 7, to: 7 }] },
 ];
 
-test("a page's anchored objectives; else its topic's objectives not anchored elsewhere in the file", () => {
+test("a tapped page flags whole topics: those taught on it and those of objectives anchored to it, wherever their objectives are taught", () => {
   const objectives: Record<string, Objective> = {
     a: obj("a", "t", [sig("m", "slide 4")]),
     b: obj("b", "t", [sig("m", "slides 3-5")]),
@@ -19,13 +19,17 @@ test("a page's anchored objectives; else its topic's objectives not anchored els
     d: obj("d", "t"),
     other: obj("other", "t", [sig("x", "slide 7")]),
     e: obj("e", "u"),
+    // Anchored on slide 20 of m, which no topic's source covers: its topic comes in through the anchor.
+    f: obj("f", "u", [sig("m", "slide 20")]),
     rejected: obj("rejected", "t", [sig("m", "slide 4")], { review: "archived" }),
     merged: obj("merged", "t", [sig("m", "slide 4")], { mergedInto: "a" }),
-    inGone: obj("inGone", "gone"),
+    inGone: obj("inGone", "gone", [sig("m", "slide 7")]),
   };
-  assert.deepEqual(objectivesOnPage("m", 4, objectives, topics).sort(), ["a", "b"]);
-  assert.deepEqual(objectivesOnPage("m", 7, objectives, topics).sort(), ["d", "other"], "nothing anchored on 7: topic t's objectives not anchored in this file");
-  assert.deepEqual(objectivesOnPage("m", 11, objectives, topics), ["e"]);
-  assert.deepEqual(objectivesOnPage("m", 20, objectives, topics), []);
-  assert.deepEqual(objectivesOnPage("x", 7, objectives, topics), ["other"], "another file's anchors");
+  const T = ["a", "b", "c", "d", "other"];
+  assert.deepEqual(objectivesOnPage("m", 4, objectives, topics).sort(), T, "an anchored page still flags the whole topic");
+  assert.deepEqual(objectivesOnPage("m", 7, objectives, topics).sort(), T, "an overview page: every objective of its topic, other files' included; the archived topic left out");
+  assert.deepEqual(objectivesOnPage("m", 11, objectives, topics).sort(), ["e", "f"]);
+  assert.deepEqual(objectivesOnPage("m", 20, objectives, topics).sort(), ["e", "f"], "through an anchor");
+  assert.deepEqual(objectivesOnPage("m", 30, objectives, topics), []);
+  assert.deepEqual(objectivesOnPage("x", 7, objectives, topics).sort(), T, "another file's anchor flags its topic");
 });
