@@ -6,6 +6,26 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Tomorrow's quick review, startable early (2026-11-07)
+- **Source:** owner, 2026-11-07; `upNext` / `quickTomorrow` in `src/lib/mastery/agenda.ts`, `todoCards`.
+- **Built:** "Due tomorrow" lists the quick review only when the course's cadence puts the next one
+  on tomorrow and something will be due in it (weak points practiced today, plus today's due ones
+  when today has no review). Its card says "start early anytime" and opens it now
+  (`?kind=quick&early=1`), over the same objectives.
+- **Assumed, pending the owner:** answers given early count like any others, so a weak point done
+  early is held again and comes back in the next review after that (same-day spacing isn't skipped).
+
+### The course trail shows only topics with weak spots (2026-11-07)
+- **Source:** owner, 2026-11-07 ("too visually overwhelming"); `src/components/path/KnowledgePath.tsx`.
+- **Assumed, pending the owner:**
+  - a topic is on the trail when it has an objective in rotation or an open check (any status but
+    not-started), mastered weak spots included, so a finished topic stays visible as done;
+  - they're laid out again in course order with no gaps; "Show all N topics" brings back the full
+    trail on its stored layout, until the page is left;
+  - with no weak spots at all, the trail says "No weak spots flagged yet." with Show all (the way to
+    flag a topic from the trail).
+- **What would change:** the filter in `KnowledgePath`, or remembering Show all per course.
+
 ### "Not relevant" on a question: what it does (2026-11-07)
 - **Source:** the thumbs-down popup (`src/components/quiz/RateQuestion.tsx`, `QuizRunner.tsx`).
 - **Assumed, pending the owner:**

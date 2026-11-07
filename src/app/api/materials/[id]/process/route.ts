@@ -7,7 +7,7 @@ import { uploadReply } from "@/lib/server/upload-reply";
  * POST → read an uploaded file on the server into its pages (`material_pages`), once it's in
  * Storage, then start building its questions. 200 { material, pages, hidden, generation } (again
  * on a repeat; `generation` in src/lib/server/jobs/start.ts), 200 { duplicate } when the course
- * already has this file, 404 not yours, 409 not uploaded yet or being read, 413/415/422 a file Orca
+ * already has this file (unless the body says { again: true }: then it's a new copy), 404 not yours, 409 not uploaded yet or being read, 413/415/422 a file Orca
  * won't read (the material is marked failed with why). See `src/lib/server/materials.ts`.
  */
 export const runtime = "nodejs";
@@ -19,6 +19,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   return forStudent(request, async (student, db) => {
     if (!z.uuid().safeParse(id).success) return reply(404, { error: "No such upload." });
-    return uploadReply(db, student.id, await processUpload(db, student.id, id));
+    // { again: true }: the student chose "Upload again" for a file the course already has.
+    const body = (await request.json().catch(() => null)) as { again?: unknown } | null;
+    return uploadReply(db, student.id, await processUpload(db, student.id, id, { again: body?.again === true }));
   });
 }

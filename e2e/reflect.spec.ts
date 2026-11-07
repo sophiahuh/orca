@@ -1,5 +1,5 @@
 import type { AnswerEvent } from "../src/lib/mastery/types";
-import { expect, test, F, FIXTURE_STATE, daysAgo, seedState, stored } from "./fixture";
+import { expect, test, F, FIXTURE_STATE, daysAgo, seedState, stored, struggled } from "./fixture";
 import { fakeCalls, fakeModel } from "./fake-model";
 import { DECK_NAME, makeDeck } from "../tests/fixtures/pdf";
 
@@ -24,8 +24,8 @@ const answer = (questionId: string, at: string): AnswerEvent => ({
 test("a homework upload's reflection sends the objectives Orca is sure of back to learning", async ({ page, student }) => {
   await seedState(student, {
     ...FIXTURE_STATE,
-    // "Convert" mastered: three questions answered right over two days.
-    evidence: [answer(F.tc1, daysAgo(3)), answer(F.tc2, daysAgo(3)), answer(F.tc3, daysAgo(2))],
+    // "Convert" mastered: flagged, then three questions answered right over two days (an unflagged one would only be verified).
+    evidence: [struggled(F.course, F.twosComplement, F.convert, daysAgo(4)), answer(F.tc1, daysAgo(3)), answer(F.tc2, daysAgo(3)), answer(F.tc3, daysAgo(2))],
   });
   // The fake API matches by objective name; the server sends it the course's live objectives.
   await fakeModel({
@@ -56,7 +56,7 @@ test("a homework upload's reflection sends the objectives Orca is sure of back t
   const state = await stored(page, student);
   const homework = state.materials.find((m) => m.type === "Homework")!;
   expect(homework.reflect).toBe(true);
-  expect(state.evidence.filter((e) => e.kind === "confusion")).toMatchObject([{ objectiveId: F.convert, materialId: homework.id, note: NOTE }]);
+  expect(state.evidence.filter((e) => e.kind === "confusion" && e.materialId === homework.id)).toMatchObject([{ objectiveId: F.convert, materialId: homework.id, note: NOTE }]);
   expect(homework.reflection).toMatchObject({ note: NOTE, objectiveIds: [F.convert] });
 });
 

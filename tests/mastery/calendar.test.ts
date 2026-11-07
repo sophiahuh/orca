@@ -6,7 +6,7 @@ import type { ObjectiveState } from "../../src/lib/mastery/types.ts";
 
 const ranked = (objectiveId: string, status: RankedObjective["status"]): RankedObjective => ({ objectiveId, topicId: "t", status, priority: { objectiveId, score: 1, terms: [] }, weight: 1, reached: true });
 const state = (objectiveId: string, dueAt: string | null): ObjectiveState => ({ objectiveId, status: "mastered", credit: 3, creditDays: 2, stabilityDays: 5, dueAt, spacedChecks: 0, recall: 0.9, lastEvidenceAt: null });
-const empty: CourseAgenda = { courseId: "c", ranked: [], dueToday: [], heldForNext: [], dueTomorrow: [], quickReviewDue: false, nextQuickDay: "2026-10-07", deepReview: { due: false, dueDay: null, tomorrow: false, candidates: 0 } };
+const empty: CourseAgenda = { courseId: "c", ranked: [], dueToday: [], heldForNext: [], dueTomorrow: [], quickReviewDue: false, nextQuickDay: "2026-10-07", upNext: [], quickTomorrow: false, deepReview: { due: false, dueDay: null, tomorrow: false, candidates: 0 } };
 const day = (iso: string) => iso.slice(0, 10);
 const TODAY = "2026-10-06";
 
