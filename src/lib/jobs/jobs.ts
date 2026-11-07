@@ -166,6 +166,11 @@ export async function processMaterial(deps: JobDeps, job: { runId: string; mater
       const render = deps.renderPage;
       const out = await pass.run({ course, material, pages, ...(pass.done === "vision" ? { markers: loaded.markers } : {}) }, { call: deps.call, render: (n) => render(material, n) });
       kept = [...kept, ...out.kept];
+      // A file read only from its images, none of which could be read, leaves nothing to build from:
+      // say so (the card offers Try again) rather than finish with 0 topics as if nothing were new.
+      if (pass.done === "vision" && !out.read.length && pages.every((p) => p.source === "needs-vision")) {
+        throw new Error(`none of its ${pages.length} pages could be read from their images (${out.kept[0]?.reason ?? "no reason given"})`);
+      }
       if (out.read.length) {
         await store.savePages(material.id, out.read, pass.done);
         const read = new Map(out.read.map((p) => [p.n, p.text]));
