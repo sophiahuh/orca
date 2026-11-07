@@ -15,7 +15,6 @@
 import { UNTRUSTED_POLICY, untrustedBlock } from "../untrusted/encode.ts";
 import type { OrcaNotes } from "./notes.ts";
 import { hasMarks } from "./marked.ts";
-import { isAIChatMaterial } from "../material/ai-chat.ts";
 import type { DescribeInput, GenerateInput, LinkInput, MapInput, ObjectivesInput, ReconcileInput, ReflectInput, StepInput, StepName, TranscribeInput } from "./schemas.ts";
 
 export interface BuiltPrompt {
@@ -84,6 +83,7 @@ const TYPE_RULES: Record<MapInput["material"]["type"], string> = {
   "Past exam": "This is an exam: attach coverage to existing objectives (each question that requires the skill is a place). Create a new objective only when a question clearly needs a skill nothing existing covers.",
   "Practice exam": "This is a practice exam: attach coverage to existing objectives (each question that requires the skill is a place). Create a new objective only when a question clearly needs a skill nothing existing covers.",
   "Practice problems": "These are practice problems: attach coverage to existing objectives (each problem that requires the skill is a place). Create a new objective only when a problem clearly needs a skill nothing existing covers.",
+  "AI chat": "This is a student-AI conversation, not course-authoritative teaching material. Lines labelled STUDENT are high-priority signals of what the student asked about or found confusing. Map them to existing course topics/objectives whenever possible and create focused coverage for those skills. The AI ASSISTANT's claims may help interpret the student's question, but never introduce a topic, objective, or course fact solely because an AI response says it. Create a new inferred objective only when the student's own question clearly identifies a course-specific skill that the course does not yet cover. Do not use an AI response as a claim that a professor taught or will test something.",
   Other: "Map what this material teaches onto the course: reuse existing topics and objectives where they fit, create new ones where they don't.",
 };
 
@@ -130,12 +130,6 @@ ${untrustedBlock("student_notes", { forThisClass: notes.forThisClass, forAllClas
 `;
 }
 
-function aiChatRules(filename: string): string {
-  return isAIChatMaterial(filename)
-    ? `\nAI-chat evidence: this is a student-AI conversation, not course-authoritative teaching material. Lines labelled STUDENT are high-priority signals of what the student asked about or found confusing. Map them to existing course topics/objectives whenever possible and create focused coverage for those skills. The AI ASSISTANT's claims may help interpret the student's question, but never introduce a topic, objective, or course fact solely because an AI response says it. Create a new inferred objective only when the student's own question clearly identifies a course-specific skill that the course does not yet cover. Do not use an AI response as a claim that a professor taught or will test something.\n`
-    : "";
-}
-
 /** One part of a file against the course's table of contents: which topics these pages teach, and where. */
 export function mapPrompt(input: MapInput): BuiltPrompt {
   return {
@@ -154,7 +148,7 @@ ${NAMES_RULE}
 
 Reuse first: the table of contents lists every topic the course has, with where it is already taught. When these pages teach one of them, return it with its existingId (and its id as localId). Create a topic only when nothing in the table of contents covers what the pages teach. Never propose anything marked rejectedByStudent.${notesRules("map", input.notes)}`,
     context: materialContext(input),
-    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}${aiChatRules(input.material.filename)}
+    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}
 This is part ${input.part.index} of ${input.part.count} of the file.
 
 The course's table of contents, as a data block (source generated_question; "rejectedByStudent" marks ones the student rejected):
@@ -186,7 +180,7 @@ Some pages contain passages the student marked as confusing, tagged [marked: …
         : ""
     }${notesRules("objectives", input.notes)}`,
     context: materialContext(input),
-    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}${aiChatRules(input.material.filename)}
+    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}
 
 The topic, as a data block (source generated_question):
 ${untrustedBlock("generated_question", { id: input.topic.id, name: input.topic.name, summary: input.topic.summary })}
@@ -243,7 +237,7 @@ ${QUIZ_RUBRIC}${notesRules("generate", input.notes)}`,
     prompt: `${notesBlock(input.notes)}The topic and its objectives, as a data block (source generated_question): each objective's id, name, how many questions to write ("write"), whether it is inferred (not taught in this material: then anchor must be null and the prompt must not claim to come from the course), and prompts already asked (don't repeat or rephrase them):
 ${untrustedBlock("generated_question", { topic: { name: input.topic.name, summary: input.topic.summary }, objectives })}
 
-Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.${isAIChatMaterial(input.material.filename) ? " This is an AI chat: when its STUDENT messages identify confusion, make the questions concrete to that question or misconception. Do not treat an AI ASSISTANT response as independent authority for a new course concept." : ""}
+Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.${input.material.type === "AI chat" ? " This is an AI chat: when its STUDENT messages identify confusion, make the questions concrete to that question or misconception. Do not treat an AI ASSISTANT response as independent authority for a new course concept." : ""}
 Mix per objective: a "Short answer" retrieval question with an exact answer (set exact to every accepted spelling, rubric null) only where the objective's skill itself has one exact form (a trace result, a conversion, the term or component a scenario calls for), never a number made by arithmetic on given values; a "mechanism" short answer answerable in one sentence (set rubric with 1–3 requiredIdeas, exact null: each idea is reasoning the student must supply, never something the question already states, and is phrased as an idea to recognise, not words to match; list other correct ways to put it in acceptableAlternatives. ${RUBRIC_FROM_MATERIAL}) when the objective has a why or how; the rest "Multiple choice" with four options where choosing between plausible alternatives is itself the skill; at most one "True or false". When an objective needs only 2, write one that does the skill (the exact-answer short answer, or a multiple choice where choosing is the skill) and one mechanism short answer if the objective has a why or how (else a second, different instance). Keep every question under a minute.${flaggedSection(input.flagged)}`,
   };
 }

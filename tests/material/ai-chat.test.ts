@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { aiChatFilename, chatPages, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript, spokenChars } from "../../src/lib/material/ai-chat.ts";
+import { aiChatFilename, chatPages, chatTextFromHtml, isPublicAIChatUrl, normaliseAIChatTranscript, pastedFilename, spokenChars, textPages } from "../../src/lib/material/ai-chat.ts";
 
 test("AI-chat intake accepts only supported public-share providers", () => {
   assert.equal(isPublicAIChatUrl("https://chatgpt.com/share/abc"), true);
@@ -49,4 +49,18 @@ test("a long pasted chat is kept whole, split into pages at line breaks, each wi
   const long = chatPages(normaliseAIChatTranscript(`You: ${"y".repeat(30_000)}`), 12_000);
   assert.equal(long.length, 3);
   assert.equal(long.reduce((sum, page) => sum + spokenChars(page), 0), 30_000);
+});
+
+test("other pasted text (a syllabus, notes) is paged the same way with no transcript header, and named by its type and day", () => {
+  const syllabus = ["ELEN 3201 Circuit Analysis", "Week 1: Ohm's law, KCL, KVL", "Week 2: Nodal analysis"].join("\n");
+  assert.deepEqual(textPages(syllabus), [syllabus]);
+  const long = textPages(Array.from({ length: 500 }, (_, i) => `Week ${i}: ${"x".repeat(60)}`).join("\n"), 12_000);
+  assert.ok(long.length > 1);
+  for (const page of long) {
+    assert.ok(!page.startsWith("AI CHAT TRANSCRIPT"));
+    assert.ok(page.length <= 12_000);
+  }
+  assert.equal(long.join("\n").split("\n").length, 500);
+  assert.equal(pastedFilename("Syllabus", new Date("2026-11-07T15:00:00Z")), "Syllabus (pasted), Nov 7");
+  assert.equal(pastedFilename("AI chat", new Date("2026-01-02T00:00:00Z")), "AI chat (pasted), Jan 2");
 });

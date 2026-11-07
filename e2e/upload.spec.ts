@@ -107,6 +107,37 @@ test("a lecture upload is built by a job on the server; the review screen follow
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
 });
 
+test("pasted text is read as the type chosen: a syllabus is stored as pasted and named by type and day; an AI chat gets the transcript treatment", async ({ page, student }) => {
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Circuits");
+  const syllabus = ["ELEN 3201 Circuit Analysis, Fall 2026", "Week 1: Ohm's law, Kirchhoff's current and voltage laws, series and parallel resistors.", "Week 2: Nodal and mesh analysis with dependent sources.", "Grading: homework 30%, midterm 30%, final 40%."].join("\n");
+  await page.goto("/add-material");
+  await page.getByLabel("What kind of material is this?").selectOption("Syllabus");
+  await page.locator("[data-part=paste-text]").fill(syllabus);
+  await page.getByRole("button", { name: "Add to course" }).click();
+  await expect(page).toHaveURL(/\/course\/circuits\/review\?run=/, { timeout: 30_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic", { timeout: 60_000 });
+  const { data: m } = await student.db.from("materials").select("id, filename, type").eq("type", "Syllabus").single();
+  expect(m!.filename).toMatch(/^Syllabus \(pasted\), [A-Z][a-z]{2} \d{1,2}$/);
+  const { data: pages } = await student.db.from("material_pages").select("n, text").eq("material_id", m!.id);
+  expect(pages).toEqual([{ n: 1, text: syllabus }]);
+
+  // The same words pasted as an AI chat: the speakers are labelled and the header tells the model how to weigh them.
+  await page.goto("/add-material");
+  await page.getByLabel("What kind of material is this?").selectOption("AI chat");
+  await page.locator("[data-part=paste-text]").fill(`You: ${syllabus.split("\n")[1]}\nChatGPT: ${syllabus.split("\n")[2]}`);
+  await page.getByRole("button", { name: "Add to course" }).click();
+  await expect(page).toHaveURL(/\/course\/circuits\/review\?run=/, { timeout: 30_000 });
+  const { data: chat } = await student.db.from("materials").select("id, filename, type").eq("type", "AI chat").single();
+  expect(chat!.filename).toMatch(/^AI chat \(pasted\), [A-Z][a-z]{2} \d{1,2}$/);
+  const { data: chatPages } = await student.db.from("material_pages").select("text").eq("material_id", chat!.id);
+  expect(chatPages![0].text).toMatch(/^AI CHAT TRANSCRIPT\n.*\nSTUDENT: Week 1.*\nAI ASSISTANT: Week 2/);
+  // Entering a chat link switches the type to AI chat.
+  await page.goto("/add-material");
+  await page.locator("[data-part=ai-chat-url]").fill("https://chatgpt.com/share/abc");
+  await expect(page.getByLabel("What kind of material is this?")).toHaveValue("AI chat");
+});
+
 test("removing material: its file, pages and calendar entry go, the objectives only it taught are archived, and the same file can be uploaded again", async ({ page, student }) => {
   await fakeModel({ extract: LECTURE, perObjective: 2 });
   await createCourse(page, "Logic");

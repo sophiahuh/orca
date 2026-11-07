@@ -116,8 +116,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **The owner runs `npm run dev` on port 3000 against a hosted project and a real OpenAI key**
   (`.env`, default model `gpt-6.1-sol`): uploads there spend money and write real data. Don't seed
   test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** production has every migration through `20261104100000_canvas` (the
-  Deploy run of 2026-11-04 applied the connector and Canvas ones). The Deploy workflow pushes
+- **Hosted migrations:** production has every migration through `20261107120000_relation_reason_no_limit`
+  (the Deploy run of 2026-11-07); `20261107130000_ai_chat_type` ships with the next merge to `main`. The Deploy workflow pushes
   pending migrations to production on every merge to `main` (its two secrets are set), so nobody
   pushes by hand; a new migration must be numbered after the newest one applied, or `db push`
   refuses it. The development project `mtztzsxgcopohlokragm` was last checked on 2026-10-25
@@ -440,7 +440,11 @@ All 11 Figma screens are built. Where things live:
   Storage, read on the server into `material_pages`. The upload page takes several files or a whole folder at once
   (`filesFromDataTransfer` walks dropped folders; `src/components/upload/BatchList.tsx` is the per-file list with
   type and dates prefilled from the page's shared defaults; files are sent one after another, each row showing where
-  it is; a file Orca can't read is listed as skipped). Three files or more is a bulk upload (owner, 2026-10-27): the
+  it is; a file Orca can't read is listed as skipped). The page also takes **pasted text** (owner, 2026-11-07: one
+  paste box, the type picked decides how it's read; `POST /api/materials/text`, named "Syllabus (pasted), Nov 7") and
+  a public AI-chat share link; **"AI chat" is a material type** (migration `20261107130000`): only that type gets the
+  transcript treatment (speakers labelled, the header, the chat rules in `TYPE_RULES`), whatever the material is
+  called. Three files or more is a bulk upload (owner, 2026-10-27): the
   rows' dates hide behind "Add dates", and with no assigned date given the page asks "How far has the class got?":
   the files after the tapped one are `materials.upcoming` ("the class hasn't reached this yet"; an assigned date in
   the future sets it too). Their objectives are left out of the due list, quick reviews and dive candidates

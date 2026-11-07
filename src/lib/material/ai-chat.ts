@@ -17,6 +17,12 @@ export function isPublicAIChatUrl(value: string) {
   }
 }
 
+/** "Syllabus (pasted), Nov 7": what the card calls text the student pasted, dated by the server's clock. */
+export function pastedFilename(type: string, now = new Date()): string {
+  const day = now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  return `${type} (pasted), ${day}`.slice(0, 255);
+}
+
 export function aiChatFilename(url?: string) {
   if (!url) return "AI chat — pasted transcript";
   const parsed = new URL(url);
@@ -110,10 +116,6 @@ export function chatTextFromHtml(html: string) {
   return normaliseAIChatTranscript(visibleHtmlText(html));
 }
 
-export function isAIChatMaterial(filename: string) {
-  return filename.toLowerCase().startsWith("ai chat —");
-}
-
 /**
  * Characters of chat in one stored page. A transcript has no pages of its own, and the pipeline
  * never splits a page (`splitParts`), so a long chat is cut here at line breaks into pages of about
@@ -123,13 +125,20 @@ export const CHAT_PAGE_CHARS = 12_000;
 
 /** A labelled transcript as material pages: whole lines where they fit, a line longer than a page cut into page-sized pieces. */
 export function chatPages(transcript: string, maxChars = CHAT_PAGE_CHARS): string[] {
-  const header = TRANSCRIPT_HEADER.join("\n");
-  const lines = transcript.split("\n").slice(TRANSCRIPT_HEADER.length);
+  return linePages(transcript.split("\n").slice(TRANSCRIPT_HEADER.length), TRANSCRIPT_HEADER.join("\n"), maxChars);
+}
+
+/** Any other pasted text (a syllabus, notes) as material pages, cut the same way, with no header. */
+export function textPages(text: string, maxChars = CHAT_PAGE_CHARS): string[] {
+  return linePages(text.split("\n"), null, maxChars);
+}
+
+function linePages(lines: string[], header: string | null, maxChars: number): string[] {
   const pages: string[] = [];
   let current: string[] = [];
   let size = 0;
   const flush = () => {
-    if (current.length) pages.push([header, ...current].join("\n"));
+    if (current.length) pages.push([...(header === null ? [] : [header]), ...current].join("\n"));
     current = [];
     size = 0;
   };
