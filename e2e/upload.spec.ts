@@ -101,6 +101,9 @@ test("a lecture upload is built by a job on the server; the review screen follow
   expect(forged.data ?? []).toEqual([]);
 
   await page.goto("/course/logic");
+  // Weak points first: nothing is flagged yet, so the trail is empty until Show all.
+  await expect(page.locator("[data-part=path-no-weak-spots]")).toContainText("No weak spots flagged yet.");
+  await page.locator("[data-part=path-show-all]").click();
   await expect(page.locator("[data-part=label]").first()).toContainText("Boolean Algebra");
 });
 
