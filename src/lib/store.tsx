@@ -188,8 +188,6 @@ interface OrcaActions {
   flagObjectives: (courseId: string, objectiveIds: readonly string[]) => void;
   /** "Which slides were hard?": one struggle flag (source slide) per objective, on the first selected page that names it. */
   flagSlides: (courseId: string, materialId: string, pages: ReadonlyArray<{ page: number; objectiveIds: readonly string[] }>) => void;
-  /** Whether the class has reached this material yet (`Material.upcoming`); its objectives wait while it hasn't. */
-  setMaterialUpcoming: (materialId: string, upcoming: boolean) => void;
   setOnboarded: (v: boolean) => void;
   /** The student's display name (profile), independent of the sign-in email. */
   setName: (name: string) => void;
@@ -812,16 +810,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save, postEvidence, requestFlagTopUp],
   );
 
-  const setMaterialUpcoming = useCallback<OrcaActions["setMaterialUpcoming"]>(
-    (materialId, upcoming) => {
-      setState((s) => ({ ...s, materials: s.materials.map((m) => (m.id === materialId ? { ...m, upcoming } : m)) }));
-      save(async () => {
-        mustChange(await browserSupabase().from("materials").update({ upcoming }).eq("id", materialId).select("id"));
-      });
-    },
-    [save],
-  );
-
   const setOnboarded = useCallback(
     (v: boolean) => {
       setState((s) => ({ ...s, onboarded: v }));
@@ -950,7 +938,6 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       recordReflection,
       flagObjectives,
       flagSlides,
-      setMaterialUpcoming,
       setOnboarded,
       setName,
       setTimezone,
@@ -962,7 +949,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, setMaterialUpcoming, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
@@ -1064,7 +1051,7 @@ export function useStreak(): number {
 
 /** What's due, per course: ranked objectives, quick and deep review, review to-dos and re-quizzes. */
 export function useAgenda(): Record<string, CourseAgenda> {
-  const { courses, objectives, relations, configs, schedules, results, events, exams, materials } = useOrca();
+  const { courses, objectives, relations, configs, schedules, results, events, exams } = useOrca();
   const mastery = useMasteryByCourse();
   const dayKey = useDayKey();
   const nowMs = useNow();
@@ -1085,19 +1072,13 @@ export function useAgenda(): Record<string, CourseAgenda> {
             // Exams, and any uploaded exam's due date on the calendar.
             examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
             examTopics: new Set(examInWindow(exams, c.id, dayKey(new Date(nowMs).toISOString()), survivingTopic(c.topics))?.topicIds ?? []),
-            upcoming: upcomingObjectives(materials, objectives[c.id] ?? {}),
             now: new Date(nowMs),
             dayKey,
           });
           return [c.id, agenda];
         }),
       ),
-    [courses, objectives, relations, configs, schedules, results, events, exams, materials, mastery, nowMs, dayKey],
+    [courses, objectives, relations, configs, schedules, results, events, exams, mastery, nowMs, dayKey],
   );
 }
 
-/** The objectives created by material the class hasn't reached yet (they wait: see `AgendaInput.upcoming`). */
-function upcomingObjectives(materials: readonly Material[], catalogue: Record<string, Objective>): Set<string> {
-  const waiting = new Set(materials.filter((m) => m.upcoming).map((m) => m.id));
-  return new Set(Object.values(catalogue).filter((o) => o.materialId !== null && waiting.has(o.materialId)).map((o) => o.id));
-}

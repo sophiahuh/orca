@@ -28,8 +28,6 @@ export interface RankedObjective {
   priority: Priority;
   /** Its computed weight (0: the material or the student's notes say it won't be tested). */
   weight: number;
-  /** False for material the class hasn't reached (a manual flag excepted): never due, never drawn into course-wide dives or practice. */
-  reached: boolean;
 }
 
 export interface DeepReviewDue {
@@ -80,12 +78,6 @@ export interface AgendaInput {
   examDays: readonly string[];
   /** The topics of the exam whose "1 wk before exam" window today is in (`examInWindow`): their weak points come first. Absent or empty: none. */
   examTopics?: ReadonlySet<string>;
-  /**
-   * Objectives from material the class hasn't reached yet (`Material.upcoming`): still playable
-   * from the trail, but not due, not drawn into quick reviews or dives, until the material is
-   * marked covered. A scheduling signal, never mastery.
-   */
-  upcoming?: ReadonlySet<string>;
   now: Date;
   dayKey?: (iso: string) => string;
 }
@@ -155,8 +147,6 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const tomorrow = addDays(today, 1);
   const results = input.results.filter((r) => r.courseId === courseId);
   const answers = mastery.events.filter((e): e is AnswerEvent => e.kind === "answer");
-  // A manual flag is the student asking for it: due even before the class reaches its material.
-  const manual = new Set(mastery.events.filter((e) => e.kind === "confusion" && e.flagSource === "manual").map((e) => e.objectiveId));
 
   /* Objectives, ranked */
   const ranked: RankedObjective[] = [];
@@ -172,7 +162,6 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
         status: state.status,
         priority: objectivePriority(state, weight, openConfusion(id, mastery.events), now),
         weight,
-        reached: !input.upcoming?.has(id) || manual.has(id),
       });
     }
   }
@@ -181,13 +170,13 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const byPriority = (a: RankedObjective, b: RankedObjective) => forExam(a) - forExam(b) || b.priority.score - a.priority.score || a.objectiveId.localeCompare(b.objectiveId);
   ranked.sort(byPriority);
   const practicedToday = new Set(answers.filter((e) => dayKey(e.at) === today).map((e) => e.objectiveId));
-  const due = ranked.filter((r) => DUE_TODAY.includes(r.status) && r.weight > 0 && r.reached);
+  const due = ranked.filter((r) => DUE_TODAY.includes(r.status) && r.weight > 0);
   const dueToday = due.filter((r) => !practicedToday.has(r.objectiveId));
   const heldForNext = due.filter((r) => practicedToday.has(r.objectiveId));
   const dueTomorrow = ranked
     .filter((r) => {
       const dueAt = mastery.objectives.get(r.objectiveId)!.dueAt;
-      return r.status === "mastered" && dueAt !== null && dayKey(dueAt) === tomorrow && r.weight > 0 && r.reached;
+      return r.status === "mastered" && dueAt !== null && dayKey(dueAt) === tomorrow && r.weight > 0;
     })
     .sort(byPriority);
 
@@ -225,7 +214,7 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const quickTomorrow = upNext.length > 0 && nextQuickDay === tomorrow;
 
   /* Deep review cadence: one cadence after the last finished one (or the course's first answer); stays due if missed */
-  const candidates = ranked.filter((r) => isInRotation(r.status) && r.status !== "retired" && r.reached).length;
+  const candidates = ranked.filter((r) => isInRotation(r.status) && r.status !== "retired").length;
   const deepDays = finishedOn("deep").sort();
   const lastDeep = deepDays.at(-1) ?? null;
   let dueDay: string | null = null;

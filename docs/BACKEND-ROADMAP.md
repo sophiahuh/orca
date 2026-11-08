@@ -436,11 +436,11 @@ Without class days or picks it rolls on from the last one finished (7 days, or 3
 The rule is `reviewWeekdays` (`src/lib/mastery/review-days.ts`), used by `courseAgenda`, so the
 calendar follows. Meeting times are stored and shown but don't schedule anything yet.
 
-**Uploads in bulk and material the class hasn't reached (2026-10-27).** An upload takes several
-files or a whole folder; three or more is a bulk upload, whose dates hide behind "Add dates" and
-which asks "How far has the class got?". Files after the one tapped (or with an assigned date in
-the future) are `materials.upcoming`: their objectives aren't due and aren't in quick reviews or
-dives until "Mark covered" on the Uploads tab. A scheduling signal, never mastery. Typed notes are
+**Uploads in bulk (2026-10-27).** An upload takes several files or a whole folder; three or more
+is a bulk upload, whose dates hide behind "Add dates". Until 2026-11-08 a bulk upload (and a Canvas
+import posted all at once) also asked "How far has the class got?" and held later files back as
+`materials.upcoming` until "Mark covered"; the owner dropped it (2026-11-08: the distinction was
+unnecessary), so every material counts as covered and the column is gone. Typed notes are
 a material type. Pasted AI chats are kept whole and stored as ~12,000-character pages.
 
 **Controlling uploads (2026-10-28).** A queued upload can be paused and resumed (run status

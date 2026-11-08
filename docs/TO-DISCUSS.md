@@ -105,13 +105,13 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### A warm-up on the first upload (decided by the owner 2026-11-08: yes)
 - **Source:** the 2026-11-08 review plan, §5 decision 2 (B1: a fresh course had nothing to do).
-- **Built:** a course's first upload the class has reached writes one ordinary question for its ten
+- **Built:** a course's first upload writes one ordinary question for its ten
   heaviest objectives; the trail's empty state offers "Try N questions" and the sidebar a "Warm-up ·
   5 min" card: a quick-style session over up to five unflagged objectives with an askable question,
   heaviest first; a miss makes a weak point. The weak-points spec ruled out a placement quiz across
   the course; this is one upload's heaviest objectives, nothing else is assumed known.
 - **Assumed, pending the owner:**
-  - "first upload" = the course has no questions at all yet and the upload isn't `upcoming`; later
+  - "first upload" = the course has no questions at all yet; later
     uploads write only for marked objectives, as before (a second course-wide warm-up would need a
     reason);
   - the warm-up is offered only while nothing in the course is in rotation or waiting on a check;
@@ -139,14 +139,13 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ### Canvas import assumptions (2026-11-04)
 - **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.
-- **Decided by the owner (2026-11-04):** posting doesn't mean reached. Files posted over the weeks
-  count as reached; three or more posted within three days are a dump and wait as `upcoming`
-  until the student taps the last covered one on the import page (the bulk-upload question).
+- **Decided by the owner (2026-11-08):** every imported file counts as covered (the 2026-11-04
+  "posted all at once waits as upcoming" rule and its question were removed).
 - **Assumed, pending the owner:** an assignment named exam/midterm/final/quiz/test is an exam,
   the rest homework (or lab); material types are guessed from file and module names; the
   assigned date is the module's unlock date, else the file's creation date. Announcements aren't
   read yet, though that's where professors write "the midterm covers lectures 2 through 7".
-- **What would change:** module unlock dates in the future could set `upcoming`; announcements
+- **What would change:** announcements
   could become exam scope; a scheduled re-sync instead of pressing Update.
 
 ### Extra priority for the topic the class is on now
@@ -483,7 +482,7 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
   2026-11-06): only objectives in rotation (a struggled
   flag, a miss or partly right answer, or mastered before it ships) come due; islands and rings
   count mastered out of those; *check me* flags from AI chats come from the Claude connector's
-  `flag_check`; a manual flag on material the class hasn't reached is due now. The full list of
+  `flag_check`. The full list of
   decisions is at the end of `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`.
 - 2026-10-26: every question has an objective (`questions.objective_id` not null); the topic's
   "not yet sorted" bucket is gone, so `POST /api/evidence` refusing an answer without an objective

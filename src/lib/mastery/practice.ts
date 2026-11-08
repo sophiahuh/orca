@@ -5,8 +5,8 @@
  *   unflagged objectives (not flagged or verified) by weight.
  * - Practice other topics / Practice exam topics: unflagged objectives only, by weight; the exam's
  *   topics only when it lists some.
- * Course-wide dives and practice leave out material the class hasn't reached and objectives weighted
- * 0 ("won't be tested"), as the due list does. Pure.
+ * Course-wide dives and practice leave out objectives weighted 0 ("won't be tested"), as the due
+ * list does. Pure.
  */
 import type { RankedObjective } from "./agenda.ts";
 import { isInRotation } from "./flags.ts";
@@ -19,11 +19,10 @@ const byWeight = (a: RankedObjective, b: RankedObjective) => b.weight - a.weight
 export function diveObjectives(ranked: readonly RankedObjective[], scope: DiveScope, opts: { topicId?: string; examTopicIds?: readonly string[] } = {}): string[] {
   const live = ranked.filter((r) => r.status !== "retired");
   if (scope === "course" && opts.topicId !== undefined) return live.filter((r) => r.topicId === opts.topicId).map((r) => r.objectiveId);
-  const reached = live.filter((r) => r.reached);
-  const others = reached.filter((r) => unflagged(r) && r.weight > 0);
+  const others = live.filter((r) => unflagged(r) && r.weight > 0);
   if (scope === "course") {
     // `ranked` is already highest priority first.
-    const weak = reached.filter((r) => (isInRotation(r.status) || r.status === "check-due") && r.weight > 0);
+    const weak = live.filter((r) => (isInRotation(r.status) || r.status === "check-due") && r.weight > 0);
     return [...weak, ...others.sort(byWeight)].map((r) => r.objectiveId);
   }
   const topics = scope === "exam" && opts.examTopicIds?.length ? new Set(opts.examTopicIds) : null;

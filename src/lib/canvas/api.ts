@@ -174,19 +174,6 @@ export function sequenceNumber(name: string): number | null {
 
 const looseOrder = (f: CanvasFile) => sequenceNumber(f.display_name) ?? Number.POSITIVE_INFINITY;
 
-/**
- * Whether the course's files were posted all at once (three or more, created within three days of
- * each other): then nothing says how far the class has got, and the files are imported as
- * `upcoming` until the student taps the last one covered. Files posted over weeks were posted as
- * the class reached them. Owner, 2026-11-04: "some profs upload nothing, others upload
- * everything from the jump."
- */
-export function postedAtOnce(picks: readonly PickedFile[]): boolean {
-  const times = picks.map((p) => Date.parse(p.file?.created_at ?? "")).filter((t) => !Number.isNaN(t));
-  if (picks.length < 3 || times.length < picks.length) return false;
-  return Math.max(...times) - Math.min(...times) <= 3 * 24 * 3600_000;
-}
-
 /** A syllabus page's text, as the model will see it: tags, scripts and entities gone, lines kept. */
 export function htmlToText(html: string): string {
   return html

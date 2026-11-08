@@ -427,9 +427,7 @@ test("an upload writes questions for the objectives marked in it; a course's fir
   assert.deepEqual(generated.sort(), [["Simplify with absorption", 2], ["Group ones on a K-map", 1], ["Read binary numbers", 1]].sort());
   assert.equal(plan.run.questionsAdded, 3);
 
-  // A later upload (the course already has questions) and a first upload the class hasn't reached: only marked objectives.
+  // A later upload (the course already has questions): only marked objectives.
   const later = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
   assert.equal(later.run.questionsAdded, 0, "nothing marked, nothing written (and no generate call: the fake would throw)");
-  const upcoming = await runUpload(input({ material: { ...material(), upcoming: true } }), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
-  assert.equal(upcoming.run.questionsAdded, 0, "not reached yet: no warm-up");
 });
