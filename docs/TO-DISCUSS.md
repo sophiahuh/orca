@@ -87,6 +87,40 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 - **Not done:** islands and rings still count a fading objective as not held the moment its check
   passes (the review plan's A8); it needs the course's review schedule inside the mastery computation.
 
+### A warm-up on the first upload (decided by the owner 2026-11-08: yes)
+- **Source:** the 2026-11-08 review plan, §5 decision 2 (B1: a fresh course had nothing to do).
+- **Built:** a course's first upload the class has reached writes one ordinary question for its ten
+  heaviest objectives; the trail's empty state offers "Try N questions" and the sidebar a "Warm-up ·
+  5 min" card: a quick-style session over up to five unflagged objectives with an askable question,
+  heaviest first; a miss makes a weak point. The weak-points spec ruled out a placement quiz across
+  the course; this is one upload's heaviest objectives, nothing else is assumed known.
+- **Assumed, pending the owner:**
+  - "first upload" = the course has no questions at all yet and the upload isn't `upcoming`; later
+    uploads write only for marked objectives, as before (a second course-wide warm-up would need a
+    reason);
+  - the warm-up is offered only while nothing in the course is in rotation or waiting on a check;
+    after the first miss the ordinary due list takes over, and unflagged objectives with questions
+    are reached through dives, "Practice other topics", or the connector's `next_questions`;
+  - a warm-up answer is recorded as a quick-review answer (`source: "quick-review"`): a right one
+    verifies the objective, a wrong or partial one puts it in rotation;
+  - "heaviest" uses the course's objective weights at upload time; the connector's `next_questions`
+    falls back to course order for unflagged objectives rather than recomputing weights.
+
+### The connector picks and writes questions (2026-11-08)
+- **Source:** the review plan's B2, B3, B5, B6; `next_questions`, `course_state` `budget` and `writing`.
+- **Assumed, pending the owner:**
+  - with no ids given, `next_questions` draws from what's due, then the next week's exams' topics
+    (unflagged objectives only), then unflagged objectives in course order; `questions_for` stays as
+    the older draw;
+  - when nothing askable exists it starts one flag top-up for up to `count` objectives (the same job
+    `flag_check` starts, under the hourly top-up limit) unless the daily budget is spent, in which
+    case nothing is started and the reply says when the budget resets;
+  - a `summary` leaves out objective lines; `full` stays the default so older clients keep working;
+  - `set_exam` with `remove: true` deletes the exam outright (no confirmation step in the chat).
+- **Not done:** `propose_question` (Claude authoring a question from the deck) and the glossary
+  pass beyond the Review tab's line, the quiz route's empty state and the dive tooltip; `/welcome`
+  and `/quiz/[slug]/[topic]` stay (browser tests reach both by URL).
+
 ### Canvas import assumptions (2026-11-04)
 - **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.
 - **Decided by the owner (2026-11-04):** posting doesn't mean reached. Files posted over the weeks

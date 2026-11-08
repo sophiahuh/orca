@@ -84,7 +84,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
         <div className="flex flex-col gap-[4px]">
           <h1 className="text-[40px] font-bold leading-none text-prussian">{course.short}: uploads &amp; review</h1>
           <p className="text-[15px] font-medium text-wisteria-deep">
-            {tab === "uploads" ? "Every file you've added and what it built." : "New topics are quizzable now, marked Unreviewed until you confirm them."}
+            {tab === "uploads" ? "Every file you've added and what it built." : "New topics, marked Unreviewed until you confirm them. Questions come when you flag something, start a dive, or try the warm-up."}
           </p>
         </div>
       </header>

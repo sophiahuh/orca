@@ -404,10 +404,15 @@ All 11 Figma screens are built. Where things live:
   "Find connections" on the Atlas, `POST /api/relink`).
 - `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
   Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
-  (one JSON-RPC message per POST, no stream) with six tools: `flag_check` (a *check me* flag per objective the student
-  asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics, every objective's derived
-  status and recall, what's due now), `set_exam` (date + topic ids = the exam's scope), `questions_for` (Orca's own
-  questions, without their keys), `check_answer` (owner, 2026-11-08: the student's words; Orca grades choice and
+  (one JSON-RPC message per POST, no stream) with seven tools (v0.3, 2026-11-08; `INSTRUCTIONS` scripts the session): `flag_check` (a *check me* flag per objective the student
+  asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics with
+  counts, every objective's derived status and recall with `detail: "full"` (the default) or none with `"summary"`, what's due now,
+  `examFocus` (the next week's exams' topics), `budget` (the daily model budget: ok, reason, resetsAt) and `writing` (top-up runs in
+  flight)), `next_questions` (Orca picks: what's due, then exam focus, then unflagged objectives in course order; per objective
+  unseen questions first, then least recently answered; `count` 1 to 5; when nothing askable exists and `write` (default) it starts a
+  top-up and answers `pending {runId, objectiveIds, state, retryAfterSeconds, reason}`, or says why it won't: the budget, the
+  hourly top-up limit, no model; never an empty list without a reason), `set_exam` (date + topic ids = the exam's scope; with
+  `remove: true` deletes it), `questions_for` (the older draw, kept; no keys), `check_answer` (owner, 2026-11-08: the student's words; Orca grades choice and
   exact answers itself and prose through `gradeAnswer` on Orca's key with the grade rate limit and budgets, records
   full credit with its own grader and `source: "connector"`, and returns the key and explanation; when it can't grade
   it answers `needsSelfGrade` with the key) and `record_answer` (the fallback: an answer Claude graded, recorded as
@@ -460,7 +465,13 @@ All 11 Figma screens are built. Where things live:
   paste box, the type picked decides how it's read; `POST /api/materials/text`, named "Syllabus (pasted), Nov 7") and
   a public AI-chat share link; **"AI chat" is a material type** (migration `20261107130000`): only that type gets the
   transcript treatment (speakers labelled, the header, the chat rules in `TYPE_RULES`), whatever the material is
-  called. Three files or more is a bulk upload (owner, 2026-10-27): the
+  called. **The warm-up** (owner, 2026-11-08; `src/lib/mastery/warmup.ts`): a course's first upload the class has reached also
+  writes one ordinary question for its ten heaviest objectives (`WARM_UP_WRITES`, in `runUpload` beside the marked ones), so a
+  course with nothing flagged has something to try: the trail's empty state shows START as "Try N questions"
+  (`data-part="warmup-start"`), the sidebar a "Warm-up · 5 min" card (`todoCards`' `warmUp`), both to
+  `/session/<slug>?kind=quick&warmup=1`, a quick-style session over up to five unflagged objectives with an askable question,
+  heaviest first (`warmUpCandidates`); a miss makes a weak point as anywhere. Offered only while nothing in the course is in
+  rotation or waiting on a check. Three files or more is a bulk upload (owner, 2026-10-27): the
   rows' dates hide behind "Add dates", and with no assigned date given the page asks "How far has the class got?":
   the files after the tapped one are `materials.upcoming` ("the class hasn't reached this yet"; an assigned date in
   the future sets it too). Their objectives are left out of the due list, quick reviews and dive candidates
