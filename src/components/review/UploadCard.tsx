@@ -27,13 +27,13 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "
  * upload the page was opened for (`?run=`): the page already follows it (one Realtime channel per
  * run), and its parts keep the names the browser tests use.
  */
-export function UploadCard({ run: stored, material, focused = false }: { run: PipelineRun; material: Material | undefined; focused?: boolean }) {
+export function UploadCard({ run: stored, material, focused = false, openSlides = false }: { run: PipelineRun; material: Material | undefined; focused?: boolean; openSlides?: boolean }) {
   // Only an unfinished run is followed (a finished one won't change), and never twice.
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   // A finished stored row wins: useRun keeps its last live row when it stops following, which would show a stopped run as still building.
   const run = isFinished(stored) ? stored : (live ?? stored);
   const { runs, courses, refresh } = useOrca();
-  const [pickingSlides, setPickingSlides] = useState(false);
+  const [pickingSlides, setPickingSlides] = useState(openSlides);
   const name = material?.filename ?? "An upload";
   const course = material ? courses.find((c) => c.id === material.courseId) : undefined;
   // Pause a queued upload (it leaves the queue), put a paused one back in line, stop a running one,
