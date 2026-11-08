@@ -1,5 +1,4 @@
-import { type Material } from "../src/lib/data";
-import { expect, test, F, FIXTURE_STATE, ids, seedState, settled, stored } from "./fixture";
+import { expect, test, F } from "./fixture";
 
 /**
  * Canvas import, browser side. The server's own checks run for real (the site must be https and
@@ -20,12 +19,8 @@ test("Settings → Canvas refuses a site Orca can't send a token to, with the re
   await expect(card.locator('[data-part="canvas-connect"]')).toBeEnabled();
 });
 
-test("connected, Settings says who, and offers the import; the import page lists courses, imports one, and asks how far the class has got", async ({ page, student }) => {
-  const id = ids("second");
-  const second: Material = { id: id.second, courseId: F.course, filename: "L02_Fixture.pdf", type: "Lecture", assigned: null, due: null, reflect: false, upcoming: true };
-  await seedState(student, { ...FIXTURE_STATE, materials: [...FIXTURE_STATE.materials, second] });
-
-  // Orca's Canvas routes, as they'd answer with a connected account and a course posted all at once.
+test("connected, Settings says who, and offers the import; the import page lists courses and imports one", async ({ page }) => {
+  // Orca's Canvas routes, as they'd answer with a connected account.
   await page.route("**/api/canvas", (route) => route.fulfill({ json: { connected: true, baseUrl: "https://courseworks2.columbia.edu", canvasUser: "Sophia Test", lastUsedAt: null } }));
   await page.route("**/api/canvas/courses", (route) =>
     route.fulfill({ json: { courses: [{ id: "77", name: "Logic Fixture", code: "ELEN 3331", term: "Fall 2026", linkedCourseId: null }, { id: "78", name: "Signals", code: "ELEN 3801", term: "Fall 2026", linkedCourseId: null }] } }),
@@ -39,7 +34,7 @@ test("connected, Settings says who, and offers the import; the import page lists
         exams: 1,
         events: 2,
         syllabus: true,
-        files: { added: 2, duplicates: 0, failed: 0, skipped: 1, remaining: 0, skippedNames: ["Old scan.pdf"], total: 3, askCoverage: true, items: [{ materialId: F.material, name: "L01_Fixture.pdf", upcoming: true }, { materialId: id.second, name: "L02_Fixture.pdf", upcoming: true }] },
+        files: { added: 2, duplicates: 0, failed: 0, skipped: 1, remaining: 0, skippedNames: ["Old scan.pdf"], total: 3 },
       },
     });
   });
@@ -56,20 +51,7 @@ test("connected, Settings says who, and offers the import; the import page lists
   await courses.first().locator('[data-part="canvas-import"]').click();
   await expect(courses.first().locator('[data-part="canvas-summary"]')).toHaveText(/Updated Logic Fixture · 1 exam · 2 assignments on the calendar · syllabus · files: 2 added, 1 skipped \(Old scan\.pdf\)\./);
   expect(imports).toEqual([JSON.stringify({ canvasCourseId: "77" })]);
-  await expect(courses.first().locator('[data-part="posted-at-once"]')).toBeVisible();
   await expect(courses.first().locator('[data-part="canvas-import"]')).toHaveText("Update");
-
-  // "How far has the class got?": tap the first file; it's covered, the second still waits.
-  const coverage = courses.first().locator('[data-part="coverage"]');
-  const files = coverage.locator('[data-part="covered-up-to"]');
-  await expect(files).toHaveCount(2);
-  await files.first().click();
-  await expect(files.first()).toHaveAttribute("data-covered", "1");
-  await expect(files.nth(1)).toHaveAttribute("data-covered", "0");
-  await settled(page);
-  const s = await stored(page, student);
-  expect(s.materials.find((m) => m.id === F.material)!.upcoming).toBeUndefined();
-  expect(s.materials.find((m) => m.id === id.second)!.upcoming).toBe(true);
 });
 
 test("the import page says when Canvas isn't connected", async ({ page }) => {

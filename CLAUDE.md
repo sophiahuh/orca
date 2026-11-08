@@ -80,8 +80,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   quick-review card reads "Covers N objectives": N is planned exactly as the session plans it
   (`src/lib/askable.ts` + `assembleQuickReview`), not the full due count.
 - **Since 2026-10-26** (details under "What exists"): every question has an objective (the
-  unsorted bucket is gone); several files or a folder per upload, with bulk uploads asking how far
-  the class has got (`upcoming` material waits); typed notes; class times and review days
+  unsorted bucket is gone); several files or a folder per upload (every file counts as covered
+  since 2026-11-08: the "how far has the class got?" question is gone); typed notes; class times and review days
   ("Twice a week"); Dive In runs beside an upload; queued uploads pause and resume, a running one
   stops, material can be removed, a failed upload has Try again; the Claude connector (MCP) and
   Canvas import (2026-11-04). **Planned, not built:** activity logs with soft delete
@@ -335,7 +335,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `default_weights` / `weights` were dropped 2026-10-25), `security_events.kind` `orca_notes`, `questions.deep`, `relations` rebuilt between topics
   (`from_topic`, `to_topic`, four types, `material_id` nullable), `exams` (owner-only, in
   `my_data`), `question_feedback`, `session_progress`, `courses.schedule` (class times and review
-  days), `materials.upcoming`, run status `paused`, material status `removed` with
+  days), run status `paused`, material status `removed` with
   `archived_with_material` on topics and objectives, `connector_tokens`, and `canvas_connections` /
   `canvas_links` (service-role only).
   Env vars (`.env.example`): the Supabase three, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` (with
@@ -437,9 +437,7 @@ All 11 Figma screens are built. Where things live:
   and every PDF/.pptx in the modules (in order) and then the file list (by the number in the name, `sequenceNumber`,
   then posting date) goes through `startUpload` → Storage →
   `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date).
-  Posting isn't reaching (owner): files posted over the weeks count as covered, three or more posted within three
-  days (`postedAtOnce`) are imported `upcoming` and the page asks "How far has the class got?" (the bulk-upload
-  question, saved through `setMaterialUpcoming`). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
+  Every imported file counts as covered (owner, 2026-11-08). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
   route pulls files until a 200 s budget and reports `files.remaining`, and the page keeps calling. The pure module
   (`api.ts`: classification, file picking, Link pagination; `client.ts`: bearer client with injectable fetch, downloads
   follow the signed redirect without the token) is tested in `tests/canvas/`; migration `20261104100000`, pgTAP 16.
@@ -468,18 +466,15 @@ All 11 Figma screens are built. Where things live:
   paste box, the type picked decides how it's read; `POST /api/materials/text`, named "Syllabus (pasted), Nov 7") and
   a public AI-chat share link; **"AI chat" is a material type** (migration `20261107130000`): only that type gets the
   transcript treatment (speakers labelled, the header, the chat rules in `TYPE_RULES`), whatever the material is
-  called. **The warm-up** (owner, 2026-11-08; `src/lib/mastery/warmup.ts`): a course's first upload the class has reached also
+  called. **The warm-up** (owner, 2026-11-08; `src/lib/mastery/warmup.ts`): a course's first upload also
   writes one ordinary question for its ten heaviest objectives (`WARM_UP_WRITES`, in `runUpload` beside the marked ones), so a
   course with nothing flagged has something to try: the trail's empty state shows START as "Try N questions"
   (`data-part="warmup-start"`), the sidebar a "Warm-up · 5 min" card (`todoCards`' `warmUp`), both to
   `/session/<slug>?kind=quick&warmup=1`, a quick-style session over up to five unflagged objectives with an askable question,
   heaviest first (`warmUpCandidates`); a miss makes a weak point as anywhere. Offered only while nothing in the course is in
   rotation or waiting on a check. Three files or more is a bulk upload (owner, 2026-10-27): the
-  rows' dates hide behind "Add dates", and with no assigned date given the page asks "How far has the class got?":
-  the files after the tapped one are `materials.upcoming` ("the class hasn't reached this yet"; an assigned date in
-  the future sets it too). Their objectives are left out of the due list, quick reviews and dive candidates
-  (`AgendaInput.upcoming`, from `Material.upcoming` via each objective's `materialId`) until the Uploads tab's "Mark
-  covered" clears it; the trail still plays them, and nothing is assumed known (a scheduling signal, never mastery) (a .pptx: one page per slide, its text, tables and speaker notes; no
+  rows' dates hide behind "Add dates". Every material counts as covered (owner, 2026-11-08: "How far has the class
+  got?", `materials.upcoming` and "Mark covered" were removed; migration `20261108100000`) (a .pptx: one page per slide, its text, tables and speaker notes; no
   pictures, and no slide figures; see `docs/TO-DISCUSS.md`). Handwritten and scanned PDF pages (the "Handwritten notes"
   switch, a notes app's PDF, or a page with no text) are marked `needs-vision` and read from their images by the
   `transcribe` step at the start of the upload job; typed slides that draw a figure (an image 100 px+ or 25+ paths,

@@ -51,8 +51,6 @@ export interface ObjectiveLine {
   recall: number | null;
   /** How many questions Orca has for it (0: it can't be checked until some are written). */
   questions: number;
-  /** From material the class hasn't reached yet: not due, still askable if the student wants. */
-  upcoming: boolean;
 }
 
 export interface ExamLine {

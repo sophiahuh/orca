@@ -25,7 +25,7 @@ import { fadeUp, stagger } from "@/lib/motion";
 
 const SKELETON = [92, 100, 78, 96, 60, 0, 100, 88, 94, 70, 0, 90, 84];
 
-/** From this many files an upload counts as bulk (owner, 2026-10-27): dates hidden, "how far has the class got?" asked instead. */
+/** From this many files an upload counts as bulk (owner, 2026-10-27): dates hidden behind "Add dates". */
 const BULK_FROM = 3;
 
 const STAGE_MESSAGE: Record<UploadStage, string> = {
@@ -103,7 +103,6 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   /** Several files at once (a folder): one row each; null when a single file is picked. */
   const [batch, setBatch] = useState<BatchItem[] | null>(null);
   /** Bulk upload: id of the last file the class has covered (`"none"`: none yet); null means every file. */
-  const [coveredUpTo, setCoveredUpTo] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
 
@@ -132,16 +131,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const sendable = batch?.filter((it) => it.problem === null) ?? [];
   const batchFailed = sendable.filter((it) => it.status.kind === "failed");
   const batchPending = sendable.filter((it) => it.status.kind === "waiting" || it.status.kind === "failed");
-  // Bulk (three files or more) is usually old content: dates stay out of the way, and instead of
-  // dates Orca asks how far the class has got, so the rest can wait. With any assigned date given,
-  // nothing is asked: a date in the future already says "not yet".
+  // Bulk (three files or more) is usually old content: dates stay out of the way.
   const bulk = sendable.length >= BULK_FROM;
-  const dated = sendable.some((it) => it.assigned !== null);
-  const inOrder = [...sendable].sort((a, b) => a.file.name.localeCompare(b.file.name, undefined, { numeric: true, sensitivity: "base" }));
-  const askCoverage = bulk && !dated && phase.kind === "idle";
-  const coveredIndex = coveredUpTo === null ? inOrder.length - 1 : coveredUpTo === "none" ? -1 : inOrder.findIndex((it) => it.id === coveredUpTo);
-  /** Whether a row's material is still ahead of the class, from its date when there is one, else from the student's tap. */
-  const isUpcoming = (it: BatchItem) => (dated ? it.assigned !== null && it.assigned > toISODate(new Date()) : bulk && inOrder.indexOf(it) > coveredIndex);
   const unreadable = file ? uploadProblem(file) : null;
   // Only a PDF can be read as page images (a .pptx has no renderer here).
   const isPdf = file ? uploadKind(file.name, file.type) === "pdf" : false;
@@ -194,7 +185,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     let failed = 0;
     let duplicates = 0;
     for (const it of batchPending) {
-      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", upcoming: isUpcoming(it), again: it.again === true };
+      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", again: it.again === true };
       try {
         const outcome = await uploadMaterial(it.file, meta, (stage) => patch(it.id, { status: { kind: "sending", message: STAGE_MESSAGE[stage] } }));
         if (outcome.kind === "read") addMaterial(outcome.material, { saved: true });
@@ -489,28 +480,6 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <Select label="What kind of material is this?" value={type} options={MATERIAL_TYPES} labels={MATERIAL_TYPE_LABELS} onChange={(t) => setDefault({ type: t })} className="self-start" />
             {batch && <span className="text-[13px] font-medium text-wisteria-deep">Applies to every file on the list; change any one of them on its row.</span>}
           </motion.section>
-
-          {askCoverage && (
-            <motion.section variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-[12px]" data-part="coverage">
-              <h2 className="text-[17px] font-bold text-prussian">How far has the class got?</h2>
-              <span className="text-[13px] font-medium text-wisteria-deep">Tap the last file the class has covered. The ones after it wait: Orca won&apos;t put them in your reviews until you mark them covered (on the Uploads tab). Nothing is assumed known either way.</span>
-              <ol className="flex flex-col gap-[6px]">
-                <li>
-                  <button type="button" onClick={() => setCoveredUpTo("none")} aria-pressed={coveredIndex === -1} className={cn("w-full rounded-[12px] border-2 px-[12px] py-[8px] text-left text-[14px] font-semibold", coveredIndex === -1 ? "border-wisteria bg-parchment text-prussian" : "border-alice-deep bg-alice text-wisteria-deep")}>
-                    None yet
-                  </button>
-                </li>
-                {inOrder.map((it, i) => (
-                  <li key={it.id}>
-                    <button type="button" onClick={() => setCoveredUpTo(it.id)} aria-pressed={i === coveredIndex} data-part="covered-up-to" data-covered={i <= coveredIndex ? "1" : "0"} className={cn("flex w-full items-center justify-between gap-[10px] rounded-[12px] border-2 px-[12px] py-[8px] text-left text-[14px] font-semibold", i <= coveredIndex ? "border-wisteria bg-parchment text-prussian" : "border-alice-deep bg-alice text-wisteria-deep")}>
-                      <span className="truncate">{it.file.name}</span>
-                      <span className="shrink-0 text-[12px] font-bold">{i <= coveredIndex ? (i === coveredIndex ? "Covered up to here" : "Covered") : "Not yet"}</span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            </motion.section>
-          )}
 
           <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
             <h2 className="text-[17px] font-bold text-prussian">When was it assigned?</h2>

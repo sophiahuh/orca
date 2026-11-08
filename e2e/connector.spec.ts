@@ -44,14 +44,14 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   // The courses, then one course: every objective unseen (not flagged), each with its questions counted; weak points first, so none is due.
   const courses = toolText(await call(page, url, "course_state", {}));
   expect(courses.courses).toEqual([{ id: F.course, name: "Logic Fixture" }]);
-  const state = toolText(await call(page, url, "course_state", { courseId: F.course })) as { topics: Array<{ name: string; objectives: number; askable: number }>; objectives: Array<{ id: string; status: string; questions: number; upcoming: boolean }>; dueNow: string[]; exams: unknown[]; budget: { ok: boolean; resetsAt: string }; writing: unknown[]; examFocus: string[] };
+  const state = toolText(await call(page, url, "course_state", { courseId: F.course })) as { topics: Array<{ name: string; objectives: number; askable: number }>; objectives: Array<{ id: string; status: string; questions: number }>; dueNow: string[]; exams: unknown[]; budget: { ok: boolean; resetsAt: string }; writing: unknown[]; examFocus: string[] };
   expect(state.topics.map((t) => [t.name, t.objectives, t.askable])).toEqual([["Boolean Algebra", 2, 1], ["Two's Complement", 2, 2]]);
-  expect(state.objectives.map((o) => [o.id, o.status, o.questions, o.upcoming]).sort()).toEqual(
+  expect(state.objectives.map((o) => [o.id, o.status, o.questions]).sort()).toEqual(
     [
-      [F.simplify, "unseen", 2, false],
-      [F.convert, "unseen", 4, false],
-      [F.signExtend, "unseen", 2, false],
-      [id.noq, "unseen", 0, false],
+      [F.simplify, "unseen", 2],
+      [F.convert, "unseen", 4],
+      [F.signExtend, "unseen", 2],
+      [id.noq, "unseen", 0],
     ].sort(),
   );
   expect(state.dueNow).toEqual([]);

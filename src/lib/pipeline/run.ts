@@ -545,10 +545,10 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     for (const p of pages) group.pages.add(p.n);
     byTopic.set(o.topicId, group);
   }
-  /* Warm-up (owner, 2026-11-08): the course's first upload the class has reached also gets one
+  /* Warm-up (owner, 2026-11-08): the course's first upload also gets one
      ordinary question for its heaviest objectives, so the student has something to try before
      anything is flagged. Later uploads don't: by then flags, dives and the warm-up's misses do the writing. */
-  if (Object.values(input.bank).flat().length === 0 && !input.material.upcoming) {
+  if (Object.values(input.bank).flat().length === 0) {
     const live = { ...input.objectives, ...Object.fromEntries(newObjectives.map((o) => [o.id, o])) };
     const weights = courseObjectiveWeights(live, allTopics(), [...input.relations, ...relations]);
     const targeted = new Set([...byTopic.values()].flatMap((g) => g.targets.map((t) => t.objective.id)));

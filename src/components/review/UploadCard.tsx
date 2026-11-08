@@ -32,7 +32,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   // A finished stored row wins: useRun keeps its last live row when it stops following, which would show a stopped run as still building.
   const run = isFinished(stored) ? stored : (live ?? stored);
-  const { runs, courses, setMaterialUpcoming, refresh } = useOrca();
+  const { runs, courses, refresh } = useOrca();
   const [pickingSlides, setPickingSlides] = useState(false);
   const name = material?.filename ?? "An upload";
   const course = material ? courses.find((c) => c.id === material.courseId) : undefined;
@@ -80,15 +80,6 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
       setPausing(e instanceof Error ? e.message : "Couldn't change the upload.");
     }
   };
-  // "The class hasn't reached this yet": its objectives wait until it's marked covered.
-  const coverage = material && (
-    <span className="flex flex-wrap items-center gap-[8px] text-[13px] font-semibold text-wisteria-deep" data-part="upload-coverage" data-upcoming={material.upcoming ? "1" : "0"}>
-      {material.upcoming ? "Not covered in class yet: its objectives wait until it is." : "Covered in class."}
-      <button type="button" onClick={() => setMaterialUpcoming(material.id, !material.upcoming)} className="font-bold text-prussian underline underline-offset-2">
-        {material.upcoming ? "Mark covered" : "Mark as not covered yet"}
-      </button>
-    </span>
-  );
   const part = (legacy: string) => (focused ? legacy : "upload-card");
   const head = (
     <span className="flex flex-wrap items-center gap-[8px]">
@@ -214,7 +205,6 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
           Questions are written when you flag something or start a dive.
         </span>
       )}
-      {coverage}
       {/* Weak points first (Plan C): tap the slides that were hard. Only a stored PDF or .pptx has pages to show. */}
       {material?.storagePath && /\.(pdf|pptx)$/i.test(material.filename) && course && (
         <>
