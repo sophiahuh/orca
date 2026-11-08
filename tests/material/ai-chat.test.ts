@@ -19,6 +19,21 @@ test("AI-chat intake labels pasted markdown and ChatGPT-style export turns", () 
   assert.match(exported, /AI ASSISTANT: It calls itself/);
 });
 
+test("a role word is a label only with a delimiter or on its own line: ordinary lines starting with me/you/AI/human keep their speaker and their letters", () => {
+  const out = normaliseAIChatTranscript("You: What is a mux?\nMemory is byte-addressed.\nAI models are large.\nHuman-readable output.\nYou said: ok\n**Assistant:** a selector.\n## You\nMeanwhile, why?\nAI - because.");
+  const lines = out.split("\n").slice(2);
+  assert.deepEqual(lines, [
+    "STUDENT: What is a mux?",
+    "STUDENT: Memory is byte-addressed.",
+    "STUDENT: AI models are large.",
+    "STUDENT: Human-readable output.",
+    "STUDENT: ok",
+    "AI ASSISTANT: a selector.",
+    "STUDENT: Meanwhile, why?",
+    "AI ASSISTANT: because.",
+  ]);
+});
+
 test("only the chat's own text counts toward enough to import, not Orca's header or role labels", () => {
   // A share page whose chat is rendered by script: visible text is just the app's name.
   const empty = chatTextFromHtml("<html><body><div>ChatGPT</div><script>{\"huge\":\"app state\"}</script></body></html>");

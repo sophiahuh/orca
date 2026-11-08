@@ -55,8 +55,11 @@ export function spokenChars(transcript: string) {
     .reduce((sum, line) => sum + line.replace(/^(?:STUDENT|AI ASSISTANT|CHAT CONTEXT):\s*/, "").trim().length, 0);
 }
 
-const STUDENT = /^(?:#{1,6}\s*|\*{0,2})?(?:user|you|human|student|me)(?:\*{0,2})?\s*(?:message|said)?\s*[:：-]?\s*/i;
-const ASSISTANT = /^(?:#{1,6}\s*|\*{0,2})?(?:assistant|chatgpt|claude|gemini|ai)(?:\*{0,2})?\s*(?:message|said)?\s*[:：-]?\s*/i;
+// A role word is a label only when the line ends there (a "## You" heading) or a delimiter follows:
+// a colon, or a dash with a space after it. Without that, "Memory is…" read as "me" + "mory is…" and
+// "AI models…" as an assistant turn, role-switching every pasted transcript (2026-11-08).
+const STUDENT = /^(?:#{1,6}\s*|\*{0,2})?(?:user|you|human|student|me)(?:\s+(?:message|said))?\*{0,2}\s*(?:[:：]\*{0,2}\s*|-\s+|$)/i;
+const ASSISTANT = /^(?:#{1,6}\s*|\*{0,2})?(?:assistant|chatgpt|claude|gemini|ai)(?:\s+(?:message|said))?\*{0,2}\s*(?:[:：]\*{0,2}\s*|-\s+|$)/i;
 
 function messagesFromExport(value: unknown) {
   const seen = new Set<unknown>();
@@ -94,12 +97,14 @@ export function normaliseAIChatTranscript(raw: string) {
     if (!line) continue;
     if (STUDENT.test(line)) {
       role = "student";
-      out.push(`STUDENT: ${line.replace(STUDENT, "")}`);
+      const rest = line.replace(STUDENT, "");
+      if (rest) out.push(`STUDENT: ${rest}`); // a bare "## You" heading only sets the speaker
       continue;
     }
     if (ASSISTANT.test(line)) {
       role = "assistant";
-      out.push(`AI ASSISTANT: ${line.replace(ASSISTANT, "")}`);
+      const rest = line.replace(ASSISTANT, "");
+      if (rest) out.push(`AI ASSISTANT: ${rest}`);
       continue;
     }
     out.push(`${role === "student" ? "STUDENT" : role === "assistant" ? "AI ASSISTANT" : "CHAT CONTEXT"}: ${line}`);
