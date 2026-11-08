@@ -18,6 +18,7 @@ import { struggledItemOk } from "./marked.ts";
 import type { OrcaNotes } from "./notes.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
+import { mathProblem } from "../math-text.ts";
 import { courseObjectiveWeights } from "../course/weights.ts";
 import { WARM_UP_WRITES } from "../mastery/warmup.ts";
 import { DEEP_TEXT, type GeneratedQuestion, type MapOutput, type ObjectivesOutput, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
@@ -161,6 +162,8 @@ function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | nu
   if (q.kind === "Multiple choice" && (q.options.length !== 4 || q.answer < 0 || q.answer > 3)) return "multiple choice needs four options and a valid answer";
   if (q.kind === "True or false" && (q.options.length !== 2 || q.answer < 0 || q.answer > 1)) return "true/false needs two options and a valid answer";
   if (q.kind === "Short answer" && !(q.exact && q.exact.length) && !q.rubric) return "short answer with neither an exact answer nor a rubric";
+  // Exact answers are compared with what the student types, so they stay plain text.
+  if (q.exact?.some((e) => /\\[(\[]/.test(e))) return "an exact answer is written as LaTeX";
   // Exact matching can't tell "a+c" from "c+a" (owner, 2026-11-08): an expression needs a rubric or choices.
   if (q.kind === "Short answer" && q.exact?.some(isExpressionAnswer)) return "an algebraic or Boolean expression as an exact answer (give a rubric or make it multiple choice)";
   if (!inferred && !q.anchor) return "no source anchor";
@@ -690,6 +693,16 @@ export async function writeQuestions(
             );
             if (!texts.ok) {
               dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });
+              continue;
+            }
+            // Math is checked only in what the question shows (not the excerpt, quoted from the material, nor exact answers).
+            const math = Object.entries(texts.values).flatMap(([name, text]) => {
+              if (name === "anchor excerpt" || name.startsWith("exact answer")) return [];
+              const problem = mathProblem(text);
+              return problem ? [`${name} ${problem}`] : [];
+            })[0];
+            if (math) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${math}` });
               continue;
             }
             if (g.anchor && !anchorExists(g.anchor.locator, facts)) {

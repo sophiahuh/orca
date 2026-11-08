@@ -77,20 +77,21 @@ test("the material that covers it most is used; without kept text the student is
   assert.deepEqual(topUpTargets({ ...input, objectives: { a: authored } }).skipped, [{ objectiveId: "a", reason: "no course material to write from" }]);
 });
 
+const generated = (objectiveId: string, prompt: string, exact: string): GeneratedQuestion => ({
+  objectiveId,
+  kind: "Short answer",
+  tier: "retrieval",
+  prompt,
+  options: [],
+  answer: -1,
+  exact: [exact],
+  rubric: null,
+  explanation: "Because.",
+  anchor: { locator: "slide 2", excerpt: "invert and add one" },
+  figureSlide: null,
+});
+
 test("runTopUp writes questions, drops duplicates, and records a top-up run", async () => {
-  const generated = (objectiveId: string, prompt: string, exact: string): GeneratedQuestion => ({
-    objectiveId,
-    kind: "Short answer",
-    tier: "retrieval",
-    prompt,
-    options: [],
-    answer: -1,
-    exact: [exact],
-    rubric: null,
-    explanation: "Because.",
-    anchor: { locator: "slide 2", excerpt: "invert and add one" },
-    figureSlide: null,
-  });
   const calls: string[] = [];
   const call = (async (step: string, input: unknown) => {
     calls.push(step);
@@ -115,6 +116,19 @@ test("runTopUp writes questions, drops duplicates, and records a top-up run", as
   assert.deepEqual(plan.run.objectivesAttached, ["a"]);
   assert.deepEqual(plan.run.dropped.map((d) => d.reason), ["the course already has this question"]);
   assert.deepEqual(calls, ["generate"]);
+});
+
+test("math in what the question shows must render; the excerpt quoted from the material isn't checked", async () => {
+  const call = (async (step: string) => {
+    if (step !== "generate") throw new Error(`unexpected ${step}`);
+    const ok = generated("a", "What is \\(-x\\) for \\(x = 0101\\) in 4 bits?", "1011");
+    ok.anchor = { locator: "slide 2", excerpt: "the regex \\( matches a parenthesis" };
+    return { questions: [generated("a", "Negate \\(\\frac{1}{\\) in 4 bits.", "1011"), ok] };
+  }) as CallStep;
+  let n = 0;
+  const plan = await runTopUp(base(), { call, newId: () => `new${++n}` });
+  assert.deepEqual(plan.questions.t.map((x) => x.prompt), ["What is \\(-x\\) for \\(x = 0101\\) in 4 bits?"]);
+  assert.match(plan.run.dropped[0].reason, /^refused: prompt has math that doesn't render/);
 });
 
 test("nothing needed, nothing called", async () => {
