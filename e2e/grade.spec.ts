@@ -116,6 +116,11 @@ test("after three flagged answers in a week, model grading is off for the studen
 
 test("grading is rate-limited per student: the 61st answer in a minute is 429 with retry-after", async ({ page, student }) => {
   await seedState(student, STATE);
+  // The limiter counts fixed clock-aligned windows (hit_rate_limit), so a loop that crosses a minute
+  // boundary starts a fresh count halfway: wait for the next window when this one is nearly over.
+  const { windowSeconds } = LIMITS.rate.grade;
+  const into = (Date.now() / 1000) % windowSeconds;
+  if (into > windowSeconds - 15) await page.waitForTimeout((windowSeconds - into + 1) * 1000);
   let last: { status: number; retryAfter: string | null } | null = null;
   for (let i = 0; i < LIMITS.rate.grade.max + 1; i++) {
     const res = await page.request.post("/api/grade", { data: { questionId: G.prose, response: `Invert every bit, then add one. Try ${i}.` } });

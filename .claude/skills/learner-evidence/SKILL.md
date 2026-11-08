@@ -21,8 +21,11 @@ The model is in `docs/MASTERY-PLAN.md`; the code is `src/lib/mastery/`.
   A flag never adds credit. Every live objective holds state with or without questions
   (`src/lib/mastery/attribution.ts`).
 - Connector activity, upload and reading signals may raise priority later; they never produce
-  mastery. An answer Claude grades through the connector is evidence, recorded self-marked
-  (`grader: "self"`, `source: "connector"`).
+  mastery. An answer through the connector is evidence with `source: "connector"`: graded by Orca
+  (`check_answer`: `grader` choice, exact or rubric, full credit) or, only when Orca's grader can't
+  run, by Claude (`record_answer`: `grader: "self"`, half credit). `verified` takes an unaided
+  correct answer; a self-marked correct proves nothing. The student's words ride `response`
+  (the row's `note` column) and are never read by the fold.
 - Every rule change goes in `MASTERY_RULES` (or `FLAG_STRENGTH`, for which source asks for what)
   and gets a test in `tests/mastery/`. A change to either, or to the fold's logic, needs a
   `RULES_VERSION` bump: `tests/mastery/snapshot.test.ts` hashes both and replays two golden logs.

@@ -49,12 +49,16 @@ export function ClaudeConnectorCard() {
     }
   };
 
+  // Disconnect asks first (as the Canvas card does): the link stops working at once and Claude
+  // would need a new one pasted in.
+  const [confirming, setConfirming] = useState(false);
   const revoke = async () => {
     setBusy(true);
     setProblem(null);
     try {
       const res = await fetch("/api/connector", { method: "DELETE" });
       if (!res.ok) return setProblem("Couldn't disconnect.");
+      setConfirming(false);
       setUrl(null);
       setStatus({ connected: false, createdAt: null, lastUsedAt: null });
     } finally {
@@ -98,13 +102,24 @@ export function ClaudeConnectorCard() {
         <Button size="sm" onClick={() => void create()} disabled={busy || status === null} data-part="connector-create">
           {status?.connected ? "Make a new link" : "Connect Claude"}
         </Button>
-        {status?.connected && (
-          <Button size="sm" variant="danger" onClick={() => void revoke()} disabled={busy} data-part="connector-revoke">
+        {status?.connected && !confirming && (
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={busy} data-part="connector-revoke">
             Disconnect
           </Button>
         )}
         {problem && <span role="alert" className="text-[13px] font-semibold text-bad-text">{problem}</span>}
       </div>
+      {status?.connected && confirming && (
+        <div className="flex flex-wrap items-center gap-[10px] rounded-[14px] border-2 border-alice-deep bg-alice px-[14px] py-[10px]" data-part="connector-revoke-confirm">
+          <span className="text-[13px] font-semibold text-prussian">Disconnect Claude? The link stops working at once; Claude would need a new one.</span>
+          <Button size="sm" variant="danger" onClick={() => void revoke()} disabled={busy} data-part="connector-revoke-yes">
+            Yes, disconnect
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy} data-part="connector-revoke-cancel">
+            Keep it
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

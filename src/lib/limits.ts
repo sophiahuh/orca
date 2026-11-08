@@ -24,8 +24,12 @@ export const LIMITS = {
   /** Weekly class meetings a course's schedule may list. */
   classMeetings: 14,
 
-  /** Pages of material one student may put through the model in one of their days (uploads). */
-  pagesPerDay: 300,
+  /**
+   * Pages of material one student may put through the model in one of their days (uploads). 1,000
+   * since 2026-11-07 (owner): a Canvas import brings a whole course's decks in one day, and 300 left
+   * most of ALD waiting; the token cap below is the backstop.
+   */
+  pagesPerDay: 1000,
   /** Tokens (input, output and cache) one student's calls may use in one of their days; a cap on pages can't be dodged with dense pages. */
   tokensPerDay: 2_000_000,
 
@@ -42,7 +46,22 @@ export const LIMITS = {
     /** "Find connections" on the Atlas (POST /api/relink): one model call over the course's topics. */
     relink: { max: 10, windowSeconds: 3600 },
     /** Importing a Canvas course (POST /api/canvas/import): each run can pull many files. */
-    canvasImport: { max: 6, windowSeconds: 3600 },
+    /**
+     * Importing a Canvas course (POST /api/canvas/import). The import page calls it up to 10 times in
+     * a row for a big course (200 s of pulling each), so the hour must hold a few whole loops; each
+     * call only works on the student's own courses, so this bounds cost, not access (2026-11-08).
+     */
+    canvasImport: { max: 30, windowSeconds: 3600 },
+    /** Pasting text or a chat link (POST /api/materials/text): each call stores pages and starts a job (2026-11-08). */
+    text: { max: 30, windowSeconds: 3600 },
+    /** Adding a website (POST /api/materials/web): an outbound fetch of up to 10 MB and a job per call. */
+    web: { max: 20, windowSeconds: 3600 },
+    /** Connecting Canvas (POST /api/canvas): a DNS lookup and an outbound request to the site named. */
+    canvasConnect: { max: 10, windowSeconds: 3600 },
+    /** Listing a Canvas course's files for the picker (GET /api/canvas/courses/:id/files): two outbound calls each. */
+    canvasFiles: { max: 60, windowSeconds: 3600 },
+    /** A Claude connector call (POST /api/mcp/<token>): the link is the only credential, so a leaked one is bounded (2026-11-08). */
+    connector: { max: 120, windowSeconds: 60 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */

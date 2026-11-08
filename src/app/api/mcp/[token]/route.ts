@@ -1,5 +1,7 @@
+import { dayKeyIn } from "@/lib/mastery/objective-state";
 import { handleRpc } from "@/lib/connector/mcp";
 import { connectorTools, studentForToken } from "@/lib/server/connector";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { NO_STORE } from "@/lib/server/student";
 import { SupabaseNotConfiguredError } from "@/lib/supabase/env";
 import { adminClient } from "@/lib/supabase/server";
@@ -29,6 +31,9 @@ export async function POST(request: Request, context: RouteContext<"/api/mcp/[to
     throw e;
   }
   if (!student) return json(401, { jsonrpc: "2.0", id: null, error: { code: -32001, message: "This connector link isn't valid. Make a new one in Orca's Settings." } });
+  // The link is the only credential, so a leaked one is bounded per student (2026-11-08).
+  const rate = await rateLimit(db, student.id, "connector");
+  if (!rate.ok) return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32000, message: rate.message } }), { status: 429, headers: { ...HEADERS, "retry-after": String(rate.retryAfterSeconds) } });
 
   let raw: unknown;
   try {
@@ -36,8 +41,11 @@ export async function POST(request: Request, context: RouteContext<"/api/mcp/[to
   } catch {
     return json(400, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Send JSON." } });
   }
-  // Evidence from the chat is filed under the day: a review check missed in one chat can be passed in a later one.
-  const session = `connector:${new Date().toISOString().slice(0, 10)}`;
+  // Evidence from the chat is filed under the student's day (their timezone, as the app's sessions
+  // are): a review check missed in one chat can be passed in a later one.
+  const { data: profile, error: profileError } = await db.from("profiles").select("timezone").eq("owner_id", student.id).maybeSingle();
+  if (profileError) throw new Error(`Couldn't read the student's timezone: ${profileError.message}`);
+  const session = `connector:${dayKeyIn(profile?.timezone ?? "UTC")(new Date().toISOString())}`;
   const reply = await handleRpc(raw, connectorTools(db, student.id), session);
   return json(reply.status, reply.body);
 }

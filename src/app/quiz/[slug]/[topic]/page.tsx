@@ -47,7 +47,7 @@ export default function QuizPage({ params }: PageProps<"/quiz/[slug]/[topic]">) 
         {hydrated && (
           <>
             <p className="text-[22px] font-bold text-prussian">No questions for {topic.name} yet.</p>
-            <p className="text-[16px] text-wisteria-deep">Add course material for this topic and Orca will write some.</p>
+            <p className="text-[16px] text-wisteria-deep">Orca writes them when you flag something here as hard, or start a dive into it.</p>
             <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)}>
               Add material
             </Button>

@@ -68,3 +68,11 @@ test("tomorrow's quick review: a card under Due tomorrow, sized like the session
   assert.deepEqual(todoCards(agenda, DEFAULT_CONFIG, names, undefined, 0), [], "nothing it can ask, no card");
   assert.throws(() => todoCards(agenda, DEFAULT_CONFIG, names));
 });
+
+test("a warm-up card when nothing is due and nothing flagged, never beside a due quick review", () => {
+  const cards = todoCards(empty, DEFAULT_CONFIG, names, undefined, undefined, 3);
+  assert.deepEqual(cards.map((c) => [c.kind, c.when, c.title, c.detail]), [["warmup", "today", "Warm-up · 5 min", "Try 3 questions"]]);
+  assert.equal(todoCards(empty, DEFAULT_CONFIG, names, undefined, undefined, 0).length, 0);
+  const due = todoCards({ ...empty, quickReviewDue: true, dueToday: [ranked("a", "t", "x")] }, DEFAULT_CONFIG, names, 1, undefined, 3);
+  assert.deepEqual(due.map((c) => c.kind), ["quick"], "a due quick review wins");
+});

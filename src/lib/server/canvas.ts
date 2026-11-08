@@ -11,12 +11,12 @@ import { isIP } from "node:net";
 import { type CanvasAssignment, type CanvasCourse, type CanvasFile, type CanvasModule, type CanvasUser, type PickedFile, classifyAssignment, dayOf, htmlToText, pickFiles, postedAtOnce } from "@/lib/canvas/api";
 import { type CanvasClient, CanvasError, canvasClient } from "@/lib/canvas/client";
 import { placeIslands } from "@/lib/course/islands";
-import { COURSE_NAME_MAX, type IslandVariant, shortName, slugify } from "@/lib/data";
+import { COURSE_NAME_MAX, type IslandVariant, type MaterialType, shortName, slugify } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
 import { UPLOAD_MIMES, uploadKind } from "@/lib/material/kind";
 import { startUploadJob } from "@/lib/server/jobs/start";
 import { BUCKET, processUpload, startUpload } from "@/lib/server/materials";
-import { isPublicAddress } from "@/lib/server/public-page";
+import { isPublicAddress, publicHop } from "@/lib/server/public-page";
 import { serverSupabaseEnv } from "@/lib/supabase/env";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 import { sanitize } from "@/lib/untrusted/sanitize";
@@ -99,7 +99,8 @@ export async function clientFor(db: OrcaSupabase, ownerId: string, fetchImpl?: t
   if (error) throw new Error(`Couldn't read the Canvas connection: ${error.message}`);
   if (!data) return null;
   await db.from("canvas_connections").update({ last_used_at: new Date().toISOString() }).eq("owner_id", ownerId);
-  return canvasClient({ baseUrl: data.base_url, token: decryptToken(data.token_enc), fetch: fetchImpl });
+  // Every hop (API calls, downloads, their redirects) must resolve to a public address, checked at use.
+  return canvasClient({ baseUrl: data.base_url, token: decryptToken(data.token_enc), fetch: fetchImpl, hopAllowed: (u) => publicHop(u) });
 }
 
 /* ── Courses ── */
@@ -133,6 +134,35 @@ export async function listCanvasCourses(db: OrcaSupabase, ownerId: string, clien
     .map((c) => ({ id: String(c.id), name: c.name, code: c.course_code ?? null, term: c.term?.name ?? null, linkedCourseId: linked.get(`course:${c.id}`) ?? null }));
 }
 
+/* ── A course's files, for the picker ── */
+
+export interface CanvasFileLine {
+  id: string;
+  name: string;
+  module: string | null;
+  assigned: string | null;
+  type: MaterialType;
+  /** Bytes, when Canvas said. */
+  size: number | null;
+  /** Already imported into Orca (a link exists): shown ticked and fixed. */
+  linked: boolean;
+}
+
+/**
+ * The files an import would pull from one course, in import order, so the student can choose
+ * (owner, 2026-11-08): modules first, then the loose files, readable kinds only; each says whether
+ * it's already in Orca.
+ */
+export async function listCanvasFiles(db: OrcaSupabase, ownerId: string, client: CanvasClient, canvasCourseId: string, timeZone?: string): Promise<CanvasFileLine[]> {
+  const id = encodeURIComponent(canvasCourseId);
+  const [modules, files, linked] = await Promise.all([
+    optional(client.getAll<CanvasModule>(`/courses/${id}/modules`, { "include[]": ["items"] })),
+    optional(client.getAll<CanvasFile>(`/courses/${id}/files`)),
+    links(db, ownerId),
+  ]);
+  return pickFiles(modules, files, timeZone).map((p) => ({ id: String(p.id), name: p.name, module: p.module, assigned: p.assigned, type: p.type, size: p.file?.size ?? null, linked: linked.has(`file:${p.id}`) }));
+}
+
 /* ── Importing one course ── */
 
 export interface ImportSummary {
@@ -146,6 +176,8 @@ export interface ImportSummary {
     failed: number;
     skipped: number;
     remaining: number;
+    /** Files this round couldn't pull (a timeout, a storage error): not linked, so the next import tries them again. */
+    skippedNames: string[];
     total: number;
     /** The files now in the course from this import, in Canvas order (added and already-there ones), for "How far has the class got?". */
     items: Array<{ materialId: string; name: string; upcoming: boolean }>;
@@ -158,6 +190,9 @@ export interface ImportOptions {
   /** Stop pulling files once this many ms have passed; the rest is reported as `remaining`. */
   budgetMs?: number;
   now?: () => Date;
+  /** The student's IANA timezone for due, unlock and posting dates; UTC when absent. */
+  timeZone?: string;  /** Only these Canvas file ids are pulled (the picker's choice); unset means every readable file. */
+  fileIds?: ReadonlySet<string>;
 }
 
 async function orcaCourseFor(db: OrcaSupabase, ownerId: string, course: CanvasCourse, linked: Map<string, string>): Promise<{ id: string; slug: string; name: string; created: boolean }> {
@@ -183,11 +218,11 @@ async function orcaCourseFor(db: OrcaSupabase, ownerId: string, course: CanvasCo
   return { id, slug, name, created: true };
 }
 
-async function importAssignments(db: OrcaSupabase, ownerId: string, courseId: string, assignments: CanvasAssignment[], linked: Map<string, string>): Promise<{ exams: number; events: number }> {
+async function importAssignments(db: OrcaSupabase, ownerId: string, courseId: string, assignments: CanvasAssignment[], linked: Map<string, string>, timeZone?: string): Promise<{ exams: number; events: number }> {
   let exams = 0;
   let events = 0;
   for (const a of assignments) {
-    const date = dayOf(a.due_at);
+    const date = dayOf(a.due_at, timeZone);
     if (!date || linked.has(`assignment:${a.id}`)) continue;
     const title = sanitize(a.name, 120).text.trim().slice(0, 120) || "Assignment";
     const kind = classifyAssignment(title);
@@ -284,23 +319,34 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
     optional(client.getAll<CanvasModule>(`/courses/${course.id}/modules`, { "include[]": ["items"] })),
     optional(client.getAll<CanvasFile>(`/courses/${course.id}/files`)),
   ]);
-  const dates = await importAssignments(db, ownerId, orca.id, assignments, linked);
+  const dates = await importAssignments(db, ownerId, orca.id, assignments, linked, options.timeZone);
   const syllabus = await importSyllabus(db, ownerId, orca.id, course, linked);
 
-  const picks = pickFiles(modules, files).filter((p) => !linked.has(`file:${p.id}`));
+  const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`) && (!options.fileIds || options.fileIds.has(String(p.id))));
   // Posted all at once, nothing says how far the class has got: the files wait until the student says (the plan's
   // assumption 1, corrected by the owner). Posted over the weeks, each file was posted as the class reached it,
   // except one whose module opens in the future.
   const dump = postedAtOnce(picks);
-  const today = dayOf(now().toISOString())!;
-  const counts: ImportSummary["files"] = { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, total: picks.length, items: [], askCoverage: dump };
+  const today = dayOf(now().toISOString(), options.timeZone)!;
+  const counts: ImportSummary["files"] = { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, skippedNames: [], total: picks.length, items: [], askCoverage: dump };
   for (const pick of picks) {
     if (now().getTime() - startedAt > budgetMs) {
       counts.remaining++;
       continue;
     }
     const upcoming = dump || (pick.assigned !== null && pick.assigned > today);
-    const { result, materialId } = await importFile(db, ownerId, orca.id, client, pick, upcoming);
+    let outcome: { result: FileResult; materialId: string | null };
+    try {
+      outcome = await importFile(db, ownerId, orca.id, client, pick, upcoming);
+    } catch (e) {
+      // One file's trouble (a download timeout, a Storage error) shouldn't lose the round: it's
+      // named as skipped and left unlinked, so the next import tries it again (2026-11-08).
+      if (e instanceof CanvasError && e.status === 401) throw e;
+      counts.skipped++;
+      counts.skippedNames.push(pick.name);
+      continue;
+    }
+    const { result, materialId } = outcome;
     if (result === "added") counts.added++;
     else if (result === "duplicate") counts.duplicates++;
     else if (result === "failed") counts.failed++;

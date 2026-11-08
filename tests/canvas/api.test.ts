@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { type CanvasFile, type CanvasModule, classifyAssignment, dayOf, htmlToText, materialTypeFor, parseNextLink, pickFiles, postedAtOnce } from "../../src/lib/canvas/api.ts";
+import { type CanvasFile, type CanvasModule, classifyAssignment, dayOf, htmlToText, materialTypeFor, parseNextLink, pickFiles, postedAtOnce, sequenceNumber } from "../../src/lib/canvas/api.ts";
 
 test("assignments are exams, labs or homework by name", () => {
   assert.equal(classifyAssignment("Midterm Exam"), "exam");
@@ -20,6 +20,14 @@ test("material types come from the file's name and its module's", () => {
   assert.equal(materialTypeFor("practice_midterm.pdf"), "Practice exam");
   assert.equal(materialTypeFor("hw2_solutions.pdf"), "Practice problems");
   assert.equal(materialTypeFor("notes.pdf", "Midterm review"), "Past exam", "the module's name counts too");
+});
+
+test("dayOf takes the student's day when given a zone: an 11:59 PM Eastern deadline stays on its day", () => {
+  assert.equal(dayOf("2026-11-08T04:59:00Z", "America/New_York"), "2026-11-07");
+  assert.equal(dayOf("2026-11-08T04:59:00Z", "Asia/Tokyo"), "2026-11-08");
+  assert.equal(dayOf("2026-11-08T04:59:00Z", "Not/AZone"), "2026-11-08", "an unknown zone falls back to UTC");
+  const picked = pickFiles([{ id: 1, name: "W1", unlock_at: "2026-09-08T03:30:00Z", items: [{ id: 1, type: "File", title: "a.pdf", content_id: 91 }] }], [], "America/New_York");
+  assert.equal(picked[0].assigned, "2026-09-07");
 });
 
 test("dayOf takes the UTC day and refuses junk", () => {
@@ -68,4 +76,13 @@ test("files posted all at once (three or more within three days) are a dump; fil
   assert.equal(postedAtOnce(dump.slice(0, 2)), false, "two files say nothing");
   const unknown = pickFiles([{ id: 1, name: "W1", items: [{ id: 1, type: "File", title: "a.pdf", content_id: 91 }, { id: 2, type: "File", title: "b.pdf", content_id: 92 }, { id: 3, type: "File", title: "c.pdf", content_id: 93 }] }], []);
   assert.equal(postedAtOnce(unknown), false, "no dates, no claim");
+});
+
+test("loose files go by the number in their name, then by posting date; unnumbered ones after, by date", () => {
+  for (const [name, n] of [["L03_Counters.pdf", 3], ["Lecture 12 - FSMs.pdf", 12], ["lec07.pptx", 7], ["Week 2 slides.pdf", 2], ["03-karnaugh.pdf", 3], ["Ch5_Memory.pdf", 5], ["Syllabus.pdf", null], ["HW3_solutions.pdf", null], ["ELEN3331_midterm.pdf", null], ["L1.pdf", 1]] as const) {
+    assert.equal(sequenceNumber(name), n, name);
+  }
+  // Posted out of order: L05 first, L04 a week later, a re-posted L01 last; the syllabus has no number.
+  const picked = pickFiles([], [file(5, "L05.pdf", { created_at: "2026-09-01T12:00:00Z" }), file(4, "L04.pdf", { created_at: "2026-09-08T12:00:00Z" }), file(1, "Syllabus.pdf", { created_at: "2026-08-20T12:00:00Z" }), file(9, "L01.pdf", { created_at: "2026-09-15T12:00:00Z" })]);
+  assert.deepEqual(picked.map((p) => p.name), ["L01.pdf", "L04.pdf", "L05.pdf", "Syllabus.pdf"]);
 });

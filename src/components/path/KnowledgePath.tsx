@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import type { Course, Topic } from "@/lib/data";
@@ -34,10 +35,12 @@ function statusLine(p: TopicProgress) {
  * trail, laid out again in their order; "Show all N topics" brings back the whole course on its
  * stored layout. With no weak spots anywhere, the trail says so and offers the same.
  */
-export function KnowledgePath({ course, progress, onStart }: {
+export function KnowledgePath({ course, progress, onStart, warmUp }: {
   course: Course;
   progress: ReadonlyMap<string, TopicProgress>;
   onStart: (topic: Topic) => void;
+  /** Nothing flagged yet, but questions to try: START on that topic (owner, 2026-11-08). */
+  warmUp?: { topicName: string; href: string; questions: number } | null;
 }) {
   const progressOf = (t: Topic) => {
     const p = progress.get(t.id);
@@ -90,7 +93,16 @@ export function KnowledgePath({ course, progress, onStart }: {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] px-[80px] text-center" data-part="path-no-weak-spots">
         <p className="text-[22px] font-bold text-prussian">No weak spots flagged yet.</p>
-        <p className="max-w-[460px] text-[16px] text-wisteria-deep">Topics show up here once something is flagged as hard: tap the slides that were hard on the Uploads tab, or show all topics and pick one.</p>
+        {warmUp ? (
+          <>
+            <p className="max-w-[460px] text-[16px] text-wisteria-deep">Start with {warmUp.topicName}: a few questions find what to work on. A miss becomes a weak spot.</p>
+            <Link href={warmUp.href} data-part="warmup-start" className="pressable inline-flex items-center rounded-[20px] bg-wisteria px-5 py-3 text-[17px] font-bold text-parchment lip-5 lip-wisteria">
+              Try {warmUp.questions} {warmUp.questions === 1 ? "question" : "questions"}
+            </Link>
+          </>
+        ) : (
+          <p className="max-w-[460px] text-[16px] text-wisteria-deep">Topics show up here once something is flagged as hard: tap the slides that were hard on the Uploads tab, or show all topics and pick one.</p>
+        )}
         {toggle}
       </div>
     );

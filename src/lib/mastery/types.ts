@@ -28,6 +28,8 @@ export interface AnswerEvent {
   source: EvidenceSource;
   /** One quiz run. A review check missed in a session can only be passed in a later session. */
   sessionId: string;
+  /** The student's own words, when they came through the connector (stored for audit; never read by the fold). */
+  response?: string;
 }
 
 /** Where a struggle flag came from (`evidence_events.flag_source`). */

@@ -52,7 +52,9 @@ migrations in `supabase/migrations/` are the source of truth.
 3. **For the agent or CI to deploy tasks**: a personal access token (account → Personal Access
    Tokens, `tr_pat_…`).
 4. **Environment variables for the tasks** (project → Environment Variables, for Prod and Dev):
-   the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER` if set),
+   the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER`, `ORCA_MODEL`,
+   `ORCA_READ_MODEL` and `ORCA_GRADE_MODEL` if set), `ORCA_JOBS=trigger` (a finishing job starts the
+   student's next one through the same code the site uses, which refuses to run without it),
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
    (the names `src/lib/supabase/env.ts` reads), and `ORCA_DAILY_BUDGET_USD` (the jobs check it).
    Tasks run on Trigger.dev's machines, so they need their own copies.
@@ -106,24 +108,22 @@ work):
 | `ORCA_JOBS` | `trigger` (or `inline` until Trigger.dev is set up: jobs then run inside the request, fine for short decks) | |
 | `TRIGGER_SECRET_KEY` | `tr_prod_…` | mark sensitive |
 | `SITE_URL` | the production address | emailed links come back to it; production refuses to send links without it |
+| `ORCA_READ_MODEL` | `gpt-6-luna` | optional (2026-11-08): the steps that read and match material run on this cheaper model of the same provider; question writing and grading stay on `ORCA_MODEL` / `ORCA_GRADE_MODEL`. Set it on the Trigger.dev project too (§2 step 4), since the jobs run there |
 | `ORCA_DAILY_BUDGET_USD` | e.g. `25` | the service-wide daily ceiling on estimated model spend; unset means none |
 | `CRON_SECRET` | a long random string (`openssl rand -hex 32`) | mark sensitive; turns on the dead-run sweep below |
 
 The full list with explanations is `.env.example`.
 
-**Dead-run sweep (optional, added 2026-10-17).** A run still "running" 40 minutes after its job
-claimed it (an upload's 30-minute limit plus 10) has died, e.g. the server restarted. Pages that
-follow a run already ask the server to mark it failed (`POST /api/runs/check`); this sweep catches
-the ones nobody is looking at. With `CRON_SECRET` set, register the cron in a `vercel.json` at the
-repo root:
-
-```json
-{ "crons": [{ "path": "/api/cron/runs", "schedule": "*/15 * * * *" }] }
-```
-
-Every 15 minutes needs a Pro plan; Hobby allows one run a day (e.g. `"0 9 * * *"`), and Vercel
-refuses a deploy with a more frequent schedule on Hobby, so it isn't committed until the plan is
-known.
+**Dead-run sweep and daily resume (added 2026-10-17; registered 2026-11-07).** A run still
+"running" 40 minutes after its job claimed it (an upload's 30-minute limit plus 10) has died, e.g.
+the server restarted. Pages that follow a run already ask the server to mark it failed
+(`POST /api/runs/check`); this sweep catches the ones nobody is looking at. It also starts every
+student's next queued or waiting job, which is what resumes uploads held by the daily page or token
+limit ("processing resumes tomorrow"): without it they only resume when the student starts another
+job. `vercel.json` registers it at 05:10 UTC daily (just after midnight Eastern, when the limit has
+reset for students there); Hobby allows one run a day and refuses a deploy with a more frequent
+schedule, so move it to `*/15 * * * *` on a Pro plan. **The route answers 503 until `CRON_SECRET`
+is set on Vercel**, so set it (above) or the sweep does nothing.
 
 **Auto-deploy (added 2026-10-25).** `.github/workflows/deploy.yml` deploys every change that
 reaches `main`: once CI on `main` passes, it pushes any new migration to the hosted project and

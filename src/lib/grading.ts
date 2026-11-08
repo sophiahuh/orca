@@ -29,7 +29,7 @@ export const ANSWER_MAX_CHARS = 2000;
 /** How long the grader is asked to keep its feedback (said in the prompt and the reply format); a longer reply is still shown whole. */
 export const FEEDBACK_MAX_CHARS = 300;
 
-/** Lowercase, drop spaces/underscores/commas, unify quote-like primes, strip a trailing period. */
+/** Lowercase, drop spaces/underscores/commas, unify quote-like primes and multiplication signs, strip a trailing period. */
 export function normaliseExact(s: string) {
   return s
     .trim()
@@ -37,8 +37,40 @@ export function normaliseExact(s: string) {
     .replace(/[\s_,]/g, "")
     .replace(/[’′`]/g, "'")
     .replace(/[−–]/g, "-")
-    .replace(/×|·|\*/g, "")
+    .replace(/[×·]/g, "*")
     .replace(/\.$/, "");
+}
+
+/**
+ * A number an exact answer may be written as, when it's written as one: a decimal (".5", "0.5",
+ * "-5.0", "1e3") or a plain fraction ("1/2"). A bare integer is null here, so bit strings ("0101"
+ * and "101") are never equal by value; `gradeExact` reads an integer by value only against one of these.
+ */
+export function numericValue(s: string): number | null {
+  const t = s.trim().replace(/[−–]/g, "-");
+  const fraction = /^([+-]?\d+)\s*\/\s*(\d+)$/.exec(t);
+  if (fraction) return Number(fraction[2]) === 0 ? null : Number(fraction[1]) / Number(fraction[2]);
+  if (!/^[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:e[+-]?\d+)?$/i.test(t) || !/[.e]/i.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+const sameNumber = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
+
+/**
+ * An algebraic or Boolean expression (letters joined by operators: "a + c", "x'y", "A⊕B", "(a+b)c"):
+ * exact matching can't tell equivalent forms apart, so question writing refuses these as exact
+ * answers (owner, 2026-11-08; a rubric or multiple choice instead). A prime counts only on a letter
+ * and not before another ("De Morgan's" is a name); a bare named term or a number is never one.
+ */
+export function isExpressionAnswer(s: string): boolean {
+  const t = s.trim();
+  if (!/[A-Za-z]/.test(t)) return false;
+  if (/[+*/⊕^|&~!×·]/.test(t)) return true;
+  if (/[A-Za-z]['’′](?!s(?![A-Za-z]))/i.test(t)) return true;
+  // Parentheses in an expression, but not function or Big-O notation ("f(x)", "O(n log n)"): one word then one group.
+  if (/\(/.test(t) && /[A-Za-z]\s*\(|\)\s*[A-Za-z(]/.test(t) && !/^[A-Za-z][A-Za-z-]*\s?\([^()]*\)$/.test(t)) return true;
+  return false;
 }
 
 /**
@@ -60,7 +92,13 @@ const HEDGE = /\s+or\s+|\s+\/\s+|\s*;\s*/i;
 export function gradeExact(response: string, accepted: string[]): GradeResult {
   const matches = (s: string) => {
     const r = normaliseResponse(s);
-    return accepted.some((a) => normaliseExact(a) === r || normaliseResponse(a) === r);
+    if (accepted.some((a) => normaliseExact(a) === r || normaliseResponse(a) === r)) return true;
+    // Numbers by value (".5" is "0.5", "1/2" is "0.5", "-5.0" is "-5") once either side is written as one.
+    const bare = s.trim().replace(/[.!]+$/, "").replace(LEAD_IN, "") || s;
+    if (numericValue(bare) === null && !accepted.some((a) => numericValue(a) !== null)) return false;
+    const value = (x: string) => numericValue(x) ?? (/^[+-]?\d+$/.test(x.trim()) ? Number(x.trim()) : null);
+    const given = value(bare);
+    return given !== null && accepted.some((a) => value(a) !== null && sameNumber(value(a)!, given));
   };
   if (matches(response)) return { outcome: "correct", feedback: "Right." };
   // A hedge that includes the right answer is partly right (owner, 2026-10-25), never full marks.

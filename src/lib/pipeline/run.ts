@@ -5,6 +5,7 @@
  */
 import type { FlaggedQuestion, Material, MaterialPages, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic, TopicPlace } from "../data.ts";
 import { type Named, exactMatch, shortlist } from "../course/match.ts";
+import { isExpressionAnswer } from "../grading.ts";
 import { locatorPages } from "../course/study.ts";
 import { type PageRange, addRanges, describePlaces } from "../course/places.ts";
 import { pagesFor } from "./topup.ts";
@@ -17,6 +18,8 @@ import { struggledItemOk } from "./marked.ts";
 import type { OrcaNotes } from "./notes.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
+import { courseObjectiveWeights } from "../course/weights.ts";
+import { WARM_UP_WRITES } from "../mastery/warmup.ts";
 import { DEEP_TEXT, type GeneratedQuestion, type MapOutput, type ObjectivesOutput, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
 
 export type CallStep = <S extends StepName>(step: S, input: StepInput<S>) => Promise<StepOutput<S>>;
@@ -160,6 +163,8 @@ function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | nu
   if (q.kind === "Short answer" && !(q.exact && q.exact.length) && !q.rubric) return "short answer with neither an exact answer nor a rubric";
   // Exact answers are compared with what the student types, so they stay plain text.
   if (q.exact?.some((e) => /\\[(\[]/.test(e))) return "an exact answer is written as LaTeX";
+  // Exact matching can't tell "a+c" from "c+a" (owner, 2026-11-08): an expression needs a rubric or choices.
+  if (q.kind === "Short answer" && q.exact?.some(isExpressionAnswer)) return "an algebraic or Boolean expression as an exact answer (give a rubric or make it multiple choice)";
   if (!inferred && !q.anchor) return "no source anchor";
   return null;
 }
@@ -538,6 +543,27 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     group.targets.push({ objective: o, existing: liveQuestions(o.id), need });
     for (const p of pages) group.pages.add(p.n);
     byTopic.set(o.topicId, group);
+  }
+  /* Warm-up (owner, 2026-11-08): the course's first upload the class has reached also gets one
+     ordinary question for its heaviest objectives, so the student has something to try before
+     anything is flagged. Later uploads don't: by then flags, dives and the warm-up's misses do the writing. */
+  if (Object.values(input.bank).flat().length === 0 && !input.material.upcoming) {
+    const live = { ...input.objectives, ...Object.fromEntries(newObjectives.map((o) => [o.id, o])) };
+    const weights = courseObjectiveWeights(live, allTopics(), [...input.relations, ...relations]);
+    const targeted = new Set([...byTopic.values()].flatMap((g) => g.targets.map((t) => t.objective.id)));
+    const heaviest = [...new Set([...newObjectives.map((o) => o.id), ...Object.keys(objectiveUpdates)])]
+      .map((id) => objectiveById.get(id))
+      .filter((o): o is Objective => !!o && o.review !== "archived" && !targeted.has(o.id) && liveQuestions(o.id).length === 0)
+      .sort((a, b) => (weights.get(b.id) ?? 0) - (weights.get(a.id) ?? 0))
+      .slice(0, WARM_UP_WRITES);
+    for (const o of heaviest) {
+      const pages = pagesFor(o, topicsNow.get(o.topicId), input.material, input.pages);
+      if (!pages) continue;
+      const group = byTopic.get(o.topicId) ?? { targets: [], pages: new Set<number>() };
+      group.targets.push({ objective: o, existing: [], need: 1 });
+      for (const p of pages) group.pages.add(p.n);
+      byTopic.set(o.topicId, group);
+    }
   }
   const questions: UploadPlan["questions"] = {};
   const written = await pool([...byTopic.values()], 2, ({ targets, pages }) =>

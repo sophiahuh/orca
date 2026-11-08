@@ -101,10 +101,31 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
   );
 
   if (run.status === "waiting") {
+    // Held by the daily limit: it resumes by itself, but the student can stop it or remove the file
+    // meanwhile (2026-11-08; before, a waiting card offered nothing).
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-waiting")} data-status={run.status} role="status">
         {head}
         <span className="text-[14px] font-semibold text-wisteria-deep">{progressMessage(run.progress)} Nothing to do: Orca builds the topics and questions when the limit resets, and they appear here.</span>
+        <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep">
+          {confirming === "stop" ? (
+            <>
+              <span className="text-prussian">Stop waiting? The file stays, so uploading it again retries.</span>
+              <button type="button" onClick={() => void act("stop")} className="font-bold text-bad-text underline underline-offset-2" data-part="stop-confirm">
+                Stop
+              </button>
+              <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
+                Keep waiting
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => setConfirming("stop")} className="font-bold text-prussian underline underline-offset-2" data-part="stop-upload">
+              Stop
+            </button>
+          )}
+        </span>
+        {removeOffer}
+        {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
   }

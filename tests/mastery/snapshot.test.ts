@@ -91,6 +91,9 @@ const RULES_HASHES: Record<number, string> = {
   1: "eb9aeb80f48d781505b46862b41eeb1176b1e06e54dc833f4c95263d0503a2e0",
   // Weak points first: rotationSince, and the fold's inRotation / checkOpen.
   2: "e56f02e25b111dcfa67d7ae205524e4ea8dd16e66736fc0efb7aa1aa68c4c60c",
+  // 2026-11-08 (owner): retryCredit; verified needs an unaided correct (verifiedUnaided); a struggled
+  // flag rates the card Again; a graded partial ends a run of misses; credited / attemptDays.
+  3: "b9fd01a6527e54fd458ff86201e1dc9c17413d38ca529e3115618b1b7229683d",
 };
 
 /**
@@ -138,12 +141,29 @@ const GOLDEN_V1: Golden = {
   },
 };
 
+const GOLDEN_V2: Golden = {
+  beforeConfusion: { ...GOLDEN_V1.beforeConfusion, inRotation: true, checkOpen: false },
+  end: { ...GOLDEN_V1.end, inRotation: true, checkOpen: false },
+};
 const GOLDEN: Record<number, Golden> = {
   1: GOLDEN_V1,
   // The same history, unchanged except for the new fields: it opens with misses, so it is in rotation throughout.
-  2: {
-    beforeConfusion: { ...GOLDEN_V1.beforeConfusion, inRotation: true, checkOpen: false },
-    end: { ...GOLDEN_V1.end, inRotation: true, checkOpen: false },
+  2: GOLDEN_V2,
+  // Version 3: the confusion event rates the card Again (the end card changes); the new fields are filled.
+  3: {
+    beforeConfusion: {
+      ...GOLDEN_V2.beforeConfusion,
+      credited: ["q3", "q4", "q5", "q6"],
+      attemptDays: { q1: "2026-10-01", q2: "2026-10-01", q3: "2026-10-01", q4: "2026-10-01", q5: "2026-10-02", q6: "2026-10-02" },
+      verifiedUnaided: true,
+    },
+    end: {
+      ...GOLDEN_V2.end,
+      credited: ["q9"],
+      attemptDays: { q9: "2026-10-31" },
+      card: { due: "2026-11-03T12:00:00.000Z", stability: 0.96406739, difficulty: 9.88922187, elapsed_days: 1, scheduled_days: 3, learning_steps: 0, reps: 15, lapses: 3, state: 2, last_review: "2026-10-31T12:00:00.000Z" },
+      verifiedUnaided: true,
+    },
   },
 };
 
@@ -217,7 +237,7 @@ test("a partly right answer that completes the bar on an unflagged objective lea
   assert.equal(stateAt("o", acc, new Date(Date.parse(nov(21, 13)) + 60_000)).status, "fading");
 });
 
-const GOLDEN_FLAGS: Record<number, { beforeStruggled: ObjectiveAccumulator; end: ObjectiveAccumulator }> = {
+const GOLDEN_FLAGS: Record<number, { beforeStruggled: Partial<ObjectiveAccumulator>; end: Partial<ObjectiveAccumulator> }> = {
   2: {
     beforeStruggled: {
       answered: 5,
@@ -259,6 +279,16 @@ const GOLDEN_FLAGS: Record<number, { beforeStruggled: ObjectiveAccumulator; end:
       inRotation: true,
       checkOpen: false,
     },
+  },
+};
+GOLDEN_FLAGS[3] = {
+  beforeStruggled: { ...GOLDEN_FLAGS[2].beforeStruggled, credited: ["q1", "q2", "q3"], attemptDays: { q1: "2027-11-12", q2: "2027-11-12", q3: "2027-11-13" }, verifiedUnaided: true },
+  end: {
+    ...GOLDEN_FLAGS[2].end,
+    credited: [],
+    attemptDays: {},
+    card: { due: "2027-11-18T12:00:00.000Z", stability: 1.41360246, difficulty: 8.2543958, elapsed_days: 2, scheduled_days: 1, learning_steps: 0, reps: 6, lapses: 1, state: 2, last_review: "2027-11-17T12:00:00.000Z" },
+    verifiedUnaided: true,
   },
 };
 

@@ -128,6 +128,7 @@ export type MaterialType =
   | "Lecture"
   | "Handwritten notes"
   | "Typed notes"
+  | "AI chat"
   | "Other";
 
 export interface Material {
@@ -402,7 +403,7 @@ export const DEFAULT_CONFIG: ReviewConfig = {
   exam: { duration: "10 hours", cadence: "1 wk before exam" },
 };
 
-export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Typed notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "Other"];
+export const MATERIAL_TYPES: readonly MaterialType[] = ["Lecture", "Handwritten notes", "Typed notes", "Syllabus", "Homework", "Past exam", "Practice exam", "Practice problems", "AI chat", "Other"];
 
 /** What the upload page shows for a type, where it differs from the stored value. */
 export const MATERIAL_TYPE_LABELS: Partial<Record<MaterialType, string>> = { Lecture: "Lecture content" };

@@ -56,12 +56,16 @@ export function CanvasConnectionCard() {
     }
   };
 
+  // Disconnect asks first: the owner hit it by accident while testing (2026-11-07), and reconnecting
+  // needs a new token from Canvas, since the old one is never shown again.
+  const [confirming, setConfirming] = useState(false);
   const disconnect = async () => {
     setBusy(true);
     setProblem(null);
     try {
       const res = await fetch("/api/canvas", { method: "DELETE" });
       if (!res.ok) return setProblem("Couldn't disconnect.");
+      setConfirming(false);
       setStatus({ connected: false, baseUrl: null, canvasUser: null, lastUsedAt: null });
     } finally {
       setBusy(false);
@@ -83,10 +87,23 @@ export function CanvasConnectionCard() {
             <Link href="/import/canvas" className="pressable inline-flex items-center rounded-[20px] bg-wisteria px-5 py-3 text-[15px] font-bold text-parchment lip-5 lip-wisteria" data-part="canvas-import-link">
               Import a course
             </Link>
-            <Button size="sm" variant="danger" onClick={() => void disconnect()} disabled={busy} data-part="canvas-disconnect">
-              Disconnect
-            </Button>
+            {!confirming && (
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={busy} data-part="canvas-disconnect">
+                Disconnect
+              </Button>
+            )}
           </div>
+          {confirming && (
+            <div className="flex flex-wrap items-center gap-[10px] rounded-[14px] border-2 border-alice-deep bg-alice px-[14px] py-[10px]" data-part="canvas-disconnect-confirm">
+              <span className="text-[13px] font-semibold text-prussian">Disconnect Canvas? Reconnecting needs a new access token from Canvas.</span>
+              <Button size="sm" variant="danger" onClick={() => void disconnect()} disabled={busy} data-part="canvas-disconnect-yes">
+                Yes, disconnect
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy} data-part="canvas-disconnect-cancel">
+                Keep it
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <form
