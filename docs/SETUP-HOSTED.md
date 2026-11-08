@@ -52,7 +52,9 @@ migrations in `supabase/migrations/` are the source of truth.
 3. **For the agent or CI to deploy tasks**: a personal access token (account → Personal Access
    Tokens, `tr_pat_…`).
 4. **Environment variables for the tasks** (project → Environment Variables, for Prod and Dev):
-   the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER` if set),
+   the model key (`OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, plus `ORCA_MODEL_PROVIDER`, `ORCA_MODEL`,
+   `ORCA_READ_MODEL` and `ORCA_GRADE_MODEL` if set), `ORCA_JOBS=trigger` (a finishing job starts the
+   student's next one through the same code the site uses, which refuses to run without it),
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
    (the names `src/lib/supabase/env.ts` reads), and `ORCA_DAILY_BUDGET_USD` (the jobs check it).
    Tasks run on Trigger.dev's machines, so they need their own copies.
@@ -106,6 +108,7 @@ work):
 | `ORCA_JOBS` | `trigger` (or `inline` until Trigger.dev is set up: jobs then run inside the request, fine for short decks) | |
 | `TRIGGER_SECRET_KEY` | `tr_prod_…` | mark sensitive |
 | `SITE_URL` | the production address | emailed links come back to it; production refuses to send links without it |
+| `ORCA_READ_MODEL` | `gpt-6-luna` | optional (2026-11-08): the steps that read and match material run on this cheaper model of the same provider; question writing and grading stay on `ORCA_MODEL` / `ORCA_GRADE_MODEL`. Set it on the Trigger.dev project too (§2 step 4), since the jobs run there |
 | `ORCA_DAILY_BUDGET_USD` | e.g. `25` | the service-wide daily ceiling on estimated model spend; unset means none |
 | `CRON_SECRET` | a long random string (`openssl rand -hex 32`) | mark sensitive; turns on the dead-run sweep below |
 

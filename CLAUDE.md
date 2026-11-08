@@ -346,7 +346,10 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 - The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
   (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
   `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
-  must be priced. OpenAI goes through its Responses API in the same `completeJson` (strict schema
+  must be priced. `ORCA_READ_MODEL` (2026-11-08, owner: the small model reads, the strong one
+  writes) runs the reading steps (`READ_STEPS`: map, objectives, reconcile, link, transcribe,
+  describe, reflect) on a cheaper model of the same provider; generate and deep stay on
+  `ORCA_MODEL`, grading on `ORCA_GRADE_MODEL`. Jobs run on Trigger.dev, so the variable goes there too. OpenAI goes through its Responses API in the same `completeJson` (strict schema
   from `src/lib/openai-schema.ts`, explicit caching of the material, same bounds and metering).
 - Model calls, on either provider, go through `completeJson` (`src/lib/llm-server.ts`:
   10-minute timeout, at most 2 retries of transient failures, spend-limit answers never retried,

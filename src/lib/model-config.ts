@@ -63,6 +63,34 @@ export function resolveServerModel(env: Env): ServerModel | null {
 }
 
 /**
+ * The steps that read and match material, as opposed to writing questions: map, objectives,
+ * reconcile, link, transcribe, describe and reflect. `ORCA_READ_MODEL` runs them on a cheaper
+ * model of the same provider (owner, 2026-11-08: the small model reads, the strong one writes
+ * questions and grades); unset, they use `ORCA_MODEL`. Writing (generate, deep) always uses `ORCA_MODEL`.
+ */
+export const READ_STEPS: ReadonlySet<string> = new Set(["map", "objectives", "reconcile", "link", "transcribe", "describe", "reflect"]);
+
+function sameProviderModel(m: ServerModel, name: string, varName: string): ServerModel {
+  const model = name.trim();
+  if (model.startsWith("claude-") !== (m.provider === "anthropic")) throw new ModelConfigError(`${varName} "${model}" isn't an ${SERVER_PROVIDERS[m.provider].label} model, but the provider is ${m.provider}.`);
+  if (!priceOf(model)) throw new ModelConfigError(`${varName} "${model}" has no price in src/lib/pricing.ts; Orca won't call a model it can't meter.`);
+  return { ...m, model };
+}
+
+/** The model that reads material (`READ_STEPS`): `ORCA_READ_MODEL`, else the server's model. Null without a key. */
+export function resolveReadModel(env: Env): ServerModel | null {
+  const m = resolveServerModel(env);
+  if (!m) return null;
+  const name = env.ORCA_READ_MODEL?.trim();
+  return name ? sameProviderModel(m, name, "ORCA_READ_MODEL") : m;
+}
+
+/** The model a pipeline step runs on: the read model for `READ_STEPS`, else the server's model. */
+export function resolveStepModel(env: Env, step: string): ServerModel | null {
+  return READ_STEPS.has(step) ? resolveReadModel(env) : resolveServerModel(env);
+}
+
+/**
  * The model that grades prose answers: the server's model unless `ORCA_GRADE_MODEL` names another
  * (e.g. a faster one; owner kept the main model for grading, 2026-10-20). It must be the provider's
  * own model and priced, like `ORCA_MODEL`. Null when no key is set; throws `ModelConfigError` for a bad setting.
@@ -70,10 +98,8 @@ export function resolveServerModel(env: Env): ServerModel | null {
 export function resolveGradeModel(env: Env): ServerModel | null {
   const m = resolveServerModel(env);
   if (!m) return null;
-  const model = env.ORCA_GRADE_MODEL?.trim() || m.model;
-  if (model.startsWith("claude-") !== (m.provider === "anthropic")) throw new ModelConfigError(`ORCA_GRADE_MODEL "${model}" isn't an ${SERVER_PROVIDERS[m.provider].label} model, but the provider is ${m.provider}.`);
-  if (!priceOf(model)) throw new ModelConfigError(`ORCA_GRADE_MODEL "${model}" has no price in src/lib/pricing.ts; Orca won't call a model it can't meter.`);
-  return { ...m, model };
+  const name = env.ORCA_GRADE_MODEL?.trim();
+  return name ? sameProviderModel(m, name, "ORCA_GRADE_MODEL") : m;
 }
 
 /** Whether `m`'s calls go to this machine (the tests' fake API) rather than the provider. */

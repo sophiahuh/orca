@@ -13,7 +13,7 @@
 import type { z } from "zod";
 import type { LlmConfig } from "@/lib/llm";
 import { LlmError, completeJson } from "@/lib/llm-server";
-import { SERVER_PROVIDERS, callsAreLocal, resolveGradeModel, resolveServerModel } from "@/lib/model-config";
+import { SERVER_PROVIDERS, callsAreLocal, resolveGradeModel, resolveServerModel, resolveStepModel } from "@/lib/model-config";
 import { STEP_BUDGET } from "@/lib/pipeline/budget";
 import { parseLooseJson } from "@/lib/pipeline/parse";
 import { buildPrompt } from "@/lib/pipeline/prompts";
@@ -105,8 +105,12 @@ export class BudgetError extends Error {
  * refused with a 429 StepError when the student's or Orca's daily budget is spent. Null without a key.
  */
 export function stepCaller(ctx: ModelCtx, options: StepCallerOptions = {}): CallStep | null {
-  const config = orcaConfig();
-  if (!config) return null;
+  if (!orcaConfig()) return null;
+  // Reading steps may run on a cheaper model (ORCA_READ_MODEL); writing steps on ORCA_MODEL.
+  const configFor = (step: StepName): LlmConfig => {
+    const m = resolveStepModel(process.env, step)!;
+    return { provider: m.provider, model: m.model, apiKey: m.apiKey, ...(m.baseUrl ? { baseUrl: m.baseUrl } : {}) };
+  };
   const guard = options.guard ?? "each-call";
   return (async (step: StepName, input: unknown) => {
     const spec = STEPS[step];
@@ -120,8 +124,9 @@ export function stepCaller(ctx: ModelCtx, options: StepCallerOptions = {}): Call
       const verdict = await checkBudget(db, ctx.ownerId, 0);
       if (!verdict.ok) throw new StepError(step, verdict.message, 429);
     }
+    const config = configFor(step);
     try {
-      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ...(built.images ? { images: built.images } : {}), ctx, onUsage: meter(ctx, db) });
+      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ...(built.images ? { images: built.images } : {}), ctx, onUsage: meter(ctx, db, config.model) });
     } catch (error) {
       if (error instanceof LlmError) throw new StepError(step, error.message, error.status);
       throw new StepError(step, `The ${step} step failed: ${error instanceof Error ? error.message : String(error)}`, 502);
