@@ -279,8 +279,10 @@ function DeepReview({ course, onAgain, topicId, startMinutes, scope }: { course:
   if (items) {
     return <QuizRunner course={course} items={items} mode="deep" title={topicName ?? course.name} backHref={backHref} again={{ label: "Dive in again", onStart: onAgain }} progressKind="deep" />;
   }
-  const writing = phase.kind === "starting" || (!!followedRunId && (!run || !isFinished(run) || (run.status === "done" && !items)));
-  const error = phase.kind === "error" ? phase.message : run?.status === "failed" ? run.error ?? "Orca couldn't prepare your dive in." : null;
+  // A dive held by the day's limit is `waiting`: say so instead of spinning until the limit resets (owner, 2026-11-07).
+  const held = run?.status === "waiting" ? `${typeof run.progress?.message === "string" ? run.progress.message : "Daily limit reached: processing resumes tomorrow."} Your dive starts by itself then; come back to it from this topic.` : null;
+  const writing = !held && (phase.kind === "starting" || (!!followedRunId && (!run || !isFinished(run) || (run.status === "done" && !items))));
+  const error = phase.kind === "error" ? phase.message : run?.status === "failed" ? run.error ?? "Orca couldn't prepare your dive in." : held;
   // Once it's on its way (a topic dive from the start, a course dive after Start), only a loading
   // screen until the questions are ready, then the quiz. A topic dive's failure is shown there too.
   if (writing || (autostart && error)) {
