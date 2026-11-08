@@ -105,6 +105,9 @@ export function HardSlides({ course, material, open, onClose }: { course: Course
     return info;
   }, [pages.count, material.id, catalogue, course.topics, mastery]);
 
+  /** Every page a tap can flag; "Select all" picks these (owner, 2026-11-08). */
+  const tappable = useMemo(() => [...pageInfo].filter(([, info]) => !info.why).map(([n]) => n), [pageInfo]);
+  const allSelected = tappable.length > 0 && tappable.every((n) => selected.includes(n));
   const toggle = (n: number) => setSelected((s) => (s.includes(n) ? s.filter((x) => x !== n) : [...s, n].sort((a, b) => a - b)));
   const flag = () => {
     flagSlides(course.id, material.id, selected.map((page) => ({ page, objectiveIds: pageInfo.get(page)?.ids ?? [] })));
@@ -186,7 +189,10 @@ export function HardSlides({ course, material, open, onClose }: { course: Course
                 })}
               </div>
             </div>
-            <div className="flex items-center justify-end gap-[12px]">
+            <div className="flex items-center justify-between gap-[12px]">
+              <Button size="sm" variant="ghost" onClick={() => setSelected(allSelected ? [] : tappable)} disabled={tappable.length === 0} data-part="select-all-slides">
+                {allSelected ? "Clear" : "Select all"}
+              </Button>
               <Button size="sm" onClick={flag} disabled={selected.length === 0} data-part="flag-slides">
                 {selected.length === 0 ? "Flag slides" : `Flag ${selected.length} slide${selected.length === 1 ? "" : "s"}`}
               </Button>

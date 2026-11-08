@@ -157,9 +157,48 @@ test("a queued upload can be paused from the Uploads tab: it sits out while the 
   expect((await runStatus(fifth.generation.runId!)).status).toBe("done");
 });
 
-test("a running upload can be stopped from the Uploads tab: it fails with the stopped message, the queue moves on, and the job can't revive it", async ({ page, student }) => {
+test("a queued or paused upload can be deleted from the Uploads tab: it leaves the queue, never runs, and its material is soft-deleted", async ({ page, student }) => {
   test.setTimeout(120_000);
   await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 4000 });
+  const courseId = await newCourse(student);
+  const first = await sendDeck(page, student, courseId, "first.pdf", "Absorption");
+  const second = await sendDeck(page, student, courseId, "second.pdf", "Consensus");
+  const third = await sendDeck(page, student, courseId, "third.pdf", "Distribution");
+  expect([first.generation.state, second.generation.state, third.generation.state]).toEqual(["started", "queued", "queued"]);
+
+  const course = (await student.db.from("courses").select("slug").eq("id", courseId).single()).data!;
+  await page.goto(`/course/${course.slug}/review?tab=uploads`);
+  const card = (name: string) => page.locator("[data-part=upload-card]").filter({ hasText: name });
+  await card("third.pdf").locator("[data-part=pause-upload]").click();
+  await expect(card("third.pdf")).toHaveAttribute("data-status", "paused");
+  for (const name of ["second.pdf", "third.pdf"]) {
+    await card(name).locator("[data-part=remove-material]").click();
+    await card(name).locator("[data-part=remove-confirm]").click();
+    await expect(card(name)).toHaveCount(0);
+  }
+
+  // Both runs are failed (out of the queue), their material rows stay, marked removed, without file or hash.
+  for (const r of [second, third]) {
+    const { data: run } = await admin().from("pipeline_runs").select("status, error").eq("id", r.generation.runId!).single();
+    expect(run).toEqual({ status: "failed", error: "Removed by you." });
+  }
+  const { data: materials } = await admin().from("materials").select("filename, status, storage_path, content_hash").eq("owner_id", student.id).order("filename");
+  expect(materials!.filter((m) => m.filename !== "first.pdf")).toEqual([
+    { filename: "second.pdf", status: "removed", storage_path: null, content_hash: null },
+    { filename: "third.pdf", status: "removed", storage_path: null, content_hash: null },
+  ]);
+
+  // The first finishes and nothing runs after it: no model call was ever made for the deleted ones.
+  await expect.poll(async () => (await runStatus(first.generation.runId!)).status, { timeout: 60_000 }).toBe("done");
+  const { data: usage } = await admin().from("model_usage").select("run_id").eq("owner_id", student.id);
+  expect(new Set(usage!.map((u) => u.run_id))).toEqual(new Set([first.generation.runId]));
+  const { data: runs } = await admin().from("pipeline_runs").select("status").eq("owner_id", student.id).order("at");
+  expect(runs!.map((r) => r.status)).toEqual(["done", "failed", "failed"]);
+});
+
+test("a running upload can be stopped from the Uploads tab: it fails with the stopped message, the queue moves on, and the job can't revive it", async ({ page, student }) => {
+  test.setTimeout(120_000);
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 1, delayMs: 6000 });
   const courseId = await newCourse(student);
   const first = await sendDeck(page, student, courseId, "first.pdf", "Absorption");
   const second = await sendDeck(page, student, courseId, "second.pdf", "Consensus");
