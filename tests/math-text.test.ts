@@ -33,8 +33,6 @@ test("KaTeX runs untrusted: links and raw HTML commands don't render", () => {
   assert.doesNotMatch(renderMath("\\href{https://evil.example}{x}", false), /<a |href=/);
 });
 
-test("the output validator refuses math that doesn't render", () => {
-  const bad = validateText("What is \\(\\frac{1}{\\)?", {});
-  assert.equal(bad.ok, false);
-  assert.ok(validateText("What is \\(\\frac{1}{2}\\)?", {}).ok);
+test("the shared output validator leaves math alone (extraction text like a regex's \\( is kept)", () => {
+  assert.ok(validateText("The regex \\( matches a literal parenthesis", {}).ok);
 });

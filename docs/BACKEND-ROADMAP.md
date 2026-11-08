@@ -472,7 +472,7 @@ plans: `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`,
 Math in questions (Amanda, 2026-11-08): the writing steps put math in LaTeX between `\( \)` or
 `\[ \]` (`QUIZ_RUBRIC`); exact answers stay plain text, since they're compared with what the
 student types. The quiz draws it with KaTeX (`src/components/ui/MathText.tsx`, prompt, options,
-solution, key and result banner); the output validator refuses math that doesn't parse or uses a
+solution, key and result banner); question validation refuses math in what a question shows (not extraction text or source excerpts) that doesn't parse or uses a
 command KaTeX would have to trust (`\href`, `\htmlClass`…), and the one `react/no-danger`
 exception is KaTeX's own output. New dependency: `katex`, since nothing in the project rendered
 math. Older questions stay plain text.

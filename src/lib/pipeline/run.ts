@@ -18,6 +18,7 @@ import { struggledItemOk } from "./marked.ts";
 import type { OrcaNotes } from "./notes.ts";
 import { DIRECTIONAL, KIND_RANK, LOOP_REASON, closesLoop, pairKey } from "../course/links.ts";
 import { QUESTIONS_PER_OBJECTIVE, promptKey } from "./questions.ts";
+import { mathProblem } from "../math-text.ts";
 import { courseObjectiveWeights } from "../course/weights.ts";
 import { WARM_UP_WRITES } from "../mastery/warmup.ts";
 import { DEEP_TEXT, type GeneratedQuestion, type MapOutput, type ObjectivesOutput, type StepInput, type StepName, type StepOutput } from "./schemas.ts";
@@ -692,6 +693,16 @@ export async function writeQuestions(
             );
             if (!texts.ok) {
               dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${texts.reason}` });
+              continue;
+            }
+            // Math is checked only in what the question shows (not the excerpt, quoted from the material, nor exact answers).
+            const math = Object.entries(texts.values).flatMap(([name, text]) => {
+              if (name === "anchor excerpt" || name.startsWith("exact answer")) return [];
+              const problem = mathProblem(text);
+              return problem ? [`${name} ${problem}`] : [];
+            })[0];
+            if (math) {
+              dropped.push({ prompt: shown(g.prompt, 1200), reason: `${REFUSED_PREFIX}${math}` });
               continue;
             }
             if (g.anchor && !anchorExists(g.anchor.locator, facts)) {
