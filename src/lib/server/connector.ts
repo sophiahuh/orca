@@ -10,6 +10,7 @@ import { NewerRulesError, VersionConflictError, readCourseState, recordEvent } f
 import type { AnswerEvent, ConfusionEvent, ObjectiveStatus } from "@/lib/mastery/types";
 import { topUpAfterFlag } from "@/lib/server/flag-top-up";
 import { recordSecurityEvents } from "@/lib/server/security";
+import { checkBudget } from "@/lib/server/usage";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
 import { questionFromRow } from "@/lib/supabase/app-rows";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -276,12 +277,17 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       const withoutQuestions = ids.filter((id) => !asked.has(id));
       if (!withoutQuestions.length) return { flagged, unknown, withoutQuestions };
       const started = await topUpAfterFlag(db, ownerId, courseId, withoutQuestions);
+      // The job itself holds on a spent daily budget (it goes `waiting`), which the hand-off can't
+      // see; say so here rather than promising questions in a few minutes (owner, 2026-11-07).
+      const held = started === "started" || started === "queued" || started === "busy" ? await checkBudget(db, ownerId, 0) : null;
       const note =
-        started === "started" || started === "queued" || started === "busy"
-          ? "Orca is writing questions for these; ask for them again in a few minutes."
-          : started === "no-model"
-            ? "Orca has no AI connected, so it can't write questions for these yet."
-            : "Orca will write questions for these with its next batch.";
+        held && !held.ok
+          ? `${held.message} Orca's daily model limit is spent, so the questions for these aren't written until it resets: tell the student, and ask for them again tomorrow rather than in a few minutes.`
+          : started === "started" || started === "queued" || started === "busy"
+            ? "Orca is writing questions for these; ask for them again in a few minutes."
+            : started === "no-model"
+              ? "Orca has no AI connected, so it can't write questions for these yet."
+              : "Orca will write questions for these with its next batch.";
       return { flagged, unknown, withoutQuestions, note };
     },
 
