@@ -23,6 +23,7 @@ import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readP
 import { readPptx } from "@/lib/material/read-pptx";
 import { looksLikeZip } from "@/lib/material/unzip";
 import { isOwnPath, uploadPath } from "@/lib/material/paths";
+import { cancelJobs } from "@/lib/server/jobs/start";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -256,6 +257,21 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
  */
 export type Removal = { status: number; body: { removed: true; archivedObjectives?: number } | { error: string } };
 
+/**
+ * Of the objectives a removed file created, the ones no other live file teaches: an objective whose
+ * signals name any material in `liveMaterialIds` is kept. Pure, for the test.
+ */
+export function objectivesOnlyTaughtBy(removedId: string, created: ReadonlyArray<{ id: string; signals: unknown }>, liveMaterialIds: readonly string[]): string[] {
+  const live = new Set(liveMaterialIds);
+  live.delete(removedId);
+  return created
+    .filter((o) => {
+      const signals = Array.isArray(o.signals) ? (o.signals as Array<{ materialId?: unknown }>) : [];
+      return !signals.some((s) => typeof s.materialId === "string" && s.materialId !== removedId && live.has(s.materialId));
+    })
+    .map((o) => o.id);
+}
+
 export async function removeMaterial(db: OrcaSupabase, ownerId: string, id: string): Promise<Removal> {
   const answer = (status: number, body: Removal["body"]): Removal => ({ status, body });
   const { data: m, error } = await db.from("materials").select("id, course_id, storage_path, status").eq("owner_id", ownerId).eq("id", id).maybeSingle();
@@ -269,10 +285,22 @@ export async function removeMaterial(db: OrcaSupabase, ownerId: string, id: stri
   if (runs.length) {
     const { error: failed } = await db.from("pipeline_runs").update({ status: "failed", error: "Removed by you.", progress: null }).eq("owner_id", ownerId).in("id", runs.map((r) => r.id)).in("status", ["queued", "waiting", "paused"]);
     if (failed) throw fail("stop the material's queued run", failed);
+    await cancelJobs(db, ownerId, runs.map((r) => r.id)); // a queued run already handed to Trigger
   }
 
-  // The objectives only this upload taught: archived (their questions go with them, by objective).
-  const { data: archived, error: archiveError } = await db.from("objectives").update({ review: "archived", archived_with_material: true }).eq("owner_id", ownerId).eq("material_id", id).neq("review", "archived").select("id, topic_id");
+  // The objectives only this upload taught are archived (their questions go with them, by objective).
+  // An objective this file created but that a later, still-live upload also teaches (its signals name
+  // that file) stays: archiving it would drop its mastery from the island (2026-11-08).
+  const [created, live] = await Promise.all([
+    db.from("objectives").select("id, signals").eq("owner_id", ownerId).eq("material_id", id).neq("review", "archived"),
+    db.from("materials").select("id").eq("owner_id", ownerId).eq("course_id", m.course_id).neq("status", "removed").neq("id", id),
+  ]);
+  if (created.error) throw fail("read the material's objectives", created.error);
+  if (live.error) throw fail("read the course's materials", live.error);
+  const toArchive = objectivesOnlyTaughtBy(id, created.data, live.data.map((r) => r.id));
+  const { data: archived, error: archiveError } = toArchive.length
+    ? await db.from("objectives").update({ review: "archived", archived_with_material: true }).eq("owner_id", ownerId).in("id", toArchive).neq("review", "archived").select("id, topic_id")
+    : { data: [] as Array<{ id: string; topic_id: string }>, error: null };
   if (archiveError) throw fail("archive the material's objectives", archiveError);
   // A topic this upload created is archived too once it has no live objective left; its place list loses this file either way.
   const { data: topics, error: topicsError } = await db.from("topics").select("id, material_id, source").eq("owner_id", ownerId).eq("course_id", m.course_id).neq("review", "archived");

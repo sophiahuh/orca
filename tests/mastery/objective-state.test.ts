@@ -84,9 +84,17 @@ test("repeating a question never adds credit", () => {
   assert.equal(s.status, "verified", "not mastered; answered right and never flagged or missed, so not a weak point");
 });
 
-test("a question first missed earns nothing when later answered correctly", () => {
-  const s = state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(2))], at(2));
-  assert.equal(s.credit, 0);
+test("a question first missed earns half credit when answered right on a later day, nothing the same day, and only once", () => {
+  assert.equal(state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(1, 13))], at(1, 14)).credit, 0, "same day: its answer was just shown");
+  const later = state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(2))], at(2));
+  assert.equal(later.credit, 0.5);
+  assert.equal(later.creditDays, 1);
+  assert.equal(state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(2)), ev("q1", day(3))], at(3)).credit, 0.5, "credited once");
+  assert.equal(state([ev("q1", day(1), { outcome: "incorrect" }), ev("q1", day(2), { grader: "self" })], at(2)).credit, 0.5, "self-marked: still half, but not graded credit");
+  // Two questions, both missed on day 1: right on day 2 they earn 1 credit in all, not the bar.
+  const both = state([ev("q1", day(1), { outcome: "incorrect" }), ev("q2", day(1), { outcome: "incorrect" }), ev("q1", day(2)), ev("q2", day(2))], at(2));
+  assert.equal(both.credit, 1);
+  assert.equal(both.status, "learning");
 });
 
 test("self-marked answers count half", () => {
@@ -101,7 +109,28 @@ test("self-marked answers alone can't master an objective", () => {
   const events = [...selfOnly, ev("q5", day(2), { grader: "self" }), ev("q6", day(2), { grader: "self" })];
   const s = state(events, at(2));
   assert.equal(s.credit, 3);
-  assert.equal(s.status, "verified", "not mastered; answered right and never flagged or missed, so not a weak point");
+  assert.equal(s.status, "unseen", "not mastered, and self-marked answers verify nothing either (owner, 2026-11-08)");
+});
+
+test("verified takes an unaided correct answer: a self-marked correct on an unflagged objective leaves it unseen", () => {
+  assert.equal(state([ev("q1", day(20), { grader: "self" })], at(20)).status, "unseen");
+  assert.equal(state([ev("q1", day(20), { grader: "self" }), ev("q2", day(21))], at(21)).status, "verified");
+  assert.equal(state([ev("q1", day(20), { grader: "self", source: "connector" })], at(20)).status, "unseen", "Claude saying correct proves nothing");
+});
+
+test("a struggled flag rates the memory estimate Again, so the re-learned objective isn't checked on its old long interval", () => {
+  const flag = (when: string): ConfusionEvent => ({ kind: "confusion", id: `c-${when}`, at: when, courseId: "ald", topicId: "t", objectiveId: "t/o", materialId: null, note: null, flagSource: "manual", page: null });
+  const before = replayObjective("t/o", [...masteredOnDay2(), ev("q4", day(10)), ev("q5", day(20))], opts());
+  const after = applyEvidence(before, flag(day(21)), opts());
+  assert.ok(after.card!.stability < before.card!.stability, "stability drops as on a miss");
+  assert.equal(after.card!.lapses, before.card!.lapses + 1);
+  assert.equal(applyEvidence(EMPTY_ACCUMULATOR, flag(day(21)), opts()).card, null, "nothing to rate before any answer");
+});
+
+test("a graded partial answer ends a run of misses: two misses with a partial between aren't a mix-up", () => {
+  const s = state([ev("q1", day(1), { outcome: "incorrect" }), ev("q2", day(1), { outcome: "partial" }), ev("q3", day(1), { outcome: "incorrect" })], at(1), false);
+  assert.equal(s.status, "learning");
+  assert.equal(state([ev("q1", day(1), { outcome: "incorrect" }), ev("q3", day(1), { outcome: "incorrect" })], at(1), false).status, "mixed-up", "back to back, they are");
 });
 
 test("the last two answers must be correct", () => {

@@ -4,7 +4,9 @@ import { use, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { DiveModal } from "@/components/quiz/DiveModal";
+import { askableQuestions } from "@/lib/askable";
 import { canFlagHard } from "@/lib/mastery/flags";
+import { warmUpCandidates } from "@/lib/mastery/warmup";
 import { durationSeconds } from "@/lib/mastery/session";
 import { useAgenda, useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { AppShell } from "@/components/layout/AppShell";
@@ -28,7 +30,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const [editingExams, setEditingExams] = useState(false);
   const closeExams = useCallback(() => setEditingExams(false), []);
   const router = useRouter();
-  const { hydrated, objectives, renameCourse, configs, runs, flagObjectives } = useOrca();
+  const { hydrated, objectives, renameCourse, configs, runs, flagObjectives, questionBank, feedback } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
   const agendas = useAgenda();
@@ -61,6 +63,9 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const uploading = uploadsInProgress(runs, course.id);
   const agenda = agendas[course.id];
   if (!agenda) throw new Error(`No agenda computed for course ${course.id}`);
+  // Nothing flagged yet, but questions to try: the trail's START (src/lib/mastery/warmup.ts).
+  const warm = agenda.dueToday.length === 0 ? warmUpCandidates(agenda.ranked, askableQuestions(course, questionBank[course.id], objectives[course.id] ?? {}, feedback).byObjective) : [];
+  const warmUp = warm.length ? { topicName: course.topics.find((t) => t.id === warm[0].topicId)?.name ?? course.name, href: `/session/${course.slug}?kind=quick&warmup=1`, questions: warm.length } : null;
 
   return (
     <AppShell bg="ocean">
@@ -73,7 +78,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </Button>
         </div>
       ) : (
-        <KnowledgePath course={course} progress={m.topics} onStart={(t) => setDiving({ id: t.id, name: t.name })} />
+        <KnowledgePath course={course} progress={m.topics} onStart={(t) => setDiving({ id: t.id, name: t.name })} warmUp={warmUp} />
       )}
 
       <motion.header variants={stagger()} initial="hidden" animate="show" className="absolute left-[28px] top-[28px] flex items-start gap-[16px]">
@@ -140,8 +145,8 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
               Dive in{agenda.deepReview.due ? " · due" : ""}
             </Link>
             <div id="dive-in-info" role="tooltip" className="pointer-events-none absolute right-0 top-full z-10 mt-[10px] w-[248px] rounded-[14px] border-2 border-alice-deep bg-parchment px-[14px] py-[11px] text-left text-[13px] font-semibold leading-[1.35] text-prussian opacity-0 shadow-[0_5px_0_var(--color-alice-deep)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-              <span className="block font-bold">Deep review.</span>
-              Solidify your understanding with harder questions
+              <span className="block font-bold">A dive.</span>
+              Harder questions on this course, written when you start
             </div>
           </div>
         )}

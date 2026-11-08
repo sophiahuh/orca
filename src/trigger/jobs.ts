@@ -7,14 +7,23 @@
 import { schedules, task } from "@trigger.dev/sdk";
 import { JOB_MAX_SECONDS, type DeepReviewJob, type MaterialJob, type TopUpJob } from "@/lib/jobs/start";
 import { runDeepReviewJob, runMaterialJob, runTopUpJob } from "@/lib/server/jobs/run";
-import { ownersWithPendingRuns, resumeNext } from "@/lib/server/jobs/start";
+import { failRunFromTask, ownersWithPendingRuns, resumeNext } from "@/lib/server/jobs/start";
 import { adminClient } from "@/lib/supabase/server";
+
+/**
+ * A task killed at its time limit, or one that threw past the job's own handling, never reaches the
+ * job's final save: the run stayed "running" for 40 minutes and blocked the student's queue until
+ * the dead-run sweep (2026-11-08). The failure hook marks it failed at once.
+ */
+const failed = (job: { ownerId: string; runId: string }, error: unknown) =>
+  failRunFromTask(adminClient(), job.ownerId, job.runId, error instanceof Error ? error.message : String(error)).catch(() => undefined);
 
 export const processMaterialTask = task({
   id: "process-material",
   retry: { maxAttempts: 1 },
   maxDuration: JOB_MAX_SECONDS.upload,
   run: (payload: MaterialJob) => runMaterialJob(payload),
+  onFailure: ({ payload, error }) => failed(payload, error),
 });
 
 export const topUpTask = task({
@@ -22,6 +31,7 @@ export const topUpTask = task({
   retry: { maxAttempts: 1 },
   maxDuration: JOB_MAX_SECONDS["top-up"],
   run: (payload: TopUpJob) => runTopUpJob(payload),
+  onFailure: ({ payload, error }) => failed(payload, error),
 });
 
 export const deepReviewTask = task({
@@ -29,6 +39,7 @@ export const deepReviewTask = task({
   retry: { maxAttempts: 1 },
   maxDuration: JOB_MAX_SECONDS["deep-review"],
   run: (payload: DeepReviewJob) => runDeepReviewJob(payload),
+  onFailure: ({ payload, error }) => failed(payload, error),
 });
 
 /**

@@ -59,6 +59,7 @@ import type { AnswerEvent, ConfusionEvent, EvidenceEvent } from "./mastery/types
 import type { CourseStructure } from "./course/ops";
 import { type CourseMastery, courseMastery } from "./mastery/course-mastery";
 import { type TodoCard, todoCards } from "./mastery/todo";
+import { warmUpCandidates } from "./mastery/warmup";
 import { assembleQuickReview, durationSeconds, lastSeenOf, sessionCandidates } from "./mastery/session";
 import { askableQuestions } from "./askable";
 import { type CourseAgenda, agendaWeights, courseAgenda, examInWindow, survivingTopic } from "./mastery/agenda";
@@ -723,10 +724,11 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const requestFlagTopUp = useCallback((courseId: string, objectiveIds: readonly string[]) => {
     const s = stateRef.current;
     const catalogue = s.objectives[courseId] ?? {};
+    // Askable questions only: a dive-only or thumbed-down question can't be asked in a quick review (owner, 2026-11-08).
     const asked = new Set(
       Object.values(s.questionBank[courseId] ?? {})
         .flat()
-        .filter((q) => !q.deep && catalogue[q.objectiveId])
+        .filter((q) => !q.deep && catalogue[q.objectiveId] && s.feedback[q.id]?.rating !== "down")
         .map((q) => resolveObjectiveId(q.objectiveId, catalogue)),
     );
     const missing = [...new Set(objectiveIds)].filter((id) => !asked.has(id));
@@ -1034,6 +1036,7 @@ export function useTodos(): TodoCard[] {
         };
         if (a.quickReviewDue) covered = plannedFor(a.dueToday);
         if (a.quickTomorrow) coveredTomorrow = plannedFor(a.upNext);
+        const warmUp = a.dueToday.length === 0 && !a.quickReviewDue ? warmUpCandidates(a.ranked, askableQuestions(c, questionBank[c.id], catalogue, feedback).byObjective).length : 0;
         return todoCards(a, config, {
           objective: (id) => {
             const o = catalogue[id];
@@ -1045,7 +1048,7 @@ export function useTodos(): TodoCard[] {
             if (!t) throw new Error(`Topic ${id} is not in course ${c.id}`);
             return t.name;
           },
-        }, covered, coveredTomorrow);
+        }, covered, coveredTomorrow, warmUp);
       }),
     [courses, objectives, configs, agenda, mastery, questionBank, feedback, nowMs, dayKey],
   );

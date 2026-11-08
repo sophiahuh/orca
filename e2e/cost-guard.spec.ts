@@ -61,8 +61,9 @@ test("an upload past the student's daily token budget is saved and waits, the mo
   const spent = await admin().from("model_usage").insert({ owner_id: student.id, kind: "upload", model: "claude-opus-5-5", input_tokens: LIMITS.tokensPerDay, output_tokens: 0, cost_usd: 8 });
   expect(spent.error).toBeNull();
   const { generation } = await sendDeck(page, student, courseId, "deck.pdf", "Absorption");
-  expect(generation.state).toBe("started");
-  await expect.poll(async () => (await runStatus(generation.runId!)).status, { timeout: 20_000 }).toBe("waiting");
+  // Parked before any job is started (2026-11-08): the dispatcher checks the budget itself.
+  expect(generation.state).toBe("waiting");
+  expect((await runStatus(generation.runId!)).status).toBe("waiting");
   expect((await runStatus(generation.runId!)).progress).toEqual({ stage: "waiting", reason: "daily-tokens", message: "Daily limit reached: processing resumes tomorrow." });
   expect(await fakeCalls()).toEqual([]);
 
@@ -70,6 +71,11 @@ test("an upload past the student's daily token budget is saved and waits, the mo
   await page.goto(`/course/${course.slug}/review?run=${generation.runId}`);
   await expect(page.locator("[data-part=run-waiting]")).toContainText("Daily limit reached: processing resumes tomorrow.");
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
+  // The waiting card can be stopped or its file removed (2026-11-08); here it's stopped.
+  await expect(page.locator("[data-part=run-waiting] [data-part=remove-material]")).toBeVisible();
+  await page.locator("[data-part=run-waiting] [data-part=stop-upload]").click();
+  await page.locator("[data-part=run-waiting] [data-part=stop-confirm]").click();
+  await expect.poll(async () => (await runStatus(generation.runId!)).status, { timeout: 20_000 }).toBe("failed");
   // The file and its pages are kept: nothing to redo tomorrow.
   const { count } = await student.db.from("material_pages").select("n", { count: "exact", head: true });
   expect(count).toBe(2);
@@ -170,7 +176,8 @@ test("a running upload can be stopped from the Uploads tab: it fails with the st
   // Try again starts a new job for the saved file: no re-upload, no second material.
   await card("first.pdf").locator("[data-part=retry-upload]").click();
   await expect(page.locator("[data-part=upload-card]").filter({ hasText: "first.pdf" })).toHaveCount(2, { timeout: 15_000 });
-  await expect.poll(async () => (await admin().from("pipeline_runs").select("status").eq("material_id", first.materialId).order("at")).data!.map((r) => r.status), { timeout: 60_000 }).toEqual(["failed", "done"]);
+  // The retry keeps the failed run's time (its place in line), so the two share it: compare as a set.
+  await expect.poll(async () => (await admin().from("pipeline_runs").select("status").eq("material_id", first.materialId)).data!.map((r) => r.status).sort(), { timeout: 60_000 }).toEqual(["done", "failed"]);
   const { count } = await student.db.from("materials").select("id", { count: "exact", head: true }).eq("course_id", courseId);
   expect(count).toBe(2);
 });

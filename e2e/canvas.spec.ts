@@ -39,7 +39,7 @@ test("connected, Settings says who, and offers the import; the import page lists
         exams: 1,
         events: 2,
         syllabus: true,
-        files: { added: 2, duplicates: 0, failed: 0, skipped: 1, remaining: 0, total: 3, askCoverage: true, items: [{ materialId: F.material, name: "L01_Fixture.pdf", upcoming: true }, { materialId: id.second, name: "L02_Fixture.pdf", upcoming: true }] },
+        files: { added: 2, duplicates: 0, failed: 0, skipped: 1, remaining: 0, skippedNames: ["Old scan.pdf"], total: 3, askCoverage: true, items: [{ materialId: F.material, name: "L01_Fixture.pdf", upcoming: true }, { materialId: id.second, name: "L02_Fixture.pdf", upcoming: true }] },
       },
     });
   });
@@ -54,7 +54,7 @@ test("connected, Settings says who, and offers the import; the import page lists
   await expect(courses).toHaveCount(2);
   await expect(courses.first()).toContainText("ELEN 3331 · Fall 2026");
   await courses.first().locator('[data-part="canvas-import"]').click();
-  await expect(courses.first().locator('[data-part="canvas-summary"]')).toHaveText(/Updated Logic Fixture · 1 exam · 2 assignments on the calendar · syllabus · files: 2 added, 1 skipped\./);
+  await expect(courses.first().locator('[data-part="canvas-summary"]')).toHaveText(/Updated Logic Fixture · 1 exam · 2 assignments on the calendar · syllabus · files: 2 added, 1 skipped \(Old scan\.pdf\)\./);
   expect(imports).toEqual([JSON.stringify({ canvasCourseId: "77" })]);
   await expect(courses.first().locator('[data-part="posted-at-once"]')).toBeVisible();
   await expect(courses.first().locator('[data-part="canvas-import"]')).toHaveText("Update");

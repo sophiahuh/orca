@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ModelConfigError, callsAreLocal, resolveServerModel } from "../src/lib/model-config.ts";
+import { ModelConfigError, READ_STEPS, callsAreLocal, resolveReadModel, resolveServerModel, resolveStepModel } from "../src/lib/model-config.ts";
 import { openAiJsonSchema } from "../src/lib/openai-schema.ts";
 import { STEPS } from "../src/lib/pipeline/schemas.ts";
 import { GradeSchema } from "../src/lib/grading.ts";
@@ -58,4 +58,18 @@ test("a string's length limit, which OpenAI's strict format can't carry, is told
   assert.equal(schema.properties.note.description, "What was wrong Keep it under 240 characters.");
   assert.equal(schema.properties.plain.description, "Keep it under 60 characters.");
   assert.equal(schema.properties.note.maxLength, undefined);
+});
+
+test("ORCA_READ_MODEL runs the reading steps on another priced model of the same provider; writing stays on ORCA_MODEL", () => {
+  const env = { OPENAI_API_KEY: "k", ORCA_MODEL: "gpt-6.1-sol", ORCA_READ_MODEL: "gpt-6-luna" };
+  assert.equal(resolveReadModel(env)!.model, "gpt-6-luna");
+  for (const step of ["map", "objectives", "reconcile", "link", "transcribe", "describe", "reflect"]) {
+    assert.ok(READ_STEPS.has(step), step);
+    assert.equal(resolveStepModel(env, step)!.model, "gpt-6-luna", step);
+  }
+  for (const step of ["generate", "deep"]) assert.equal(resolveStepModel(env, step)!.model, "gpt-6.1-sol", step);
+  assert.equal(resolveReadModel({ OPENAI_API_KEY: "k" })!.model, "gpt-6.1-sol", "unset: the server's model");
+  assert.equal(resolveReadModel({}), null, "no key: no model");
+  assert.throws(() => resolveReadModel({ OPENAI_API_KEY: "k", ORCA_READ_MODEL: "claude-opus-5-5" }), ModelConfigError, "wrong provider");
+  assert.throws(() => resolveReadModel({ OPENAI_API_KEY: "k", ORCA_READ_MODEL: "gpt-99" }), ModelConfigError, "unpriced");
 });

@@ -111,12 +111,15 @@ objective holds state with or without questions, and a flag on one with none wri
 understand something, the note is matched to objectives (uncertain matches are confirmed by the
 student) and each match records a confusion event (a struggled flag from `homework`). A confusion event resets the objective to
 `learning`: credit, credit days and attempted questions are cleared, so it needs 3 fresh credited
-answers over 2 days again. On an objective that isn't mastered yet it raises priority. The
+answers over 2 days again, and FSRS's memory estimate is rated Again as a miss would (2026-11-08:
+an objective re-learned after "I don't get this" isn't checked on its old long interval). On an
+objective that isn't mastered yet it raises priority. The
 asymmetry is deliberate: "I don't get it" is believed because it's cheap and safe to act on;
 "I get it" never raises mastery. Connector activity (§5) would be stored as a
 separate *signal*, not an evidence event: it raises priority ("you studied this on Tuesday") and
 never counts toward mastery. (Not built. What the connector records today is answers to Orca's own
-questions, graded by Claude, as self-marked evidence.)
+questions: graded by Orca through `check_answer` (full credit, Orca's grader) or, when Orca's grader
+can't run, by Claude through `record_answer` as self-marked evidence; 2026-11-08.)
 
 ### 2.3 Objective state (pure function of events + now)
 
@@ -125,11 +128,11 @@ summarise them.
 
 | State | Meaning | Counts as mastered? | Leaves the state when |
 |---|---|---|---|
-| `unseen` | Not in rotation, never answered, no open check ("Not flagged") | No | A fully right answer (→ verified), a check flag (→ check-due), a struggled flag or any answer short of right (→ in rotation) |
-| `verified` | Not in rotation, answered fully right ("Verified ✓"); never due | No | A check flag (→ check-due), a struggled flag or any answer short of right (→ in rotation) |
-| `check-due` | Not in rotation, an open *check me* flag; due for one question | No | Its next answer: fully right → verified, otherwise → in rotation |
+| `unseen` | Not in rotation, never answered right by Orca's own grader, no open check ("Not flagged") | No | An unaided fully right answer (→ verified), a check flag (→ check-due), a struggled flag or any answer short of right (→ in rotation). A self-marked correct changes nothing (2026-11-08) |
+| `verified` | Not in rotation, answered fully right by Orca's grader at least once ("Verified ✓"); never due | No | A check flag (→ check-due), a struggled flag or any answer short of right (→ in rotation) |
+| `check-due` | Not in rotation, an open *check me* flag; due for one question | No | Its next answer: unaided fully right → verified, self-marked correct → unseen, otherwise → in rotation |
 | `learning` | In rotation, mastery bar not met yet | No | The bar is met (→ mastered), or a mix-up is detected (→ mixed-up) |
-| `mixed-up` | Two unaided wrong answers in a row on different questions: probably a wrong idea, not a slip (no confidence rating is captured; see TO-DISCUSS) | No | An unaided correct answer on a "why" (mechanism) question, or any unaided correct answer if the objective has none (→ learning) |
+| `mixed-up` | Two unaided wrong answers in a row on different questions, with no graded partial or correct between (2026-11-08): probably a wrong idea, not a slip (no confidence rating is captured; see TO-DISCUSS) | No | An unaided correct answer on a "why" (mechanism) question, or any unaided correct answer if the objective has none (→ learning) |
 | `mastered` | Bar met (§2.4); its next spaced check isn't due yet | **Yes** | The check comes due, or any miss, including a self-marked one (→ fading) |
 | `fading` | Its spaced check is due or overdue, or it was just missed; it's in the review queue (a missed check is due again at once, for the course's next review session) | No | A genuine pass: an unaided correct answer at or after the due time, and after a miss, in a later session than the miss (→ mastered, with a longer interval). Partial or self-marked answers don't clear it |
 | `retired` | Stable: FSRS stability ≥ 60 days with 3+ passed checks; out of daily review | **Yes** | Any miss, including a self-marked one (→ fading), or an exam covering it brings it back |
@@ -171,6 +174,11 @@ For ALD:
 **Graded-credit floor** (decided 2026-10-05): of the 3 credit, at least 2 must come from graded
 answers (multiple choice, exact, or rubric), so self-marked answers can top up but never carry
 mastery alone.
+
+**Retry credit** (owner, 2026-11-08; `MASTERY_RULES.retryCredit`): a question earns credit once. In
+full (or 0.5 for partial or self-marked) on its first attempt; 0.5 when a question missed before is
+answered right on a later day, since its answer was shown; nothing on the same day. Without it, a
+student who missed both of an objective's first questions could never master it until a top-up landed.
 
 Rules that apply to all:
 - Repeating the same question never adds to the count; it only clears a miss.
@@ -288,10 +296,13 @@ objectives get none); dives and practice write their own. No drill generators ye
   generation. Runs in the background after a session, never while the student waits.
 
 ## 5. The connector (no API cost)
-*As built (2026-11-04):* `POST /api/mcp/<token>` with `course_state`, `set_exam`, `questions_for`
-and `record_answer`; Claude asks Orca's questions and records the answers it grades as self-marked
-evidence (`src/lib/connector/mcp.ts`, roadmap Phase 7). `log_study` and `get_material` below
-aren't built. The plan as first written:
+*As built (2026-11-04, grading moved to Orca 2026-11-08):* `POST /api/mcp/<token>` with
+`course_state`, `set_exam`, `questions_for` (no keys), `check_answer` (Orca grades choice and exact
+answers itself and prose through its rubric grader, records full credit with its own grader, and
+returns the key; when it can't grade, it hands the key over with `needsSelfGrade`), `record_answer`
+(Claude's own grade, self-marked, with the student's words stored) and `flag_check`
+(`src/lib/connector/mcp.ts`, roadmap Phase 7). `log_study` and `get_material` below aren't built.
+The plan as first written:
 Orca exposes a small MCP server at `/api/mcp` with a per-student token. Students add it once to
 Claude.ai (Settings → Connectors, Pro and up) or ChatGPT (Apps & Connectors, developer mode).
 Tools:

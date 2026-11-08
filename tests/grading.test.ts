@@ -1,9 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ANSWER_MAX_CHARS, GRADE_SYSTEM, GradeSchema, RubricSchema, cleanAnswer, gradeExact, gradePrompt, normaliseExact, validateGrade } from "../src/lib/grading.ts";
+import { ANSWER_MAX_CHARS, GRADE_SYSTEM, GradeSchema, RubricSchema, cleanAnswer, gradeExact, gradePrompt, isExpressionAnswer, normaliseExact, validateGrade } from "../src/lib/grading.ts";
 
-test("normaliseExact ignores case, spacing, middle dots and a trailing period", () => {
-  assert.equal(normaliseExact(" X1 · X2' . "), "x1x2'");
+test("normaliseExact ignores case, spacing and a trailing period, and unifies multiplication signs", () => {
+  assert.equal(normaliseExact(" X1 · X2' . "), "x1*x2'");
+  assert.equal(normaliseExact("10 × 2"), "10*2", "a multiplication sign is kept, so 10*2 is never 102");
+});
+
+test("gradeExact compares numbers by value once either side is written as a decimal or a fraction, never bit strings", () => {
+  assert.equal(gradeExact(".5", ["0.5"]).outcome, "correct");
+  assert.equal(gradeExact("1/2", ["0.5"]).outcome, "correct");
+  assert.equal(gradeExact("-5.0", ["-5"]).outcome, "correct");
+  assert.equal(gradeExact("the answer is 0.50", ["1/2"]).outcome, "correct");
+  assert.equal(gradeExact("101", ["0101"]).outcome, "incorrect", "bit strings are not numbers");
+  assert.equal(gradeExact("0101", ["101"]).outcome, "incorrect");
+  assert.equal(gradeExact("1e3", ["1000"]).outcome, "correct");
+});
+
+test("isExpressionAnswer tells an algebraic or Boolean expression from a number, a bit string or a named term", () => {
+  for (const yes of ["a + c", "x'y", "A⊕B", "(a+b)c", "ab + a'c", "x*y", "A·B", "A|B", "~x"]) assert.equal(isExpressionAnswer(yes), true, yes);
+  for (const no of ["1010", "-5", "0.5", "valid", "De Morgan's law", "two's complement", "O(n log n)", "carry-save adder", "x"]) assert.equal(isExpressionAnswer(no), false, no);
 });
 
 test("gradeExact ignores lead-in words like \"is\" or \"the answer is\", never a negation", () => {

@@ -42,6 +42,16 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
     reloadedFor.current = run.id;
     void refresh();
   }, [known, run, refresh]);
+  // A run held by the daily limit (`waiting`) resumes only when something asks the server to look
+  // (a finishing job, the daily sweep). Opening the Uploads tab is a good moment to ask, once: the
+  // check is budget-gated, so it starts the run only once the student's limit has reset (2026-11-08).
+  const checkedWaiting = useRef(false);
+  const anyWaiting = runs.some((r) => r.status === "waiting");
+  useEffect(() => {
+    if (!anyWaiting || checkedWaiting.current) return;
+    checkedWaiting.current = true;
+    void fetch("/api/runs/check", { method: "POST" }).then((res) => (res.ok ? refresh() : undefined)).catch(() => undefined);
+  }, [anyWaiting, refresh]);
 
   if (!course) {
     return (
@@ -74,7 +84,7 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
         <div className="flex flex-col gap-[4px]">
           <h1 className="text-[40px] font-bold leading-none text-prussian">{course.short}: uploads &amp; review</h1>
           <p className="text-[15px] font-medium text-wisteria-deep">
-            {tab === "uploads" ? "Every file you've added and what it built." : "New topics are quizzable now, marked Unreviewed until you confirm them."}
+            {tab === "uploads" ? "Every file you've added and what it built." : "New topics, marked Unreviewed until you confirm them. Questions come when you flag something, start a dive, or try the warm-up."}
           </p>
         </div>
       </header>
