@@ -324,7 +324,8 @@ test("re-uploading the same deck is recognised by its content and adds nothing, 
   await fakeModel({ extract: ONE_TOPIC, perObjective: 6 });
   await createCourse(page, "Logic");
   await upload(page);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
+  // A first upload: the warm-up writes one question for its objective.
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 1 question added.", { timeout: 60_000 });
   await upload(page);
   await expect(page.getByText(`Logic already has this file (${DECK_NAME}), so nothing was added.`)).toBeVisible({ timeout: 30_000 });
   expect((await fakeCalls()).filter((s) => s === "map")).toHaveLength(1);
@@ -358,7 +359,7 @@ test("a job that fails says why on the review screen, saves nothing, and uploadi
   // The file is kept; uploading it again (now that the model answers) builds it.
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await upload(page);
-  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective, 0 existing objectives covered again, 1 question added.", { timeout: 60_000 });
   state = await stored(page, student);
   expect(state.materials).toHaveLength(1);
   // The retry keeps the failed run's time (its place in line), so the two share it: compare as a set.

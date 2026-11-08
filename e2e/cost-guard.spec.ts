@@ -175,7 +175,8 @@ test("a running upload can be stopped from the Uploads tab: it fails with the st
   // Try again starts a new job for the saved file: no re-upload, no second material.
   await card("first.pdf").locator("[data-part=retry-upload]").click();
   await expect(page.locator("[data-part=upload-card]").filter({ hasText: "first.pdf" })).toHaveCount(2, { timeout: 15_000 });
-  await expect.poll(async () => (await admin().from("pipeline_runs").select("status").eq("material_id", first.materialId).order("at")).data!.map((r) => r.status), { timeout: 60_000 }).toEqual(["failed", "done"]);
+  // The retry keeps the failed run's time (its place in line), so the two share it: compare as a set.
+  await expect.poll(async () => (await admin().from("pipeline_runs").select("status").eq("material_id", first.materialId)).data!.map((r) => r.status).sort(), { timeout: 60_000 }).toEqual(["done", "failed"]);
   const { count } = await student.db.from("materials").select("id", { count: "exact", head: true }).eq("course_id", courseId);
   expect(count).toBe(2);
 });

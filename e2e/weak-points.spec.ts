@@ -38,7 +38,8 @@ test("This topic is hard flags every objective in the topic", async ({ page, stu
 });
 
 test("caught up: Practice other topics opens a dive over objectives nobody flagged", async ({ page, student }) => {
-  await seedFixtureCourse(student);
+  // No questions yet: nothing to warm up with (that card would come first), so the course is caught up.
+  await seedState(student, { ...FIXTURE_STATE, questionBank: { [F.course]: {} } });
   await page.goto(`/course/${COURSE_SLUG}`);
   await expect(page.locator('[data-part="caught-up"]')).toContainText("You're caught up");
   await page.locator('[data-part="practice-other"]').click();
