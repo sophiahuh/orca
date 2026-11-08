@@ -14,19 +14,24 @@ import type { ScreenHit } from "../untrusted/screen.ts";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 const KNOWN_VERSIONS = new Set(["2025-06-18", "2025-03-26", "2024-11-05"]);
-export const SERVER_INFO = { name: "orca", version: "0.2" } as const;
+export const SERVER_INFO = { name: "orca", version: "0.3" } as const;
 
-/** What Claude is told when it connects; the tool descriptions do the rest. */
+/** What Claude is told when it connects: the study session as a script; the tool descriptions do the rest. */
 export const INSTRUCTIONS =
   "Orca keeps this student's courses: what each exam covers, every learning objective and how well " +
-  "the student can do it, and a bank of questions written from their course material. Before " +
-  "planning a study session or saying what to work on, call course_state. When the student says " +
-  "what an exam covers (from the professor, the syllabus, or a classmate), call set_exam. To check " +
-  "the student, ask questions from questions_for one at a time and send each answer, in the student's " +
-  "words, to check_answer: Orca grades it, records it and returns the key and explanation for you to " +
-  "teach from. Only when check_answer says needsSelfGrade do you grade against the key it returns and " +
-  "call record_answer. Never record an answer the student didn't give. When the student asks about " +
-  "something or gets it wrong in this chat, call flag_check so Orca checks them on it later.";
+  "the student can do it, and a bank of questions written from their course material. Run a study " +
+  "session like this. 1) Call course_state first (detail summary for a check-in, full when you need " +
+  "objective ids); it says what's due, what the next exam covers (examFocus), whether Orca's daily model " +
+  "budget is spent (budget) and whether questions are being written (writing). 2) Ask one question at a " +
+  "time from next_questions (it picks what's due, then exam focus, then the heaviest unflagged objectives; " +
+  "pass objectiveIds or topicIds to steer it). 3) Send the student's answer, in their words, to " +
+  "check_answer: Orca grades it, records it and returns the key and explanation; teach from those, then go " +
+  "to the next question. If check_answer says needsSelfGrade, grade against the key it returns and call " +
+  "record_answer. Never record an answer the student didn't give. 4) When next_questions returns pending, " +
+  "Orca is writing questions: teach from the material meanwhile and ask again after retryAfterSeconds. When " +
+  "budget.ok is false, say so: Orca can't write or grade prose until it resets (resetsAt). 5) Call flag_check " +
+  "only for objectives the student asked about or got wrong in this chat, and set_exam when the student " +
+  "says what an exam covers or when it's cancelled.";
 
 /* ── Tool results: plain data the implementations return; the protocol wraps them ── */
 
@@ -59,15 +64,56 @@ export interface ExamLine {
   topicIds: string[];
 }
 
+export interface TopicLine {
+  id: string;
+  name: string;
+  /** Live objectives in the topic. */
+  objectives: number;
+  /** Of those, weak points (in rotation) or open checks. */
+  weak: number;
+  /** Of those, with at least one question Orca can ask. */
+  askable: number;
+}
+
+/** Whether Orca's model can be called for this student right now (the daily budget, src/lib/jobs/budget.ts). */
+export interface BudgetLine {
+  ok: boolean;
+  /** Why not, when it isn't. */
+  reason?: string;
+  /** When the student's day (and the budget) resets, ISO. */
+  resetsAt: string;
+}
+
+/** A question-writing job in flight for the course. */
+export interface WritingLine {
+  runId: string;
+  objectiveIds: string[];
+  state: "queued" | "waiting" | "running";
+}
+
 export interface CourseState {
   course: CourseSummary;
   /** The student's day, YYYY-MM-DD, in their timezone. */
   today: string;
   exams: ExamLine[];
-  topics: Array<{ id: string; name: string }>;
-  objectives: ObjectiveLine[];
+  topics: TopicLine[];
+  /** Every live objective (detail "full"); left out for "summary". */
+  objectives?: ObjectiveLine[];
   /** Objective ids Orca would have the student work on now, most urgent first. */
   dueNow: string[];
+  /** Topic ids an exam within the next week covers (every topic when it names none). */
+  examFocus: string[];
+  budget: BudgetLine;
+  writing: WritingLine[];
+}
+
+/** What next_questions answers: questions to ask, or why there are none yet. */
+export interface NextQuestions {
+  questions: QuestionLine[];
+  /** Questions are being written (started now, or already in flight): ask again after retryAfterSeconds. */
+  pending?: { runId: string | null; objectiveIds: string[]; state: "started" | "queued" | "waiting" | "busy"; retryAfterSeconds: number; reason: string };
+  /** Why the list is empty, when it is and nothing is pending. */
+  reason?: string;
 }
 
 /** A question as Claude asks it: no key (Orca grades through check_answer, which returns the key afterwards). */
@@ -140,7 +186,12 @@ export interface FlagCheckResult {
 /** What the route implements against the student's data. Every method is scoped to one student. */
 export interface ConnectorTools {
   courses(): Promise<CourseSummary[]>;
-  courseState(courseId: string): Promise<CourseState | null>;
+  /** The course in full, or a summary without the objective lines (or only some topics' objectives). Null: no such course. */
+  courseState(courseId: string, options?: { detail?: "summary" | "full"; topicIds?: string[] }): Promise<CourseState | null>;
+  /** The next questions to ask (unanswered first, then least recently seen), writing some when none exist. Null: no such course. */
+  nextQuestions(courseId: string, options: { objectiveIds?: string[]; topicIds?: string[]; count: number; write: boolean }): Promise<NextQuestions | null>;
+  /** Remove an exam. */
+  removeExam(courseId: string, examId: string): Promise<{ removed: true } | { error: string }>;
   /** The questions, and which of the objectives asked for have none (deep-review questions don't count). Null: no such course. */
   questionsFor(courseId: string, objectiveIds: string[] | null, limit: number): Promise<{ questions: QuestionLine[]; withoutQuestions: string[] } | null>;
   /** Grade the student's answer with Orca's own graders and record it (full credit); or say Orca can't right now and hand over the key. `response` arrives cleaned. */
@@ -166,12 +217,38 @@ export const TOOLS = [
       "learning objective with Orca's status for it (unseen = not flagged, verified, check-due, learning, " +
       "mixed-up, mastered, fading, retired) and predicted recall, and which objectives are due now. Orca " +
       "only schedules weak points: objectives the student struggled with, missed or asked to be checked " +
-      "on. Call this before planning " +
-      "what to study, and again after recording answers to see where things stand. With no course, " +
-      "lists the courses so you can pick one.",
+      "on. Call this first. check_answer and record_answer already return each objective's new status, so " +
+      "there's no need to call it after every answer; detail summary is a cheap check-in (topics with " +
+      "counts, what's due, exam focus, budget, what's being written), full lists every objective. With no " +
+      "course, lists the courses so you can pick one.",
     inputSchema: {
       type: "object",
-      properties: { courseId: { ...UUID, description: "The course to describe. Omit to list the courses." } },
+      properties: {
+        courseId: { ...UUID, description: "The course to describe. Omit to list the courses." },
+        detail: { type: "string", enum: ["summary", "full"], description: "summary: no objective lines; full (default): every objective." },
+        topicIds: { type: "array", items: { type: "string" }, description: "With full: only these topics' objectives." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "next_questions",
+    description:
+      "The next questions to ask, picked by Orca: what's due now, then the next exam's topics, then the " +
+      "heaviest objectives nobody has flagged; within an objective, questions the student hasn't seen first. " +
+      "Pass objectiveIds or topicIds to steer it. Ask one at a time and send each answer to check_answer. " +
+      "When nothing askable exists, Orca writes questions (write true, the default) and answers pending: " +
+      "teach from the material and ask again after retryAfterSeconds. The reply always says why when it's empty.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        courseId: UUID,
+        objectiveIds: { type: "array", items: { type: "string" }, maxItems: 20, description: "Objectives to draw from." },
+        topicIds: { type: "array", items: { type: "string" }, maxItems: 20, description: "Topics to draw from (ignored when objectiveIds is given)." },
+        count: { type: "integer", minimum: 1, maximum: 5, description: "How many (default 1)." },
+        write: { type: "boolean", description: "Write questions when none exist (default true)." },
+      },
+      required: ["courseId"],
       additionalProperties: false,
     },
   },
@@ -180,17 +257,19 @@ export const TOOLS = [
     description:
       "Record an exam and what it covers: its date and the topic ids it tests (empty for the whole " +
       "course). Use it when the student says what's on an exam, from the professor, the syllabus or a " +
-      "classmate. Pass an existing exam's id to change it. Orca schedules reviews from this.",
+      "classmate. Pass an existing exam's id to change it, or with remove true to delete it (a cancelled " +
+      "exam). Orca schedules reviews from this.",
     inputSchema: {
       type: "object",
       properties: {
         courseId: UUID,
-        examId: { ...UUID, description: "An existing exam to change; omit to add one." },
+        examId: { ...UUID, description: "An existing exam to change or remove; omit to add one." },
         title: { type: "string", description: "What the student calls it, e.g. Midterm, Final." },
         date: { type: "string", description: "YYYY-MM-DD." },
         topicIds: { type: "array", items: { type: "string" }, description: "Topic ids it covers; empty for every topic." },
+        remove: { type: "boolean", description: "With examId: remove the exam instead." },
       },
-      required: ["courseId", "title", "date", "topicIds"],
+      required: ["courseId"],
       additionalProperties: false,
     },
   },
@@ -348,11 +427,28 @@ async function callTool(params: Record<string, unknown>, tools: ConnectorTools, 
       case "course_state": {
         if (args.courseId === undefined) return toolText({ courses: await tools.courses() });
         if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
-        const state = await tools.courseState(args.courseId);
+        if (args.detail !== undefined && args.detail !== "summary" && args.detail !== "full") return toolText({ error: "detail is summary or full." }, true);
+        if (args.topicIds !== undefined && (!Array.isArray(args.topicIds) || !args.topicIds.every(isUuid))) return toolText({ error: "topicIds is a list of topic ids from course_state." }, true);
+        const state = await tools.courseState(args.courseId, { detail: (args.detail as "summary" | "full" | undefined) ?? "full", ...(args.topicIds !== undefined ? { topicIds: args.topicIds as string[] } : {}) });
         return state ? toolText(state) : toolText({ error: "No such course." }, true);
+      }
+      case "next_questions": {
+        if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
+        for (const k of ["objectiveIds", "topicIds"] as const) {
+          if (args[k] !== undefined && (!Array.isArray(args[k]) || (args[k] as unknown[]).length > 20 || !(args[k] as unknown[]).every(isUuid))) return toolText({ error: `${k} is a list of up to 20 ids from course_state.` }, true);
+        }
+        const count = typeof args.count === "number" && Number.isInteger(args.count) ? Math.min(5, Math.max(1, args.count)) : 1;
+        const write = args.write === undefined ? true : args.write === true;
+        const next = await tools.nextQuestions(args.courseId, { ...(args.objectiveIds !== undefined ? { objectiveIds: [...new Set(args.objectiveIds as string[])] } : {}), ...(args.topicIds !== undefined ? { topicIds: [...new Set(args.topicIds as string[])] } : {}), count, write });
+        return next ? toolText(next) : toolText({ error: "No such course." }, true);
       }
       case "set_exam": {
         if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
+        if (args.remove === true) {
+          if (!isUuid(args.examId)) return toolText({ error: "remove needs examId, an exam id from course_state." }, true);
+          const gone = await tools.removeExam(args.courseId, args.examId);
+          return toolText(gone, "error" in gone);
+        }
         if (typeof args.title !== "string" || args.title.trim().length === 0 || args.title.length > 120) return toolText({ error: "title is 1 to 120 characters." }, true);
         if (typeof args.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(args.date) || Number.isNaN(Date.parse(args.date))) return toolText({ error: "date is YYYY-MM-DD." }, true);
         if (!Array.isArray(args.topicIds) || !args.topicIds.every(isUuid)) return toolText({ error: "topicIds is a list of topic ids from course_state (empty for the whole course)." }, true);

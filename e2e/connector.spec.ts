@@ -18,11 +18,13 @@ const call = (page: Page, url: string, name: string, args: unknown) => rpc(page,
 
 test("Settings mints the connector link once; Claude can read the course, ask a question and have Orca grade it; Disconnect revokes it", async ({ page, student }) => {
   // The fixture's exact-answer questions, plus a choice question and a prose one, so every grader is exercised.
-  const id = ids("mc", "prose");
+  const id = ids("mc", "prose", "noq");
   const mc: QuizQuestion = { id: id.mc, kind: "Multiple choice", tier: "retrieval", topic: "Two's Complement", prompt: "Which 4-bit pattern is −5?", options: ["0101", "1011", "0110", "1111"], answer: 1, explanation: "Invert 0101 and add one.", anchor: { locator: "slide 7", excerpt: "fixture" }, objectiveId: F.convert };
   const prose: QuizQuestion = { id: id.prose, kind: "Short answer", tier: "mechanism", topic: "Two's Complement", prompt: "Why does sign extension copy the top bit?", options: [], answer: -1, rubric: { requiredIdeas: ["The top bit is the sign"], acceptableAlternatives: [], knownMisconceptions: [] }, explanation: "The weight of the new bits cancels.", anchor: { locator: "slide 9", excerpt: "fixture" }, objectiveId: F.signExtend };
   const bank = FIXTURE_STATE.questionBank[F.course];
-  await seedState(student, { ...FIXTURE_STATE, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], mc, prose] } } });
+  // Plus an objective with no questions yet, for next_questions to write for.
+  const noq = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.noq, name: "Factor an expression" };
+  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], mc, prose] } } });
   await page.goto("/settings");
   const card = page.locator('[data-part="claude-connector"]');
   await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Not connected/);
@@ -37,22 +39,37 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   const note = await page.request.post(url, { data: { jsonrpc: "2.0", method: "notifications/initialized" } });
   expect(note.status()).toBe(202);
   const tools = await rpc(page, url, "tools/list");
-  expect(tools.body!.result!.tools!.map((t) => t.name)).toEqual(["course_state", "set_exam", "questions_for", "check_answer", "record_answer", "flag_check"]);
+  expect(tools.body!.result!.tools!.map((t) => t.name)).toEqual(["course_state", "next_questions", "set_exam", "questions_for", "check_answer", "record_answer", "flag_check"]);
 
   // The courses, then one course: every objective unseen (not flagged), each with its questions counted; weak points first, so none is due.
   const courses = toolText(await call(page, url, "course_state", {}));
   expect(courses.courses).toEqual([{ id: F.course, name: "Logic Fixture" }]);
-  const state = toolText(await call(page, url, "course_state", { courseId: F.course })) as { topics: Array<{ name: string }>; objectives: Array<{ id: string; status: string; questions: number; upcoming: boolean }>; dueNow: string[]; exams: unknown[] };
-  expect(state.topics.map((t) => t.name)).toEqual(["Boolean Algebra", "Two's Complement"]);
+  const state = toolText(await call(page, url, "course_state", { courseId: F.course })) as { topics: Array<{ name: string; objectives: number; askable: number }>; objectives: Array<{ id: string; status: string; questions: number; upcoming: boolean }>; dueNow: string[]; exams: unknown[]; budget: { ok: boolean; resetsAt: string }; writing: unknown[]; examFocus: string[] };
+  expect(state.topics.map((t) => [t.name, t.objectives, t.askable])).toEqual([["Boolean Algebra", 2, 1], ["Two's Complement", 2, 2]]);
   expect(state.objectives.map((o) => [o.id, o.status, o.questions, o.upcoming]).sort()).toEqual(
     [
       [F.simplify, "unseen", 2, false],
       [F.convert, "unseen", 4, false],
       [F.signExtend, "unseen", 2, false],
+      [id.noq, "unseen", 0, false],
     ].sort(),
   );
   expect(state.dueNow).toEqual([]);
   expect(state.exams).toEqual([]);
+  expect(state.budget.ok).toBe(true);
+  expect(Date.parse(state.budget.resetsAt)).toBeGreaterThan(Date.now());
+  expect([state.writing, state.examFocus]).toEqual([[], []]);
+  // A summary leaves the objective lines out; the session needs nothing else between answers.
+  const summary = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" }));
+  expect(summary).not.toHaveProperty("objectives");
+  // next_questions picks for an objective (unseen questions first) and writes for one that has none.
+  const next = toolText(await call(page, url, "next_questions", { courseId: F.course, objectiveIds: [F.convert], count: 2 })) as { questions: Array<{ id: string }> };
+  expect(next.questions.map((q) => q.id)).toEqual([F.tc1, F.tc2]);
+  const writing = toolText(await call(page, url, "next_questions", { courseId: F.course, objectiveIds: [id.noq] })) as { questions: unknown[]; pending?: { objectiveIds: string[]; state: string; retryAfterSeconds: number; reason: string } };
+  expect(writing.questions).toEqual([]);
+  expect(writing.pending?.objectiveIds).toEqual([id.noq]);
+  expect(["started", "queued", "busy"]).toContain(writing.pending?.state);
+  expect(writing.pending?.retryAfterSeconds).toBeGreaterThan(0);
 
   // An exam with its scope; then a question for one objective, without its key.
   const exam = toolText(await call(page, url, "set_exam", { courseId: F.course, title: "Midterm", date: "2026-12-01", topicIds: [F.booleanAlgebra] })) as { id: string; title: string; topicIds: string[] };
@@ -91,9 +108,12 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   const flagged = toolText(await call(page, url, "flag_check", { courseId: F.course, objectiveIds: [F.convert], said: "why does the sign bit get copied?" })) as { flagged: Array<{ objectiveId: string; status: string }>; unknown: string[]; withoutQuestions: string[] };
   expect(flagged).toEqual({ flagged: [{ objectiveId: F.convert, status: "check-due" }], unknown: [], withoutQuestions: [] });
   const after = toolText(await call(page, url, "course_state", { courseId: F.course })) as { objectives: Array<{ id: string; status: string }>; exams: Array<{ title: string }>; dueNow: string[] };
-  expect(Object.fromEntries(after.objectives.map((o) => [o.id, o.status]))).toEqual({ [F.simplify]: "learning", [F.convert]: "check-due", [F.signExtend]: "learning" });
+  expect(Object.fromEntries(after.objectives.map((o) => [o.id, o.status]))).toEqual({ [F.simplify]: "learning", [F.convert]: "check-due", [F.signExtend]: "learning", [id.noq]: "unseen" });
   expect([...after.dueNow].sort()).toEqual([F.simplify, F.convert, F.signExtend].sort());
   expect(after.exams.map((e) => e.title)).toEqual(["Midterm"]);
+  // The exam is cancelled.
+  expect(toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, remove: true }))).toEqual({ removed: true });
+  expect((toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { exams: unknown[] }).exams).toEqual([]);
   const s = await stored(page, student);
   const events = s.evidence.filter((e) => e.kind === "answer").sort((a, b) => a.at.localeCompare(b.at));
   expect(events.map((e) => [e.questionId, e.outcome, e.grader, e.source])).toEqual([

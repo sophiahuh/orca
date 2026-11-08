@@ -18,16 +18,32 @@ function fakeTools() {
     async courses() {
       return [{ id: COURSE, name: "ALD" }];
     },
-    async courseState(courseId) {
+    async courseState(courseId, options = {}) {
       if (courseId !== COURSE) return null;
       return {
         course: { id: COURSE, name: "ALD" },
         today: "2026-11-04",
         exams,
-        topics: [{ id: TOPIC, name: "Adders" }],
-        objectives: [{ id: OBJ, topicId: TOPIC, topic: "Adders", name: "Explain carry-save", status: "unseen", recall: null, questions: 1, upcoming: false }],
+        topics: [{ id: TOPIC, name: "Adders", objectives: 1, weak: 0, askable: 1 }],
+        ...(options.detail === "summary" ? {} : { objectives: [{ id: OBJ, topicId: TOPIC, topic: "Adders", name: "Explain carry-save", status: "unseen", recall: null, questions: 1, upcoming: false }] }),
         dueNow: [OBJ],
+        examFocus: [],
+        budget: { ok: true, resetsAt: "2026-11-05T05:00:00.000Z" },
+        writing: [],
       };
+    },
+    async nextQuestions(courseId, { objectiveIds, count, write }) {
+      if (courseId !== COURSE) return null;
+      if (objectiveIds && !objectiveIds.includes(OBJ)) {
+        return write ? { questions: [], pending: { runId: null, objectiveIds, state: "started", retryAfterSeconds: 90, reason: "Orca is writing questions for these now." } } : { questions: [], reason: "No questions written for these yet (write is false)." };
+      }
+      return { questions: [{ id: Q, objectiveId: OBJ, kind: "Short answer" as const, prompt: "Why is carry-save faster?", options: [] }].slice(0, count) };
+    },
+    async removeExam(courseId, examId) {
+      const i = exams.findIndex((e) => e.id === examId);
+      if (courseId !== COURSE || i < 0) return { error: "No such exam in this course; use an id from course_state." };
+      exams.splice(i, 1);
+      return { removed: true };
     },
     async questionsFor(courseId, objectiveIds, limit) {
       if (courseId !== COURSE) return null;
@@ -89,7 +105,7 @@ test("notifications get 202 and no body; ping and tools/list answer", async () =
   assert.deepEqual((await handleRpc(rpc("ping"), tools, "s")).body, { jsonrpc: "2.0", id: 1, result: {} });
   const list = await handleRpc(rpc("tools/list"), tools, "s");
   const names = (list.body as { result: { tools: Array<{ name: string }> } }).result.tools.map((t) => t.name);
-  assert.deepEqual(names, ["course_state", "set_exam", "questions_for", "check_answer", "record_answer", "flag_check"]);
+  assert.deepEqual(names, ["course_state", "next_questions", "set_exam", "questions_for", "check_answer", "record_answer", "flag_check"]);
   for (const t of TOOLS) {
     assert.ok(t.description.length > 80, `${t.name} explains when to use it`);
     assert.equal(t.inputSchema.type, "object");
@@ -162,6 +178,46 @@ test("the instructions and tool descriptions send Claude through check_answer, w
   assert.match(INSTRUCTIONS, /needsSelfGrade/);
   const record = TOOLS.find((t) => t.name === "record_answer")!;
   assert.match(record.description, /needsSelfGrade/);
+});
+
+test("course_state takes a detail: summary leaves the objective lines out; both carry the budget, exam focus and what's being written", async () => {
+  const { tools, COURSE } = fakeTools();
+  const full = text(await handleRpc(call("course_state", { courseId: COURSE }), tools, "s"));
+  assert.ok(Array.isArray(full.objectives));
+  assert.deepEqual(full.budget, { ok: true, resetsAt: "2026-11-05T05:00:00.000Z" });
+  assert.deepEqual([full.examFocus, full.writing], [[], []]);
+  const summary = text(await handleRpc(call("course_state", { courseId: COURSE, detail: "summary" }), tools, "s"));
+  assert.equal("objectives" in summary, false);
+  assert.deepEqual(summary.topics, [{ id: "e0000000-0000-4000-8000-000000000001", name: "Adders", objectives: 1, weak: 0, askable: 1 }]);
+  assert.equal(isError(await handleRpc(call("course_state", { courseId: COURSE, detail: "brief" }), tools, "s")), true);
+});
+
+test("next_questions asks one at a time by default, steers by objective, and says pending or why when there's nothing", async () => {
+  const { tools, COURSE, OBJ, Q } = fakeTools();
+  const one = text(await handleRpc(call("next_questions", { courseId: COURSE }), tools, "s"));
+  assert.deepEqual((one.questions as Array<{ id: string }>).map((q) => q.id), [Q]);
+  const other = "f0000000-0000-4000-8000-000000000002";
+  const pending = text(await handleRpc(call("next_questions", { courseId: COURSE, objectiveIds: [other, other], count: 2 }), tools, "s"));
+  assert.deepEqual(pending.questions, []);
+  assert.deepEqual((pending.pending as { objectiveIds: string[]; state: string; retryAfterSeconds: number }).objectiveIds, [other], "ids deduplicated; Orca writes for them");
+  const held = text(await handleRpc(call("next_questions", { courseId: COURSE, objectiveIds: [other], write: false }), tools, "s"));
+  assert.match(String(held.reason), /write is false/);
+  assert.equal(isError(await handleRpc(call("next_questions", { courseId: COURSE, objectiveIds: [OBJ], count: 9 }), tools, "s")), false, "count is clamped, not refused");
+  assert.equal(isError(await handleRpc(call("next_questions", { courseId: COURSE, topicIds: ["Adders"] }), tools, "s")), true, "topics are ids");
+});
+
+test("set_exam with remove deletes the exam", async () => {
+  const { tools, exams, COURSE, TOPIC } = fakeTools();
+  const saved = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz 3", date: "2026-10-23", topicIds: [TOPIC] }), tools, "s"));
+  assert.equal(exams.length, 1);
+  const gone = text(await handleRpc(call("set_exam", { courseId: COURSE, examId: saved.id, remove: true }), tools, "s"));
+  assert.deepEqual(gone, { removed: true });
+  assert.equal(exams.length, 0);
+  assert.equal(isError(await handleRpc(call("set_exam", { courseId: COURSE, remove: true }), tools, "s")), true, "remove needs the exam's id");
+});
+
+test("the instructions script the session: state, one question at a time, Orca grades, pending and budget handled", () => {
+  for (const word of ["next_questions", "check_answer", "pending", "retryAfterSeconds", "budget", "flag_check", "set_exam"]) assert.match(INSTRUCTIONS, new RegExp(word));
 });
 
 test("set_exam checks its fields and returns the saved exam", async () => {
