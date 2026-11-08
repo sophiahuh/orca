@@ -25,3 +25,15 @@ test("opened directly, Back goes to the page it sits under", async ({ page }) =>
   await back(page);
   await expect(page).toHaveURL(/:\d+\/$/);
 });
+
+/** Account Settings open from the avatar in the top bar (no separate gear there); a course's sidebar gear opens its own settings. */
+test("the avatar opens account Settings; a course's gear opens that course's settings", async ({ page }) => {
+  await page.goto("/");
+  const topBar = page.locator("[data-part=top-bar]");
+  await expect(topBar.getByRole("link", { name: "Settings" })).toHaveCount(1);
+  await topBar.locator("[data-part=avatar-settings]").click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.goto(`/course/${SLUG}`);
+  await page.getByRole("link", { name: `${FIXTURE_STATE.courses[0].short} settings` }).click();
+  await expect(page).toHaveURL(new RegExp(`/course/${SLUG}/settings$`));
+});

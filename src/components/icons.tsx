@@ -102,15 +102,6 @@ export function IconUpload({ size = 26, ...props }: IconProps) {
   );
 }
 
-export function IconGear({ size = 26, ...props }: IconProps) {
-  return (
-    <svg viewBox="0 0 26 26" {...base(size, props)} strokeWidth={2.71}>
-      <circle cx="13" cy="13" r="3.79" />
-      <path d="M13 2.71v3.25M13 20.04v3.25M2.71 13h3.25M20.04 13h3.25M5.74 5.74l2.28 2.28M17.98 17.98l2.28 2.28M5.74 20.26l2.28-2.28M17.98 8.02l2.28-2.28" />
-    </svg>
-  );
-}
-
 /** Figma: Icon/Settings (Header & Nav Assets; 24 px grid, 2.2 px round stroke). */
 export function IconSettings({ size = 24, ...props }: IconProps) {
   return (
