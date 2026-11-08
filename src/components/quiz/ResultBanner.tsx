@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { IconCheck, IconClose } from "@/components/icons";
+import { MathText } from "@/components/ui/MathText";
 import type { Outcome } from "@/lib/mastery/types";
 import { cn } from "@/lib/cn";
 import { popIn } from "@/lib/motion";
@@ -47,7 +48,11 @@ export function ResultBanner({ outcome, line, nonce }: { outcome: Outcome | null
           </span>
           <span className="flex flex-col">
             <span className={cn("text-[22px] font-bold leading-tight", good ? "text-good-text" : outcome === "partial" ? "text-warn-text" : "text-bad-text")}>{TITLE[outcome]}</span>
-            {line && <span className="text-[15px] font-semibold text-prussian">{line}</span>}
+            {line && (
+              <span className="text-[15px] font-semibold text-prussian">
+                <MathText text={line} />
+              </span>
+            )}
           </span>
         </motion.div>
       )}

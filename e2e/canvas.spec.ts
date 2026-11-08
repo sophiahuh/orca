@@ -30,6 +30,19 @@ test("connected, Settings says who, and offers the import; the import page lists
   await page.route("**/api/canvas/courses", (route) =>
     route.fulfill({ json: { courses: [{ id: "77", name: "Logic Fixture", code: "ELEN 3331", term: "Fall 2026", linkedCourseId: null }, { id: "78", name: "Signals", code: "ELEN 3801", term: "Fall 2026", linkedCourseId: null }] } }),
   );
+  // The picker's listing: two files in a module, one loose, one already in Orca.
+  await page.route("**/api/canvas/courses/77/files", (route) =>
+    route.fulfill({
+      json: {
+        files: [
+          { id: "501", name: "L01_Fixture.pdf", module: "Week 1", assigned: "2026-09-08", type: "Lecture", size: 1200, linked: false },
+          { id: "502", name: "L02_Fixture.pdf", module: "Week 1", assigned: "2026-09-10", type: "Lecture", size: 1300, linked: false },
+          { id: "503", name: "Old scan.pdf", module: null, assigned: null, type: "Other", size: 90, linked: false },
+          { id: "504", name: "Syllabus.pdf", module: null, assigned: null, type: "Syllabus", size: 50, linked: true },
+        ],
+      },
+    }),
+  );
   const imports: string[] = [];
   await page.route("**/api/canvas/import", (route) => {
     imports.push(route.request().postData() ?? "");
@@ -54,8 +67,17 @@ test("connected, Settings says who, and offers the import; the import page lists
   await expect(courses).toHaveCount(2);
   await expect(courses.first()).toContainText("ELEN 3331 · Fall 2026");
   await courses.first().locator('[data-part="canvas-import"]').click();
+  // The picker: every new file ticked, the one already in Orca fixed; untick the loose scan, then import.
+  const picker = courses.first().locator('[data-part="canvas-files"]');
+  await expect(picker.locator('[data-part="canvas-module"]')).toHaveCount(2);
+  await expect(picker.locator('[data-part="canvas-file"]')).toHaveCount(4);
+  await expect(picker.locator('[data-part="canvas-file"][data-id="504"]')).toBeDisabled();
+  await expect(picker.locator('[data-part="canvas-import-chosen"]')).toHaveText("Import 3 files");
+  await picker.locator('[data-part="canvas-file"][data-id="503"]').uncheck();
+  await expect(picker.locator('[data-part="canvas-import-chosen"]')).toHaveText("Import 2 files");
+  await picker.locator('[data-part="canvas-import-chosen"]').click();
   await expect(courses.first().locator('[data-part="canvas-summary"]')).toHaveText(/Updated Logic Fixture · 1 exam · 2 assignments on the calendar · syllabus · files: 2 added, 1 skipped \(Old scan\.pdf\)\./);
-  expect(imports).toEqual([JSON.stringify({ canvasCourseId: "77" })]);
+  expect(imports).toEqual([JSON.stringify({ canvasCourseId: "77", fileIds: ["501", "502"] })]);
   await expect(courses.first().locator('[data-part="posted-at-once"]')).toBeVisible();
   await expect(courses.first().locator('[data-part="canvas-import"]')).toHaveText("Update");
 

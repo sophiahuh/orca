@@ -467,7 +467,15 @@ without questions. Handwritten markers: Settings describes the student's marks
 (checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the whole topics
 taught on each tapped page, every objective of each (owner, 2026-11-07). Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
 plans: `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`,
-`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `phase-4`, shipping together.
+`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `main` since 2026-11-05 (Plan A) and 2026-11-07 (B and C).
+
+Math in questions (Amanda, 2026-11-08): the writing steps put math in LaTeX between `\( \)` or
+`\[ \]` (`QUIZ_RUBRIC`); exact answers stay plain text, since they're compared with what the
+student types. The quiz draws it with KaTeX (`src/components/ui/MathText.tsx`, prompt, options,
+solution, key and result banner); question validation refuses math in what a question shows (not extraction text or source excerpts) that doesn't parse or uses a
+command KaTeX would have to trust (`\href`, `\htmlClass`…), and the one `react/no-danger`
+exception is KaTeX's own output. New dependency: `katex`, since nothing in the project rendered
+math. Older questions stay plain text.
 
 ### Phase 5 — Relation mastery, exams, calendar (not started)
 Already built ahead of it: the `exams` table, exams and scheduled reviews on the calendar. Not

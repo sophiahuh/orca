@@ -61,9 +61,10 @@ migrations in `supabase/migrations/` are the source of truth.
 5. **Deploy the tasks.** Since 2026-11-04 the Deploy workflow does it: add `TRIGGER_ACCESS_TOKEN`
    (the `tr_pat_…` from step 3) and `TRIGGER_PROJECT_REF` (`proj_…`) as repository secrets
    (GitHub → Settings → Secrets and variables → Actions), and every merge to `main` deploys
-   `src/trigger/` to the project's prod environment before the site goes out. (By hand, the old
-   way: `TRIGGER_PROJECT_REF=proj_…` in `.env`, `npx trigger.dev@latest login`, then
-   `npx trigger.dev@latest deploy`.)
+   `src/trigger/` to the project's prod environment before the site goes out. Orca's secrets are
+   set (2026-11-07). By hand: `npx trigger.dev@4 login`, then `npx trigger.dev@4 deploy --env prod`
+   (the CLI matches the pinned SDK; `trigger.config.ts` defaults the ref to Orca's project, and
+   `TRIGGER_PROJECT_REF` overrides it).
 6. **Switch the site over.** On Vercel (Production env vars) set `TRIGGER_SECRET_KEY`
    (`tr_prod_…`) and `ORCA_JOBS=trigger`, then redeploy. From then on uploads, imports, top-ups
    and dives run on Trigger.dev with a 30-minute limit per job instead of Vercel's 5.
