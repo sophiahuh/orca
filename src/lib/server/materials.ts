@@ -23,7 +23,7 @@ import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readP
 import { readPptx } from "@/lib/material/read-pptx";
 import { looksLikeZip } from "@/lib/material/unzip";
 import { isOwnPath, uploadPath } from "@/lib/material/paths";
-import { cancelJobs } from "@/lib/server/jobs/start";
+import { cancelJobs, checkRuns } from "@/lib/server/jobs/start";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -250,7 +250,8 @@ export async function processUpload(db: OrcaSupabase, ownerId: string, id: strin
  * The objectives only this material taught are archived, and a topic it created that is left with
  * no live objective is archived too; what another upload also teaches stays. Answer history is
  * never touched (archived objectives just leave reviews and the island). A queued or paused run
- * for it is failed; a running one must be stopped first (409).
+ * for it is failed (its Trigger.dev run cancelled, and the student's next job started); a running one
+ * must be stopped first (409).
  */
 export type Removal = { status: number; body: { removed: true; archivedObjectives?: number } | { error: string } };
 
@@ -280,9 +281,18 @@ export async function removeMaterial(db: OrcaSupabase, ownerId: string, id: stri
   if (runsError) throw fail("read the material's runs", runsError);
   if (runs.some((r) => r.status === "running")) return answer(409, { error: "Orca is building from this file right now. Stop that upload first, then remove it." });
   if (runs.length) {
-    const { error: failed } = await db.from("pipeline_runs").update({ status: "failed", error: "Removed by you.", progress: null }).eq("owner_id", ownerId).in("id", runs.map((r) => r.id)).in("status", ["queued", "waiting", "paused"]);
-    if (failed) throw fail("stop the material's queued run", failed);
+    const { data: failed, error: failError } = await db
+      .from("pipeline_runs")
+      .update({ status: "failed", error: "Removed by you.", progress: null })
+      .eq("owner_id", ownerId)
+      .in("id", runs.map((r) => r.id))
+      .in("status", ["queued", "waiting", "paused"])
+      .select("id");
+    if (failError) throw fail("stop the material's queued run", failError);
+    // A queued run its job claimed between the read and this update is running now: leave it to Stop.
+    if (failed.length < runs.length) return answer(409, { error: "Orca started building from this file just now. Stop that upload first, then remove it." });
     await cancelJobs(db, ownerId, runs.map((r) => r.id)); // a queued run already handed to Trigger
+    await checkRuns(db, ownerId); // the removed run may have been next in line: start the one behind it
   }
 
   // The objectives only this upload taught are archived (their questions go with them, by objective).
