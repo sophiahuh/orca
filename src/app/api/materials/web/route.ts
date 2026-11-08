@@ -35,8 +35,12 @@ export async function POST(request: Request) {
     const id = crypto.randomUUID();
     const filename = `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`.slice(0, 255);
     const hash = createHash("sha256").update(url.href).digest("hex");
+    // The hash index stopped being unique on 2026-11-07 (uploading again is allowed), so the duplicate is looked up, not caught.
+    const { data: same, error: sameError } = await db.from("materials").select("id").eq("owner_id", student.id).eq("course_id", parsed.data.courseId).eq("content_hash", hash).neq("status", "removed").limit(1).maybeSingle();
+    if (sameError) return reply(500, { error: "Orca couldn't check that website." });
+    if (same) return reply(409, { error: "That course page was already added." });
     const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/html" }).select().single();
-    if (error) return reply(error.code === "23505" ? 409 : 500, { error: error.code === "23505" ? "That course page was already added." : "Orca couldn't save that website." });
+    if (error) return reply(500, { error: "Orca couldn't save that website." });
     const pages = [{ owner_id: student.id, material_id: id, n: 1, text }];
     const inserted = await db.from("material_pages").insert(pages);
     if (inserted.error) return reply(500, { error: "Orca saved the website but couldn't read it." });
