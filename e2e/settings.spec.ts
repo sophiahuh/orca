@@ -89,3 +89,22 @@ test("a weekly dive lands the day before class until the student picks its day",
   expect(s.schedules[F.course]).toEqual({ meetings: [{ day: 2, start: "10:00", end: "11:15" }], quickDays: null, deepDays: [5] });
   expect(s.configs[F.course].quick.cadence).toBe("Twice a week");
 });
+
+/** Deleting a course (soft delete): a red button on the course's settings, behind a confirmation. */
+test("a course can be deleted from its settings, after a confirmation", async ({ page, student }) => {
+  await seedFixtureCourse(student);
+  await page.goto("/course/logic-e2e/settings");
+  await page.locator('[data-part="delete-course"]').click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Keep it" }).click();
+  await expect(dialog).toBeHidden();
+  expect((await stored(page, student)).courses.map((c) => c.id)).toContain(F.course);
+
+  await page.locator('[data-part="delete-course"]').click();
+  await page.locator('[data-part="delete-course-yes"]').click();
+  await expect(page).toHaveURL(/\/$/);
+  expect((await stored(page, student)).courses.map((c) => c.id)).not.toContain(F.course);
+  await page.goto("/course/logic-e2e");
+  await expect(page.getByText("We couldn't find that island.")).toBeVisible();
+});

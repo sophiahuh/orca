@@ -90,7 +90,7 @@ export function pickOption(response: string, options: readonly string[]): number
 
 export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Date = () => new Date()): ConnectorTools {
   const owns = async (courseId: string) => {
-    const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+    const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).eq("id", courseId).is("deleted_at", null).maybeSingle();
     if (error) throw new Error(`Couldn't read the course: ${error.message}`);
     return data;
   };
@@ -257,7 +257,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
 
   return {
     async courses() {
-      const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).order("created_at");
+      const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).is("deleted_at", null).order("created_at");
       if (error) throw new Error(`Couldn't read the courses: ${error.message}`);
       return data.map((c) => ({ id: c.id, name: c.name }));
     },

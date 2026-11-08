@@ -57,6 +57,7 @@ function fakeDb(tables: Record<string, Row[]>, opts: { uniqueInFlight?: boolean 
       },
       eq: (k: string, v: unknown) => (filters.push((r) => r[k] === v), q),
       neq: (k: string, v: unknown) => (filters.push((r) => r[k] !== v), q),
+      is: (k: string, v: unknown) => (filters.push((r) => (r[k] ?? null) === v), q),
       gte: (k: string, v: string) => (filters.push((r) => (r[k] as string) >= v), q),
       in: (k: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[k])), q),
       lt: (k: string, v: string) => (filters.push((r) => (r[k] as string) < v), q),

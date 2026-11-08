@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { type CourseSchedule, type ReviewConfig, NO_SCHEDULE } from "@/lib/data";
 import { useOrca } from "@/lib/store";
@@ -12,6 +13,7 @@ import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
 import { ClassMeetings, meetingProblem } from "@/components/config/ClassMeetings";
 import { ReviewDays } from "@/components/config/ReviewDays";
+import { DeleteCourse } from "@/components/config/DeleteCourse";
 import { classCadence } from "@/lib/mastery/review-days";
 import { fadeUp, stagger } from "@/lib/motion";
 
@@ -29,6 +31,7 @@ async function saveCourseSettings(body: { courseId: string; reviewConfig: Review
 /** Course-only overrides. Saving never changes account defaults and deliberately stays on this page. */
 export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]/settings">) {
   const { slug } = use(params);
+  const router = useRouter();
   const { courses, configs, configOverrides, courseNotes, schedules, defaultConfig, hydrated, refresh } = useOrca();
   const course = courses.find((item) => item.slug === slug);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -161,6 +164,13 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
             </div>
             <ClassMeetings meetings={schedule.meetings} onChange={changeMeetings} />
           </Card>
+          <DeleteCourse
+            course={course}
+            onDeleted={() => {
+              router.replace("/");
+              void refresh();
+            }}
+          />
         </motion.aside>
       </motion.div>
     </Screen>
