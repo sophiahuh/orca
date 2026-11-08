@@ -215,19 +215,18 @@ one PR to `main`; Fix-mode checks per commit, the merge gate once per phase.
    parsing (also a quality fix); C8.
 4. Only then revisit the token cap.
 
-### Phase 4: Canvas lite (import catalogues, reads on demand)
+### Phase 4: Canvas import correctness (reading on import stays)
 
-1. Import inserts materials as `listed` (no download, no pages) with the Canvas file id; the
-   syllabus is still read (cheap; **topics and `taught` hints only, no objectives**, D2). Dates and
-   the file list arrive in seconds instead of minutes.
-2. A read is triggered by: a tap on a listed file or on "Which slides were hard?", a dive or exam
-   scope that covers its module or date, a flag on a topic whose only placements are listed files,
-   "Mark covered", and a nightly top-up that reads the next listed file by date when the day's
-   budget allows. A `read` run (download + `processUpload`, no model) chains into the upload run.
-3. UI: a slim card for a listed file ("Not read yet · Read now, ≈N pages"); "Read everything up to
-   here" replaces the coverage question; dives say "Orca will read 3 decks first".
-4. E5 dump rule over all picks, types from file names, quizzes aren't exams by default, re-import
-   updates dates.
+**Decided by the owner (2026-11-08):** the import keeps reading every file. With the reading steps
+on the small model (`ORCA_READ_MODEL`, built the same day) a whole course costs about 30 cents to
+read, so the "list files, read on demand" design is dropped: it would have traded a few cents for
+a five-minute wait the first time a student practised an unread deck. What stays from it:
+
+1. E5: the dump rule over all picks (not only unlinked ones); material type from the file name
+   before the module name; a "quiz" assignment isn't an exam by default; re-import updates moved
+   due dates and a changed syllabus.
+2. D2's syllabus half: the syllabus produces topics and `taught` hints, no objectives.
+3. The import summary counts runs held by the daily limit and says so (with C3).
 
 ### Phase 5: structure integrity
 
@@ -249,10 +248,11 @@ E6, E7, E8, F6, F7, F8, A9, A11, and the §3G clean-up list.
    weak-points spec said no placement quiz; this is narrower.
 3. **Syllabus → topics only, no objectives** (D2). Recommend yes; the 78-objective Circuit
    Analysis outline is the case against the current behaviour.
-4. **Model per step.** Recommend measuring with the extraction scorer, then the small model for
-   the cheap steps at least. The token cap stays at 2M until then (owner, 2026-11-08).
-5. **Canvas lite** (phase 4). Recommend yes; it's what makes "import a whole course" cost nothing
-   until the student actually studies.
+4. **Model per step.** **Decided 2026-11-08:** the reading steps run on the small model
+   (`ORCA_READ_MODEL=gpt-6-luna`); question writing and grading stay on the strong one. The token
+   cap stays at 2M until the quality of the small model's reading has been looked at.
+5. **Canvas lite** (reading on demand). **Decided 2026-11-08: no.** Reading on import stays; the
+   small model makes it cheap enough, and on-demand reading would add a wait before practice.
 6. **A "quiz" assignment is an exam** (E5). Recommend no by default.
 
 ## 6. What's good (keep)
