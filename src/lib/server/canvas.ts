@@ -11,7 +11,7 @@ import { isIP } from "node:net";
 import { type CanvasAssignment, type CanvasCourse, type CanvasFile, type CanvasModule, type CanvasUser, type PickedFile, classifyAssignment, dayOf, htmlToText, pickFiles, postedAtOnce } from "@/lib/canvas/api";
 import { type CanvasClient, CanvasError, canvasClient } from "@/lib/canvas/client";
 import { placeIslands } from "@/lib/course/islands";
-import { COURSE_NAME_MAX, type IslandVariant, shortName, slugify } from "@/lib/data";
+import { COURSE_NAME_MAX, type IslandVariant, type MaterialType, shortName, slugify } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
 import { UPLOAD_MIMES, uploadKind } from "@/lib/material/kind";
 import { startUploadJob } from "@/lib/server/jobs/start";
@@ -134,6 +134,35 @@ export async function listCanvasCourses(db: OrcaSupabase, ownerId: string, clien
     .map((c) => ({ id: String(c.id), name: c.name, code: c.course_code ?? null, term: c.term?.name ?? null, linkedCourseId: linked.get(`course:${c.id}`) ?? null }));
 }
 
+/* ── A course's files, for the picker ── */
+
+export interface CanvasFileLine {
+  id: string;
+  name: string;
+  module: string | null;
+  assigned: string | null;
+  type: MaterialType;
+  /** Bytes, when Canvas said. */
+  size: number | null;
+  /** Already imported into Orca (a link exists): shown ticked and fixed. */
+  linked: boolean;
+}
+
+/**
+ * The files an import would pull from one course, in import order, so the student can choose
+ * (owner, 2026-11-08): modules first, then the loose files, readable kinds only; each says whether
+ * it's already in Orca.
+ */
+export async function listCanvasFiles(db: OrcaSupabase, ownerId: string, client: CanvasClient, canvasCourseId: string, timeZone?: string): Promise<CanvasFileLine[]> {
+  const id = encodeURIComponent(canvasCourseId);
+  const [modules, files, linked] = await Promise.all([
+    optional(client.getAll<CanvasModule>(`/courses/${id}/modules`, { "include[]": ["items"] })),
+    optional(client.getAll<CanvasFile>(`/courses/${id}/files`)),
+    links(db, ownerId),
+  ]);
+  return pickFiles(modules, files, timeZone).map((p) => ({ id: String(p.id), name: p.name, module: p.module, assigned: p.assigned, type: p.type, size: p.file?.size ?? null, linked: linked.has(`file:${p.id}`) }));
+}
+
 /* ── Importing one course ── */
 
 export interface ImportSummary {
@@ -162,7 +191,8 @@ export interface ImportOptions {
   budgetMs?: number;
   now?: () => Date;
   /** The student's IANA timezone for due, unlock and posting dates; UTC when absent. */
-  timeZone?: string;
+  timeZone?: string;  /** Only these Canvas file ids are pulled (the picker's choice); unset means every readable file. */
+  fileIds?: ReadonlySet<string>;
 }
 
 async function orcaCourseFor(db: OrcaSupabase, ownerId: string, course: CanvasCourse, linked: Map<string, string>): Promise<{ id: string; slug: string; name: string; created: boolean }> {
@@ -292,7 +322,7 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
   const dates = await importAssignments(db, ownerId, orca.id, assignments, linked, options.timeZone);
   const syllabus = await importSyllabus(db, ownerId, orca.id, course, linked);
 
-  const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`));
+  const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`) && (!options.fileIds || options.fileIds.has(String(p.id))));
   // Posted all at once, nothing says how far the class has got: the files wait until the student says (the plan's
   // assumption 1, corrected by the owner). Posted over the weeks, each file was posted as the class reached it,
   // except one whose module opens in the future.

@@ -58,6 +58,8 @@ export const LIMITS = {
     web: { max: 20, windowSeconds: 3600 },
     /** Connecting Canvas (POST /api/canvas): a DNS lookup and an outbound request to the site named. */
     canvasConnect: { max: 10, windowSeconds: 3600 },
+    /** Listing a Canvas course's files for the picker (GET /api/canvas/courses/:id/files): two outbound calls each. */
+    canvasFiles: { max: 60, windowSeconds: 3600 },
     /** A Claude connector call (POST /api/mcp/<token>): the link is the only credential, so a leaked one is bounded (2026-11-08). */
     connector: { max: 120, windowSeconds: 60 },
   },
