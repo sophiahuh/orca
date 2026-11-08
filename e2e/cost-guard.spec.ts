@@ -70,6 +70,11 @@ test("an upload past the student's daily token budget is saved and waits, the mo
   await page.goto(`/course/${course.slug}/review?run=${generation.runId}`);
   await expect(page.locator("[data-part=run-waiting]")).toContainText("Daily limit reached: processing resumes tomorrow.");
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
+  // The waiting card can be stopped or its file removed (2026-11-08); here it's stopped.
+  await expect(page.locator("[data-part=run-waiting] [data-part=remove-material]")).toBeVisible();
+  await page.locator("[data-part=run-waiting] [data-part=stop-upload]").click();
+  await page.locator("[data-part=run-waiting] [data-part=stop-confirm]").click();
+  await expect.poll(async () => (await runStatus(generation.runId!)).status, { timeout: 20_000 }).toBe("failed");
   // The file and its pages are kept: nothing to redo tomorrow.
   const { count } = await student.db.from("material_pages").select("n", { count: "exact", head: true });
   expect(count).toBe(2);
