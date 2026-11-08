@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { usePathname } from "next/navigation";
 import { DueCard } from "@/components/ui/DueCard";
-import { useOrca, useTodos } from "@/lib/store";
+import { useAgenda, useOrca, useTodos } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
 import type { Course } from "@/lib/data";
 import type { TodoCard } from "@/lib/mastery/todo";
@@ -49,6 +49,22 @@ function Section({ title, items, hydrated, courses, emptyNote }: { title: string
 /** On a course page, Due today becomes the caught-up card when nothing in the course is due. */
 function CourseToday({ course, hydrated, items, courses }: { course: Course; hydrated: boolean; items: TodoCard[]; courses: Map<string, Course> }) {
   const caughtUp = useCaughtUp(course);
+  const agenda = useAgenda()[course.id];
+  // Weak points are due but none has a question a quick review can ask yet (written after a flag;
+  // thumbed-down ones don't count): say so, instead of "Nothing due" (owner, 2026-11-08).
+  if (hydrated && items.length === 0 && agenda && agenda.dueToday.length > 0) {
+    const n = agenda.dueToday.length;
+    return (
+      <motion.section variants={stagger()} initial="hidden" animate="show" className="flex flex-col gap-[12px]">
+        <motion.h2 variants={fadeUp} className="text-[22px] font-bold text-prussian">
+          Due today
+        </motion.h2>
+        <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep" data-part="writing-questions">
+          Writing questions for {n} weak {n === 1 ? "spot" : "spots"}… Your quick review starts once they&apos;re ready.
+        </motion.p>
+      </motion.section>
+    );
+  }
   if (hydrated && items.length === 0 && caughtUp) {
     return (
       <motion.section variants={stagger()} initial="hidden" animate="show" className="flex flex-col gap-[12px]">

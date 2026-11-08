@@ -57,16 +57,35 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   - a connector *check me* gets 2 questions written (it still asks one).
 - **What would change:** each is one small change in the files the plan names.
 
-### Who grades a connector answer, and what Claude's tool output shows (2026-11-05)
-- **Source:** the Claude connector (`src/lib/connector/mcp.ts`).
-- **Today:** `questions_for` hands Claude each question with its answer, exact forms or rubric, and
-  Claude grades and reports through `record_answer` as a self-marked answer (half credit). A student
-  who expands the tool result in Claude can read the answers before answering.
-- **Alternative:** a `check_answer` tool: Claude sends the student's words, Orca grades them itself
-  (exact and choice locally, prose through the server's rubric grader on the owner's key) and
-  records the result as a full-credit answer with Orca's own grader, and `questions_for` stops
-  returning answers. Consistent with the app's grading, costs model calls for prose, and the
-  student can no longer peek. Worth deciding before classmates get links.
+### Who grades a connector answer (decided by the owner 2026-11-08: Orca does)
+- **Source:** the Claude connector (`src/lib/connector/mcp.ts`); the 2026-11-08 review plan, §5 decision 1.
+- **Built:** `check_answer` grades the student's words (choice and exact locally, prose through the
+  server's rubric grader on the owner's key, under the grade rate limit and the daily budget) and
+  records a full-credit answer with Orca's own grader; `questions_for` no longer returns keys; when
+  the grader can't run (no model, budget, rate limit, grading off) the key is handed over with
+  `needsSelfGrade` and Claude's own grade goes through `record_answer`, self-marked, with the
+  student's words stored.
+- **Assumed, pending the owner:**
+  - a choice answer is read as the option's number as shown (1-based), its letter, or its text; an
+    answer that fits no option is refused rather than guessed;
+  - the student's words on a connector answer are kept on the evidence row (`note`) for audit, never
+    read by the fold, and never shown in the app yet;
+  - a self-marked correct on an unflagged objective leaves it `unseen` (it no longer reads
+    "Verified"); `verified` takes an answer Orca graded;
+  - a question missed before earns **0.5** credit when answered right on a later day (its answer was
+    shown), counted as graded credit when Orca graded it; nothing on the same day; each question
+    earns credit once;
+  - a struggled flag rates the FSRS card Again (a miss's rating), so the first check after
+    re-learning is short;
+  - a graded partial or correct answer ends a run of misses for the mix-up rule (two misses with a
+    partial between aren't a mix-up);
+  - exact answers that are algebraic or Boolean expressions are refused when questions are written
+    (a rubric or multiple choice instead); existing questions with such keys keep string matching;
+    numbers written with a point, exponent or fraction compare by value, bit strings never do;
+  - the sidebar says "Writing questions for N weak spots…" when weak points are due but none has an
+    askable question, and a flag top-up counts thumbed-down questions as missing.
+- **Not done:** islands and rings still count a fading objective as not held the moment its check
+  passes (the review plan's A8); it needs the course's review schedule inside the mastery computation.
 
 ### Canvas import assumptions (2026-11-04)
 - **Source:** `docs/superpowers/plans/2026-11-04-canvas-import.md`.

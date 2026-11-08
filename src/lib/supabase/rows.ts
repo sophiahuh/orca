@@ -34,6 +34,7 @@ export function eventFromRow(r: EvidenceRow): EvidenceEvent {
     grader: r.grader as AnswerEvent["grader"],
     source: r.source as AnswerEvent["source"],
     sessionId: r.session_id,
+    ...(r.note !== null ? { response: r.note } : {}),
   };
 }
 
@@ -41,7 +42,7 @@ export function eventFromRow(r: EvidenceRow): EvidenceEvent {
 export function eventToRow(e: EvidenceEvent): Omit<EvidenceRow, "owner_id"> {
   const common = { id: e.id, kind: e.kind, at: e.at, course_id: e.courseId, topic_id: e.topicId, objective_id: e.objectiveId };
   return e.kind === "answer"
-    ? { ...common, question_id: e.questionId, tier: e.tier, outcome: e.outcome, grader: e.grader, source: e.source, session_id: e.sessionId, material_id: null, note: null, flag_source: null, page: null }
+    ? { ...common, question_id: e.questionId, tier: e.tier, outcome: e.outcome, grader: e.grader, source: e.source, session_id: e.sessionId, material_id: null, note: e.response ?? null, flag_source: null, page: null }
     : { ...common, question_id: null, tier: null, outcome: null, grader: null, source: null, session_id: null, material_id: e.materialId, note: e.note, flag_source: e.flagSource, page: e.page };
 }
 

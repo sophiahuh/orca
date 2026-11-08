@@ -28,6 +28,14 @@ test("events survive the trip to a row and back, with Postgres's timestamp forma
   }
 });
 
+test("a connector answer's words ride the note column and come back as response", () => {
+  const said: AnswerEvent = { ...answer, id: "e9", source: "connector", grader: "exact", response: "x + y" };
+  const row = { ...eventToRow(said), owner_id: "u" };
+  assert.equal(row.note, "x + y");
+  assert.deepEqual(eventFromRow(row), said);
+  assert.equal(eventToRow(answer).note, null, "an answer without words stores none");
+});
+
 test("a row missing a field its kind needs throws instead of becoming a partial event", () => {
   const row = { ...eventToRow(answer), owner_id: "u", outcome: null };
   assert.throws(() => eventFromRow(row), /missing/);

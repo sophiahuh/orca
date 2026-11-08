@@ -14,7 +14,7 @@ import type { ScreenHit } from "../untrusted/screen.ts";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 const KNOWN_VERSIONS = new Set(["2025-06-18", "2025-03-26", "2024-11-05"]);
-export const SERVER_INFO = { name: "orca", version: "0.1" } as const;
+export const SERVER_INFO = { name: "orca", version: "0.2" } as const;
 
 /** What Claude is told when it connects; the tool descriptions do the rest. */
 export const INSTRUCTIONS =
@@ -22,9 +22,11 @@ export const INSTRUCTIONS =
   "the student can do it, and a bank of questions written from their course material. Before " +
   "planning a study session or saying what to work on, call course_state. When the student says " +
   "what an exam covers (from the professor, the syllabus, or a classmate), call set_exam. To check " +
-  "the student, ask questions from questions_for and grade them yourself; then call record_answer " +
-  "for each one so Orca's record stays right. Never record an answer you didn't grade. When the student " +
-  "asks about something or gets it wrong in this chat, call flag_check so Orca checks them on it later.";
+  "the student, ask questions from questions_for one at a time and send each answer, in the student's " +
+  "words, to check_answer: Orca grades it, records it and returns the key and explanation for you to " +
+  "teach from. Only when check_answer says needsSelfGrade do you grade against the key it returns and " +
+  "call record_answer. Never record an answer the student didn't give. When the student asks about " +
+  "something or gets it wrong in this chat, call flag_check so Orca checks them on it later.";
 
 /* ── Tool results: plain data the implementations return; the protocol wraps them ── */
 
@@ -68,24 +70,54 @@ export interface CourseState {
   dueNow: string[];
 }
 
+/** A question as Claude asks it: no key (Orca grades through check_answer, which returns the key afterwards). */
 export interface QuestionLine {
   id: string;
   objectiveId: string;
   kind: "Multiple choice" | "True or false" | "Short answer";
   prompt: string;
+  /** Choices for a choice question, in the order to show them; empty for short answer. */
   options: string[];
-  /** Index into options for choice questions; -1 for short answer. */
-  answer: number;
-  /** Accepted exact answers for a short answer, if it has an exact form. */
-  exact?: string[];
-  /** How to judge a prose answer, if there's no exact form. */
-  rubric?: { requiredIdeas: string[]; acceptableAlternatives: string[]; knownMisconceptions: Array<{ description: string; indicativePhrasing: string[] }> };
-  explanation: string;
   /** Where in the course material it's grounded, when it is. */
   anchor?: { locator: string; excerpt: string };
 }
 
 export type Outcome = "correct" | "partial" | "incorrect";
+
+export interface Rubric {
+  requiredIdeas: string[];
+  acceptableAlternatives: string[];
+  knownMisconceptions: Array<{ description: string; indicativePhrasing: string[] }>;
+}
+
+/** The key, returned once an answer is checked (or when Orca can't check it). */
+export interface AnswerKey {
+  /** The right answer as text: the right option, the first accepted exact form, or the ideas a full prose answer needs. */
+  answer: string;
+  /** Every accepted spelling of an exact answer. */
+  exact?: string[];
+  /** How a prose answer is judged. */
+  rubric?: Rubric;
+  explanation: string;
+}
+
+/** An answer Orca graded and recorded (full credit, with Orca's own grader). */
+export interface CheckedAnswer extends AnswerKey {
+  recorded: true;
+  outcome: Outcome;
+  grader: "choice" | "exact" | "rubric";
+  feedback: string;
+  objectiveId: string;
+  /** The objective's status after the answer. */
+  status: string;
+  note?: string;
+}
+
+/** Orca couldn't grade a prose answer now (no model, the day's budget, a rate limit, grading off): Claude grades against the key and calls record_answer. */
+export interface SelfGradeNeeded extends AnswerKey {
+  needsSelfGrade: true;
+  reason: string;
+}
 
 export interface RecordedAnswer {
   recorded: boolean;
@@ -111,7 +143,10 @@ export interface ConnectorTools {
   courseState(courseId: string): Promise<CourseState | null>;
   /** The questions, and which of the objectives asked for have none (deep-review questions don't count). Null: no such course. */
   questionsFor(courseId: string, objectiveIds: string[] | null, limit: number): Promise<{ questions: QuestionLine[]; withoutQuestions: string[] } | null>;
-  recordAnswer(courseId: string, questionId: string, outcome: Outcome, sessionId: string): Promise<RecordedAnswer | { error: string }>;
+  /** Grade the student's answer with Orca's own graders and record it (full credit); or say Orca can't right now and hand over the key. `response` arrives cleaned. */
+  checkAnswer(courseId: string, questionId: string, response: string, sessionId: string): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }>;
+  /** An answer Claude graded itself: self-marked (half credit). `response`, when given, is the student's words, cleaned and screened. */
+  recordAnswer(courseId: string, questionId: string, outcome: Outcome, sessionId: string, response?: string): Promise<RecordedAnswer | { error: string }>;
   setExam(courseId: string, exam: { id?: string; title: string; date: string; topicIds: string[] }): Promise<ExamLine | { error: string }>;
   /** One check-me flag (source connector) per known live objective. `said` arrives cleaned and screened. */
   flagCheck(courseId: string, objectiveIds: string[], said: string): Promise<FlagCheckResult | { error: string }>;
@@ -162,11 +197,11 @@ export const TOOLS = [
   {
     name: "questions_for",
     description:
-      "Questions from Orca's bank to check the student with, each with its objective, the answer and " +
-      "how to grade it. Ask them in your own words if you like, but grade against the answer, exact " +
-      "forms or rubric given. For a choice question, show the options. Then call record_answer for " +
-      "each one you graded. Leave objectiveIds out to get questions for what's due now (only weak points are " +
-      "ever due; pass objectiveIds to practise others).",
+      "Questions from Orca's bank to check the student with, each with its objective. They come without " +
+      "their keys: ask one, then send the student's answer to check_answer, which grades it, records it and " +
+      "returns the key and explanation. For a choice question, show the options in the order given. Leave " +
+      "objectiveIds out to get questions for what's due now (only weak points are ever due; pass " +
+      "objectiveIds to practise others).",
     inputSchema: {
       type: "object",
       properties: {
@@ -179,18 +214,39 @@ export const TOOLS = [
     },
   },
   {
+    name: "check_answer",
+    description:
+      "Send the student's answer to one of Orca's questions, in their own words, and Orca grades and " +
+      "records it: a choice question by the option they picked (its number as shown, 1 to 4, its letter, " +
+      "or its text), a short answer by exact match or, for a prose answer, by Orca's grader against the " +
+      "question's rubric. The reply carries the outcome, feedback, the key and the explanation: teach from " +
+      "those. If it says needsSelfGrade, Orca couldn't grade it now; grade against the key yourself and call " +
+      "record_answer. 'I don't know' is an answer too: send it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        courseId: UUID,
+        questionId: { ...UUID, description: "The question's id from questions_for." },
+        response: { type: "string", maxLength: 2000, description: "The student's answer, as they gave it (at most 2000 characters)." },
+      },
+      required: ["courseId", "questionId", "response"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "record_answer",
     description:
-      "Record one answer you graded to one of Orca's questions: correct, partial or incorrect. Only " +
-      "call it for a question from questions_for that the student actually answered and you graded; " +
-      "'I don't know' is incorrect. Orca counts these as self-marked (half credit) and derives the " +
-      "objective's new status.",
+      "Record one answer you graded yourself, only after check_answer said needsSelfGrade for it: correct, " +
+      "partial or incorrect, graded against the key check_answer returned. Orca counts these as self-marked " +
+      "(half credit) and derives the objective's new status. Pass the student's words too, so Orca can " +
+      "look at the grading later. 'I don't know' is incorrect.",
     inputSchema: {
       type: "object",
       properties: {
         courseId: UUID,
         questionId: { ...UUID, description: "The question's id from questions_for." },
         outcome: { type: "string", enum: ["correct", "partial", "incorrect"] },
+        response: { type: "string", maxLength: 2000, description: "The student's answer, as they gave it (at most 2000 characters)." },
       },
       required: ["courseId", "questionId", "outcome"],
       additionalProperties: false,
@@ -311,11 +367,27 @@ async function callTool(params: Record<string, unknown>, tools: ConnectorTools, 
         const questions = await tools.questionsFor(args.courseId, (args.objectiveIds as string[] | undefined) ?? null, limit);
         return questions ? toolText(questions) : toolText({ error: "No such course." }, true);
       }
+      case "check_answer": {
+        if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
+        if (!isUuid(args.questionId)) return toolText({ error: "questionId must be a question id from questions_for." }, true);
+        if (typeof args.response !== "string" || args.response.trim().length === 0 || args.response.length > 2000) return toolText({ error: "response is the student's answer, 1 to 2000 characters." }, true);
+        const checked = await tools.checkAnswer(args.courseId, args.questionId, args.response.trim(), session);
+        return toolText(checked, "error" in checked);
+      }
       case "record_answer": {
         if (!isUuid(args.courseId)) return toolText({ error: "courseId must be a course id from course_state." }, true);
         if (!isUuid(args.questionId)) return toolText({ error: "questionId must be a question id from questions_for." }, true);
         if (args.outcome !== "correct" && args.outcome !== "partial" && args.outcome !== "incorrect") return toolText({ error: "outcome is correct, partial or incorrect." }, true);
-        const recorded = await tools.recordAnswer(args.courseId, args.questionId, args.outcome, session);
+        let response: string | undefined;
+        if (args.response !== undefined) {
+          if (typeof args.response !== "string" || args.response.length > 2000) return toolText({ error: "response is the student's answer, at most 2000 characters." }, true);
+          // Screened like a reflection note: a strong hit is refused, every hit logged.
+          const said = checkNotes(args.response, 2000);
+          if (said.hits.length) await tools.screened(said.hits);
+          if (!said.ok) return toolText({ error: `Orca can't record that answer ("${said.quote}"); send what the student said, in plain words.` }, true);
+          response = said.text ?? undefined;
+        }
+        const recorded = await tools.recordAnswer(args.courseId, args.questionId, args.outcome, session, response);
         return toolText(recorded, "error" in recorded);
       }
       case "flag_check": {

@@ -723,10 +723,11 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const requestFlagTopUp = useCallback((courseId: string, objectiveIds: readonly string[]) => {
     const s = stateRef.current;
     const catalogue = s.objectives[courseId] ?? {};
+    // Askable questions only: a dive-only or thumbed-down question can't be asked in a quick review (owner, 2026-11-08).
     const asked = new Set(
       Object.values(s.questionBank[courseId] ?? {})
         .flat()
-        .filter((q) => !q.deep && catalogue[q.objectiveId])
+        .filter((q) => !q.deep && catalogue[q.objectiveId] && s.feedback[q.id]?.rating !== "down")
         .map((q) => resolveObjectiveId(q.objectiveId, catalogue)),
     );
     const missing = [...new Set(objectiveIds)].filter((id) => !asked.has(id));

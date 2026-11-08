@@ -291,7 +291,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   content comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** The server's model (OpenAI by default, or Claude) extracts material,
   writes questions and grades short answers. Students' own Claude connects through the MCP connector (built 2026-11-04, see
-  "What exists"): Claude asks Orca's questions and grades them; those answers count as self-marked.
+  "What exists"): Claude asks Orca's questions and Orca grades them (`check_answer`); only when Orca's grader can't run
+  does Claude grade, and those answers count as self-marked.
 
 ## Stack
 
@@ -403,11 +404,18 @@ All 11 Figma screens are built. Where things live:
   "Find connections" on the Atlas, `POST /api/relink`).
 - `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
   Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
-  (one JSON-RPC message per POST, no stream) with five tools: `flag_check` (a *check me* flag per objective the student
+  (one JSON-RPC message per POST, no stream) with six tools: `flag_check` (a *check me* flag per objective the student
   asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics, every objective's derived
   status and recall, what's due now), `set_exam` (date + topic ids = the exam's scope), `questions_for` (Orca's own
-  questions with their answers and rubrics, for Claude to ask and grade) and `record_answer` (an answer Claude graded,
-  recorded as `grader: "self"`, `source: "connector"`: half credit, never clears a mix-up). The token is minted in
+  questions, without their keys), `check_answer` (owner, 2026-11-08: the student's words; Orca grades choice and
+  exact answers itself and prose through `gradeAnswer` on Orca's key with the grade rate limit and budgets, records
+  full credit with its own grader and `source: "connector"`, and returns the key and explanation; when it can't grade
+  it answers `needsSelfGrade` with the key) and `record_answer` (the fallback: an answer Claude graded, recorded as
+  `grader: "self"`: half credit, never clears a mix-up; the student's words, screened, stored on the event as
+  `response`, the row's `note`). Mastery rules changed with it (`RULES_VERSION` 3): `verified` takes an unaided
+  correct answer, a struggled flag rates the FSRS card Again, a question missed before earns half credit when answered
+  right on a later day (`retryCredit`), a graded partial ends a run of misses, and exact answers that are algebraic or
+  Boolean expressions are refused at writing time (`isExpressionAnswer`; numbers compare by value). The token is minted in
   Settings → Claude connector (`/api/connector`; only its sha256 is stored, `connector_tokens`, migration
   `20261104090000`) and pasted into Claude as a custom connector with no sign-in: the URL is the secret, so the proper
   OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is pure and tested with a fake

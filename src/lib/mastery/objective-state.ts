@@ -15,6 +15,8 @@ export const MASTERY_RULES = {
   requiredDays: 2,
   /** Of the credit, at least this much must come from graded answers (not self-marked). */
   requiredGradedCredit: 2,
+  /** Credit for a question missed before and answered right on a later day (its answer was shown; owner, 2026-11-08). */
+  retryCredit: 0.5,
   /** FSRS schedules a check when predicted recall falls to this. */
   targetRetention: 0.9,
   /** Longest gap between checks, so everything mastered is checked within a semester. */
@@ -49,7 +51,7 @@ export const MASTERY_RULES = {
  * hashes them) and when the logic does (golden replays recorded per version); record the new hash
  * and golden accumulators there with the bump.
  */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** Deterministic (no fuzz), day-based (no same-day learning steps; sessions are daily), capped at 60 days. */
 export const FSRS_PARAMETERS = Object.freeze(
@@ -161,8 +163,12 @@ export interface ObjectiveAccumulator {
   answered: number;
   /** ISO time of the last applied answer. */
   lastAt: string | null;
-  /** Questions already attempted; only first attempts earn credit. */
+  /** Questions already attempted. */
   attempted: string[];
+  /** Questions that have earned credit (once each). */
+  credited: string[];
+  /** The day each attempted question was last attempted: a missed question earns half credit when answered right on a later day. */
+  attemptDays: Record<string, string>;
   credit: number;
   /** The part of `credit` earned from graded (not self-marked) answers. */
   gradedCredit: number;
@@ -190,12 +196,16 @@ export interface ObjectiveAccumulator {
   inRotation: boolean;
   /** A check flag on an objective not in rotation, open until its next answer. */
   checkOpen: boolean;
+  /** Answered fully right by Orca's own grader at least once: what "verified" means (a self-marked correct proves nothing). */
+  verifiedUnaided: boolean;
 }
 
 export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   answered: 0,
   lastAt: null,
   attempted: [],
+  credited: [],
+  attemptDays: {},
   credit: 0,
   gradedCredit: 0,
   creditDays: [],
@@ -211,6 +221,7 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   card: null,
   inRotation: false,
   checkOpen: false,
+  verifiedUnaided: false,
 }) as ObjectiveAccumulator;
 
 function timeOf(e: EvidenceEvent) {
@@ -240,6 +251,7 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
   const card = capInterval(scheduler.next(before, new Date(t), gradeOf(e)).card, t);
   const stored = toStored(card);
   const next: ObjectiveAccumulator = { ...acc, answered: acc.answered + 1, lastAt: e.at, card: stored, checkOpen: false };
+  if (e.outcome === "correct" && !assisted) next.verifiedUnaided = true;
   // Anything short of fully right is a weak point, wherever it was answered.
   if (e.outcome !== "correct") {
     next.inRotation = true;
@@ -252,21 +264,30 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
     if (e.outcome === "incorrect" && !assisted) {
       if (next.lastMissQuestion !== null && next.lastMissQuestion !== e.questionId) next.mixedUp = true;
       next.lastMissQuestion = e.questionId;
-    } else if (e.outcome === "correct" && !assisted) {
+    } else if (e.outcome !== "incorrect" && !assisted) {
+      // Any graded answer that isn't a miss ends the "in a row" (owner, 2026-11-08); clearing a
+      // mix-up still takes a fully right answer (a mechanism one where the objective has those).
       next.lastMissQuestion = null;
-      if (next.mixedUp && (e.tier === "mechanism" || !options.hasMechanismQuestions)) next.mixedUp = false;
+      if (e.outcome === "correct" && next.mixedUp && (e.tier === "mechanism" || !options.hasMechanismQuestions)) next.mixedUp = false;
     }
 
-    if (!next.attempted.includes(e.questionId)) {
-      next.attempted = [...next.attempted, e.questionId];
-      const value = e.outcome === "correct" ? (assisted ? 0.5 : 1) : e.outcome === "partial" ? 0.5 : 0;
+    // Credit once per question: in full on a first attempt; half when a question missed before is
+    // answered right on a later day (its answer was shown, so it proves less; owner, 2026-11-08).
+    // Credited and attempted stay apart so a retry on the same day earns nothing.
+    const day = dayKey(e.at);
+    const firstAttempt = !next.attempted.includes(e.questionId);
+    const laterDay = !firstAttempt && next.attemptDays[e.questionId] !== undefined && next.attemptDays[e.questionId] !== day;
+    if (!next.credited.includes(e.questionId) && (firstAttempt || laterDay)) {
+      const value = firstAttempt ? (e.outcome === "correct" ? (assisted ? 0.5 : 1) : e.outcome === "partial" ? 0.5 : 0) : e.outcome === "correct" ? R.retryCredit : 0;
       if (value > 0) {
+        next.credited = [...next.credited, e.questionId];
         next.credit += value;
         if (!assisted) next.gradedCredit += value;
-        const d = dayKey(e.at);
-        if (!next.creditDays.includes(d)) next.creditDays = [...next.creditDays, d];
+        if (!next.creditDays.includes(day)) next.creditDays = [...next.creditDays, day];
       }
     }
+    if (firstAttempt) next.attempted = [...next.attempted, e.questionId];
+    next.attemptDays = { ...next.attemptDays, [e.questionId]: day };
 
     if (e.outcome !== "partial") next.lastTwo = [...next.lastTwo, e.outcome].slice(-2);
     const lastTwoCorrect = next.lastTwo.length === 2 && next.lastTwo.every((o) => o === "correct");
@@ -303,9 +324,10 @@ export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: 
 
 /**
  * A struggle flag. Struggled: back to learning and into rotation (credit, credit days, attempted
- * questions and the mastery check cleared; FSRS's memory estimate kept, since past answers still
- * happened), also on an objective never answered. Check: one question for an objective not in
- * rotation; on a mastered one its spaced check is due now; on one still being learned, nothing.
+ * questions and the mastery check cleared), also on an objective never answered; FSRS's memory
+ * estimate is rated Again (as a miss is; owner, 2026-11-08), so an objective re-learned after "I
+ * don't get this" isn't checked on its old long interval. Check: one question for an objective not
+ * in rotation; on a mastered one its spaced check is due now; on one still being learned, nothing.
  */
 export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): ObjectiveAccumulator {
   const t = timeOf(e);
@@ -318,12 +340,16 @@ export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): Ob
     if (acc.mastered) return { ...acc, lastAt: e.at, checkDueAt: acc.checkDueAt !== null && Date.parse(acc.checkDueAt) < t ? acc.checkDueAt : e.at, retired: false };
     return { ...acc, lastAt: e.at };
   }
+  const card = acc.card === null ? null : toStored(capInterval(scheduler.next(toCard(acc.card), new Date(t), Rating.Again).card, t));
   return {
     ...acc,
     lastAt: e.at,
+    card,
     inRotation: true,
     checkOpen: false,
     attempted: [],
+    credited: [],
+    attemptDays: {},
     credit: 0,
     gradedCredit: 0,
     creditDays: [],
@@ -346,7 +372,7 @@ export function applyEvidence(acc: ObjectiveAccumulator, e: EvidenceEvent, optio
 /** Read an accumulator against the clock. Fading is computed here, never by a timer. */
 export function stateAt(objectiveId: string, acc: ObjectiveAccumulator, now: Date): ObjectiveState {
   let status: ObjectiveStatus;
-  if (!acc.inRotation) status = acc.checkOpen ? "check-due" : acc.answered === 0 ? "unseen" : "verified";
+  if (!acc.inRotation) status = acc.checkOpen ? "check-due" : acc.verifiedUnaided ? "verified" : "unseen";
   else if (!acc.mastered) status = acc.mixedUp ? "mixed-up" : "learning";
   else if (acc.retired) status = "retired";
   else if (acc.missPending || (acc.checkDueAt !== null && now.getTime() >= Date.parse(acc.checkDueAt))) status = "fading";

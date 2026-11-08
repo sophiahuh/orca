@@ -4,7 +4,10 @@
  * client, every query scoped to that student.
  */
 import { createHash, randomBytes } from "node:crypto";
-import type { ConnectorTools, CourseState, ExamLine, FlagCheckResult, ObjectiveLine, QuestionLine, RecordedAnswer } from "@/lib/connector/mcp";
+import type { AnswerKey, CheckedAnswer, ConnectorTools, CourseState, ExamLine, FlagCheckResult, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded } from "@/lib/connector/mcp";
+import type { QuizQuestion } from "@/lib/data";
+import { cleanAnswer, gradeExact, normaliseExact } from "@/lib/grading";
+import { gradeAnswer } from "@/lib/server/grade";
 import { dayKeyIn, stateAt } from "@/lib/mastery/objective-state";
 import { NewerRulesError, VersionConflictError, readCourseState, recordEvent } from "@/lib/mastery/snapshots";
 import type { AnswerEvent, ConfusionEvent, ObjectiveStatus } from "@/lib/mastery/types";
@@ -54,6 +57,33 @@ const DUE_ORDER: Record<ObjectiveStatus, number> = { fading: 0, "mixed-up": 1, l
 // Weak points first: only objectives in rotation and open checks come due (the agenda's DUE_TODAY).
 const DUE_STATUSES: ReadonlySet<ObjectiveStatus> = new Set(["fading", "mixed-up", "learning", "check-due"]);
 const DUE_LIMIT = 20;
+
+/** The key Claude teaches from once an answer is checked. */
+function keyOf(q: QuizQuestion): AnswerKey {
+  if (q.kind !== "Short answer") return { answer: q.options[q.answer] ?? "", explanation: q.explanation };
+  if (q.exact?.length) return { answer: q.exact[0], exact: q.exact, explanation: q.explanation };
+  if (q.rubric) return { answer: q.rubric.requiredIdeas.join("; "), rubric: q.rubric, explanation: q.explanation };
+  return { answer: "", explanation: q.explanation };
+}
+
+/** Which option the student chose: its number as shown (1-based), its letter (A, B, …), or its text; null when none fits. */
+export function pickOption(response: string, options: readonly string[]): number | null {
+  const t = response.trim().replace(/[.)]+$/, "").trim();
+  if (/^\d{1,2}$/.test(t)) {
+    const n = Number(t);
+    return n >= 1 && n <= options.length ? n - 1 : null;
+  }
+  if (/^[A-Za-z]$/.test(t)) {
+    const i = t.toUpperCase().charCodeAt(0) - 65;
+    if (i >= 0 && i < options.length) return i;
+  }
+  const want = normaliseExact(t);
+  const exact = options.findIndex((o) => normaliseExact(o) === want);
+  if (exact >= 0) return exact;
+  // The option's text inside a longer answer ("I'd say XOR"), when only one option fits.
+  const within = options.map((o, i) => (normaliseExact(o).length >= 2 && want.includes(normaliseExact(o)) ? i : -1)).filter((i) => i >= 0);
+  return within.length === 1 ? within[0] : null;
+}
 
 export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Date = () => new Date()): ConnectorTools {
   const owns = async (courseId: string) => {
@@ -135,6 +165,48 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     };
   };
 
+  /** The question (whole) and its live objective's topic, or why not. */
+  const questionWithObjective = async (courseId: string, questionId: string): Promise<{ q: QuizQuestion; objectiveId: string; topicId: string; tier: AnswerEvent["tier"] } | { error: string }> => {
+    if (!(await owns(courseId))) return { error: "No such course." };
+    const { data: row, error } = await db.from("questions").select("*").eq("owner_id", ownerId).eq("course_id", courseId).eq("id", questionId).maybeSingle();
+    if (error) throw new Error(`Couldn't read the question: ${error.message}`);
+    if (!row || !row.objective_id) return { error: "No such question in this course; use an id from questions_for." };
+    const { data: objective, error: objectiveError } = await db.from("objectives").select("topic_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("id", row.objective_id).maybeSingle();
+    if (objectiveError) throw new Error(`Couldn't read the question's objective: ${objectiveError.message}`);
+    if (!objective) return { error: "That question's objective is no longer in the course." };
+    return { q: questionFromRow(row), objectiveId: row.objective_id, topicId: objective.topic_id, tier: row.tier as AnswerEvent["tier"] };
+  };
+
+  /** One answer event from the connector, recorded against the student's snapshot. */
+  const record = async (a: { courseId: string; topicId: string; objectiveId: string; questionId: string; tier: AnswerEvent["tier"]; outcome: AnswerEvent["outcome"]; grader: AnswerEvent["grader"]; sessionId: string; response?: string }): Promise<RecordedAnswer | { error: string }> => {
+    const at = now();
+    const event: AnswerEvent = {
+      kind: "answer",
+      id: crypto.randomUUID(),
+      at: at.toISOString(),
+      courseId: a.courseId,
+      topicId: a.topicId,
+      objectiveId: a.objectiveId,
+      questionId: a.questionId,
+      tier: a.tier,
+      outcome: a.outcome,
+      grader: a.grader,
+      source: "connector",
+      sessionId: a.sessionId,
+      ...(a.response ? { response: a.response } : {}),
+    };
+    try {
+      const r = await recordEvent(supabaseSnapshotStore(db, ownerId, a.courseId), event);
+      const status = r.objectiveId && r.accumulator ? stateAt(r.objectiveId, r.accumulator, at).status : "unseen";
+      return { recorded: true, objectiveId: r.objectiveId ?? a.objectiveId, status, ...(r.objectiveId === null ? { note: "Recorded, but this question's objective isn't live, so it counts for nothing." } : {}) };
+    } catch (e) {
+      if (e instanceof VersionConflictError) return { error: "Another answer was being saved at the same moment; this one wasn't recorded. Try again." };
+      if (e instanceof NewerRulesError) return { error: "Orca is being updated; the answer wasn't recorded. Try again in a moment." };
+      if (e instanceof RecordError) return { error: `Orca couldn't record the answer: ${e.message}` };
+      throw e;
+    }
+  };
+
   return {
     async courses() {
       const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).order("created_at");
@@ -165,10 +237,6 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
           kind: q.kind,
           prompt: q.figure ? `${q.prompt} [This question comes with a figure Orca can't show here; skip it if it needs one.]` : q.prompt,
           options: q.options,
-          answer: q.answer,
-          ...(q.exact ? { exact: q.exact } : {}),
-          ...(q.rubric ? { rubric: q.rubric } : {}),
-          explanation: q.explanation,
           ...(q.anchor ? { anchor: q.anchor } : {}),
         };
         (byObjective.get(row.objective_id) ?? byObjective.set(row.objective_id, []).get(row.objective_id)!).push(line);
@@ -188,40 +256,48 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       return { questions: out, withoutQuestions: wanted.filter((id) => !quickAsked.has(id)) };
     },
 
-    async recordAnswer(courseId, questionId, outcome, sessionId): Promise<RecordedAnswer | { error: string }> {
-      if (!(await owns(courseId))) return { error: "No such course." };
-      const { data: q, error } = await db.from("questions").select("objective_id, tier").eq("owner_id", ownerId).eq("course_id", courseId).eq("id", questionId).maybeSingle();
-      if (error) throw new Error(`Couldn't read the question: ${error.message}`);
-      if (!q || !q.objective_id) return { error: "No such question in this course; use an id from questions_for." };
-      const { data: objective, error: objectiveError } = await db.from("objectives").select("topic_id").eq("owner_id", ownerId).eq("course_id", courseId).eq("id", q.objective_id).maybeSingle();
-      if (objectiveError) throw new Error(`Couldn't read the question's objective: ${objectiveError.message}`);
-      if (!objective) return { error: "That question's objective is no longer in the course." };
-      const at = now();
-      const event: AnswerEvent = {
-        kind: "answer",
-        id: crypto.randomUUID(),
-        at: at.toISOString(),
-        courseId,
-        topicId: objective.topic_id,
-        objectiveId: q.objective_id,
-        questionId,
-        tier: q.tier as AnswerEvent["tier"],
-        outcome,
-        // Claude graded it, not Orca's own grader: self-marked (half credit, never clears a mix-up).
-        grader: "self",
-        source: "connector",
-        sessionId,
-      };
-      try {
-        const r = await recordEvent(supabaseSnapshotStore(db, ownerId, courseId), event);
-        const status = r.objectiveId && r.accumulator ? stateAt(r.objectiveId, r.accumulator, at).status : "unseen";
-        return { recorded: true, objectiveId: r.objectiveId ?? q.objective_id, status, ...(r.objectiveId === null ? { note: "Recorded, but this question's objective isn't live, so it counts for nothing." } : {}) };
-      } catch (e) {
-        if (e instanceof VersionConflictError) return { error: "Another answer was being saved at the same moment; this one wasn't recorded. Try again." };
-        if (e instanceof NewerRulesError) return { error: "Orca is being updated; the answer wasn't recorded. Try again in a moment." };
-        if (e instanceof RecordError) return { error: `Orca couldn't record the answer: ${e.message}` };
-        throw e;
+    async checkAnswer(courseId, questionId, response, sessionId): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }> {
+      const found = await questionWithObjective(courseId, questionId);
+      if ("error" in found) return found;
+      const { q, objectiveId, topicId, tier } = found;
+      const words = cleanAnswer(response);
+      if (!words) return { error: "response is the student's answer, 1 to 2000 characters." };
+      const key = keyOf(q);
+      let outcome: AnswerEvent["outcome"];
+      let feedback: string;
+      let grader: CheckedAnswer["grader"];
+      if (q.kind !== "Short answer") {
+        const picked = pickOption(words, q.options);
+        if (picked === null) return { error: `Pass the option the student chose: its number as shown (1 to ${q.options.length}), its letter, or its text.` };
+        outcome = picked === q.answer ? "correct" : "incorrect";
+        feedback = outcome === "correct" ? "Right." : `Not quite. The answer is ${q.options[q.answer]}.`;
+        grader = "choice";
+      } else if (q.exact?.length) {
+        const r = gradeExact(words, q.exact);
+        outcome = r.outcome;
+        feedback = r.feedback;
+        grader = "exact";
+      } else if (q.rubric) {
+        // Orca's own prose grader, on Orca's key: its rate limit, budgets and the grading-off rule apply.
+        const g = await gradeAnswer(db, ownerId, questionId, words);
+        if (g.status !== 200 || "error" in g.body) return { needsSelfGrade: true, reason: "error" in g.body ? g.body.error : "Orca couldn't grade this answer.", ...key };
+        outcome = g.body.outcome;
+        feedback = g.body.feedback;
+        grader = "rubric";
+      } else {
+        return { error: "This question has no key Orca can check against." };
       }
+      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader, sessionId, response: words });
+      if ("error" in recorded) return recorded;
+      return { recorded: true, outcome, grader, feedback, ...key, objectiveId: recorded.objectiveId, status: recorded.status, ...(recorded.note ? { note: recorded.note } : {}) };
+    },
+
+    async recordAnswer(courseId, questionId, outcome, sessionId, response): Promise<RecordedAnswer | { error: string }> {
+      const found = await questionWithObjective(courseId, questionId);
+      if ("error" in found) return found;
+      const { objectiveId, topicId, tier } = found;
+      // Claude graded it, not Orca's own grader: self-marked (half credit, never clears a mix-up).
+      return record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader: "self", sessionId, ...(response ? { response } : {}) });
     },
 
     async screened(hits) {

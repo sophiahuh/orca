@@ -5,6 +5,7 @@
  */
 import type { FlaggedQuestion, Material, MaterialPages, Objective, ObjectiveSignal, PipelineRun, QuizQuestion, Relation, Topic, TopicPlace } from "../data.ts";
 import { type Named, exactMatch, shortlist } from "../course/match.ts";
+import { isExpressionAnswer } from "../grading.ts";
 import { locatorPages } from "../course/study.ts";
 import { type PageRange, addRanges, describePlaces } from "../course/places.ts";
 import { pagesFor } from "./topup.ts";
@@ -158,6 +159,8 @@ function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | nu
   if (q.kind === "Multiple choice" && (q.options.length !== 4 || q.answer < 0 || q.answer > 3)) return "multiple choice needs four options and a valid answer";
   if (q.kind === "True or false" && (q.options.length !== 2 || q.answer < 0 || q.answer > 1)) return "true/false needs two options and a valid answer";
   if (q.kind === "Short answer" && !(q.exact && q.exact.length) && !q.rubric) return "short answer with neither an exact answer nor a rubric";
+  // Exact matching can't tell "a+c" from "c+a" (owner, 2026-11-08): an expression needs a rubric or choices.
+  if (q.kind === "Short answer" && q.exact?.some(isExpressionAnswer)) return "an algebraic or Boolean expression as an exact answer (give a rubric or make it multiple choice)";
   if (!inferred && !q.anchor) return "no source anchor";
   return null;
 }

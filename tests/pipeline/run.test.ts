@@ -218,7 +218,7 @@ test("questions that duplicate the bank or break the rules are dropped with a re
     generate: (i) => {
       const id = i.objectives[0].id;
       // A refused question doesn't count toward the 2 the objective needs; a duplicate does (it's dropped later).
-      return { questions: [short(id, "No anchor?", ["x"], { anchor: null }), mc(id, "Which gate?", 1), short(id, "Old question", ["x"])] };
+      return { questions: [short(id, "No anchor?", ["x"], { anchor: null }), mc(id, "Which gate?", 1), short(id, "Simplify a + a'c", ["a + c"]), short(id, "Old question", ["x"])] };
     },
   });
   const plan = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] }, ...marking() }), { call: model.call, newId });
@@ -226,6 +226,7 @@ test("questions that duplicate the bank or break the rules are dropped with a re
   const reasons = Object.fromEntries(plan.run.dropped.map((d) => [d.prompt, d.reason]));
   assert.match(reasons["Old question"], /already has this question/);
   assert.match(reasons["No anchor?"], /no source anchor/);
+  assert.match(reasons["Simplify a + a'c"], /expression as an exact answer/, "exact matching can't tell equivalent forms apart (owner, 2026-11-08)");
 });
 
 test("a figure question keeps its slide image, or is dropped when the slide can't be rendered", async () => {
