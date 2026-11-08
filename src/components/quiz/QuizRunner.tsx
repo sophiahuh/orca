@@ -18,7 +18,6 @@ import { ResultBanner } from "@/components/quiz/ResultBanner";
 import { IconClose } from "@/components/icons";
 import { Screen } from "@/components/layout/Screen";
 import { AnswerOption, type AnswerState } from "@/components/ui/AnswerOption";
-import { MathText } from "@/components/ui/MathText";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { RoundButton } from "@/components/ui/RoundButton";
@@ -468,7 +467,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
               className={q.deep ? "whitespace-pre-line text-[18px] font-bold leading-[1.55] text-prussian" : "text-[34px] font-bold leading-tight text-prussian"}
               data-part={q.deep ? "deep-question-prompt" : "question-prompt"}
             >
-              <MathText text={q.prompt} />
+              {q.prompt}
             </motion.h1>
 
             {q.figure && (
@@ -504,7 +503,7 @@ export function QuizRunner({ course, items: firstItems, mode, title, backHref, a
               <div className="mt-[24px] flex flex-col gap-[12px]">
                 {q.options.map((opt, i) => (
                   <AnswerOption key={opt} letter={LETTERS[i]} state={stateFor(i)} tag={tagFor(i)} disabled={checked} onClick={() => setSelected(i)}>
-                    <MathText text={opt} />
+                    {opt}
                   </AnswerOption>
                 ))}
               </div>
