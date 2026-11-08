@@ -52,6 +52,12 @@ export const LIMITS = {
      * call only works on the student's own courses, so this bounds cost, not access (2026-11-08).
      */
     canvasImport: { max: 30, windowSeconds: 3600 },
+    /** Pasting text or a chat link (POST /api/materials/text): each call stores pages and starts a job (2026-11-08). */
+    text: { max: 30, windowSeconds: 3600 },
+    /** Adding a website (POST /api/materials/web): an outbound fetch of up to 10 MB and a job per call. */
+    web: { max: 20, windowSeconds: 3600 },
+    /** Connecting Canvas (POST /api/canvas): a DNS lookup and an outbound request to the site named. */
+    canvasConnect: { max: 10, windowSeconds: 3600 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */

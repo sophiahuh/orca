@@ -17,6 +17,9 @@ const WHAT: Record<RateAction, string> = {
   topUp: "top-ups",
   relink: "connection searches",
   canvasImport: "Canvas imports",
+  text: "pasted texts",
+  web: "websites added",
+  canvasConnect: "Canvas connections",
 };
 
 function spell(seconds: number): string {

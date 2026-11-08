@@ -7,6 +7,7 @@ import { sanitize } from "@/lib/untrusted/sanitize";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import { startUploadJob } from "@/lib/server/jobs/start";
 import { fetchPublicPage } from "@/lib/server/public-page";
+import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { ownsCourse, forStudent, reply } from "@/lib/server/student";
 
 /**
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return reply(400, { error: "Paste some text or enter a public AI chat link." });
     if (!(await ownsCourse(db, student.id, parsed.data.courseId))) return reply(404, { error: "No such course." });
+    const rate = await rateLimit(db, student.id, "text");
+    if (!rate.ok) return tooManyRequests(rate);
 
     let text: string;
     let sourceUrl: string | undefined;

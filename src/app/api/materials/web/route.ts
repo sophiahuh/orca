@@ -4,6 +4,7 @@ import { materialFromRow } from "@/lib/supabase/app-rows";
 import { sanitize } from "@/lib/untrusted/sanitize";
 import { startUploadJob } from "@/lib/server/jobs/start";
 import { fetchPublicPage } from "@/lib/server/public-page";
+import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { forStudent, reply } from "@/lib/server/student";
 import { ownsCourse } from "@/lib/server/student";
 
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
     if (!parsed.success) return reply(400, { error: "Enter a valid public course-page URL." });
     const url = new URL(parsed.data.url);
     if (!(await ownsCourse(db, student.id, parsed.data.courseId))) return reply(404, { error: "No such course." });
+    const rate = await rateLimit(db, student.id, "web");
+    if (!rate.ok) return tooManyRequests(rate);
     const page = await fetchPublicPage(url.href, { schemes: ["https:", "http:"], userAgent: "Orca course-material importer" });
     if (!page.ok) {
       if (page.reason === "blocked") return reply(400, { error: "Use a public http(s) website." });
