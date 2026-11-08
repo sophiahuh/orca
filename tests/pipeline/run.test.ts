@@ -418,14 +418,18 @@ test("marked passages become flags on their objectives, checked against the page
   assert.deepEqual(noMarkers.flags, [], "without a marker description nothing is looked for");
 });
 
-test("an upload writes questions only for the objectives marked in it", async () => {
+test("an upload writes questions for the objectives marked in it; a course's first upload also gets one warm-up question per heaviest objective", async () => {
   const one = { ...lectureExtract, objectives: lectureExtract.objectives.map((o, i) => (i === 0 ? { ...o, struggled: [{ page: 1, quote: "text about logic" }] } : o)) };
   const model = fakeModel({ extract: () => one, generate: (i) => ({ questions: i.objectives.map((o) => short(o.id, `${o.name}?`, ["x"])) }) });
   const plan = await runUpload(input(marking()), { call: model.call, newId });
-  const generated = model.calls.filter((c) => c.step === "generate").flatMap((c) => (c.input as StepInput<"generate">).objectives.map((o) => o.name));
-  assert.deepEqual(generated, ["Simplify with absorption"]);
-  assert.equal(plan.run.questionsAdded, 1);
+  const generated = model.calls.filter((c) => c.step === "generate").flatMap((c) => (c.input as StepInput<"generate">).objectives.map((o) => [o.name, o.need]));
+  // The marked objective needs its 2; the other two of this first upload get one each (the warm-up, owner 2026-11-08).
+  assert.deepEqual(generated.sort(), [["Simplify with absorption", 2], ["Group ones on a K-map", 1], ["Read binary numbers", 1]].sort());
+  assert.equal(plan.run.questionsAdded, 3);
 
-  const none = await runUpload(input(), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
-  assert.equal(none.run.questionsAdded, 0, "nothing marked, nothing written (and no generate call: the fake would throw)");
+  // A later upload (the course already has questions) and a first upload the class hasn't reached: only marked objectives.
+  const later = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
+  assert.equal(later.run.questionsAdded, 0, "nothing marked, nothing written (and no generate call: the fake would throw)");
+  const upcoming = await runUpload(input({ material: { ...material(), upcoming: true } }), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
+  assert.equal(upcoming.run.questionsAdded, 0, "not reached yet: no warm-up");
 });

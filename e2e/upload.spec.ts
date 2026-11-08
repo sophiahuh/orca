@@ -60,16 +60,16 @@ test("a lecture upload is built by a job on the server; the review screen follow
 
   await expect(page).toHaveURL(/\/course\/logic\/review\?run=/, { timeout: 30_000 });
   await expect(page.locator("[data-part=run-progress]")).toBeVisible();
-  // Weak points first: nothing is marked in a typed deck, so no questions are written at upload.
-  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again.", { timeout: 60_000 });
-  await expect(page.locator("[data-part=questions-later]")).toHaveText("Questions are written when you flag something or start a dive.");
+  // Weak points first: nothing is marked in a typed deck, so only the warm-up's questions are written: one per objective of a course's first upload.
+  await expect(page.locator("[data-part=run-summary]")).toContainText("2 new topics, 3 new objectives, 0 existing objectives covered again, 3 questions added.", { timeout: 60_000 });
+  await expect(page.locator("[data-part=questions-later]")).toHaveCount(0);
   await expect(page.locator("[data-part=run-progress]")).toHaveCount(0);
   await expect(page.locator("[data-part=new-topic]")).toHaveCount(2);
   // Slides 3 and 4 are pictures with only a slide number: they're read from their images first; then
   // the 8 typed slides with a figure get it described (4 a call). The log can start with calls from
   // the previous test's job still finishing in the background, so this run's are compared from its first.
   const calls = await fakeCalls();
-  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", "describe", "describe", "map", "objectives", "objectives", "link"]);
+  expect(calls.slice(calls.indexOf("transcribe"))).toEqual(["transcribe", "describe", "describe", "map", "objectives", "objectives", "link", "generate", "generate"]);
 
   const state = await stored(page, student);
   const course = state.courses[0];
@@ -79,7 +79,7 @@ test("a lecture upload is built by a job on the server; the review screen follow
   ]);
   expect(Object.values(state.objectives[course.id]).map((o) => (o as { review: string }).review)).toEqual(["proposed", "proposed", "proposed"]);
   expect(state.relations[course.id]).toHaveLength(1);
-  expect(state.runs).toEqual([expect.objectContaining({ kind: "upload", status: "done", model: "claude-opus-5-5", questionsAdded: 0 })]);
+  expect(state.runs).toEqual([expect.objectContaining({ kind: "upload", status: "done", model: "claude-opus-5-5", questionsAdded: 3 })]);
   expect(state.materials[0].filename).toBe(DECK_NAME);
 
   // The file is in the student's folder in Storage, and its pages were read on the server.

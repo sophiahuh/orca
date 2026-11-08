@@ -131,13 +131,13 @@ test("processMaterial builds the structure from the stored pages and saves it wi
   assert.equal(out.status, "done");
   assert.equal(mem.saves.length, 1);
   const rows = mem.saves[0];
-  // Weak points first: nothing marked in this upload, so no questions are written (a flag or a dive writes them).
-  assert.deepEqual(rows.runs!.map((r) => [r.id, r.status, r.questions_added, r.progress, r.error]), [["run1", "done", 0, null, null]]);
+  // Weak points first: nothing marked in this upload; but it is the course's first, so its objective gets one warm-up question (owner, 2026-11-08).
+  assert.deepEqual(rows.runs!.map((r) => [r.id, r.status, r.questions_added, r.progress, r.error]), [["run1", "done", 1, null, null]]);
   assert.deepEqual(rows.topics!.map((t) => [t.name, t.review]), [["Boolean Algebra", "proposed"]]);
   assert.equal(rows.objectives!.length, 1);
-  assert.equal(rows.questions, undefined);
-  assert.ok(!model.steps.includes("generate"));
-  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "objectives"]);
+  assert.equal(rows.questions!.length, 1);
+  assert.ok(model.steps.includes("generate"));
+  assert.deepEqual(mem.progress.map((p) => p.stage), ["mapping", "objectives", "writing"]);
 });
 
 test("handwritten pages are read from their images first: the text is stored, mapping reads it, and an unrenderable page keeps its own", async () => {

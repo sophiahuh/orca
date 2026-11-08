@@ -22,6 +22,8 @@ export function todoHref(card: TodoCard, course: Course): string {
       return `/session/${course.slug}?kind=${card.kind}`;
     case "checks":
       return `/course/${course.slug}`;
+    case "warmup":
+      return `/session/${course.slug}?kind=quick&warmup=1`;
   }
 }
 

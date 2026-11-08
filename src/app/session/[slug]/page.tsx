@@ -13,6 +13,7 @@ import {
   lastSeenOf,
   sessionCandidates,
 } from "@/lib/mastery/session";
+import { warmUpCandidates } from "@/lib/mastery/warmup";
 import { useAgenda, useCourse, useDayKey, useMasteryByCourse, useOrca } from "@/lib/store";
 import { examInWindow, survivingTopic } from "@/lib/mastery/agenda";
 import { type DiveScope, diveObjectives } from "@/lib/mastery/practice";
@@ -52,9 +53,10 @@ export default function SessionPage({ params, searchParams }: PageProps<"/sessio
   const picked = Number(sp.minutes);
   const minutes = Number.isInteger(picked) && picked >= 1 ? picked : undefined;
   const scope: DiveScope = SCOPES.find((s) => s === sp.scope) ?? "course";
-  // Tomorrow's quick review started early (the sidebar's "Due tomorrow").
+  // Tomorrow's quick review started early (the sidebar's "Due tomorrow"); or the warm-up (nothing flagged yet).
   const early = kind === "quick" && sp.early === "1";
-  return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}:${scope}:${early}`} course={course} kind={kind} topicId={topicId} minutes={minutes} scope={scope} early={early} />;
+  const warmUp = kind === "quick" && sp.warmup === "1";
+  return <SessionBody key={`${course.id}:${kind}:${topicId ?? ""}:${scope}:${early}:${warmUp}`} course={course} kind={kind} topicId={topicId} minutes={minutes} scope={scope} early={early} warmUp={warmUp} />;
 }
 
 /** How long an unfinished session can be picked up again. */
@@ -65,7 +67,7 @@ const RESUME_WITHIN_MS = 24 * 60 * 60 * 1000;
  * first ("Pick up where you left off?"). A deep review asks for its length first and can be run
  * again from its end card.
  */
-function SessionBody({ course, kind, topicId, minutes, scope, early }: { course: Course; kind: Kind; topicId?: string; minutes?: number; scope: DiveScope; early: boolean }) {
+function SessionBody({ course, kind, topicId, minutes, scope, early, warmUp }: { course: Course; kind: Kind; topicId?: string; minutes?: number; scope: DiveScope; early: boolean; warmUp: boolean }) {
   const [round, setRound] = useState(0);
   const { progress, saveProgress } = useOrca();
   const saved = progress[progressKey(course.id, kind)];
@@ -93,7 +95,7 @@ function SessionBody({ course, kind, topicId, minutes, scope, early }: { course:
     );
   }
   if (kind === "deep") return <DeepReview key={round} course={course} topicId={topicId} startMinutes={minutes} scope={scope} onAgain={() => setRound((r) => r + 1)} />;
-  return <QuickReview course={course} early={early} />;
+  return <QuickReview course={course} early={early} warmUp={warmUp} />;
 }
 
 /**
@@ -176,7 +178,7 @@ function useSessionSources(course: Course) {
       if (!pick) return null;
       return { question: pick, topicId: placeOf.get(pick.id)!.topicId, notes: ["In place of the question you flagged"] };
     };
-    return { agenda, ctx, toItems, replacementFor, candidates: (ranked: typeof agenda.ranked) => sessionCandidates(ranked, mastery.objectives, byObjective) };
+    return { agenda, ctx, toItems, replacementFor, askable: byObjective, candidates: (ranked: typeof agenda.ranked) => sessionCandidates(ranked, mastery.objectives, byObjective) };
   });
   return sources;
 }
@@ -185,15 +187,20 @@ function useSessionSources(course: Course) {
  * Today's quick review, or (`early`) the next one started ahead of its day: it covers what's waiting
  * for it (`upNext`), weak points practiced today included, so a student who wants to go again can.
  */
-function QuickReview({ course, early = false }: { course: Course; early?: boolean }) {
+function QuickReview({ course, early = false, warmUp = false }: { course: Course; early?: boolean; warmUp?: boolean }) {
   const router = useRouter();
   const { configs } = useOrca();
-  const { agenda, ctx, toItems, candidates, replacementFor } = useSessionSources(course);
+  const { agenda, ctx, toItems, candidates, askable, replacementFor } = useSessionSources(course);
   const caughtUp = useCaughtUp(course);
   const backHref = `/course/${course.slug}`;
 
   const [items] = useState(() => {
     const budgetSeconds = durationSeconds((configs[course.id] ?? DEFAULT_CONFIG).quick.duration);
+    if (warmUp) {
+      // One question each for the heaviest unflagged objectives (src/lib/mastery/warmup.ts); a miss makes a weak point.
+      const warm = warmUpCandidates(agenda.ranked, askable);
+      return toItems(assembleQuickReview(candidates(warm), { ...ctx, budgetSeconds })).slice(0, warm.length);
+    }
     return toItems(assembleQuickReview(candidates(early ? agenda.upNext : agenda.dueToday), { ...ctx, budgetSeconds }));
   });
 
@@ -204,7 +211,7 @@ function QuickReview({ course, early = false }: { course: Course; early?: boolea
       : `Nothing to review in ${course.name} right now.`;
     return <NothingToDo course={course} message={message} onBack={() => goBack(router, backHref)} caughtUp={caughtUp} />;
   }
-  return <QuizRunner course={course} items={items} mode="quick" title={course.name} backHref={backHref} replacementFor={replacementFor} progressKind="quick" />;
+  return <QuizRunner course={course} items={items} mode="quick" title={warmUp ? `${course.name} · Warm-up` : course.name} backHref={backHref} replacementFor={replacementFor} progressKind="quick" />;
 }
 
 /**
