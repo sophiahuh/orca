@@ -437,7 +437,7 @@ async function insertTopUp(deps: StartDeps, ownerId: string, courseId: string, o
 export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: { courseId: string; minutes: number; objectiveIds: string[] }): Promise<DeepReviewStart> {
   const { db, model } = deps;
   if (!model) return { state: "no-model" };
-  const { data: course, error: courseError } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", req.courseId).maybeSingle();
+  const { data: course, error: courseError } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", req.courseId).is("deleted_at", null).maybeSingle();
   if (courseError) throw new Error(`Couldn't read the course: ${courseError.message}`);
   if (!course) return { state: "no-course" };
   await failDeadRuns(deps, ownerId);
