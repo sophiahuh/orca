@@ -27,9 +27,9 @@ export async function forStudent(request: Request, handle: (student: { id: strin
   return handle(student, db);
 }
 
-/** Whether the course exists and is this student's. */
+/** Whether the course exists, is this student's and isn't deleted. */
 export async function ownsCourse(db: OrcaSupabase, ownerId: string, courseId: string): Promise<boolean> {
-  const { data, error } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+  const { data, error } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", courseId).is("deleted_at", null).maybeSingle();
   if (error) throw new Error(`Couldn't read the course: ${error.message}`);
   return data !== null;
 }

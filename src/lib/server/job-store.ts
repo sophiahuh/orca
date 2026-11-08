@@ -76,7 +76,7 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
     },
 
     async course(courseId): Promise<LoadedCourse | null> {
-      const { data: course, error } = await db.from("courses").select("id, name, short, orca_notes").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+      const { data: course, error } = await db.from("courses").select("id, name, short, orca_notes").eq("owner_id", ownerId).eq("id", courseId).is("deleted_at", null).maybeSingle();
       if (error) throw new Error(`Couldn't read the course: ${error.message}`);
       if (!course) return null;
       const { data: profile, error: profileError } = await db.from("profiles").select("orca_notes, marker_notes").eq("owner_id", ownerId).single();
@@ -195,9 +195,9 @@ export function supabaseJobStore(db: OrcaSupabase, ownerId: string): JobStore {
 
     async save(courseId, rows) {
       // save_structure takes the owner from the course row; check it's this student's first.
-      const { data, error } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", courseId).maybeSingle();
+      const { data, error } = await db.from("courses").select("id").eq("owner_id", ownerId).eq("id", courseId).is("deleted_at", null).maybeSingle();
       if (error) throw new Error(`Couldn't read the course: ${error.message}`);
-      if (!data) throw new Error("the course isn't this student's");
+      if (!data) throw new Error("the course isn't this student's, or was deleted");
       // A run the student stopped meanwhile (POST /api/runs/stop) is failed; its job must not land its
       // work and flip it to done. The save is one transaction, so nothing of it is written.
       for (const run of rows.runs ?? []) {

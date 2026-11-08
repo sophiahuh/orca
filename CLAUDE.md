@@ -111,6 +111,11 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   between `\( \)` / `\[ \]`, drawn by KaTeX (PR #8: `src/lib/math-text.ts`,
   `src/components/ui/MathText.tsx`); question validation refuses math that doesn't render, and exact
   answers stay plain text.
+- **Courses can be deleted** (2026-11-08, soft delete): `courses.deleted_at` (migration
+  `20261108090000`), set only by `DELETE /api/courses/:id`, which also stops the course's jobs;
+  `my_data`, `course_structure` and every server course lookup leave deleted courses out, and
+  their slug is free again. "Delete this course" is on the course's settings page. Assumptions in
+  `docs/TO-DISCUSS.md`.
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
   uses for development. `.env` may point at either (it has pointed at each at different times):

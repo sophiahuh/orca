@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
+import { DailyUsage } from "@/components/map/DailyUsage";
 import { KnowledgeMap } from "@/components/map/KnowledgeMap";
 import { OrcaLogo } from "@/components/brand/OrcaLogo";
 import { IconPlus } from "@/components/icons";
@@ -37,6 +38,7 @@ export default function HomePage() {
         <OrcaLogo width={38} shadow={false} />
         {hydrated && <span className="text-[15px] font-bold text-prussian">{streak} day streak</span>}
       </div>
+      {hydrated && courses.length > 0 && <DailyUsage />}
     </AppShell>
   );
 }

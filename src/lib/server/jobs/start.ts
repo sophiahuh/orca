@@ -139,6 +139,29 @@ export async function stopRun(db: OrcaSupabase, ownerId: string, runId: string):
   return stopped;
 }
 
+export const COURSE_DELETED_ERROR = "Stopped: the course was deleted.";
+
+/**
+ * Stop every unfinished job of a course the student deleted (uploads, top-ups, dives; queued,
+ * waiting, paused or running): failed with `COURSE_DELETED_ERROR`, their Trigger.dev runs
+ * cancelled, and the student's next job (in another course) started. Returns how many stopped.
+ */
+export async function stopCourseRuns(db: OrcaSupabase, ownerId: string, courseId: string): Promise<number> {
+  const { data, error } = await db
+    .from("pipeline_runs")
+    .update({ status: "failed", error: COURSE_DELETED_ERROR, progress: null })
+    .eq("owner_id", ownerId)
+    .eq("course_id", courseId)
+    .in("status", ["queued", "waiting", "running", "paused"])
+    .select("id");
+  if (error) throw new Error(`Couldn't stop the course's jobs: ${error.message}`);
+  if (data.length) {
+    await cancelJobs(db, ownerId, data.map((r) => r.id));
+    await core.resumeNext(deps(db, "after-response"), ownerId);
+  }
+  return data.length;
+}
+
 /**
  * Cancel the Trigger.dev runs behind these pipeline runs (their stored `job_id`), after they were
  * stopped or their material removed: until 2026-11-08 the task kept calling the model for up to 30

@@ -21,7 +21,7 @@ export async function acceptNotes(
     const error =
       opts.kind === "marker_notes"
         ? `Orca can't use a description that gives its AI instructions ("${out.quote}"). Describe your marks instead.`
-        : `Orca can't use notes that give its AI instructions ("${out.quote}"). Describe the class instead.`;
+        : `Orca can't use notes that give its AI instructions ("${out.quote}"). Describe the class, or how you like to be quizzed, instead.`;
     return { ok: false, response: reply(400, { error }) };
   }
   return { ok: true, text: out.text };
