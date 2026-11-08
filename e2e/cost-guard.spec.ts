@@ -67,6 +67,14 @@ test("an upload past the student's daily token budget is saved and waits, the mo
   expect((await runStatus(generation.runId!)).progress).toEqual({ stage: "waiting", reason: "daily-tokens", message: "Daily limit reached: processing resumes tomorrow." });
   expect(await fakeCalls()).toEqual([]);
 
+  // The home page says so too (2026-11-08): today's allowance is spent, one upload is waiting for it.
+  await page.goto("/");
+  const meter = page.locator("[data-part=daily-usage]");
+  await expect(meter).toHaveAttribute("data-spent", "1");
+  await expect(meter).toContainText("Today's limit reached");
+  await expect(meter).toContainText(/resets at \d/);
+  await expect(meter.locator("[data-part=daily-usage-held]")).toHaveText("1 upload is waiting for it");
+
   const course = (await student.db.from("courses").select("slug").eq("id", courseId).single()).data!;
   await page.goto(`/course/${course.slug}/review?run=${generation.runId}`);
   await expect(page.locator("[data-part=run-waiting]")).toContainText("Daily limit reached: processing resumes tomorrow.");
