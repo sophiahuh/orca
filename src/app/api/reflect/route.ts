@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     if (error) throw new Error(`Couldn't read the material: ${error.message}`);
     if (!material) return reply(404, { error: "No such material." });
     const [course, objectives, topics] = await Promise.all([
-      db.from("courses").select("name, short").eq("owner_id", student.id).eq("id", material.course_id).single(),
+      db.from("courses").select("name, short").eq("owner_id", student.id).eq("id", material.course_id).is("deleted_at", null).single(),
       db.from("objectives").select("id, name, description, topic_id, review, merged_into").eq("owner_id", student.id).eq("course_id", material.course_id),
       db.from("topics").select("id, name").eq("owner_id", student.id).eq("course_id", material.course_id),
     ]);

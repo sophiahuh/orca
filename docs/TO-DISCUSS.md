@@ -6,6 +6,22 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Deleting a course (2026-11-08)
+- **Source:** owner, 2026-11-08 ("soft delete with a `deleted_at` column"); migration
+  `20261108090000_course_soft_delete.sql`, `DELETE /api/courses/:id` (`src/lib/server/courses.ts`),
+  "Delete this course" on the course's settings page (`src/components/config/DeleteCourse.tsx`).
+- **Built:** the course row and everything under it stay, stamped `deleted_at`; `my_data`,
+  `course_structure` and every server lookup of a course leave it out; its unfinished jobs stop
+  ("Stopped: the course was deleted."); only the server can set or clear `deleted_at` (a trigger).
+- **Assumed, pending the owner:**
+  - no restore in the app (the dialog says so); restoring is owner SQL (`deleted_at = null`), and
+    fails if a live course has taken its slug meanwhile;
+  - the slug is freed, so a new course of the same name gets the same URL;
+  - Your metrics leave out the deleted course's sessions and answers;
+  - its Storage files are kept;
+  - importing the same Canvas course again makes a fresh Orca course and imports everything anew.
+- **What would change:** a "Recently deleted" list with Restore, or purging Storage after a while.
+
 ### Tomorrow's quick review, startable early (2026-11-07)
 - **Source:** owner, 2026-11-07; `upNext` / `quickTomorrow` in `src/lib/mastery/agenda.ts`, `todoCards`.
 - **Built:** "Due tomorrow" lists the quick review only when the course's cadence puts the next one

@@ -111,6 +111,11 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   between `\( \)` / `\[ \]`, drawn by KaTeX (PR #8: `src/lib/math-text.ts`,
   `src/components/ui/MathText.tsx`); question validation refuses math that doesn't render, and exact
   answers stay plain text.
+- **Courses can be deleted** (2026-11-08, soft delete): `courses.deleted_at` (migration
+  `20261108090000`), set only by `DELETE /api/courses/:id`, which also stops the course's jobs;
+  `my_data`, `course_structure` and every server course lookup leave deleted courses out, and
+  their slug is free again. "Delete this course" is on the course's settings page. Assumptions in
+  `docs/TO-DISCUSS.md`.
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
   uses for development. `.env` may point at either (it has pointed at each at different times):
@@ -437,7 +442,10 @@ All 11 Figma screens are built. Where things live:
   and every PDF/.pptx in the modules (in order) and then the file list (by the number in the name, `sequenceNumber`,
   then posting date) goes through `startUpload` → Storage →
   `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date).
-  Every imported file counts as covered (owner, 2026-11-08). `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
+  Every imported file counts as covered (owner, 2026-11-08). **Import opens a picker first** (owner, 2026-11-08):
+  `GET /api/canvas/courses/:id/files` lists what the import would pull, grouped by module, every new file ticked and files
+  already in Orca fixed; `POST /api/canvas/import` takes `fileIds` and pulls only those (dates and the syllabus always).
+  `canvas_links` records every imported Canvas object, so importing again adds only what's new; the
   route pulls files until a 200 s budget and reports `files.remaining`, and the page keeps calling. The pure module
   (`api.ts`: classification, file picking, Link pagination; `client.ts`: bearer client with injectable fetch, downloads
   follow the signed redirect without the token) is tested in `tests/canvas/`; migration `20261104100000`, pgTAP 16.

@@ -11,7 +11,7 @@ import { isIP } from "node:net";
 import { type CanvasAssignment, type CanvasCourse, type CanvasFile, type CanvasModule, type CanvasUser, type PickedFile, classifyAssignment, dayOf, htmlToText, pickFiles } from "@/lib/canvas/api";
 import { type CanvasClient, CanvasError, canvasClient } from "@/lib/canvas/client";
 import { placeIslands } from "@/lib/course/islands";
-import { COURSE_NAME_MAX, type IslandVariant, shortName, slugify } from "@/lib/data";
+import { COURSE_NAME_MAX, type IslandVariant, type MaterialType, shortName, slugify } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
 import { UPLOAD_MIMES, uploadKind } from "@/lib/material/kind";
 import { startUploadJob } from "@/lib/server/jobs/start";
@@ -117,9 +117,15 @@ export interface CanvasCourseLine {
 type LinkKind = "course" | "file" | "assignment" | "syllabus";
 
 async function links(db: OrcaSupabase, ownerId: string): Promise<Map<string, string>> {
-  const { data, error } = await db.from("canvas_links").select("kind, canvas_id, orca_id").eq("owner_id", ownerId);
-  if (error) throw new Error(`Couldn't read what was imported before: ${error.message}`);
-  return new Map(data.map((l) => [`${l.kind}:${l.canvas_id}`, l.orca_id]));
+  const [linked, deleted] = await Promise.all([
+    db.from("canvas_links").select("kind, canvas_id, orca_id").eq("owner_id", ownerId),
+    db.from("courses").select("id").eq("owner_id", ownerId).not("deleted_at", "is", null),
+  ]);
+  if (linked.error) throw new Error(`Couldn't read what was imported before: ${linked.error.message}`);
+  if (deleted.error) throw new Error(`Couldn't read the deleted courses: ${deleted.error.message}`);
+  // A Canvas course imported into a course the student since deleted counts as never imported.
+  const gone = new Set(deleted.data.map((c) => c.id));
+  return new Map(linked.data.filter((l) => !(l.kind === "course" && gone.has(l.orca_id))).map((l) => [`${l.kind}:${l.canvas_id}`, l.orca_id]));
 }
 
 async function link(db: OrcaSupabase, ownerId: string, kind: LinkKind, canvasId: string, orcaId: string) {
@@ -132,6 +138,35 @@ export async function listCanvasCourses(db: OrcaSupabase, ownerId: string, clien
   return courses
     .filter((c) => typeof c.name === "string" && c.workflow_state !== "deleted")
     .map((c) => ({ id: String(c.id), name: c.name, code: c.course_code ?? null, term: c.term?.name ?? null, linkedCourseId: linked.get(`course:${c.id}`) ?? null }));
+}
+
+/* ── A course's files, for the picker ── */
+
+export interface CanvasFileLine {
+  id: string;
+  name: string;
+  module: string | null;
+  assigned: string | null;
+  type: MaterialType;
+  /** Bytes, when Canvas said. */
+  size: number | null;
+  /** Already imported into Orca (a link exists): shown ticked and fixed. */
+  linked: boolean;
+}
+
+/**
+ * The files an import would pull from one course, in import order, so the student can choose
+ * (owner, 2026-11-08): modules first, then the loose files, readable kinds only; each says whether
+ * it's already in Orca.
+ */
+export async function listCanvasFiles(db: OrcaSupabase, ownerId: string, client: CanvasClient, canvasCourseId: string, timeZone?: string): Promise<CanvasFileLine[]> {
+  const id = encodeURIComponent(canvasCourseId);
+  const [modules, files, linked] = await Promise.all([
+    optional(client.getAll<CanvasModule>(`/courses/${id}/modules`, { "include[]": ["items"] })),
+    optional(client.getAll<CanvasFile>(`/courses/${id}/files`)),
+    links(db, ownerId),
+  ]);
+  return pickFiles(modules, files, timeZone).map((p) => ({ id: String(p.id), name: p.name, module: p.module, assigned: p.assigned, type: p.type, size: p.file?.size ?? null, linked: linked.has(`file:${p.id}`) }));
 }
 
 /* ── Importing one course ── */
@@ -158,17 +193,18 @@ export interface ImportOptions {
   budgetMs?: number;
   now?: () => Date;
   /** The student's IANA timezone for due, unlock and posting dates; UTC when absent. */
-  timeZone?: string;
+  timeZone?: string;  /** Only these Canvas file ids are pulled (the picker's choice); unset means every readable file. */
+  fileIds?: ReadonlySet<string>;
 }
 
 async function orcaCourseFor(db: OrcaSupabase, ownerId: string, course: CanvasCourse, linked: Map<string, string>): Promise<{ id: string; slug: string; name: string; created: boolean }> {
   const existingId = linked.get(`course:${course.id}`);
   if (existingId) {
-    const { data, error } = await db.from("courses").select("id, slug, name").eq("owner_id", ownerId).eq("id", existingId).maybeSingle();
+    const { data, error } = await db.from("courses").select("id, slug, name").eq("owner_id", ownerId).eq("id", existingId).is("deleted_at", null).maybeSingle();
     if (error) throw new Error(`Couldn't read the course: ${error.message}`);
     if (data) return { ...data, created: false };
   }
-  const { data: mine, error } = await db.from("courses").select("id, slug").eq("owner_id", ownerId).order("created_at");
+  const { data: mine, error } = await db.from("courses").select("id, slug").eq("owner_id", ownerId).is("deleted_at", null).order("created_at");
   if (error) throw new Error(`Couldn't read the courses: ${error.message}`);
   const name = sanitize(course.name, COURSE_NAME_MAX).text.trim().slice(0, COURSE_NAME_MAX) || "Canvas course";
   const taken = mine.map((c) => c.slug);
@@ -275,9 +311,11 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
   const now = options.now ?? (() => new Date());
   const startedAt = now().getTime();
   const budgetMs = options.budgetMs ?? 200_000;
-  const linked = await links(db, ownerId);
+  const known = await links(db, ownerId);
   const course = await client.get<CanvasCourse>(`/courses/${encodeURIComponent(canvasCourseId)}`, { "include[]": ["syllabus_body", "term"] });
-  const orca = await orcaCourseFor(db, ownerId, course, linked);
+  const orca = await orcaCourseFor(db, ownerId, course, known);
+  // A new Orca course starts with nothing imported: links left from an earlier import went to a course since deleted.
+  const linked = orca.created ? new Map<string, string>() : known;
 
   const [assignments, modules, files] = await Promise.all([
     optional(client.getAll<CanvasAssignment>(`/courses/${course.id}/assignments`)),
@@ -287,7 +325,7 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
   const dates = await importAssignments(db, ownerId, orca.id, assignments, linked, options.timeZone);
   const syllabus = await importSyllabus(db, ownerId, orca.id, course, linked);
 
-  const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`));
+  const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`) && (!options.fileIds || options.fileIds.has(String(p.id))));
   // Every file counts as covered once imported (owner, 2026-11-08): no "how far has the class got?".
   const counts: ImportSummary["files"] = { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, skippedNames: [], total: picks.length };
   for (const pick of picks) {
