@@ -168,6 +168,15 @@ one PR to `main`; Fix-mode checks per commit, the merge gate once per phase.
 
 ### Phase 0: stop the bleeding (this week, no cost change)
 
+> **Status (2026-11-08):** landed on `phase-4`: D1 (chat role regex), D3 (remove-material archiving),
+> F1 (every Canvas hop public-address checked), F5 (web duplicate by hash), E3 (import page: per-file
+> skip, partial summary, `remaining`, the import limit holds the loop), E4 (Canvas dates in the
+> student's timezone), C4 (check on Uploads-tab load; Stop/Remove on a waiting card), E2 (Trigger
+> run cancelled on stop/remove; failure hook marks the run failed), F3 for text/web/canvas routes.
+> Still open from this phase: E1 (verify `ORCA_JOBS` on the Trigger project), C3 (no dispatch
+> cascade when the budget is spent; it lives in `resumeNext`, with the Phase 1/2 build), A10 (the
+> connector's session day), and the MCP route's rate limit.
+
 1. **Verify the Trigger worker** (E1): check `ORCA_JOBS` on the Trigger project; read the last
    run's log for "Couldn't start the next job". Make the worker pass the mode explicitly.
 2. D1 chat regex; D3 remove-material archiving; F1 SSRF hop checks; F5 web duplicate check.
