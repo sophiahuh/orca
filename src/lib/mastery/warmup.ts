@@ -12,14 +12,14 @@ export const WARM_UP_QUESTIONS = 5;
 /** How many of a first upload's heaviest objectives get one question written, so a warm-up has something to ask. */
 export const WARM_UP_WRITES = 10;
 
-export function warmUpCandidates<T extends Pick<RankedObjective, "objectiveId" | "status" | "weight" | "reached">>(
+export function warmUpCandidates<T extends Pick<RankedObjective, "objectiveId" | "status" | "weight">>(
   ranked: readonly T[],
   askable: ReadonlyMap<string, readonly unknown[]>,
   max = WARM_UP_QUESTIONS,
 ): T[] {
   if (ranked.some((r) => isInRotation(r.status) || r.status === "check-due")) return [];
   return ranked
-    .filter((r) => r.status === "unseen" && r.reached && (askable.get(r.objectiveId)?.length ?? 0) > 0)
+    .filter((r) => r.status === "unseen" && (askable.get(r.objectiveId)?.length ?? 0) > 0)
     .sort((a, b) => b.weight - a.weight)
     .slice(0, max);
 }

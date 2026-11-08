@@ -10,7 +10,6 @@ const ranked = (objectiveId: string, topicId: string, reason: string): RankedObj
   status: "learning",
   priority: { objectiveId, score: 2, terms: [{ term: "gap", value: 1, reason }] },
   weight: 1,
-  reached: true,
 });
 const names = { objective: (id: string) => `Obj ${id}`, topic: (id: string) => `Topic ${id}` };
 const empty: CourseAgenda = {

@@ -72,7 +72,7 @@ failed reads.
 | `/import/canvas` | Pick a Canvas course to import: files, assignments, exam dates and syllabus |
 | `/add-material` | Upload PDFs, .pptx decks, handwritten or typed notes (several files or a folder at once), or add an AI chat or a web page, with a homework reflection; Orca maps it onto the course and writes questions |
 | `/course/[slug]` | The course's trail of topics; each topic's play button opens a dive into it |
-| `/course/[slug]/review` | After an upload: confirm, rename or reject new topics; settle possible duplicates. Its Uploads tab lists every file with its progress (pause, stop, try again, remove, mark covered) |
+| `/course/[slug]/review` | After an upload: confirm, rename or reject new topics; settle possible duplicates. Its Uploads tab lists every file with its progress (pause, stop, try again, remove) |
 | `/course/[slug]/objectives` | Every objective: review status, origin, mastery, weight; reject, restore, merge |
 | `/course/[slug]/atlas` | Concept Atlas: the course's topics and how they connect |
 | `/course/[slug]/settings` | The course's own review settings (overriding the account defaults), class times and review days, and its Notes for Orca |

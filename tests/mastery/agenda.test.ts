@@ -210,34 +210,6 @@ test("a weekly dive on class days: first due the day before class after the firs
   assert.equal(agenda(evidence, "2026-10-07T09:00:00Z", { unflagged: true, schedule: { ...tueThu, deepDays: [3] } }).deepReview.dueDay, "2026-10-07", "the student's day");
 });
 
-test("objectives from material the class hasn't reached yet wait: not due, not in tomorrow's list, not dive candidates", () => {
-  const reflected = ["a", "b", "c"].map((id) => flagged(id, "2026-10-01T09:00:00Z", "homework"));
-  const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence: reflected, now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
-  const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
-  const g = courseAgenda({ courseId: "k", mastery, weights, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["c"]), now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
-  assert.deepEqual(g.dueToday.map((r) => r.objectiveId), ["a", "b"]);
-  // Still ranked (the trail can play it); only the schedule leaves it out.
-  assert.ok(g.ranked.some((r) => r.objectiveId === "c"));
-
-  // Answered before the class got there (played from the trail): it's still no dive candidate while upcoming.
-  const evidence = [ans("c1", "2026-10-01T10:00:00Z", "incorrect")];
-  const m2 = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence, now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
-  const w2 = agendaWeights(m2.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
-  const waiting = courseAgenda({ courseId: "k", mastery: m2, weights: w2, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["c"]), now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
-  assert.equal(waiting.deepReview.candidates, 0);
-  const covered = courseAgenda({ courseId: "k", mastery: m2, weights: w2, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], now: new Date("2026-10-05T09:00:00Z"), dayKey: utcDay });
-  assert.equal(covered.deepReview.candidates, 1);
-});
-
-test("a manual flag makes an objective from material the class hasn't reached due anyway", () => {
-  const now = new Date("2026-10-05T09:00:00Z");
-  const evidence = [flagged("c", "2026-10-01T09:00:00Z", "homework"), flagged("a", "2026-10-01T09:00:00Z", "homework"), flagged("a", "2026-10-02T09:00:00Z")];
-  const mastery = courseMastery({ courseId: "k", topicIds: ["t1", "t2"], bank, catalogue, evidence, now, dayKey: utcDay });
-  const weights = agendaWeights(mastery.objectives.keys(), new Map(Object.entries({ a: 1, b: 1, c: 1 })));
-  const g = courseAgenda({ courseId: "k", mastery, weights, config: DEFAULT_CONFIG, schedule: NO_SCHEDULE, results: [], examDays: [], upcoming: new Set(["a", "c"]), now, dayKey: utcDay });
-  assert.deepEqual(g.dueToday.map((r) => r.objectiveId), ["a"], "a has a manual flag; c only a reflection");
-});
-
 test("only objectives in rotation or with an open check come due; unflagged ones never do", () => {
   const evidence = [ans("a1", "2026-10-01T10:00:00Z"), ans("b1", "2026-10-01T10:00:00Z", "partial")];
   const g = agenda(evidence, "2026-10-05T09:00:00Z", { unflagged: true });

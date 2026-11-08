@@ -4,13 +4,12 @@ import { diveObjectives } from "../../src/lib/mastery/practice.ts";
 import type { RankedObjective } from "../../src/lib/mastery/agenda.ts";
 import type { ObjectiveStatus } from "../../src/lib/mastery/types.ts";
 
-const r = (objectiveId: string, status: ObjectiveStatus, weight = 1, topicId = "t1", reached = true): RankedObjective => ({
+const r = (objectiveId: string, status: ObjectiveStatus, weight = 1, topicId = "t1"): RankedObjective => ({
   objectiveId,
   topicId,
   status,
   priority: { objectiveId, score: weight, terms: [] },
   weight,
-  reached,
 });
 
 test("practice covers unflagged objectives (not flagged or verified), highest weight first", () => {
@@ -18,18 +17,18 @@ test("practice covers unflagged objectives (not flagged or verified), highest we
   assert.deepEqual(diveObjectives(ranked, "practice"), ["c", "b"]);
 });
 
-test("practice leaves out material the class hasn't reached and objectives that won't be tested", () => {
-  const ranked = [r("a", "unseen", 1, "t1", false), r("b", "unseen", 0), r("c", "unseen", 1)];
+test("practice leaves out objectives that won't be tested", () => {
+  const ranked = [r("b", "unseen", 0), r("c", "unseen", 1)];
   assert.deepEqual(diveObjectives(ranked, "practice"), ["c"]);
 });
 
 test("a course-wide dive covers weak points first (in priority order), then unflagged objectives by weight", () => {
-  const ranked = [r("b", "unseen", 2), r("a", "learning", 1), r("e", "check-due", 1), r("c", "verified", 1), r("d", "retired", 2), r("x", "fading", 1, "t1", false), r("z", "learning", 0)];
+  const ranked = [r("b", "unseen", 2), r("a", "learning", 1), r("e", "check-due", 1), r("c", "verified", 1), r("d", "retired", 2), r("z", "learning", 0)];
   assert.deepEqual(diveObjectives(ranked, "course"), ["a", "e", "b", "c"]);
 });
 
-test("a topic dive covers every objective in the topic but retired ones, reached or not", () => {
-  const ranked = [r("a", "unseen", 1, "t1", false), r("b", "learning", 1, "t2"), r("c", "retired", 1, "t1")];
+test("a topic dive covers every objective in the topic but retired ones", () => {
+  const ranked = [r("a", "unseen", 1, "t1"), r("b", "learning", 1, "t2"), r("c", "retired", 1, "t1")];
   assert.deepEqual(diveObjectives(ranked, "course", { topicId: "t1" }), ["a"]);
 });
 
