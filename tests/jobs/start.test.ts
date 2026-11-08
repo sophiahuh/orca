@@ -121,6 +121,19 @@ test("a retry keeps the failed run's place in line: the new run carries its time
   assert.deepEqual(sent.map((x) => x.job.runId), ["run-new"], "it is older than the queued run, so it is the one handed off");
 });
 
+test("with the day's budget spent, queued runs aren't dispatched either: each would only load its material and park (a Canvas import's cascade)", async () => {
+  const q = (id: string, material: string, at: string): Row => ({ id, owner_id: OWNER, course_id: "c1", material_id: material, kind: "upload", status: "queued", at, started_at: null });
+  const runs = [q("run-a", "m1", "2026-10-05T11:00:00.000Z"), q("run-b", "m2", "2026-10-05T11:01:00.000Z")];
+  const f = fakeDb({ materials: [material], material_pages: [page], pipeline_runs: runs });
+  const { deps: d, sent } = deps(f.db, "claude-opus-5-5");
+  d.budget = async () => ({ ok: false, reason: "daily-tokens", message: "spent" });
+  assert.equal(await resumeNext(d, OWNER), null);
+  assert.deepEqual(sent, [], "nothing handed off");
+  assert.deepEqual(runs.map((r) => [r.status, r.started_at, (r.progress as { message?: string } | undefined)?.message]), [["waiting", null, "spent"], ["waiting", null, "spent"]], "both parked as waiting with the reason, no job started");
+  d.budget = async () => ({ ok: true });
+  assert.equal((await resumeNext(d, OWNER))?.job.runId, "run-a", "the oldest starts once the budget allows");
+});
+
 test("a run that died long ago is failed, and uploading again starts a new one", async () => {
   const at = new Date(now.getTime() - DEAD_RUN_MS.upload - 1000).toISOString();
   const dead = { id: "run-dead", owner_id: OWNER, course_id: "c1", material_id: "m1", kind: "upload", status: "running", at, started_at: at };

@@ -145,16 +145,30 @@ async function hasJobInFlight(deps: StartDeps, ownerId: string): Promise<boolean
 
 type LiveRun = { id: string; kind: string; status: string; material_id: string | null; objective_ids: string[] | null; deep_minutes: number | null; started_at?: string | null };
 
-/** Whether a live run may be handed to a job now: a waiting run only once its student's budget allows it. */
+/**
+ * Whether a live run may be handed to a job now: only once its student's budget allows it. A queued
+ * run is checked like a waiting one (2026-11-08): the job would check the budget right after
+ * claiming and park itself, so with the day spent each dispatch was a job that loaded the material
+ * only to wait, one per queued file after a Canvas import. A queued run the budget refuses is
+ * parked as `waiting` here instead, with the reason, as the job would have.
+ */
 async function mayRun(deps: StartDeps, ownerId: string, r: LiveRun): Promise<boolean> {
-  if (r.status !== "waiting" || !deps.budget) return true;
+  if (r.status === "running" || !deps.budget) return true;
   let pages = 0;
   if (r.kind === "upload" && r.material_id) {
     const { count, error } = await deps.db.from("material_pages").select("n", { count: "exact", head: true }).eq("owner_id", ownerId).eq("material_id", r.material_id);
     if (error) throw new Error(`Couldn't count the material's pages: ${error.message}`);
     pages = count ?? 0;
   }
-  return (await deps.budget(ownerId, pages)).ok;
+  const verdict = await deps.budget(ownerId, pages);
+  if (verdict.ok) return true;
+  if (r.status === "queued") {
+    const progress = { stage: "waiting", reason: verdict.reason, message: verdict.message };
+    const { error } = await deps.db.from("pipeline_runs").update({ status: "waiting", progress }).eq("owner_id", ownerId).eq("id", r.id).eq("status", "queued");
+    if (error) throw new Error(`Couldn't hold the run: ${error.message}`);
+    r.status = "waiting";
+  }
+  return false;
 }
 
 /** Hand a queued or waiting run to its job: back to queued (a waiting run) so the job can claim it, stamped with when it was handed off (the claim overwrites it). */
@@ -177,6 +191,13 @@ async function dispatchRun(deps: StartDeps, ownerId: string, r: LiveRun): Promis
  * orphaned queued run, or runs waiting for a limit), start the oldest that may run now, which may
  * be this one. Says whether this run was the one started.
  */
+/** Whether `resumeNext` just parked the run for the day's budget (it reads `waiting` now). */
+async function heldByBudget(deps: StartDeps, ownerId: string, runId: string): Promise<boolean> {
+  const { data, error } = await deps.db.from("pipeline_runs").select("status").eq("owner_id", ownerId).eq("id", runId).maybeSingle();
+  if (error) throw new Error(`Couldn't read the run: ${error.message}`);
+  return data?.status === "waiting";
+}
+
 async function startBehind(deps: StartDeps, ownerId: string, runId: string): Promise<boolean> {
   const next = await resumeNext(deps, ownerId);
   return next?.job.runId === runId;
@@ -256,7 +277,8 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
   // they were recorded, so the later one maps its file onto the topics the earlier one made. This
   // run starts now only if nothing of the student's is running and no older run is queued.
   try {
-    return { state: (await startBehind(deps, ownerId, runId)) ? "started" : "queued", runId };
+    if (await startBehind(deps, ownerId, runId)) return { state: "started", runId };
+    return { state: (await heldByBudget(deps, ownerId, runId)) ? "waiting" : "queued", runId };
   } catch (e) {
     // handOff marked the run failed and said why; the material itself is saved, so say so instead of failing the request.
     return { state: "failed", runId, error: e instanceof Error ? e.message : String(e) };

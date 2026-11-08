@@ -17,6 +17,7 @@ const WHAT: Record<RateAction, string> = {
   topUp: "top-ups",
   relink: "connection searches",
   canvasImport: "Canvas imports",
+  connector: "connector calls",
   text: "pasted texts",
   web: "websites added",
   canvasConnect: "Canvas connections",
