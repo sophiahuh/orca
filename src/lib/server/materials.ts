@@ -23,6 +23,7 @@ import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readP
 import { readPptx } from "@/lib/material/read-pptx";
 import { looksLikeZip } from "@/lib/material/unzip";
 import { isOwnPath, uploadPath } from "@/lib/material/paths";
+import { cancelJobs } from "@/lib/server/jobs/start";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -284,6 +285,7 @@ export async function removeMaterial(db: OrcaSupabase, ownerId: string, id: stri
   if (runs.length) {
     const { error: failed } = await db.from("pipeline_runs").update({ status: "failed", error: "Removed by you.", progress: null }).eq("owner_id", ownerId).in("id", runs.map((r) => r.id)).in("status", ["queued", "waiting", "paused"]);
     if (failed) throw fail("stop the material's queued run", failed);
+    await cancelJobs(db, ownerId, runs.map((r) => r.id)); // a queued run already handed to Trigger
   }
 
   // The objectives only this upload taught are archived (their questions go with them, by objective).

@@ -15,7 +15,7 @@
  * The mode is checked before any run row is written, so a bad setting leaves nothing queued.
  */
 import { after } from "next/server";
-import { configure, tasks } from "@trigger.dev/sdk";
+import { configure, runs, tasks } from "@trigger.dev/sdk";
 import type { deepReviewTask, processMaterialTask, topUpTask } from "@/trigger/jobs";
 import * as core from "@/lib/jobs/start";
 import type { Dispatch, Generation, StartDeps, TopUpStart } from "@/lib/jobs/start";
@@ -132,8 +132,45 @@ export async function pauseRuns(db: OrcaSupabase, ownerId: string, target: core.
 /** Stop an upload's run now (POST /api/runs/stop) and start the student's next job after the response. */
 export async function stopRun(db: OrcaSupabase, ownerId: string, runId: string): Promise<boolean> {
   const stopped = await core.stopRun(deps(db, "after-response"), ownerId, runId);
-  if (stopped) await core.resumeNext(deps(db, "after-response"), ownerId);
+  if (stopped) {
+    await cancelJobs(db, ownerId, [runId]);
+    await core.resumeNext(deps(db, "after-response"), ownerId);
+  }
   return stopped;
+}
+
+/**
+ * Cancel the Trigger.dev runs behind these pipeline runs (their stored `job_id`), after they were
+ * stopped or their material removed: until 2026-11-08 the task kept calling the model for up to 30
+ * minutes until its final save was refused. Inline mode has nothing to cancel. A run Trigger no
+ * longer knows (finished, never claimed) is ignored; `cancel` is injectable for the test.
+ */
+export async function cancelJobs(db: OrcaSupabase, ownerId: string, runIds: readonly string[], cancel: (jobId: string) => Promise<unknown> = (id) => runs.cancel(id)): Promise<number> {
+  if (!runIds.length || jobsMode() !== "trigger") return 0;
+  configureTrigger();
+  const { data, error } = await db.from("pipeline_runs").select("id, job_id").eq("owner_id", ownerId).in("id", [...runIds]);
+  if (error) throw new Error(`Couldn't read the runs' jobs: ${error.message}`);
+  let cancelled = 0;
+  for (const r of data) {
+    if (!r.job_id) continue;
+    try {
+      await cancel(r.job_id);
+      cancelled++;
+    } catch {
+      // Already finished or unknown to Trigger: nothing to cancel.
+    }
+  }
+  return cancelled;
+}
+
+/**
+ * Mark a run failed from a task's failure hook: the process was killed at its time limit or threw
+ * outside the job's own handling, so the job's final save never happened (2026-11-08). A run that
+ * already finished is left alone.
+ */
+export async function failRunFromTask(db: OrcaSupabase, ownerId: string, runId: string, message: string): Promise<void> {
+  const { error } = await db.from("pipeline_runs").update({ status: "failed", error: `Orca's job stopped: ${message}`.slice(0, 500), progress: null }).eq("owner_id", ownerId).eq("id", runId).in("status", ["queued", "running"]);
+  if (error) throw new Error(`Couldn't mark the run failed: ${error.message}`);
 }
 
 /** Every student with a live run (queued, waiting or running: a running one may have died), for the scheduled sweeps. */
