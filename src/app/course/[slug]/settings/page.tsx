@@ -155,7 +155,7 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
           <Card className="flex flex-col gap-[8px] px-[20px] py-[20px]" tone="alice" lip={4}>
             <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-wisteria-deep">Course override</p>
             <h2 className="text-[22px] font-bold leading-tight text-prussian">{course.name}</h2>
-            <p className="pt-[4px] text-[14px] font-medium leading-relaxed text-wisteria-deep">Review settings: {inheritsConfig ? "inheriting master settings" : "course override"}. Notes for Orca: {notes.trim() ? "set for this class" : "none for this class"}; your notes for all classes apply too.</p>
+            <p className="pt-[4px] text-[14px] font-medium leading-relaxed text-wisteria-deep">Review settings: {inheritsConfig ? "inheriting master settings" : "course override"}. Notes for Orca: {notes.trim() ? "set for this class" : "none for this class"}; your question preferences in Settings apply too.</p>
           </Card>
           <Card className="flex flex-col gap-[12px] px-[20px] pb-[22px] pt-[20px]">
             <div className="flex flex-col gap-[4px]">
