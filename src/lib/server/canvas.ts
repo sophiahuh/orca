@@ -161,6 +161,8 @@ export interface ImportOptions {
   /** Stop pulling files once this many ms have passed; the rest is reported as `remaining`. */
   budgetMs?: number;
   now?: () => Date;
+  /** The student's IANA timezone for due, unlock and posting dates; UTC when absent. */
+  timeZone?: string;
 }
 
 async function orcaCourseFor(db: OrcaSupabase, ownerId: string, course: CanvasCourse, linked: Map<string, string>): Promise<{ id: string; slug: string; name: string; created: boolean }> {
@@ -186,11 +188,11 @@ async function orcaCourseFor(db: OrcaSupabase, ownerId: string, course: CanvasCo
   return { id, slug, name, created: true };
 }
 
-async function importAssignments(db: OrcaSupabase, ownerId: string, courseId: string, assignments: CanvasAssignment[], linked: Map<string, string>): Promise<{ exams: number; events: number }> {
+async function importAssignments(db: OrcaSupabase, ownerId: string, courseId: string, assignments: CanvasAssignment[], linked: Map<string, string>, timeZone?: string): Promise<{ exams: number; events: number }> {
   let exams = 0;
   let events = 0;
   for (const a of assignments) {
-    const date = dayOf(a.due_at);
+    const date = dayOf(a.due_at, timeZone);
     if (!date || linked.has(`assignment:${a.id}`)) continue;
     const title = sanitize(a.name, 120).text.trim().slice(0, 120) || "Assignment";
     const kind = classifyAssignment(title);
@@ -287,15 +289,15 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
     optional(client.getAll<CanvasModule>(`/courses/${course.id}/modules`, { "include[]": ["items"] })),
     optional(client.getAll<CanvasFile>(`/courses/${course.id}/files`)),
   ]);
-  const dates = await importAssignments(db, ownerId, orca.id, assignments, linked);
+  const dates = await importAssignments(db, ownerId, orca.id, assignments, linked, options.timeZone);
   const syllabus = await importSyllabus(db, ownerId, orca.id, course, linked);
 
-  const picks = pickFiles(modules, files).filter((p) => !linked.has(`file:${p.id}`));
+  const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`));
   // Posted all at once, nothing says how far the class has got: the files wait until the student says (the plan's
   // assumption 1, corrected by the owner). Posted over the weeks, each file was posted as the class reached it,
   // except one whose module opens in the future.
   const dump = postedAtOnce(picks);
-  const today = dayOf(now().toISOString())!;
+  const today = dayOf(now().toISOString(), options.timeZone)!;
   const counts: ImportSummary["files"] = { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, skippedNames: [], total: picks.length, items: [], askCoverage: dump };
   for (const pick of picks) {
     if (now().getTime() - startedAt > budgetMs) {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CanvasError } from "@/lib/canvas/client";
 import { clientFor, importCanvasCourse } from "@/lib/server/canvas";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
+import { timezoneOf } from "@/lib/server/usage";
 import { forStudent, reply } from "@/lib/server/student";
 
 /**
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     const rate = await rateLimit(db, student.id, "canvasImport");
     if (!rate.ok) return tooManyRequests(rate);
     try {
-      return reply(200, await importCanvasCourse(db, student.id, client, parsed.data.canvasCourseId, { budgetMs: 200_000 }));
+      return reply(200, await importCanvasCourse(db, student.id, client, parsed.data.canvasCourseId, { budgetMs: 200_000, timeZone: await timezoneOf(db, student.id) }));
     } catch (e) {
       if (e instanceof CanvasError) {
         if (e.status === 401) return reply(409, { error: "Canvas no longer accepts the token. Reconnect in Settings." });

@@ -22,6 +22,14 @@ test("material types come from the file's name and its module's", () => {
   assert.equal(materialTypeFor("notes.pdf", "Midterm review"), "Past exam", "the module's name counts too");
 });
 
+test("dayOf takes the student's day when given a zone: an 11:59 PM Eastern deadline stays on its day", () => {
+  assert.equal(dayOf("2026-11-08T04:59:00Z", "America/New_York"), "2026-11-07");
+  assert.equal(dayOf("2026-11-08T04:59:00Z", "Asia/Tokyo"), "2026-11-08");
+  assert.equal(dayOf("2026-11-08T04:59:00Z", "Not/AZone"), "2026-11-08", "an unknown zone falls back to UTC");
+  const picked = pickFiles([{ id: 1, name: "W1", unlock_at: "2026-09-08T03:30:00Z", items: [{ id: 1, type: "File", title: "a.pdf", content_id: 91 }] }], [], "America/New_York");
+  assert.equal(picked[0].assigned, "2026-09-07");
+});
+
 test("dayOf takes the UTC day and refuses junk", () => {
   assert.equal(dayOf("2026-10-23T03:59:00Z"), "2026-10-23");
   assert.equal(dayOf(null), null);

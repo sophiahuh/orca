@@ -68,11 +68,22 @@ export interface CanvasAssignment {
 
 /* ── Decisions ── */
 
-/** YYYY-MM-DD of an ISO time (the UTC day; Canvas due times are stored in UTC), or null for none. */
-export function dayOf(iso: string | null | undefined): string | null {
+/**
+ * YYYY-MM-DD of an ISO time in `timeZone` (the student's; UTC when none), or null for none. Canvas
+ * stores due times in UTC, so an 11:59 PM Eastern deadline is 04:59 UTC the next day: read in UTC
+ * it landed a day late (2026-11-08).
+ */
+export function dayOf(iso: string | null | undefined, timeZone?: string): string | null {
   if (!iso) return null;
   const t = Date.parse(iso);
-  return Number.isNaN(t) ? null : new Date(t).toISOString().slice(0, 10);
+  if (Number.isNaN(t)) return null;
+  if (!timeZone) return new Date(t).toISOString().slice(0, 10);
+  try {
+    // en-CA formats as YYYY-MM-DD.
+    return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(t));
+  } catch {
+    return new Date(t).toISOString().slice(0, 10); // an unknown zone: UTC, never nothing
+  }
 }
 
 export type AssignmentKind = "exam" | "lab" | "hw";
@@ -117,7 +128,7 @@ export interface PickedFile {
  * item whose file isn't in the list (the Files tab is hidden, say) is kept with `file: null` for
  * the caller to look up.
  */
-export function pickFiles(modules: readonly CanvasModule[], files: readonly CanvasFile[]): PickedFile[] {
+export function pickFiles(modules: readonly CanvasModule[], files: readonly CanvasFile[], timeZone?: string): PickedFile[] {
   const byId = new Map(files.map((f) => [f.id, f]));
   const seen = new Set<number>();
   const out: PickedFile[] = [];
@@ -131,7 +142,7 @@ export function pickFiles(modules: readonly CanvasModule[], files: readonly Canv
       name,
       file,
       module: module?.name ?? null,
-      assigned: dayOf(module?.unlock_at) ?? dayOf(file?.created_at),
+      assigned: dayOf(module?.unlock_at, timeZone) ?? dayOf(file?.created_at, timeZone),
       type: materialTypeFor(name, module?.name),
     });
   };
