@@ -58,3 +58,23 @@ test("download follows the signed redirect without the token and refuses big fil
   await assert.rejects(client.download("https://canvas.test/files/9/download", 2), (e: unknown) => e instanceof CanvasError && e.status === 413);
   await assert.rejects(client.download("https://other.test/files/9/download", 1024), CanvasError);
 });
+
+test("every hop is checked: a redirect to a private address is refused, on downloads and on API calls (2026-11-08)", async () => {
+  const seen: string[] = [];
+  const client = canvasClient({
+    baseUrl: "https://canvas.test",
+    token: "secret",
+    hopAllowed: async (url) => url.hostname !== "10.0.0.5",
+    fetch: fakeFetch((url) => {
+      seen.push(url.href);
+      if (url.hostname === "canvas.test") return new Response(null, { status: 302, headers: { location: "https://10.0.0.5/secret" } });
+      return new Response("leaked", { status: 200 });
+    }),
+  });
+  await assert.rejects(client.download("https://canvas.test/files/9/download", 1024), (e: unknown) => e instanceof CanvasError && /won't fetch/.test(e.message));
+  await assert.rejects(client.get("/courses"), (e: unknown) => e instanceof CanvasError && /won't fetch/.test(e.message));
+  assert.ok(seen.every((href) => !href.includes("10.0.0.5")), "the private host was never fetched");
+  // Without a check, https is still required.
+  const plain = canvasClient({ baseUrl: "https://canvas.test", token: "t", fetch: fakeFetch(() => new Response(null, { status: 302, headers: { location: "http://canvas.test/x" } })) });
+  await assert.rejects(plain.get("/courses"), (e: unknown) => e instanceof CanvasError && /off https/.test(e.message));
+});

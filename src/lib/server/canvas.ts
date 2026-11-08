@@ -16,7 +16,7 @@ import { LIMITS } from "@/lib/limits";
 import { UPLOAD_MIMES, uploadKind } from "@/lib/material/kind";
 import { startUploadJob } from "@/lib/server/jobs/start";
 import { BUCKET, processUpload, startUpload } from "@/lib/server/materials";
-import { isPublicAddress } from "@/lib/server/public-page";
+import { isPublicAddress, publicHop } from "@/lib/server/public-page";
 import { serverSupabaseEnv } from "@/lib/supabase/env";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 import { sanitize } from "@/lib/untrusted/sanitize";
@@ -99,7 +99,8 @@ export async function clientFor(db: OrcaSupabase, ownerId: string, fetchImpl?: t
   if (error) throw new Error(`Couldn't read the Canvas connection: ${error.message}`);
   if (!data) return null;
   await db.from("canvas_connections").update({ last_used_at: new Date().toISOString() }).eq("owner_id", ownerId);
-  return canvasClient({ baseUrl: data.base_url, token: decryptToken(data.token_enc), fetch: fetchImpl });
+  // Every hop (API calls, downloads, their redirects) must resolve to a public address, checked at use.
+  return canvasClient({ baseUrl: data.base_url, token: decryptToken(data.token_enc), fetch: fetchImpl, hopAllowed: (u) => publicHop(u) });
 }
 
 /* ── Courses ── */

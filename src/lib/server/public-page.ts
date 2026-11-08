@@ -72,6 +72,15 @@ export function isPublicAddress(ip: string): boolean {
   return !lower.startsWith("2001:db8:"); // documentation
 }
 
+/**
+ * Whether one https hop (a URL, or a redirect's target) points at a public address: every address
+ * the host resolves to is public. The Canvas client checks each API call and download hop with it
+ * (2026-11-08), so a student-chosen "Canvas" site can't redirect Orca into a private network.
+ */
+export function publicHop(url: URL, lookup: (host: string) => Promise<string[]> = resolveAll): Promise<boolean> {
+  return hopAllowed(url, { userAgent: "" }, lookup);
+}
+
 async function hopAllowed(url: URL, options: PageOptions, lookup: (host: string) => Promise<string[]>): Promise<boolean> {
   const schemes = options.schemes ?? ["https:"];
   if (!(schemes as readonly string[]).includes(url.protocol) || url.username || url.password) return false;
