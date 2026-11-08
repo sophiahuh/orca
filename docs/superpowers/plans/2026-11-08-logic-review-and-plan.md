@@ -173,9 +173,9 @@ one PR to `main`; Fix-mode checks per commit, the merge gate once per phase.
 > skip, partial summary, `remaining`, the import limit holds the loop), E4 (Canvas dates in the
 > student's timezone), C4 (check on Uploads-tab load; Stop/Remove on a waiting card), E2 (Trigger
 > run cancelled on stop/remove; failure hook marks the run failed), F3 for text/web/canvas routes.
-> Still open from this phase: E1 (verify `ORCA_JOBS` on the Trigger project), C3 (no dispatch
-> cascade when the budget is spent; it lives in `resumeNext`, with the Phase 1/2 build), A10 (the
-> connector's session day), and the MCP route's rate limit.
+> Then (879065f) C3, A10 and the MCP route's rate limit. E1: `ORCA_JOBS=trigger` was missing from
+> the Trigger project's Prod env vars and was set on 2026-11-07 (a flag top-up had sat queued behind
+> it); the worker still reads the mode from the env. Phases 0–2 reached `main` in PR #6 (2026-11-08).
 
 1. **Verify the Trigger worker** (E1): check `ORCA_JOBS` on the Trigger project; read the last
    run's log for "Couldn't start the next job". Make the worker pass the mode explicitly.
