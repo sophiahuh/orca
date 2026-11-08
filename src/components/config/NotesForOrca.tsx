@@ -14,8 +14,8 @@ const COPY = {
   account: {
     title: "Your question preferences",
     eyebrow: "For all your classes",
-    body: "How you like to be quizzed in every class: the kinds of questions, their style, how hard. Orca follows this whenever it writes something new for you; questions already written don't change. Anything about one class goes in that class's settings.",
-    placeholder: "e.g. More real-world scenarios, fewer definitions. Make questions as hard as the exam.",
+    body: "Any general preferences for how Orca determines topics, objectives and questions. Applies to what it writes from now on.",
+    placeholder: "e.g. Only conceptual questions, no plain calculations.",
   },
   course: {
     title: "Notes for Orca",
