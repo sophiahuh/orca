@@ -7,12 +7,12 @@ import { Card } from "@/components/ui/Card";
  * Notes for Orca (owner, 2026-10-25): what the student knows about a class, in their own words.
  * The writing steps follow them within fixed rules (src/lib/pipeline/prompts.ts); the save routes
  * screen them. One for all classes (Settings) and one per class (the course's settings).
- * Settings calls its box "Your question preferences" (owner, 2026-11-08): what holds in every class
- * is mostly how the student likes to be quizzed. Same data and prompts either way.
+ * Settings calls its box "Your study preferences" (owner, 2026-11-08): what holds in every class
+ * is general preferences for topics, objectives and questions. Same data and prompts either way.
  */
 const COPY = {
   account: {
-    title: "Your question preferences",
+    title: "Your study preferences",
     eyebrow: "For all your classes",
     body: "Any general preferences for how Orca determines topics, objectives and questions. Applies to what it writes from now on.",
     placeholder: "e.g. Only conceptual questions, no plain calculations.",
