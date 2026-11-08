@@ -27,7 +27,94 @@ interface ImportSummary {
   files: { added: number; duplicates: number; failed: number; skipped: number; remaining: number; skippedNames: string[]; total: number; items: Array<{ materialId: string; name: string; upcoming: boolean }>; askCoverage: boolean };
 }
 
-type Progress = { kind: "idle" } | { kind: "running"; pulled: number } | { kind: "done"; summary: ImportSummary } | { kind: "failed"; message: string };
+interface CanvasFileLine {
+  id: string;
+  name: string;
+  module: string | null;
+  assigned: string | null;
+  type: string;
+  size: number | null;
+  linked: boolean;
+}
+
+type Progress =
+  | { kind: "idle" }
+  | { kind: "listing" }
+  | { kind: "picking"; files: CanvasFileLine[]; chosen: Set<string> }
+  | { kind: "running"; pulled: number }
+  | { kind: "done"; summary: ImportSummary }
+  | { kind: "failed"; message: string };
+
+const NO_MODULE = "Files not in a module";
+
+/**
+ * Which files to pull (owner, 2026-11-08): the course's readable files grouped by module, every new
+ * one ticked; files already in Orca are shown ticked and fixed. Nothing is pulled until Import.
+ */
+function Picker({ files, chosen, onChange, onImport, onCancel }: { files: CanvasFileLine[]; chosen: Set<string>; onChange: (next: Set<string>) => void; onImport: () => void; onCancel: () => void }) {
+  const groups = new Map<string, CanvasFileLine[]>();
+  for (const f of files) {
+    const key = f.module ?? NO_MODULE;
+    groups.set(key, [...(groups.get(key) ?? []), f]);
+  }
+  const fresh = files.filter((f) => !f.linked);
+  const count = fresh.filter((f) => chosen.has(f.id)).length;
+  const toggle = (ids: string[], on: boolean) => {
+    const next = new Set(chosen);
+    for (const id of ids) if (on) next.add(id);
+    else next.delete(id);
+    onChange(next);
+  };
+  return (
+    <section className="flex flex-col gap-[10px] rounded-[16px] border-2 border-alice-deep bg-alice px-[16px] py-[14px]" data-part="canvas-files">
+      <div className="flex flex-wrap items-center justify-between gap-[8px]">
+        <h3 className="text-[15px] font-bold text-prussian">Which files should Orca read?</h3>
+        {fresh.length > 0 && (
+          <div className="flex gap-[12px] text-[13px] font-bold text-wisteria-deep">
+            <button type="button" className="underline underline-offset-2" onClick={() => toggle(fresh.map((f) => f.id), true)} data-part="canvas-files-all">
+              All
+            </button>
+            <button type="button" className="underline underline-offset-2" onClick={() => toggle(fresh.map((f) => f.id), false)} data-part="canvas-files-none">
+              None
+            </button>
+          </div>
+        )}
+      </div>
+      {files.length === 0 && <p className="text-[13px] font-semibold text-prussian">Canvas lists no PDFs or slide decks in this course. Dates and the syllabus are still imported.</p>}
+      {[...groups.entries()].map(([module, members]) => {
+        const freshHere = members.filter((f) => !f.linked);
+        const allOn = freshHere.length > 0 && freshHere.every((f) => chosen.has(f.id));
+        return (
+          <div key={module} className="flex flex-col gap-[4px]" data-part="canvas-module">
+            <label className="flex items-center gap-[8px] text-[13px] font-bold text-prussian">
+              <input type="checkbox" checked={allOn} disabled={freshHere.length === 0} onChange={(e) => toggle(freshHere.map((f) => f.id), e.target.checked)} data-part="canvas-module-toggle" />
+              <span className="truncate">{module}</span>
+            </label>
+            <ul className="flex flex-col gap-[2px] pl-[22px]">
+              {members.map((f) => (
+                <li key={f.id}>
+                  <label className={cn("flex items-center gap-[8px] text-[13px] font-medium", f.linked ? "text-wisteria-deep" : "text-prussian")}>
+                    <input type="checkbox" checked={f.linked || chosen.has(f.id)} disabled={f.linked} onChange={(e) => toggle([f.id], e.target.checked)} data-part="canvas-file" data-id={f.id} data-linked={f.linked ? "1" : "0"} />
+                    <span className="truncate">{f.name}</span>
+                    <span className="shrink-0 text-[12px] font-semibold text-wisteria-deep">{f.linked ? "already in Orca" : f.type}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+      <div className="flex flex-wrap items-center gap-[10px] pt-[4px]">
+        <Button size="sm" onClick={onImport} data-part="canvas-import-chosen">
+          {count === 0 ? "Import dates and syllabus only" : `Import ${count} file${count === 1 ? "" : "s"}`}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancel} data-part="canvas-files-cancel">
+          Cancel
+        </Button>
+      </div>
+    </section>
+  );
+}
 
 function summaryLine(s: ImportSummary): string {
   const parts = [s.course.created ? `Created ${s.course.name}` : `Updated ${s.course.name}`];
@@ -101,12 +188,24 @@ export default function ImportCanvasPage() {
     };
   }, []);
 
-  const importCourse = async (c: CanvasCourseLine) => {
+  // Import opens the picker first: the course's files, every new one ticked (owner, 2026-11-08).
+  const pickFiles = async (c: CanvasCourseLine) => {
+    setProgress((p) => ({ ...p, [c.id]: { kind: "listing" } }));
+    const res = await fetch(`/api/canvas/courses/${encodeURIComponent(c.id)}/files`, { cache: "no-store" });
+    const body = (await res.json().catch(() => null)) as { files?: CanvasFileLine[]; error?: string } | null;
+    if (!res.ok || !body?.files) {
+      setProgress((p) => ({ ...p, [c.id]: { kind: "failed", message: body?.error ?? "Orca couldn't list that course's files." } }));
+      return;
+    }
+    setProgress((p) => ({ ...p, [c.id]: { kind: "picking", files: body.files!, chosen: new Set(body.files!.filter((f) => !f.linked).map((f) => f.id)) } }));
+  };
+
+  const importCourse = async (c: CanvasCourseLine, fileIds: string[]) => {
     setProgress((p) => ({ ...p, [c.id]: { kind: "running", pulled: 0 } }));
     let last: ImportSummary | null = null;
     // Each request pulls files until its time budget is used; keep going while Canvas has more.
     for (let round = 0; round < 10; round++) {
-      const res = await fetch("/api/canvas/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasCourseId: c.id }) });
+      const res = await fetch("/api/canvas/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasCourseId: c.id, fileIds }) });
       const body = (await res.json().catch(() => null)) as (ImportSummary & { error?: string }) | null;
       if (!res.ok || !body || !("course" in body)) {
         // A later round failing (a 429, a Canvas hiccup) keeps what the earlier rounds pulled: those files
@@ -140,7 +239,7 @@ export default function ImportCanvasPage() {
           Pick a course
         </motion.h1>
         <motion.p variants={fadeUp} className="max-w-[520px] text-[16px] leading-[1.45] text-prussian">
-          Orca pulls the slides, the assignments and the exam dates itself. Import again any time to pick up what the professor posted since.
+          Orca pulls the assignments and exam dates itself, and the files you tick. Import again any time to pick up what the professor posted since.
         </motion.p>
 
         {notConnected && (
@@ -168,10 +267,21 @@ export default function ImportCanvasPage() {
                         <p className="truncate text-[18px] font-bold text-prussian">{c.name}</p>
                         <p className="text-[13px] font-semibold text-wisteria-deep">{[c.code, c.term].filter(Boolean).join(" · ")}</p>
                       </div>
-                      <Button size="sm" variant={c.linkedCourseId ? "secondary" : "primary"} disabled={p.kind === "running"} onClick={() => void importCourse(c)} data-part="canvas-import">
-                        {p.kind === "running" ? "Importing…" : c.linkedCourseId ? "Update" : "Import"}
-                      </Button>
+                      {p.kind !== "picking" && (
+                        <Button size="sm" variant={c.linkedCourseId ? "secondary" : "primary"} disabled={p.kind === "running" || p.kind === "listing"} onClick={() => void pickFiles(c)} data-part="canvas-import">
+                          {p.kind === "running" ? "Importing…" : p.kind === "listing" ? "Listing files…" : c.linkedCourseId ? "Update" : "Import"}
+                        </Button>
+                      )}
                     </div>
+                    {p.kind === "picking" && (
+                      <Picker
+                        files={p.files}
+                        chosen={p.chosen}
+                        onChange={(chosen) => setProgress((x) => ({ ...x, [c.id]: { ...p, chosen } }))}
+                        onImport={() => void importCourse(c, [...p.chosen])}
+                        onCancel={() => setProgress((x) => ({ ...x, [c.id]: { kind: "idle" } }))}
+                      />
+                    )}
                     {p.kind === "running" && (
                       <p className="text-[13px] font-semibold text-prussian" role="status">
                         {p.pulled === 0 ? "Reading the course: dates, syllabus, then the files…" : `${p.pulled} files pulled, getting the rest…`}
