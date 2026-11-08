@@ -467,7 +467,7 @@ without questions. Handwritten markers: Settings describes the student's marks
 (checked by code). Tapped slides: "Which slides were hard?" on an upload card flags the whole topics
 taught on each tapped page, every objective of each (owner, 2026-11-07). Spec: `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`;
 plans: `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`,
-`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `phase-4`, shipping together.
+`docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`. On `main` since 2026-11-05 (Plan A) and 2026-11-07 (B and C).
 
 Math in questions (Amanda, 2026-11-08): the writing steps put math in LaTeX between `\( \)` or
 `\[ \]` (`QUIZ_RUBRIC`); exact answers stay plain text, since they're compared with what the

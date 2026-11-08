@@ -28,14 +28,13 @@ was Advanced Logic Design (ALD, Columbia ELEN; its decks are local-only, `docs/s
 own courses (Data Structures, Fundamentals of Computer Systems) on the hosted project.
 
 **Where things stand.**
-- **Branches (keep this straight).** `phase-4` is the shared working branch for everyone (the
-  owner, Amanda, agents); everything lands there first, pushed fast-forward only (never force-move
-  it: it carries other people's commits). `backend-implementation` is the **production branch**:
-  Vercel (project `orca`, https://orca-lake-omega.vercel.app) builds every push to it, so a push
-  there is a deploy and is the owner's call. Merges go one way, `phase-4` → `backend-implementation`
-  (merge commit, no rebase of either branch), after the merge gate below. Since 2026-10-24 the team
-  merges `phase-4` into `main` by pull request, and `main` is deployed automatically (Deploy,
-  below); nobody needs to touch `backend-implementation`. **Commit as whoever is running you**
+- **Branches (keep this straight).** Since 2026-11-08 each change gets its own branch off `main`,
+  named for the change (e.g. `latex-support`), and reaches `main` by pull request after the merge
+  gate below; merging into `main` is the deploy (Deploy, below). Never commit straight to `main`.
+  `phase-4` was the shared working branch until then (PRs #1–#7 came from it); others may still push
+  there, so never force-move it, and don't base new work on it (it carries unrelated commits).
+  `backend-implementation` is the **production branch** Vercel (project `orca`,
+  https://orca-lake-omega.vercel.app) builds; only the Deploy workflow pushes it. **Commit as whoever is running you**
   (the machine's git config; never pass `-c user.name/user.email`). Vercel refuses to build a
   commit whose author email isn't on the owner's GitHub account, but it only checks the commit at
   the top of `backend-implementation`, and the Deploy workflow authors that merge commit as the
@@ -89,13 +88,12 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`).
 - **Since 2026-11-05: weak points first, Plan A** (spec
   `docs/superpowers/specs/2026-11-04-weak-points-first-design.md`, plan
-  `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`; on `phase-4`, not merged). Only
+  `docs/superpowers/plans/2026-11-04-weak-points-plan-a.md`; on `main` since 2026-11-05). Only
   objectives in rotation come due (see "Product model"); flags are `confusion` evidence with
-  `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2, with
-  `MASTERY_RULES.rotationSince` = 2026-11-05 (set by the owner).
+  `flag_source` and `page` (migration `20261105090000`); `RULES_VERSION` 2 (3 since
+  2026-11-08), with `MASTERY_RULES.rotationSince` = 2026-11-05 (set by the owner).
 - **Since 2026-11-06: weak points first, Plans B and C** (plan
-  `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`; on `phase-4`, not merged; ships with
-  Plan A in one PR). Every live objective holds state with or without questions (attribution; migration
+  `docs/superpowers/plans/2026-11-05-weak-points-plans-b-c.md`; on `main` since 2026-11-07). Every live objective holds state with or without questions (attribution; migration
   `20261106090000` left placeholders for older evidence). Uploads write questions only for objectives
   marked in them; any other flagged objective gets its questions from a flag top-up
   (`POST /api/top-up` without a session, one per batch of flags; `FlagTopUpWatcher` follows it), and
@@ -107,6 +105,12 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   me*), and "Which slides were hard?" on an upload card (`src/components/review/HardSlides.tsx`,
   `objectivesOnPage` in `src/lib/course/slides.ts`; `slide` flags). The decisions this made are listed
   in the plan and in `docs/TO-DISCUSS.md`.
+- **Since 2026-11-08:** Phases 0–2 of `docs/superpowers/plans/2026-11-08-logic-review-and-plan.md`
+  (PR #6: connector v0.3 with `check_answer`, mastery rules v3, the warm-up, `ORCA_READ_MODEL`,
+  pasted text, Canvas and queue fixes; details under "What exists"). Math in questions is LaTeX
+  between `\( \)` / `\[ \]`, drawn by KaTeX (PR #8: `src/lib/math-text.ts`,
+  `src/components/ui/MathText.tsx`); question validation refuses math that doesn't render, and exact
+  answers stay plain text.
 - **Two hosted Supabase projects.** Production is `fbbimuspcsytjhbqlzzc` (the live site's; its
   keys are Vercel's Production env vars). `mtztzsxgcopohlokragm` is a second hosted project Amanda
   uses for development. `.env` may point at either (it has pointed at each at different times):
@@ -116,8 +120,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **The owner runs `npm run dev` on port 3000 against a hosted project and a real OpenAI key**
   (`.env`, default model `gpt-6.1-sol`): uploads there spend money and write real data. Don't seed
   test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** production has every migration through `20261107120000_relation_reason_no_limit`
-  (the Deploy run of 2026-11-07); `20261107130000_ai_chat_type` ships with the next merge to `main`. The Deploy workflow pushes
+- **Hosted migrations:** production has every migration through `20261107130000_ai_chat_type`
+  (the Deploy run of 2026-11-08). The Deploy workflow pushes
   pending migrations to production on every merge to `main` (its two secrets are set), so nobody
   pushes by hand; a new migration must be numbered after the newest one applied, or `db push`
   refuses it. The development project `mtztzsxgcopohlokragm` was last checked on 2026-10-25
@@ -130,8 +134,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   against `e2e/fake-anthropic.ts` (a fake Messages API on port 3101; the test server gets
   `ANTHROPIC_BASE_URL` pointing there and a fake key). `npm run score:extraction` has no baseline yet
   and the weight constants are untuned.
-- **CI** (`.github/workflows/ci.yml`) runs the whole merge gate on every push to `phase-4` and
-  `main` and is green as of fe7a9f4 (2026-11-04: 87/87 browser tests).
+- **CI** (`.github/workflows/ci.yml`) runs the whole merge gate on every pull request and every
+  push to `main` and `phase-*`; green on `main` as of PR #6 (2026-11-08).
   Occasional failures come from the environment, not the product: `next dev` compiling a
   route mid-test (a save waits 5 s+ and an `expect.poll` gives up; the one CI retry usually
   passes) and the dev server taking over 120 s to start. (`next build` used to fail when the
@@ -140,10 +144,9 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   failing run's trace (`gh run download <id> -n playwright-traces`) before changing a test.
 
 **Next, in order.**
-1. Weak points first: Plans A, B and C and the state-without-questions follow-up are built on
-   `phase-4` (`rotationSince` 2026-11-05). Next: push access to `sophiahuh/orca`, then one PR to
-   `main`; if the deploy is much later than 2026-11-05, ask the owner whether to move `rotationSince`
-   (and re-record `RULES_HASHES[2]`).
+1. The 2026-11-08 plan (`docs/superpowers/plans/2026-11-08-logic-review-and-plan.md`): Phases
+   0–2 are on `main`; Phase 3 (cost: measure, then switch models per step) is next. PR #7
+   (`phase-4` → `main`, the Canvas import's file picker) is open.
 2. Activity logs, edit history and soft delete: planned
    (`docs/superpowers/plans/2026-10-27-activity-logs-soft-delete.md`), not started; read its status
    block first (migration numbers and newer hard deletes changed since it was written).
@@ -297,7 +300,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
 ## Stack
 
 - Next.js 16 (App Router, `src/` dir, TypeScript), Tailwind v4, `motion` (Framer Motion) for animation.
-- The app's data is in Supabase (Phase 4, branch `phase-4`), behind a React context
+- The app's data is in Supabase (Phase 4), behind a React context
   (`src/lib/store.tsx`): `supabase/` holds `config.toml`, the
   migrations (profiles, courses, materials and their pages, pipeline runs, topics, objectives,
   relations, questions, finished sessions, calendar entries, the evidence log, the `materials`
@@ -315,7 +318,7 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   pure), actions in `src/app/auth/actions.ts` (sign-up and an unconfirmed log-in offer to resend
   the confirmation email: `resendConfirmation`, 10 s between sends; production Supabase's per-user email interval must be no longer), screens `/sign-in`, `/sign-up`, `/forgot-password`,
   `/reset-password`, callback `/auth/callback`, Account card in Settings, and the root layout shows
-  "isn't connected" without the env vars. `react/no-danger` is an error. e2e specs import `test`
+  "isn't connected" without the env vars. `react/no-danger` is an error (one reviewed exception: KaTeX's output in `MathText`). e2e specs import `test`
   from `e2e/fixture.ts`, which signs in a throwaway student; Playwright reads the Supabase URL and
   keys from `supabase status` (stack must be up) unless `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`
   and `SUPABASE_SECRET_KEY` are set.
@@ -503,15 +506,18 @@ All 11 Figma screens are built. Where things live:
   `.github/workflows/deploy.yml` merges `main` into it (after pushing new migrations) whenever CI
   on `main` is green, so merging a PR into `main` is the deploy (`docs/SETUP-HOSTED.md` §5 lists
   the two secrets it needs for migrations). Production env vars (Vercel → Settings →
-  Environments → Production): the Supabase three, `SITE_URL`, `ORCA_JOBS=inline`, and the model
-  key (`OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) with `ORCA_MODEL` if not the default; without a
-  key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
+  Environments → Production): the Supabase three, `SITE_URL`, `ORCA_JOBS=trigger` with
+  `TRIGGER_SECRET_KEY`, and the model key (`OPENAI_API_KEY`, or `ANTHROPIC_API_KEY`) with
+  `ORCA_MODEL` if not the default; without a key the upload page says "No AI connected". Changing an env var needs a new deploy (an empty
   commit by the owner pushed to `backend-implementation`, or Redeploy on the deployment's page).
-  The Deploy workflow also deploys `src/trigger/` to Trigger.dev once `TRIGGER_ACCESS_TOKEN` and
-  `TRIGGER_PROJECT_REF` are repository secrets; they aren't yet (the step is skipped). On
-  2026-11-05 the owner set `ORCA_JOBS=trigger` and `TRIGGER_SECRET_KEY` (a Prod key of Amanda's
-  Trigger.dev project) on Vercel, so production sends jobs to Trigger.dev; whether the tasks are
-  deployed there is Amanda's side and was unverified when this was written. The first jobs failed
+  Jobs run on Trigger.dev in production (since 2026-11-05; `TRIGGER_SECRET_KEY` is a Prod key of
+  Amanda's project `proj_cafvbqanvngbcfvnpmqv`, also the default ref in `trigger.config.ts`). The
+  Deploy workflow deploys `src/trigger/` there on every merge to `main` (the `TRIGGER_ACCESS_TOKEN`
+  and `TRIGGER_PROJECT_REF` repository secrets are set since 2026-11-07). The tasks read their own
+  env vars from Trigger.dev's Prod environment, not Vercel's (`docs/SETUP-HOSTED.md` §2 step 4,
+  including `ORCA_JOBS=trigger`, without which a finishing job can't start the student's next one);
+  `trigger.config.ts` installs `pdfjs-dist` and `@napi-rs/canvas` in the image (`build.external`),
+  or handwritten pages can't be drawn. The first jobs failed
   with "No matching branch env" until the SDK was told to send no preview branch
   (`src/lib/server/jobs/start.ts`; `docs/SETUP-HOSTED.md` §2).
 
@@ -519,7 +525,7 @@ All 11 Figma screens are built. Where things live:
 
 `docs/BACKEND-ROADMAP.md` is the plan. Phases 1–4 are built and live; Phase 7 (the MCP connector)
 has a first version and Canvas import is built (2026-11-04); Phases 5 and 6 haven't started. Next
-by the owner's priorities: weak points first (Plans A, B and C built on `phase-4`: push and one PR to `main`), then the open items above. Before
+by the owner's priorities: the 2026-11-08 plan from Phase 3 on, then the open items above. Before
 tuning extraction, run `npm run score:extraction` with a key (and the local ALD decks) and record a
 baseline. Phases: (1) mastery core on-device, (2) uploads create
 topics, objectives, weights and relations (on-device), (3) scheduling and sessions, (4) Supabase

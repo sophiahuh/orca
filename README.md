@@ -5,14 +5,16 @@ Duolingo-style trail of topics inside each island, quizzes you, and nudges revie
 you configure per class. Mastery is tracked per learning objective from your answers, with spaced
 checks (FSRS), and each island's look shows how much of its course you've mastered.
 
-**Status (2026-11-04):** live at https://orca-lake-omega.vercel.app. Phases 1–4 are built: mastery
+**Status (2026-11-08):** live at https://orca-lake-omega.vercel.app. Phases 1–4 are built: mastery
 tracking, courses built from uploaded material (PDFs, .pptx decks, handwritten and typed notes,
 AI chats and web pages), scheduled quick reviews and dives, and a Supabase backend with accounts.
 Since then: a Claude connector (an MCP server Claude calls while a student studies in a chat) and
-Canvas import (connect CourseWorks once, import a course instead of uploading it). Phases 5 and 6
-(relation mastery and exam review, ALD drills) haven't started. Designed next: weak points first
-(`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`). Work lands on `phase-4`, reaches
-`main` by pull request, and deploys automatically. New here, human or agent? Read `CLAUDE.md` →
+Canvas import (connect CourseWorks once, import a course instead of uploading it), and weak points
+first: only what a student flagged or missed comes due
+(`docs/superpowers/specs/2026-11-04-weak-points-first-design.md`). Phases 5 and 6 (relation mastery
+and exam review, ALD drills) haven't started. Each change gets its own branch off `main`, reaches
+`main` by pull request, and deploys automatically (the site to Vercel, the background jobs to
+Trigger.dev). New here, human or agent? Read `CLAUDE.md` →
 "Start here".
 
 Stack: Next.js 16 (App Router) + Tailwind v4 + `motion`, Supabase (Postgres with row-level
