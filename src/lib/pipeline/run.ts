@@ -158,6 +158,8 @@ function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | nu
   if (q.kind === "Multiple choice" && (q.options.length !== 4 || q.answer < 0 || q.answer > 3)) return "multiple choice needs four options and a valid answer";
   if (q.kind === "True or false" && (q.options.length !== 2 || q.answer < 0 || q.answer > 1)) return "true/false needs two options and a valid answer";
   if (q.kind === "Short answer" && !(q.exact && q.exact.length) && !q.rubric) return "short answer with neither an exact answer nor a rubric";
+  // Exact answers are compared with what the student types, so they stay plain text.
+  if (q.exact?.some((e) => /\\[(\[]/.test(e))) return "an exact answer is written as LaTeX";
   if (!inferred && !q.anchor) return "no source anchor";
   return null;
 }

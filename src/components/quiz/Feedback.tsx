@@ -5,6 +5,7 @@ import type { QuizQuestion } from "@/lib/data";
 import type { GradeResult } from "@/lib/grading";
 import type { Outcome } from "@/lib/mastery/types";
 import { DueCard } from "@/components/ui/DueCard";
+import { MathText } from "@/components/ui/MathText";
 import { cn } from "@/lib/cn";
 import { fadeUp } from "@/lib/motion";
 
@@ -50,12 +51,18 @@ export function Feedback({ question: q, outcome, grade, objectiveName, before, a
     >
       <div className="flex flex-col gap-[12px]">
         <h2 className="text-[24px] font-bold text-prussian">Solution</h2>
-        {grade?.feedback && outcome !== "correct" && <p className="text-[18px] font-medium leading-[26px] text-prussian">{grade.feedback}</p>}
-        <p className="text-[18px] font-medium leading-[26px] text-prussian">{q.explanation}</p>
+        {grade?.feedback && outcome !== "correct" && <p className="text-[18px] font-medium leading-[26px] text-prussian">
+            <MathText text={grade.feedback} />
+          </p>}
+        <p className="text-[18px] font-medium leading-[26px] text-prussian">
+          <MathText text={q.explanation} />
+        </p>
         {q.kind === "Short answer" && q.rubric && outcome !== "correct" && (
           <p className="inline-flex max-w-full flex-wrap gap-x-[10px] self-start rounded-[12px] bg-alice px-[14px] py-[8px] text-[16px] font-semibold text-prussian" data-part="feedback-key">
             <span className="font-bold">Key</span>
-            <span className="text-wisteria-deep">{q.rubric.requiredIdeas.join(" · ")}</span>
+            <span className="text-wisteria-deep">
+              <MathText text={q.rubric.requiredIdeas.join(" · ")} />
+            </span>
           </p>
         )}
         {q.anchor && (
