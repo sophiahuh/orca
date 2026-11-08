@@ -51,3 +51,6 @@ next-env.d.ts
 
 # real course decks for the extraction scorer (not ours to publish; see docs/samples/README.md)
 docs/samples/ald/
+
+# Agent worktrees (another session's checkout, never part of the repo)
+.claude/worktrees/

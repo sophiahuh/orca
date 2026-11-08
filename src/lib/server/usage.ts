@@ -41,7 +41,7 @@ export function meterUsage(db: OrcaSupabase, ctx: ModelCtx, requested: string): 
   return (usage, model) => recordUsage(db, ctx, model, usage, priceOf(model) || !priceOf(requested) ? {} : { pricedAs: requested });
 }
 
-async function timezoneOf(db: OrcaSupabase, ownerId: string): Promise<string> {
+export async function timezoneOf(db: OrcaSupabase, ownerId: string): Promise<string> {
   const { data, error } = await db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle();
   if (error) throw new Error(`Couldn't read the student's timezone: ${error.message}`);
   return data?.timezone || "UTC";

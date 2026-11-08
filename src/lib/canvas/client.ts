@@ -22,6 +22,11 @@ export interface CanvasClientOptions {
   /** Most pages followed for one list (100 items each). */
   maxPages?: number;
   timeoutMs?: number;
+  /**
+   * Whether a URL (the request, or a redirect's target) may be fetched; the server passes a public-
+   * address check so a redirect can't lead into a private network. Absent (tests): https only.
+   */
+  hopAllowed?: (url: URL) => Promise<boolean>;
 }
 
 export interface CanvasClient {
@@ -51,8 +56,23 @@ export function canvasClient(options: CanvasClientOptions): CanvasClient {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const auth = { authorization: `Bearer ${options.token}`, accept: "application/json" };
 
+  const hopAllowed = options.hopAllowed ?? (async () => true);
+  const allowed = async (url: URL) => {
+    if (url.protocol !== "https:") throw new CanvasError(502, "Canvas pointed Orca off https.");
+    if (!(await hopAllowed(url))) throw new CanvasError(502, "Canvas pointed Orca at an address it won't fetch.");
+  };
+
+  // An API call: redirects are followed by hand so every hop is checked; the token goes only to the site itself.
   const page = async <T>(url: URL): Promise<{ body: T; next: string | null }> => {
-    const res = await doFetch(url, { headers: auth, redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
+    await allowed(url);
+    let res = await doFetch(url, { headers: auth, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+    for (let hops = 0; res.status >= 300 && res.status < 400 && hops < 5; hops++) {
+      const location = res.headers.get("location");
+      if (!location) break;
+      url = new URL(location, url);
+      await allowed(url);
+      res = await doFetch(url, { headers: url.origin === base.origin ? auth : { accept: auth.accept }, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
+    }
     if (res.status === 401) throw new CanvasError(401, "Canvas didn't accept the token.");
     if (res.status === 403 || res.status === 404) throw new CanvasError(res.status, `Canvas wouldn't show ${url.pathname} (${res.status}).`);
     if (!res.ok) throw new CanvasError(res.status, `Canvas answered ${res.status} for ${url.pathname}.`);
@@ -83,13 +103,14 @@ export function canvasClient(options: CanvasClientOptions): CanvasClient {
     async download(url: string, maxBytes: number): Promise<Uint8Array> {
       let target = new URL(url);
       if (target.origin !== base.origin) throw new CanvasError(502, "The file's download link isn't on the Canvas site.");
+      await allowed(target);
       // The first hop is Canvas (needs the token); it redirects to storage, which must not see the token.
       let res = await doFetch(target, { headers: auth, redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
       for (let hops = 0; res.status >= 300 && res.status < 400 && hops < 5; hops++) {
         const location = res.headers.get("location");
         if (!location) break;
         target = new URL(location, target);
-        if (target.protocol !== "https:") throw new CanvasError(502, "The file's download link left https.");
+        await allowed(target);
         res = await doFetch(target, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
       }
       if (!res.ok) throw new CanvasError(res.status, `Canvas wouldn't hand over the file (${res.status}).`);

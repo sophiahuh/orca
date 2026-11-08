@@ -73,6 +73,9 @@ test.describe("a course with uploaded questions", () => {
     await page.goto("/course/logic-e2e");
     // Weak points first: with nothing flagged the trail is empty, and Show all brings every topic back.
     await expect(page.locator("[data-part=path-no-weak-spots]")).toContainText("No weak spots flagged yet.");
+    // The warm-up (owner, 2026-11-08): the fixture's three objectives have questions, so START offers them, and the sidebar does too.
+    await expect(page.locator("[data-part=warmup-start]")).toHaveText("Try 3 questions");
+    await expect(page.locator('[data-todo="warmup"]')).toContainText("Warm-up");
     await expect(page.locator("[data-visual]")).toHaveCount(0);
     await page.locator("[data-part=path-show-all]").click();
     await expect(page.locator('[data-part="start"]')).toHaveCount(1);
@@ -83,6 +86,27 @@ test.describe("a course with uploaded questions", () => {
     await expect(page.locator('[data-visual="upcoming"]')).toContainText("No weak spots flagged");
     await expect(page.locator('[data-visual="upcoming"] button').first()).toBeVisible();
     await expect(page.locator("[data-visual] button:disabled")).toHaveCount(0);
+  });
+
+  test("the warm-up asks one question per objective; a miss makes a weak point and the warm-up is over", async ({ page, student }) => {
+    await page.goto("/course/logic-e2e");
+    await page.locator("[data-part=warmup-start]").click();
+    await expect(page).toHaveURL(/\/session\/logic-e2e\?kind=quick&warmup=1$/);
+    await expect(page.getByText("1 / 3")).toBeVisible();
+    for (let i = 0; i < 3; i++) {
+      await answerShort(page, "nope");
+      await expect(page.getByText("Not quite.", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: i === 2 ? "Finish" : "Continue" }).click();
+    }
+    await expect(page.locator("[data-part=quiz-end-summary]")).toBeVisible();
+    const evidence = await storedEvidence(page, student);
+    expect(evidence.map((e) => [e.outcome, e.source])).toEqual([["incorrect", "quick-review"], ["incorrect", "quick-review"], ["incorrect", "quick-review"]]);
+    expect(new Set(evidence.map((e) => e.objectiveId)).size).toBe(3);
+    // Every objective is a weak point now: the trail shows both topics, and the warm-up isn't offered again.
+    await page.goto("/course/logic-e2e");
+    await expect(page.locator("[data-visual]")).toHaveCount(2);
+    await expect(page.locator("[data-part=warmup-start]")).toHaveCount(0);
+    await expect(page.locator('[data-todo="warmup"]')).toHaveCount(0);
   });
 
   test("answering quiz questions records evidence, and a miss makes a weak point that moves the trail, island and streak", async ({ page, student }) => {

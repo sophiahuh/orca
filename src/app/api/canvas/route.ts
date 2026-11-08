@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CanvasError } from "@/lib/canvas/client";
 import { connectionStatus, revokeConnection, saveConnection } from "@/lib/server/canvas";
+import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
 import { forStudent, reply } from "@/lib/server/student";
 
 /**
@@ -21,6 +22,8 @@ export async function POST(request: Request) {
   return forStudent(request, async (student, db) => {
     const parsed = Body.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return reply(400, { error: "Enter the Canvas site and an access token." });
+    const rate = await rateLimit(db, student.id, "canvasConnect");
+    if (!rate.ok) return tooManyRequests(rate);
     try {
       return reply(201, await saveConnection(db, student.id, parsed.data.baseUrl, parsed.data.token));
     } catch (e) {

@@ -15,7 +15,6 @@
 import { UNTRUSTED_POLICY, untrustedBlock } from "../untrusted/encode.ts";
 import type { OrcaNotes } from "./notes.ts";
 import { hasMarks } from "./marked.ts";
-import { isAIChatMaterial } from "../material/ai-chat.ts";
 import type { DescribeInput, GenerateInput, LinkInput, MapInput, ObjectivesInput, ReconcileInput, ReflectInput, StepInput, StepName, TranscribeInput } from "./schemas.ts";
 
 export interface BuiltPrompt {
@@ -53,7 +52,7 @@ export const QUIZ_RUBRIC = `Rules for every question:
 - Distractors must be wrong for a reason a student might believe (the dual operation, an off-by-one, the unsigned reading of a signed pattern). No joke options.
 - Every claim traces to the material (the anchor). Don't paraphrase the material's sentence as the prompt; apply the idea so understanding, not reading, is what's tested.
 - Multiple choice: exactly four options, exactly one defensible answer. The options are shown in a random order, so never refer to one by its letter or position (no "A", "the second option", "all of the above", "none of the above"); in the explanation, name the option by what it says. True/false: only for statements with a tempting wrong reading, at most one per objective.
-- A typed answer is checked by exact match, so use one only when the answer has a single short form a student would write the same way: a number, a bit string, an expression, a code token, or a named term. List every natural way to write it in exact (with and without units, singular and plural, symbol and word, common abbreviations). When the answer is a judgement among a few fixed choices (valid or invalid, yes or no, increases or decreases, which of two designs), make it multiple choice or true/false instead. When it takes a phrase or a sentence, give it a rubric instead of exact.
+- A typed answer is checked by exact match, so use one only when the answer has a single short form a student would write the same way: a number, a bit string, a code token, or a named term. Never an algebraic or Boolean expression (a + c, x'y, A⊕B): equivalent forms can't be matched, so make such a question multiple choice (the right form among three wrong ones) or give it a rubric. List every natural way to write it in exact (with and without units, singular and plural, symbol and word, common abbreviations). When the answer is a judgement among a few fixed choices (valid or invalid, yes or no, increases or decreases, which of two designs), make it multiple choice or true/false instead. When it takes a phrase or a sentence, give it a rubric instead of exact.
 - Answerable in under a minute without paper. The explanation teaches: why the right answer is right and why the most tempting distractor is wrong, in one or two sentences.
 - Plain text only: no HTML, no markdown links, no URLs the material doesn't contain, and nothing addressed to a reader other than the student.`;
 
@@ -84,6 +83,7 @@ const TYPE_RULES: Record<MapInput["material"]["type"], string> = {
   "Past exam": "This is an exam: attach coverage to existing objectives (each question that requires the skill is a place). Create a new objective only when a question clearly needs a skill nothing existing covers.",
   "Practice exam": "This is a practice exam: attach coverage to existing objectives (each question that requires the skill is a place). Create a new objective only when a question clearly needs a skill nothing existing covers.",
   "Practice problems": "These are practice problems: attach coverage to existing objectives (each problem that requires the skill is a place). Create a new objective only when a problem clearly needs a skill nothing existing covers.",
+  "AI chat": "This is a student-AI conversation, not course-authoritative teaching material. Lines labelled STUDENT are high-priority signals of what the student asked about or found confusing. Map them to existing course topics/objectives whenever possible and create focused coverage for those skills. The AI ASSISTANT's claims may help interpret the student's question, but never introduce a topic, objective, or course fact solely because an AI response says it. Create a new inferred objective only when the student's own question clearly identifies a course-specific skill that the course does not yet cover. Do not use an AI response as a claim that a professor taught or will test something.",
   Other: "Map what this material teaches onto the course: reuse existing topics and objectives where they fit, create new ones where they don't.",
 };
 
@@ -130,12 +130,6 @@ ${untrustedBlock("student_notes", { forThisClass: notes.forThisClass, forAllClas
 `;
 }
 
-function aiChatRules(filename: string): string {
-  return isAIChatMaterial(filename)
-    ? `\nAI-chat evidence: this is a student-AI conversation, not course-authoritative teaching material. Lines labelled STUDENT are high-priority signals of what the student asked about or found confusing. Map them to existing course topics/objectives whenever possible and create focused coverage for those skills. The AI ASSISTANT's claims may help interpret the student's question, but never introduce a topic, objective, or course fact solely because an AI response says it. Create a new inferred objective only when the student's own question clearly identifies a course-specific skill that the course does not yet cover. Do not use an AI response as a claim that a professor taught or will test something.\n`
-    : "";
-}
-
 /** One part of a file against the course's table of contents: which topics these pages teach, and where. */
 export function mapPrompt(input: MapInput): BuiltPrompt {
   return {
@@ -154,7 +148,7 @@ ${NAMES_RULE}
 
 Reuse first: the table of contents lists every topic the course has, with where it is already taught. When these pages teach one of them, return it with its existingId (and its id as localId). Create a topic only when nothing in the table of contents covers what the pages teach. Never propose anything marked rejectedByStudent.${notesRules("map", input.notes)}`,
     context: materialContext(input),
-    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}${aiChatRules(input.material.filename)}
+    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}
 This is part ${input.part.index} of ${input.part.count} of the file.
 
 The course's table of contents, as a data block (source generated_question; "rejectedByStudent" marks ones the student rejected):
@@ -186,7 +180,7 @@ Some pages contain passages the student marked as confusing, tagged [marked: …
         : ""
     }${notesRules("objectives", input.notes)}`,
     context: materialContext(input),
-    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}${aiChatRules(input.material.filename)}
+    prompt: `${notesBlock(input.notes)}${TYPE_RULES[input.material.type]}
 
 The topic, as a data block (source generated_question):
 ${untrustedBlock("generated_question", { id: input.topic.id, name: input.topic.name, summary: input.topic.summary })}
@@ -243,7 +237,7 @@ ${QUIZ_RUBRIC}${notesRules("generate", input.notes)}`,
     prompt: `${notesBlock(input.notes)}The topic and its objectives, as a data block (source generated_question): each objective's id, name, how many questions to write ("write"), whether it is inferred (not taught in this material: then anchor must be null and the prompt must not claim to come from the course), and prompts already asked (don't repeat or rephrase them):
 ${untrustedBlock("generated_question", { topic: { name: input.topic.name, summary: input.topic.summary }, objectives })}
 
-Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.${isAIChatMaterial(input.material.filename) ? " This is an AI chat: when its STUDENT messages identify confusion, make the questions concrete to that question or misconception. Do not treat an AI ASSISTANT response as independent authority for a new course concept." : ""}
+Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.${input.material.type === "AI chat" ? " This is an AI chat: when its STUDENT messages identify confusion, make the questions concrete to that question or misconception. Do not treat an AI ASSISTANT response as independent authority for a new course concept." : ""}
 Mix per objective: a "Short answer" retrieval question with an exact answer (set exact to every accepted spelling, rubric null) only where the objective's skill itself has one exact form (a trace result, a conversion, the term or component a scenario calls for), never a number made by arithmetic on given values; a "mechanism" short answer answerable in one sentence (set rubric with 1–3 requiredIdeas, exact null: each idea is reasoning the student must supply, never something the question already states, and is phrased as an idea to recognise, not words to match; list other correct ways to put it in acceptableAlternatives. ${RUBRIC_FROM_MATERIAL}) when the objective has a why or how; the rest "Multiple choice" with four options where choosing between plausible alternatives is itself the skill; at most one "True or false". When an objective needs only 2, write one that does the skill (the exact-answer short answer, or a multiple choice where choosing is the skill) and one mechanism short answer if the objective has a why or how (else a second, different instance). Keep every question under a minute.${flaggedSection(input.flagged)}`,
   };
 }
@@ -274,7 +268,7 @@ Except: deep-review questions are not answerable in under a minute; they take se
 ${untrustedBlock("generated_question", { topic: { name: input.topic.name, summary: input.topic.summary }, objectives })}
 
 Write the questions for these objectives from the material (the uploaded_pdf data block above), tagging each with its objective id and anchoring each one to the material unless its objective is inferred.
-Every question is a "Short answer" (options empty, answer -1) that takes 3–6 minutes: a multi-step problem on a new concrete instance (design, simplify, trace, convert, derive), a question that connects this objective to another idea in the material, or a why/compare question that needs reasoning, not recall. Use tier "application" for a new instance, "connection" when it links ideas, "transfer" for an unfamiliar setting, "mechanism" for a why or how. When the final answer has one exact form (a number, a bit string, an expression), set exact to every accepted spelling of that final answer and rubric null; otherwise set rubric with the 2–5 ideas a full answer needs and exact null (each one reasoning the student must supply, never a given the question already states; ideas to recognise, not words to match). ${RUBRIC_FROM_MATERIAL} The explanation walks through the full solution. Keep each prompt under about 1,500 characters and each explanation under about 2,500.
+Every question is a "Short answer" (options empty, answer -1) that takes 3–6 minutes: a multi-step problem on a new concrete instance (design, simplify, trace, convert, derive), a question that connects this objective to another idea in the material, or a why/compare question that needs reasoning, not recall. Use tier "application" for a new instance, "connection" when it links ideas, "transfer" for an unfamiliar setting, "mechanism" for a why or how. When the final answer has one exact form (a number, a bit string, a named term; never an algebraic or Boolean expression, which goes to a rubric), set exact to every accepted spelling of that final answer and rubric null; otherwise set rubric with the 2–5 ideas a full answer needs and exact null (each one reasoning the student must supply, never a given the question already states; ideas to recognise, not words to match). ${RUBRIC_FROM_MATERIAL} The explanation walks through the full solution. Keep each prompt under about 1,500 characters and each explanation under about 2,500.
 
 Format the prompt for a student reading it on screen: use short paragraphs, put any givens on their own line(s), and use numbered steps on separate lines when the student must do more than one thing. Preserve those line breaks in the JSON string using \\n. Do not use Markdown, HTML, tables, or a dense single paragraph.${flaggedSection(input.flagged)}`,
   };

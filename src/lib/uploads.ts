@@ -61,9 +61,12 @@ export async function importWebsite(url: string, meta: UploadMeta): Promise<Uplo
   return importOutcome(await post<Imported>("/api/materials/web", { ...meta, url }));
 }
 
-/** Save a pasted AI-chat export or scrape a public shared-chat snapshot as one material page (or recognise it as one already in the course). */
-export async function importAIChat(input: { text?: string; url?: string }, meta: UploadMeta): Promise<UploadOutcome> {
-  return importOutcome(await post<Imported>("/api/materials/chat", { ...meta, ...input }));
+/**
+ * Save pasted text as material (read as the type in `meta`), or a public AI-chat link (always an
+ * "AI chat"), or recognise it as one already in the course.
+ */
+export async function importText(input: { text?: string; url?: string }, meta: UploadMeta): Promise<UploadOutcome> {
+  return importOutcome(await post<Imported>("/api/materials/text", { ...meta, ...input }));
 }
 
 /**

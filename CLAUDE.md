@@ -116,8 +116,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **The owner runs `npm run dev` on port 3000 against a hosted project and a real OpenAI key**
   (`.env`, default model `gpt-6.1-sol`): uploads there spend money and write real data. Don't seed
   test users or test data there. Browser tests and screenshots use the local stack.
-- **Hosted migrations:** production has every migration through `20261104100000_canvas` (the
-  Deploy run of 2026-11-04 applied the connector and Canvas ones). The Deploy workflow pushes
+- **Hosted migrations:** production has every migration through `20261107120000_relation_reason_no_limit`
+  (the Deploy run of 2026-11-07); `20261107130000_ai_chat_type` ships with the next merge to `main`. The Deploy workflow pushes
   pending migrations to production on every merge to `main` (its two secrets are set), so nobody
   pushes by hand; a new migration must be numbered after the newest one applied, or `db push`
   refuses it. The development project `mtztzsxgcopohlokragm` was last checked on 2026-10-25
@@ -291,7 +291,8 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   content comes from uploads. Missing data shows as an explicit empty or error state.
 - **No in-app AI chat.** The server's model (OpenAI by default, or Claude) extracts material,
   writes questions and grades short answers. Students' own Claude connects through the MCP connector (built 2026-11-04, see
-  "What exists"): Claude asks Orca's questions and grades them; those answers count as self-marked.
+  "What exists"): Claude asks Orca's questions and Orca grades them (`check_answer`); only when Orca's grader can't run
+  does Claude grade, and those answers count as self-marked.
 
 ## Stack
 
@@ -339,12 +340,17 @@ model), `docs/TO-DISCUSS.md` (open questions). In short:
   `ANTHROPIC_BASE_URL` for a proxy or the tests' fake API), `ORCA_JOBS`, `SITE_URL`
   (where emailed links come back; required in production), `ORCA_DAILY_BUDGET_USD` (the
   service-wide daily ceiling; unset = none), `TRIGGER_*`, `CRON_SECRET` (the dead-run sweep,
-  `GET /api/cron/runs`; pages following a run also ask `POST /api/runs/check` once it's past its
-  40-minute limit).
+  `GET /api/cron/runs`, registered daily at 05:10 UTC in `vercel.json` since 2026-11-07: it also
+  resumes uploads held by the daily limit; pages following a run also ask `POST /api/runs/check`
+  once it's past its 40-minute limit). Per-student daily caps are in `src/lib/limits.ts`
+  (1,000 pages and 2M tokens a day since 2026-11-07; a Canvas import of a whole course is one day).
 - The server's provider and model come from `src/lib/model-config.ts`: `ORCA_MODEL_PROVIDER`
   (`openai` | `anthropic`; set, its key must be set), else `OPENAI_API_KEY` before
   `ANTHROPIC_API_KEY`; `ORCA_MODEL` overrides the default (`gpt-6.1-sol` / `claude-opus-5-5`) and
-  must be priced. OpenAI goes through its Responses API in the same `completeJson` (strict schema
+  must be priced. `ORCA_READ_MODEL` (2026-11-08, owner: the small model reads, the strong one
+  writes) runs the reading steps (`READ_STEPS`: map, objectives, reconcile, link, transcribe,
+  describe, reflect) on a cheaper model of the same provider; generate and deep stay on
+  `ORCA_MODEL`, grading on `ORCA_GRADE_MODEL`. Jobs run on Trigger.dev, so the variable goes there too. OpenAI goes through its Responses API in the same `completeJson` (strict schema
   from `src/lib/openai-schema.ts`, explicit caching of the material, same bounds and metering).
 - Model calls, on either provider, go through `completeJson` (`src/lib/llm-server.ts`:
   10-minute timeout, at most 2 retries of transient failures, spend-limit answers never retried,
@@ -398,11 +404,23 @@ All 11 Figma screens are built. Where things live:
   "Find connections" on the Atlas, `POST /api/relink`).
 - `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
   Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
-  (one JSON-RPC message per POST, no stream) with five tools: `flag_check` (a *check me* flag per objective the student
-  asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics, every objective's derived
-  status and recall, what's due now), `set_exam` (date + topic ids = the exam's scope), `questions_for` (Orca's own
-  questions with their answers and rubrics, for Claude to ask and grade) and `record_answer` (an answer Claude graded,
-  recorded as `grader: "self"`, `source: "connector"`: half credit, never clears a mix-up). The token is minted in
+  (one JSON-RPC message per POST, no stream) with seven tools (v0.3, 2026-11-08; `INSTRUCTIONS` scripts the session): `flag_check` (a *check me* flag per objective the student
+  asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics with
+  counts, every objective's derived status and recall with `detail: "full"` (the default) or none with `"summary"`, what's due now,
+  `examFocus` (the next week's exams' topics), `budget` (the daily model budget: ok, reason, resetsAt) and `writing` (top-up runs in
+  flight)), `next_questions` (Orca picks: what's due, then exam focus, then unflagged objectives in course order; per objective
+  unseen questions first, then least recently answered; `count` 1 to 5; when nothing askable exists and `write` (default) it starts a
+  top-up and answers `pending {runId, objectiveIds, state, retryAfterSeconds, reason}`, or says why it won't: the budget, the
+  hourly top-up limit, no model; never an empty list without a reason), `set_exam` (date + topic ids = the exam's scope; with
+  `remove: true` deletes it), `questions_for` (the older draw, kept; no keys), `check_answer` (owner, 2026-11-08: the student's words; Orca grades choice and
+  exact answers itself and prose through `gradeAnswer` on Orca's key with the grade rate limit and budgets, records
+  full credit with its own grader and `source: "connector"`, and returns the key and explanation; when it can't grade
+  it answers `needsSelfGrade` with the key) and `record_answer` (the fallback: an answer Claude graded, recorded as
+  `grader: "self"`: half credit, never clears a mix-up; the student's words, screened, stored on the event as
+  `response`, the row's `note`). Mastery rules changed with it (`RULES_VERSION` 3): `verified` takes an unaided
+  correct answer, a struggled flag rates the FSRS card Again, a question missed before earns half credit when answered
+  right on a later day (`retryCredit`), a graded partial ends a run of misses, and exact answers that are algebraic or
+  Boolean expressions are refused at writing time (`isExpressionAnswer`; numbers compare by value). The token is minted in
   Settings → Claude connector (`/api/connector`; only its sha256 is stored, `connector_tokens`, migration
   `20261104090000`) and pasted into Claude as a custom connector with no sign-in: the URL is the secret, so the proper
   OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is pure and tested with a fake
@@ -413,7 +431,8 @@ All 11 Figma screens are built. Where things live:
   `canvas_connections`, service-role only). `/import/canvas` lists their active Canvas courses (`GET /api/canvas/courses`)
   and `POST /api/canvas/import { canvasCourseId }` creates or updates the Orca course: assignments with a due date become
   exams (name says exam/midterm/final/quiz/test) or `hw`/`lab` calendar entries, the syllabus becomes a ready material,
-  and every PDF/.pptx in the modules (in order) and the file list goes through `startUpload` → Storage →
+  and every PDF/.pptx in the modules (in order) and then the file list (by the number in the name, `sequenceNumber`,
+  then posting date) goes through `startUpload` → Storage →
   `processUpload` → job, exactly as a browser upload (assigned = module unlock date else the file's creation date).
   Posting isn't reaching (owner): files posted over the weeks count as covered, three or more posted within three
   days (`postedAtOnce`) are imported `upcoming` and the page asks "How far has the class got?" (the bulk-upload
@@ -427,7 +446,9 @@ All 11 Figma screens are built. Where things live:
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and
   Resume puts it back in line by upload time; re-uploading a paused file resumes its run instead of starting a second.
   A running upload can be **stopped** (`POST /api/runs/stop`, `stopRun`: failed with `STOPPED_ERROR`, the queue moves
-  on; a job still alive can't revive it, its final save checks the run is still running). Material can be **removed**
+  on; a job still alive can't revive it, its final save checks the run is still running). A retried upload (Try again,
+  or the file uploaded again after a failure) keeps the failed run's `at`, so it goes back to its place in line.
+  Settings' Disconnect buttons (Canvas, Claude connector) ask first (2026-11-07). Material can be **removed**
   from a course (`DELETE /api/materials/:id`, `removeMaterial`): file, pages and calendar entry go, the row stays with
   status `removed` (not loaded; hash cleared so the file can be uploaded again), the objectives only it taught and a
   topic it created that has no live objective left are archived with `archived_with_material` (migrations
@@ -440,7 +461,17 @@ All 11 Figma screens are built. Where things live:
   Storage, read on the server into `material_pages`. The upload page takes several files or a whole folder at once
   (`filesFromDataTransfer` walks dropped folders; `src/components/upload/BatchList.tsx` is the per-file list with
   type and dates prefilled from the page's shared defaults; files are sent one after another, each row showing where
-  it is; a file Orca can't read is listed as skipped). Three files or more is a bulk upload (owner, 2026-10-27): the
+  it is; a file Orca can't read is listed as skipped). The page also takes **pasted text** (owner, 2026-11-07: one
+  paste box, the type picked decides how it's read; `POST /api/materials/text`, named "Syllabus (pasted), Nov 7") and
+  a public AI-chat share link; **"AI chat" is a material type** (migration `20261107130000`): only that type gets the
+  transcript treatment (speakers labelled, the header, the chat rules in `TYPE_RULES`), whatever the material is
+  called. **The warm-up** (owner, 2026-11-08; `src/lib/mastery/warmup.ts`): a course's first upload the class has reached also
+  writes one ordinary question for its ten heaviest objectives (`WARM_UP_WRITES`, in `runUpload` beside the marked ones), so a
+  course with nothing flagged has something to try: the trail's empty state shows START as "Try N questions"
+  (`data-part="warmup-start"`), the sidebar a "Warm-up · 5 min" card (`todoCards`' `warmUp`), both to
+  `/session/<slug>?kind=quick&warmup=1`, a quick-style session over up to five unflagged objectives with an askable question,
+  heaviest first (`warmUpCandidates`); a miss makes a weak point as anywhere. Offered only while nothing in the course is in
+  rotation or waiting on a check. Three files or more is a bulk upload (owner, 2026-10-27): the
   rows' dates hide behind "Add dates", and with no assigned date given the page asks "How far has the class got?":
   the files after the tapped one are `materials.upcoming` ("the class hasn't reached this yet"; an assigned date in
   the future sets it too). Their objectives are left out of the due list, quick reviews and dive candidates
