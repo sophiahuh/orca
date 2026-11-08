@@ -24,7 +24,7 @@ interface ImportSummary {
   exams: number;
   events: number;
   syllabus: boolean;
-  files: { added: number; duplicates: number; failed: number; skipped: number; remaining: number; total: number; items: Array<{ materialId: string; name: string; upcoming: boolean }>; askCoverage: boolean };
+  files: { added: number; duplicates: number; failed: number; skipped: number; remaining: number; skippedNames: string[]; total: number; items: Array<{ materialId: string; name: string; upcoming: boolean }>; askCoverage: boolean };
 }
 
 type Progress = { kind: "idle" } | { kind: "running"; pulled: number } | { kind: "done"; summary: ImportSummary } | { kind: "failed"; message: string };
@@ -39,8 +39,9 @@ function summaryLine(s: ImportSummary): string {
   if (f.added) files.push(`${f.added} added`);
   if (f.duplicates) files.push(`${f.duplicates} already there`);
   if (f.failed) files.push(`${f.failed} couldn't be read`);
-  if (f.skipped) files.push(`${f.skipped} skipped`);
+  if (f.skipped) files.push(`${f.skipped} skipped${f.skippedNames.length ? ` (${f.skippedNames.slice(0, 3).join(", ")}${f.skippedNames.length > 3 ? ", …" : ""})` : ""}`);
   parts.push(f.total === 0 ? "no new files" : `files: ${files.join(", ")}`);
+  if (f.remaining) parts.push(`${f.remaining} more to pull: press Import again to continue`);
   return parts.join(" · ");
 }
 
@@ -108,10 +109,13 @@ export default function ImportCanvasPage() {
       const res = await fetch("/api/canvas/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasCourseId: c.id }) });
       const body = (await res.json().catch(() => null)) as (ImportSummary & { error?: string }) | null;
       if (!res.ok || !body || !("course" in body)) {
+        // A later round failing (a 429, a Canvas hiccup) keeps what the earlier rounds pulled: those files
+        // are linked and queued already, so the summary shows and Import again continues (2026-11-08).
+        if (last) break;
         setProgress((p) => ({ ...p, [c.id]: { kind: "failed", message: body?.error ?? "Orca couldn't import that course." } }));
         return;
       }
-      last = last ? { ...body, exams: last.exams + body.exams, events: last.events + body.events, syllabus: last.syllabus || body.syllabus, files: { ...body.files, added: last.files.added + body.files.added, duplicates: last.files.duplicates + body.files.duplicates, failed: last.files.failed + body.files.failed, skipped: last.files.skipped + body.files.skipped, total: last.files.total, items: [...last.files.items, ...body.files.items], askCoverage: last.files.askCoverage || body.files.askCoverage } } : body;
+      last = last ? { ...body, exams: last.exams + body.exams, events: last.events + body.events, syllabus: last.syllabus || body.syllabus, files: { ...body.files, added: last.files.added + body.files.added, duplicates: last.files.duplicates + body.files.duplicates, failed: last.files.failed + body.files.failed, skipped: last.files.skipped + body.files.skipped, skippedNames: [...last.files.skippedNames, ...body.files.skippedNames], total: last.files.total, items: [...last.files.items, ...body.files.items], askCoverage: last.files.askCoverage || body.files.askCoverage } } : body;
       if (body.files.remaining === 0) break;
       const pulled = last.files.added + last.files.duplicates + last.files.failed + last.files.skipped;
       setProgress((p) => ({ ...p, [c.id]: { kind: "running", pulled } }));

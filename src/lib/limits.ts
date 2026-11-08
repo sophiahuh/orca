@@ -46,7 +46,12 @@ export const LIMITS = {
     /** "Find connections" on the Atlas (POST /api/relink): one model call over the course's topics. */
     relink: { max: 10, windowSeconds: 3600 },
     /** Importing a Canvas course (POST /api/canvas/import): each run can pull many files. */
-    canvasImport: { max: 6, windowSeconds: 3600 },
+    /**
+     * Importing a Canvas course (POST /api/canvas/import). The import page calls it up to 10 times in
+     * a row for a big course (200 s of pulling each), so the hour must hold a few whole loops; each
+     * call only works on the student's own courses, so this bounds cost, not access (2026-11-08).
+     */
+    canvasImport: { max: 30, windowSeconds: 3600 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */
