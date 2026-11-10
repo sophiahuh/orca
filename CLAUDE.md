@@ -111,6 +111,11 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   between `\( \)` / `\[ \]`, drawn by KaTeX (PR #8: `src/lib/math-text.ts`,
   `src/components/ui/MathText.tsx`); question validation refuses math that doesn't render, and exact
   answers stay plain text.
+- **Upload toasts** (2026-11-08, `src/components/layout/UploadToasts.tsx`, mounted in `providers.tsx`): an upload
+  that finishes (done or failed) while the app is open, from any tab or device, pops a toast unless the student is on
+  that course's uploads; uploads of one course finishing while its toast is up share it. One upload's toast opens
+  `/course/<slug>/review?run=<id>&slides=1` (the card pinned, "Which slides were hard?" open); several, the Uploads
+  tab. "Which slides were hard?" also has Select all.
 - **Courses can be deleted** (2026-11-08, soft delete): `courses.deleted_at` (migration
   `20261108090000`), set only by `DELETE /api/courses/:id`, which also stops the course's jobs;
   `my_data`, `course_structure` and every server course lookup leave deleted courses out, and

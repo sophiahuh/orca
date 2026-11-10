@@ -220,6 +220,13 @@ test("which slides were hard: the deck's pages as a grid; tapping a page flags t
   await expect.poll(() => tiles.first().locator("canvas").evaluate((c: HTMLCanvasElement) => c.width), { timeout: 30_000 }).toBeGreaterThan(0);
   // Slide 5 teaches no topic and no objective cites it: nothing to flag.
   await expect(modal.locator("[data-part=slide-tile][data-page='5']")).toBeDisabled();
+  // Select all picks every slide that has something to flag, and turns into Clear (owner, 2026-11-08).
+  const tappable = await modal.locator("[data-part=slide-tile]:not([disabled])").count();
+  await modal.locator("[data-part=select-all-slides]").click();
+  await expect(modal.locator("[data-part=flag-slides]")).toHaveText(`Flag ${tappable} slide${tappable === 1 ? "" : "s"}`);
+  await modal.locator("[data-part=select-all-slides]").click();
+  await expect(modal.locator("[data-part=select-all-slides]")).toHaveText("Select all");
+  await expect(modal.locator("[data-part=flag-slides]")).toHaveText("Flag slides");
   // Slide 1 only opens the topic (slides 1-2); its one objective is taught on slide 12. Tapping it flags the whole topic anyway.
   await modal.locator("[data-part=slide-tile][data-page='1']").click();
   await modal.locator("[data-part=flag-slides]").click();
@@ -229,6 +236,28 @@ test("which slides were hard: the deck's pages as a grid; tapping a page flags t
   expect(flags.map((f) => f.kind === "confusion" && [f.flagSource, f.page, f.materialId])).toEqual([["slide", 1, after.materials[0].id]]);
   await page.goto("/course/logic/objectives");
   await expect(page.locator("li[data-objective='Simplify with absorption']")).toContainText("Learning");
+});
+
+/** A toast when an upload finishes while the student is elsewhere in the app (owner, 2026-11-08); it opens the upload with "Which slides were hard?" open. */
+test("an upload that finishes while you're elsewhere pops a toast that opens it, ready to flag slides", async ({ page, student }) => {
+  test.setTimeout(90_000);
+  await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
+  await createCourse(page, "Logic");
+  await upload(page);
+  await expect(page.locator("[data-part=run-summary]")).toContainText("1 new topic, 1 new objective", { timeout: 60_000 });
+  const runId = new URL(page.url()).searchParams.get("run")!;
+  // Played back: the run is building again when the student opens the map, then its job finishes.
+  const db = admin();
+  expect((await db.from("pipeline_runs").update({ status: "running", started_at: new Date().toISOString() }).eq("owner_id", student.id).eq("id", runId)).error).toBeNull();
+  await page.goto("/");
+  await expect(page.locator("[data-part=upload-toast]")).toHaveCount(0);
+  expect((await db.from("pipeline_runs").update({ status: "done" }).eq("owner_id", student.id).eq("id", runId)).error).toBeNull();
+  const toast = page.locator("[data-part=upload-toast]");
+  await expect(toast).toContainText(`${DECK_NAME} is ready`, { timeout: 30_000 });
+  await toast.locator("[data-part=upload-toast-link]").click();
+  await expect(page).toHaveURL(new RegExp(`/course/logic/review\\?run=${runId}&slides=1$`));
+  await expect(page.locator("[data-part=hard-slides-modal]")).toBeVisible();
+  await expect(toast).toHaveCount(0);
 });
 
 test("a folder of files: one row each with its own type, prefilled from the shared default; sent one after another; a file Orca can't read is listed as skipped", async ({ page, student }) => {

@@ -100,7 +100,8 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
         {run && (
           <motion.div variants={fadeUp}>
-            <UploadCard run={run} material={material} focused />
+            {/* From an upload's toast (`&slides=1`): "Which slides were hard?" opens with the card. */}
+            <UploadCard run={run} material={material} focused openSlides={sp.slides === "1"} />
           </motion.div>
         )}
 

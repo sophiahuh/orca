@@ -27,13 +27,13 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "
  * upload the page was opened for (`?run=`): the page already follows it (one Realtime channel per
  * run), and its parts keep the names the browser tests use.
  */
-export function UploadCard({ run: stored, material, focused = false }: { run: PipelineRun; material: Material | undefined; focused?: boolean }) {
+export function UploadCard({ run: stored, material, focused = false, openSlides = false }: { run: PipelineRun; material: Material | undefined; focused?: boolean; openSlides?: boolean }) {
   // Only an unfinished run is followed (a finished one won't change), and never twice.
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   // A finished stored row wins: useRun keeps its last live row when it stops following, which would show a stopped run as still building.
   const run = isFinished(stored) ? stored : (live ?? stored);
   const { runs, courses, refresh } = useOrca();
-  const [pickingSlides, setPickingSlides] = useState(false);
+  const [pickingSlides, setPickingSlides] = useState(openSlides);
   const name = material?.filename ?? "An upload";
   const course = material ? courses.find((c) => c.id === material.courseId) : undefined;
   // Pause a queued upload (it leaves the queue), put a paused one back in line, stop a running one,
@@ -52,13 +52,20 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
       setPausing(e instanceof Error ? e.message : "Couldn't change the upload.");
     }
   };
+  // A queued or paused upload hasn't been built: deleting it takes it out of the queue (its job is
+  // cancelled) and removes the file, the same soft delete as removing built material.
+  const unbuilt = run.status === "queued" || run.status === "paused";
   const removeOffer = material && (
     <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep" data-part="remove-offer">
       {confirming === "remove" ? (
         <>
-          <span className="text-prussian">Remove {material.filename} from the course? Its file and pages go; the objectives only it taught are archived.</span>
+          <span className="text-prussian">
+            {unbuilt
+              ? `Delete ${material.filename}? Orca hasn't built from it yet: it leaves the queue and its file goes.`
+              : `Remove ${material.filename} from the course? Its file and pages go; the objectives only it taught are archived.`}
+          </span>
           <button type="button" onClick={() => void act("remove")} className="font-bold text-bad-text underline underline-offset-2" data-part="remove-confirm">
-            Remove
+            {unbuilt ? "Delete" : "Remove"}
           </button>
           <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
             Keep
@@ -66,7 +73,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
         </>
       ) : (
         <button type="button" onClick={() => setConfirming("remove")} className="font-bold text-wisteria-deep underline underline-offset-2" data-part="remove-material">
-          Remove from course
+          {unbuilt ? "Delete upload" : "Remove from course"}
         </button>
       )}
     </span>
@@ -130,6 +137,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
             Resume
           </button>
         </span>
+        {removeOffer}
         {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
@@ -165,6 +173,7 @@ export function UploadCard({ run: stored, material, focused = false }: { run: Pi
               </button>
             ))}
         </span>
+        {run.status === "queued" && removeOffer}
         {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
