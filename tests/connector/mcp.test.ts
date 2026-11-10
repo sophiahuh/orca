@@ -38,6 +38,9 @@ function fakeTools() {
         vault: [],
         mode: "normal",
         cramming: null,
+        plan: null,
+        coverage: null,
+        topErrors: [],
       };
     },
     async nextQuestions(courseId, { objectiveIds, count, write }) {
@@ -526,4 +529,37 @@ test("a tool not built yet is reported as that tool's failure", async () => {
   const reply = await handleRpc(call("material_for", { courseId: COURSE, objectiveIds: [OBJ] }), tools, "s");
   assert.equal(isError(reply), true);
   assert.match(String(text(reply).error), /Not built yet/);
+});
+
+/* ── Step 8: the plan and the time budget ── */
+
+test("set_exam takes the cram's time budget in the scope, normalised, and refuses a malformed one", async () => {
+  const { tools, exams, COURSE } = fakeTools();
+  const saved = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Final", date: "2026-11-20", topicIds: [], cramming: true, scope: { objectives: [], sources: [], budget: { hours: 6, daysOut: ["2026-11-15", "2026-11-14", "2026-11-15"], since: "2026-11-10T09:00:00+01:00" } } }), tools, "s"));
+  assert.deepEqual((saved.scope as { budget: unknown }).budget, { hours: 6, daysOut: ["2026-11-14", "2026-11-15"], since: "2026-11-10T08:00:00.000Z" }, "days out are deduplicated and sorted; since is kept as UTC");
+  const without = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz", date: "2026-11-21", topicIds: [], scope: { objectives: [], sources: [] } }), tools, "s"));
+  assert.equal("budget" in (without.scope as object), false, "no budget until setup sets one");
+  assert.equal(exams.length, 2);
+  for (const budget of [
+    "6 hours",
+    { hours: 6, daysOut: [] },
+    { hours: -1, daysOut: [], since: "2026-11-10T09:00:00Z" },
+    { hours: "6", daysOut: [], since: "2026-11-10T09:00:00Z" },
+    { hours: 6, daysOut: ["tomorrow"], since: "2026-11-10T09:00:00Z" },
+    { hours: 6, daysOut: [], since: "yesterday" },
+  ]) assert.equal(isError(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz", date: "2026-11-21", topicIds: [], scope: { objectives: [], sources: [], budget } }), tools, "s")), true, JSON.stringify(budget));
+  assert.equal(exams.length, 2, "refused calls save nothing");
+});
+
+test("course_state carries the plan, coverage and top errors, and the instructions say the plan line is said as is and top errors on the eve", async () => {
+  const { tools, COURSE } = fakeTools();
+  const state = text(await handleRpc(call("course_state", { courseId: COURSE, detail: "summary" }), tools, "s"));
+  assert.deepEqual([state.plan, state.coverage, state.topErrors], [null, null, []]);
+  assert.match(INSTRUCTIONS, /plan\.line as is/);
+  assert.match(INSTRUCTIONS, /topErrors/);
+  assert.match(INSTRUCTIONS, /day-of, or plan\.daysLeft is 1 or less/);
+  const tool = TOOLS.find((t) => t.name === "set_exam");
+  assert.ok(tool);
+  const scope = (tool.inputSchema.properties as Record<string, { properties?: Record<string, unknown> }>).scope;
+  assert.ok(scope.properties && "budget" in scope.properties, "the schema offers the budget");
 });

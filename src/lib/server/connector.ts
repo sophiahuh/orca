@@ -8,6 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { AnswerKey, AnswerReport, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
 import { addMaterial } from "@/lib/server/connector/add-material";
 import { addQuestions } from "@/lib/server/connector/add-questions";
+import { cramFields } from "@/lib/server/connector/cram-plan";
 import { logEvidence } from "@/lib/server/connector/log-evidence";
 import { materialFor } from "@/lib/server/connector/material-for";
 import type { ExamScope, MaterialType } from "@/lib/data";
@@ -202,6 +203,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const writing: WritingLine[] = (runs.data ?? []).map((r) => ({ runId: r.id, objectiveIds: r.objective_ids, state: r.status as WritingLine["state"] }));
     // The budget resets at the student's next local midnight (src/lib/jobs/budget.ts counts their day).
     const resetsAt = new Date(dayStartIn(timezone, at).getTime() + 86_400_000).toISOString();
+    // The cram plan, coverage and top errors (contract section 6) read the agenda's effective weights: course × scope inside the window.
+    const cram = await cramFields(db, ownerId, { courseId, at, timezone, today, exams: examLines, topics: liveTopics, objectives: lines, weights: await effectiveWeights(courseId, examLines, today) });
 
     return {
       course: { id: course.id, name: course.name },
@@ -216,6 +219,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       vault: vaultLines,
       mode,
       cramming,
+      ...cram,
     };
   };
 

@@ -10,7 +10,8 @@
  */
 
 import { SCOPE_STRENGTH } from "../course/scope.ts";
-import { MATERIAL_TYPES, type ExamScope, type MaterialType, type ScopeEvidence, type ScopeSignal } from "../data.ts";
+import { MATERIAL_TYPES, type CramBudget, type ExamScope, type MaterialType, type ScopeEvidence, type ScopeSignal } from "../data.ts";
+import type { CramPlan } from "../mastery/cram-plan.ts";
 import type { ErrorType, FlagStrength, Help, SignalEvent, WorkEvent } from "../mastery/types.ts";
 import { checkNotes } from "../pipeline/notes.ts";
 import type { ScreenHit } from "../untrusted/screen.ts";
@@ -27,7 +28,10 @@ export const INSTRUCTIONS =
   "study session like this. 1) Call course_state first (detail summary for a check-in, full when " +
   "you need objective ids); it says what's due, the next exam's topics (examFocus), the course's " +
   "mode, which exam is being crammed for (cramming), the vault, whether Orca's daily model budget " +
-  "is spent (budget) and whether questions are being written (writing). Follow mode: normal, a " +
+  "is spent (budget) and whether questions are being written (writing). When plan isn't null (an " +
+  "exam is being crammed for), start the session by saying plan.line as is, then follow plan.today's " +
+  "order, weak spots first. On the eve (mode day-of, or plan.daysLeft is 1 or less), mention " +
+  "topErrors: the kinds of mistake the student makes most. Follow mode: normal, a " +
   "short review of what's due; exam-week, work through the exam's scope, heaviest first; day-of, a " +
   "quick pass over what's weak and nothing new. 2) Setup: when an exam is near and has no scope, " +
   "ask what the professor said it covers, whether there's a practice exam or study guide " +
@@ -128,6 +132,20 @@ export interface WritingLine {
   state: "queued" | "waiting" | "running";
 }
 
+/** How much of the scoping exam's scope is verified: over objectives in scope (weight > 0), and per topic. */
+export interface CoverageLine {
+  verified: number;
+  total: number;
+  share: number;
+  byTopic: Array<{ topicId: string; verified: number; total: number }>;
+}
+
+/** A kind of mistake and how often the student made it (answer and work events' errorType). */
+export interface TopError {
+  errorType: ErrorType;
+  count: number;
+}
+
 export interface CourseState {
   course: CourseSummary;
   /** The student's day, YYYY-MM-DD, in their timezone. */
@@ -147,6 +165,12 @@ export interface CourseState {
   mode: CourseMode;
   /** The exam being crammed for, or null. */
   cramming: string | null;
+  /** The cram plan over the cramming exam (src/lib/mastery/cram-plan.ts); null when no exam is cramming, or its scope has no budget yet. */
+  plan: CramPlan | null;
+  /** Coverage of the scoping exam's scope (the cramming exam, else the soonest within the window); null outside every window. */
+  coverage: CoverageLine | null;
+  /** The kinds of mistake since the cram started (else the last 30 days), most frequent first, at most 6. */
+  topErrors: TopError[];
 }
 
 /** What next_questions answers: questions to ask, or why there are none yet. */
@@ -341,6 +365,8 @@ const PROBLEM_CHARS = 4000;
 const TEXT_MATERIAL_CHARS = 200_000;
 /** A scope quote: the words a weight rests on. */
 const QUOTE_CHARS = 500;
+const BUDGET_HOURS_MAX = 1000;
+const BUDGET_DAYS_OUT_MAX = 366;
 
 export const TOOLS = [
   {
@@ -352,8 +378,10 @@ export const TOOLS = [
       "only schedules weak points: objectives the student struggled with, missed or asked to be checked " +
       "on. Call this first. check_answer and record_answer already return each objective's new status, so " +
       "there's no need to call it after every answer; detail summary is a cheap check-in (topics with " +
-      "counts, what's due, exam focus, budget, what's being written), full lists every objective. With no " +
-      "course, lists the courses so you can pick one.",
+      "counts, what's due, exam focus, budget, what's being written), full lists every objective. While an " +
+      "exam is being crammed for, plan holds the day's plan (plan.line is the one-line summary to say), " +
+      "coverage how much of the exam's scope is verified, and topErrors the kinds of mistake made most. " +
+      "With no course, lists the courses so you can pick one.",
     inputSchema: {
       type: "object",
       properties: {
@@ -444,6 +472,17 @@ export const TOOLS = [
               additionalProperties: false,
             },
             sources: { type: "array", items: { type: "string", enum: SCOPE_SIGNALS }, maxItems: 6, description: "Where the scope came from, for the exam card." },
+            budget: {
+              type: "object",
+              description: "The student's time budget for the cram; the plan is derived from it. Omit to keep what the exam has.",
+              properties: {
+                hours: { type: "number", minimum: 0, maximum: BUDGET_HOURS_MAX, description: "Hours the student can put in before the exam." },
+                daysOut: { type: "array", items: { type: "string" }, maxItems: BUDGET_DAYS_OUT_MAX, description: "Days with no study, YYYY-MM-DD." },
+                since: { type: "string", description: "When cramming started, ISO: minutes studied since then count against the budget." },
+              },
+              required: ["hours", "daysOut", "since"],
+              additionalProperties: false,
+            },
           },
           required: ["objectives", "sources"],
           additionalProperties: false,
@@ -712,7 +751,7 @@ async function screenText(tools: ConnectorTools, raw: string, maxChars: number, 
 
 /** An exam scope as set_exam takes it: ids, weights, evidence (quotes screened), format and sources checked field by field. */
 async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope: ExamScope } | { error: string }> {
-  if (!isObject(raw)) return { error: "scope is an object: objectives, sources and optionally format." };
+  if (!isObject(raw)) return { error: "scope is an object: objectives, sources and optionally format and budget." };
   if (!Array.isArray(raw.objectives) || raw.objectives.length > 400) return { error: "scope.objectives is a list of up to 400 { objectiveId, weight, evidence }." };
   if (!Array.isArray(raw.sources) || raw.sources.length > 6 || !raw.sources.every((x) => isOneOf(SCOPE_SIGNALS, x))) return { error: `scope.sources is a list of ${SCOPE_SIGNALS.join(", ")}.` };
   const objectives: ExamScope["objectives"] = [];
@@ -745,7 +784,16 @@ async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope:
     if (f.kinds !== undefined && (!Array.isArray(f.kinds) || f.kinds.length > 4 || !f.kinds.every((k) => isOneOf(SCOPE_KINDS, k)))) return { error: `scope.format.kinds is a list of ${SCOPE_KINDS.join(", ")}.` };
     format = { ...(f.minutes !== undefined ? { minutes: f.minutes as number } : {}), ...(f.problems !== undefined ? { problems: f.problems as number } : {}), ...(f.kinds !== undefined ? { kinds: [...new Set(f.kinds as ScopeKind[])] } : {}) };
   }
-  return { scope: { objectives, ...(format !== undefined ? { format } : {}), sources: [...new Set(raw.sources as ScopeSignal[])] } };
+  let budget: CramBudget | undefined;
+  if (raw.budget !== undefined) {
+    const b = raw.budget;
+    if (!isObject(b)) return { error: "scope.budget is an object: hours, daysOut, since." };
+    if (typeof b.hours !== "number" || !Number.isFinite(b.hours) || b.hours < 0 || b.hours > BUDGET_HOURS_MAX) return { error: `scope.budget.hours is a number from 0 to ${BUDGET_HOURS_MAX}.` };
+    if (!Array.isArray(b.daysOut) || b.daysOut.length > BUDGET_DAYS_OUT_MAX || !b.daysOut.every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)))) return { error: "scope.budget.daysOut is a list of days, YYYY-MM-DD." };
+    if (typeof b.since !== "string" || Number.isNaN(Date.parse(b.since))) return { error: "scope.budget.since is an ISO date-time: when cramming started." };
+    budget = { hours: b.hours, daysOut: [...new Set(b.daysOut as string[])].sort(), since: new Date(b.since).toISOString() };
+  }
+  return { scope: { objectives, ...(format !== undefined ? { format } : {}), sources: [...new Set(raw.sources as ScopeSignal[])], ...(budget !== undefined ? { budget } : {}) } };
 }
 
 /** One question as add_questions takes it, checked field by field (the deeper checks, like a generated question's, are the implementation's). */
