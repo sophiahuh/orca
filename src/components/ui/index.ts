@@ -13,3 +13,7 @@ export { AnswerOption } from "./AnswerOption";
 export type { AnswerState } from "./AnswerOption";
 export { DueCard } from "./DueCard";
 export { PathNode, NODE_SIZE } from "./PathNode";
+export { Kbd } from "./Kbd";
+export { InlineConfirm } from "./InlineConfirm";
+export { Spotlight } from "./Spotlight";
+export { AnchoredBubble } from "./AnchoredBubble";

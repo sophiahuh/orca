@@ -76,6 +76,7 @@ import { snapshotFromRow } from "./supabase/rows";
 import { confusionEventId } from "./mastery/ids";
 import { resolveObjectiveId } from "./mastery/catalogue";
 import type { Json } from "./supabase/database.types";
+import { type OnboardingState, TIPS_OFF, withSeen } from "./onboarding/state";
 import { useNow } from "@/hooks/useNow";
 
 interface OrcaState {
@@ -102,6 +103,8 @@ interface OrcaState {
   defaultConfig: ReviewConfig;
   results: QuizResult[];
   onboarded: boolean;
+  /** The onboarding tips: which were seen, whether all were skipped (off until the student's data is in). */
+  onboarding: OnboardingState;
   /** The student's IANA timezone (profile); every day boundary uses it. */
   timezone: string;
   /** The student's sea-buddy avatar (profile), shown in the top bar. */
@@ -145,6 +148,7 @@ const initialState: OrcaState = {
   defaultConfig: DEFAULT_CONFIG,
   results: [],
   onboarded: false,
+  onboarding: TIPS_OFF,
   timezone: "UTC",
   avatar: DEFAULT_AVATAR,
   name: null,
@@ -192,6 +196,10 @@ interface OrcaActions {
   /** "Which slides were hard?": one struggle flag (source slide) per objective, on the first selected page that names it. */
   flagSlides: (courseId: string, materialId: string, pages: ReadonlyArray<{ page: number; objectiveIds: readonly string[] }>) => void;
   setOnboarded: (v: boolean) => void;
+  /** These onboarding tips were seen (or dismissed): they don't show again. */
+  markTipsSeen: (ids: readonly string[]) => void;
+  /** "Skip all tips": none shows again, on any device. */
+  skipTips: () => void;
   /** The student's display name (profile), independent of the sign-in email. */
   setName: (name: string) => void;
   setTimezone: (timezone: string) => void;
@@ -833,6 +841,29 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
     [save],
   );
 
+  // The tips' state is one value, saved whole. Changes build on the newest one, even before React
+  // has rendered the last (two tips can be marked in one tick); saves run in order, so the last
+  // write holds every change.
+  const pendingOnboarding = useRef<OnboardingState | null>(null);
+  const changeOnboarding = useCallback(
+    (change: (o: OnboardingState) => OnboardingState) => {
+      const before = pendingOnboarding.current ?? stateRef.current.onboarding;
+      const next = change(before);
+      if (next === before) return; // nothing new: nothing to save
+      pendingOnboarding.current = next;
+      setState((s) => ({ ...s, onboarding: next }));
+      save(async () => {
+        const { data } = await browserSupabase().auth.getSession();
+        if (!data.session) throw new Error("you're signed out");
+        mustChange(await browserSupabase().from("profiles").update({ onboarding: next }).eq("owner_id", data.session.user.id).select("owner_id"));
+        if (pendingOnboarding.current === next) pendingOnboarding.current = null;
+      });
+    },
+    [save],
+  );
+  const markTipsSeen = useCallback<OrcaActions["markTipsSeen"]>((ids) => changeOnboarding((o) => withSeen(o, ids)), [changeOnboarding]);
+  const skipTips = useCallback<OrcaActions["skipTips"]>(() => changeOnboarding((o) => ({ ...o, skipped: true })), [changeOnboarding]);
+
   const setName = useCallback<OrcaActions["setName"]>(
     (name) => {
       const clean = name.trim();
@@ -949,6 +980,8 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       flagSlides,
       requestQuestions: requestFlagTopUp,
       setOnboarded,
+      markTipsSeen,
+      skipTips,
       setName,
       setTimezone,
       setAvatar,
@@ -959,7 +992,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, requestFlagTopUp, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, requestFlagTopUp, setOnboarded, markTipsSeen, skipTips, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
