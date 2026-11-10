@@ -34,7 +34,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   `phase-4` was the shared working branch until then (PRs #1–#7 came from it); others may still push
   there, so never force-move it, and don't base new work on it (it carries unrelated commits).
   `backend-implementation` is the **production branch** Vercel (project `orca`,
-  https://orca-lake-omega.vercel.app) builds; only the Deploy workflow pushes it. **Commit as whoever is running you**
+  https://orca.us.com since 2026-11-10; the vercel.app address still serves) builds; only the Deploy workflow pushes it. **Commit as whoever is running you**
   (the machine's git config; never pass `-c user.name/user.email`). Vercel refuses to build a
   commit whose author email isn't on the owner's GitHub account, but it only checks the commit at
   the top of `backend-implementation`, and the Deploy workflow authors that merge commit as the
@@ -568,7 +568,7 @@ All 11 Figma screens are built. Where things live:
 - `docs/samples/ald/` — the real ALD decks for the extraction scorer, **not committed** (gitignored; removed from the
   history 2026-10-27 before the repo went public: course material isn't ours to publish; `docs/samples/README.md`).
   Tests use the generated stand-in deck `makeDeck()` in `tests/fixtures/pdf.ts`. `docs/OBJECTIVES-ALD.md` is the benchmark.
-- Deploy: Vercel (https://orca-lake-omega.vercel.app) builds `backend-implementation` (Production);
+- Deploy: Vercel (https://orca.us.com, the GoDaddy domain added 2026-11-10; https://orca-lake-omega.vercel.app still serves) builds `backend-implementation` (Production);
   pushes to other branches get Preview deploys at most. **Nobody pushes there by hand any more:**
   `.github/workflows/deploy.yml` merges `main` into it (after pushing new migrations) whenever CI
   on `main` is green, so merging a PR into `main` is the deploy (`docs/SETUP-HOSTED.md` §5 lists
