@@ -11,6 +11,7 @@ import type { PipelineRun } from "@/lib/data";
 import { popIn } from "@/lib/motion";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
+import { useActiveTip } from "@/components/onboarding/active-tip";
 
 /** How long a toast stays when the pointer isn't on it. */
 const TOAST_MS = 5_000;
@@ -141,12 +142,13 @@ function UploadToast({ toast, course, onDismiss }: { toast: Toast; course: { slu
   const { materials, runs } = useOrca();
   const [hovered, setHovered] = useState(false);
   const { courseId, version } = toast;
-  // Up for TOAST_MS from its last new upload, paused while the pointer is on it.
+  // Up for TOAST_MS from its last new upload, paused while the pointer is on it or an onboarding tip points at it.
+  const pointedAt = useActiveTip() === "upload-toast";
   useEffect(() => {
-    if (hovered) return;
+    if (hovered || pointedAt) return;
     const timer = window.setTimeout(() => onDismiss(courseId), TOAST_MS);
     return () => window.clearTimeout(timer);
-  }, [hovered, version, courseId, onDismiss]);
+  }, [hovered, pointedAt, version, courseId, onDismiss]);
   const close = () => onDismiss(courseId);
 
   const failed = toast.items.filter((i) => !i.ok).length;

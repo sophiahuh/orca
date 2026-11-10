@@ -73,7 +73,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] text-center">
           <p className="text-[22px] font-bold text-prussian">This island is uncharted.</p>
           <p className="text-[16px] text-wisteria-deep">Add lecture slides or homework and Orca will map its topics.</p>
-          <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)}>
+          <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)} data-part="uncharted-add">
             Add material
           </Button>
         </div>
@@ -114,7 +114,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           >
             {course.name}
           </motion.h1>
-          <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep">
+          <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part={topics.length > 0 ? "weak-count" : undefined}>
             {weak ? `${held} of ${weak} weak spots mastered` : "No weak spots flagged yet"}
           </motion.p>
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
