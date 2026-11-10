@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { cardExam, daysUntil, examObjectives } from "@/lib/course/exam-card";
-import type { CramPlan, CramPlanInput } from "@/lib/mastery/cram-plan";
+import type { CramPlan, CramPlanInput, SpentMinutes } from "@/lib/mastery/cram-plan";
 import type { ObjectiveStatus } from "@/lib/mastery/types";
 import { useCourse, useDayKey, useMasteryByCourse, useOrca } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
@@ -23,14 +23,19 @@ const PILL = "pressable rounded-pill bg-parchment px-[12px] py-[6px] text-[13px]
 const daysText = (days: number) => (days === 0 ? "Exam day" : days === 1 ? "Tomorrow" : days > 1 ? `${days} days left` : days === -1 ? "Yesterday" : `${-days} days ago`);
 const hoursText = (h: number) => (Number.isInteger(h) ? `${h}` : (Math.round(h * 10) / 10).toFixed(1));
 const minutesText = (m: number) => `${Math.round(m)} min`;
+/** "Tue 11" for a YYYY-MM-DD day (pure date arithmetic, so the zone can't shift it). */
+const dayChip = (day: string) => {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", day: "numeric", timeZone: "UTC" });
+};
 
 /**
- * The cram page (cram mode contract, section 6): setup (the professor's words, the files the exam
- * covers, Add material held back, worries, hours a day and days out) until the exam is cramming
- * with a budget, then the plan: days
- * left, the budget, the line, the scope as topic rows with weak spots, today, the practice test,
- * the vault, Study with Claude, Edit scope and Stop cramming. The plan is computed here from the
- * store; nothing about it is stored.
+ * The cram page (cram mode contract, section 6 and its per-day addendum): setup (the professor's
+ * words, the files the exam covers, Add material held back, worries, the hours for each day) until
+ * the exam is cramming with a budget, then the plan: days left, the budget with its hours by day
+ * (today highlighted), the line, the scope as topic rows with weak spots, today, the practice
+ * test, the vault, Study with Claude, Edit scope and Stop cramming. The plan is computed here from
+ * the store, as the exam card's line is; nothing about it is stored.
  */
 export default function CramPage({ params, searchParams }: PageProps<"/course/[slug]/cram">) {
   const { slug } = use(params);
@@ -97,7 +102,7 @@ export default function CramPage({ params, searchParams }: PageProps<"/course/[s
 
       <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]" data-part="cram-page" data-cramming={exam.cramming ? "1" : undefined}>
         {cramming ? (
-          <CrammingView course={course} exam={exam} plan={planned.plan} topics={planned.topics} spentMinutes={planned.spentMinutes} objectiveName={(id) => catalogue[id]?.name ?? id} vault={vault.map((v) => v.filename)} connected={connected} onEdit={() => setEditing(true)} onStop={() => updateExam(exam.id, { cramming: false })} />
+          <CrammingView course={course} today={today} plan={planned.plan} topics={planned.topics} spentMinutes={planned.spentMinutes} objectiveName={(id) => catalogue[id]?.name ?? id} vault={vault.map((v) => v.filename)} connected={connected} onEdit={() => setEditing(true)} onStop={() => updateExam(exam.id, { cramming: false })} />
         ) : (
           <motion.div variants={fadeUp} className="w-[600px]">
             <Card className="px-[28px] pb-[24px] pt-[24px]">
@@ -114,8 +119,11 @@ export default function CramPage({ params, searchParams }: PageProps<"/course/[s
 
 const isVerified = (s: ObjectiveStatus) => s === "verified" || s === "mastered";
 
-function CrammingView({ course, exam, plan, topics, spentMinutes, objectiveName, vault, connected, onEdit, onStop }: { course: { slug: string }; exam: { title: string; scope: { budget?: { hours: number } } | null }; plan: CramPlan; topics: CramPlanInput["topics"]; spentMinutes: number; objectiveName: (id: string) => string; vault: string[]; connected: boolean | null; onEdit: () => void; onStop: () => void }) {
-  const hours = exam.scope?.budget?.hours ?? 0;
+function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName, vault, connected, onEdit, onStop }: { course: { slug: string }; today: string; plan: CramPlan; topics: CramPlanInput["topics"]; spentMinutes: SpentMinutes; objectiveName: (id: string) => string; vault: string[]; connected: boolean | null; onEdit: () => void; onStop: () => void }) {
+  // The budget's days, as the plan reads them (a budget saved before per-day budgets shows its spread); the total is their sum.
+  const days = Object.keys(plan.perDay).sort();
+  const hours = days.reduce((sum, d) => sum + plan.perDay[d], 0);
+  const studied = spentMinutes.beforeToday + spentMinutes.today;
   const topicName = new Map(plan.topics.map((t) => [t.id, t.name]));
   // Per topic: its in-scope objectives (weight > 0), how many are verified, and each one's status.
   const scoped = new Map(topics.map((t) => [t.id, t.objectives.filter((o) => o.weight > 0)]));
@@ -130,10 +138,30 @@ function CrammingView({ course, exam, plan, topics, spentMinutes, objectiveName,
               {hoursText(plan.hoursLeft)} hours left of {hoursText(hours)}
               {plan.behindMinutes > 0 && <span className="text-wisteria-deep"> · {plan.behindMinutes} minutes behind</span>}
             </p>
-            <p className="text-[13px] font-medium text-wisteria-deep">
-              {minutesText(spentMinutes)} studied in Orca since you started · {plan.studyDays.length} study day{plan.studyDays.length === 1 ? "" : "s"} left
-              {plan.minutesPerDay > 0 ? ` · about ${minutesText(plan.minutesPerDay)} a day` : ""}
+            <p className="text-[13px] font-medium text-wisteria-deep" data-part="cram-spent">
+              {minutesText(studied)} studied in Orca since you started · {plan.studyDays.length} study day{plan.studyDays.length === 1 ? "" : "s"} left
+              {plan.daysLeft > 0 ? ` · ${minutesText(plan.minutesToday)} left today` : ""}
             </p>
+            {days.length > 0 && (
+              <ul className="flex flex-wrap gap-[6px]" data-part="cram-days" aria-label="Hours by day">
+                {days.map((day) => {
+                  const isToday = day === today;
+                  const past = day < today;
+                  return (
+                    <li
+                      key={day}
+                      className={`rounded-pill px-[10px] py-[4px] text-[12px] font-bold ring-2 ring-inset ${isToday ? "bg-wisteria text-parchment ring-wisteria" : past ? "bg-parchment text-wisteria-deep ring-alice-deep opacity-70" : "bg-parchment text-prussian ring-alice-deep"}`}
+                      data-part="cram-day"
+                      data-day={day}
+                      data-today={isToday ? "1" : undefined}
+                      data-hours={plan.perDay[day]}
+                    >
+                      {dayChip(day)} · {hoursText(plan.perDay[day])} h
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             <p className="text-[16px] font-semibold text-prussian" data-part="cram-plan">
               {plan.line}
             </p>

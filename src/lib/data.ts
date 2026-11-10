@@ -124,14 +124,25 @@ export interface ScopeEvidence {
   materialId?: string;
 }
 
-/** The student's time budget for a cram (cram mode contract, section 6), asked at setup; the plan is derived from it, never stored. */
+/**
+ * The student's time budget for a cram (cram mode contract, section 6 and its per-day addendum),
+ * asked at setup day by day; the plan is derived from it, never stored. `perDay` is the source;
+ * `hours` and `daysOut` are derived from it (src/lib/mastery/cram-budget.ts) so earlier readers
+ * keep working.
+ */
 export interface CramBudget {
-  /** Hours the student can put in before the exam, asked at setup (prefilled from the course's exam review duration). */
+  /** Hours the student can put in before the exam: the sum of `perDay`. */
   hours: number;
-  /** Days with no study, YYYY-MM-DD, in the student's timezone. */
+  /** Days with no study, YYYY-MM-DD, in the student's timezone: the days of `perDay` at 0. */
   daysOut: string[];
   /** When cramming started, ISO: minutes studied since then count against the budget. */
   since: string;
+  /**
+   * Hours per day (half-hour steps, 0 = a day out), YYYY-MM-DD in the student's timezone, for every
+   * day from the day cramming started to the day before the exam. Absent on a budget saved before
+   * 2026-11-10: `perDayOf` spreads `hours` evenly over its study days.
+   */
+  perDay?: Record<string, number>;
 }
 
 /** An exam's scope (`exams.scope`): per-objective weights inside the exam window, the format, and the sources it was built from. */

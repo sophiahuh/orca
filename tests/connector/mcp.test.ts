@@ -1,8 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { type AddMaterialInput, type AddQuestion, type AnswerReport, type ConnectorTools, type EvidenceEntry, type ExamLine, INSTRUCTIONS, PROTOCOL_VERSION, SERVER_INFO, TOOLS, handleRpc } from "../../src/lib/connector/mcp.ts";
+import { type AddMaterialInput, type AddQuestion, type AnswerReport, type ConnectorTools, type EvidenceEntry, type ExamLine, type ScopeInput, INSTRUCTIONS, PROTOCOL_VERSION, SERVER_INFO, TOOLS, handleRpc } from "../../src/lib/connector/mcp.ts";
 import type { FlagStrength } from "../../src/lib/mastery/types.ts";
 import type { ScreenHit } from "../../src/lib/untrusted/screen.ts";
+import { mergeBudget } from "../../src/lib/mastery/cram-budget.ts";
+import type { ExamScope } from "../../src/lib/data.ts";
+
+/** The fake setExam's scope: the budget merged as the server merges it, with the 10th as today and a fixed clock. */
+const mergeScopeForTest = (input: ScopeInput, examDate: string): ExamScope => {
+  const { budget, objectives, sources, ...rest } = input;
+  return { objectives: objectives ?? [], sources: sources ?? [], ...rest, ...(budget ? { budget: mergeBudget(null, budget, { today: "2026-11-10", examDate, now: "2026-11-10T12:00:00.000Z" }) } : {}) };
+};
 
 /** A student with one course, one objective and one question, remembering what was recorded. */
 function fakeTools() {
@@ -86,7 +94,9 @@ function fakeTools() {
     },
     async setExam(courseId, exam) {
       if (courseId !== COURSE) return { error: "No such course." };
-      const saved: ExamLine = { id: exam.id ?? "b0000000-0000-4000-8000-000000000001", title: exam.title, date: exam.date, topicIds: exam.topicIds, cramming: exam.cramming ?? false, scope: exam.scope ?? null, mode: exam.cramming ? "exam-week" : "normal" };
+      // As the server does: the budget merges over the exam's (none here), objectives left out keep the exam's (none here); today is the 10th.
+      const scope = exam.scope ? mergeScopeForTest(exam.scope, exam.date) : null;
+      const saved: ExamLine = { id: exam.id ?? "b0000000-0000-4000-8000-000000000001", title: exam.title, date: exam.date, topicIds: exam.topicIds, cramming: exam.cramming ?? false, scope, mode: exam.cramming ? "exam-week" : "normal" };
       exams.push(saved);
       return saved;
     },
@@ -544,22 +554,41 @@ test("a tool not built yet is reported as that tool's failure", async () => {
 
 /* ── Step 8: the plan and the time budget ── */
 
-test("set_exam takes the cram's time budget in the scope, normalised, and refuses a malformed one", async () => {
+test("set_exam takes the cram's time budget in the scope, by day or as a total, normalised, and refuses a malformed one", async () => {
   const { tools, exams, COURSE } = fakeTools();
-  const saved = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Final", date: "2026-11-20", topicIds: [], cramming: true, scope: { objectives: [], sources: [], budget: { hours: 6, daysOut: ["2026-11-15", "2026-11-14", "2026-11-15"], since: "2026-11-10T09:00:00+01:00" } } }), tools, "s"));
-  assert.deepEqual((saved.scope as { budget: unknown }).budget, { hours: 6, daysOut: ["2026-11-14", "2026-11-15"], since: "2026-11-10T08:00:00.000Z" }, "days out are deduplicated and sorted; since is kept as UTC");
+  // The older form, a total with days out: spread evenly over the days from the start of the cram.
+  const saved = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Final", date: "2026-11-14", topicIds: [], cramming: true, scope: { objectives: [], sources: [], budget: { hours: 6, daysOut: ["2026-11-12", "2026-11-11", "2026-11-12"], since: "2026-11-10T09:00:00+01:00" } } }), tools, "s"));
+  assert.deepEqual((saved.scope as { budget: unknown }).budget, { hours: 6, daysOut: ["2026-11-11", "2026-11-12"], since: "2026-11-10T08:00:00.000Z", perDay: { "2026-11-10": 3, "2026-11-11": 0, "2026-11-12": 0, "2026-11-13": 3 } }, "days out are deduplicated and sorted; since is kept as UTC; the hours are spread by day");
+  // Hours by day, and today alone ("I have until 7"), with objectives and sources left out: the scope is kept.
+  const byDay = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Final", date: "2026-11-13", topicIds: [], scope: { budget: { perDay: { "2026-11-10": 1.5, "2026-11-11": 0, "2026-11-12": 2 }, since: "2026-11-10T09:00:00Z" } } }), tools, "s"));
+  assert.deepEqual((byDay.scope as { budget: unknown }).budget, { hours: 3.5, daysOut: ["2026-11-11"], since: "2026-11-10T09:00:00.000Z", perDay: { "2026-11-10": 1.5, "2026-11-11": 0, "2026-11-12": 2 } });
+  const todayOnly = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Final", date: "2026-11-13", topicIds: [], scope: { budget: { today: 1 } } }), tools, "s"));
+  assert.deepEqual((todayOnly.scope as { budget: { perDay: unknown } }).budget.perDay, { "2026-11-10": 1, "2026-11-11": 2, "2026-11-12": 2 }, "merged over the assumed 2 hours a day when the exam had none");
   const without = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz", date: "2026-11-21", topicIds: [], scope: { objectives: [], sources: [] } }), tools, "s"));
   assert.equal("budget" in (without.scope as object), false, "no budget until setup sets one");
-  assert.equal(exams.length, 2);
+  assert.equal(exams.length, 4);
   for (const budget of [
     "6 hours",
-    { hours: 6, daysOut: [] },
+    {},
     { hours: -1, daysOut: [], since: "2026-11-10T09:00:00Z" },
     { hours: "6", daysOut: [], since: "2026-11-10T09:00:00Z" },
     { hours: 6, daysOut: ["tomorrow"], since: "2026-11-10T09:00:00Z" },
     { hours: 6, daysOut: [], since: "yesterday" },
+    { perDay: { tomorrow: 1 } },
+    { perDay: { "2026-11-11": 1.25 } },
+    { perDay: { "2026-11-11": 25 } },
+    { perDay: "2 hours" },
+    { today: -1 },
+    { today: 0.75 },
   ]) assert.equal(isError(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz", date: "2026-11-21", topicIds: [], scope: { objectives: [], sources: [], budget } }), tools, "s")), true, JSON.stringify(budget));
-  assert.equal(exams.length, 2, "refused calls save nothing");
+  // Objectives without sources (or the other way round) is half a scope.
+  assert.equal(isError(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz", date: "2026-11-21", topicIds: [], scope: { objectives: [] } }), tools, "s")), true);
+  assert.equal(exams.length, 4, "refused calls save nothing");
+  assert.match(INSTRUCTIONS, /scope\.budget\.today for today, or perDay/);
+  const tool = TOOLS.find((t) => t.name === "set_exam");
+  const scope = (tool!.inputSchema.properties as unknown as Record<string, { properties: Record<string, { properties: Record<string, unknown> }>; required?: string[] }>).scope;
+  assert.deepEqual(Object.keys(scope.properties.budget.properties), ["perDay", "today", "hours", "daysOut", "since"]);
+  assert.equal(scope.required, undefined, "objectives and sources can be left out to change only the budget");
 });
 
 test("course_state carries the plan, coverage and top errors, and the instructions say the plan line is said as is and top errors on the eve", async () => {

@@ -219,16 +219,41 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   expect(budgeted.scope.budget.hours).toBe(6);
   expect(budgeted.scope.materialIds).toEqual([F.material]);
   expect(toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { ...scope, materialIds: [crypto.randomUUID()] } }))).toMatchObject({ error: expect.stringMatching(/material ids/) });
-  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number; defaulted: boolean }; coverage: { total: number; verified: number }; topErrors: unknown[]; exams: Array<Record<string, unknown>> };
+  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number; minutesToday: number; defaulted: boolean; perDay: Record<string, number> }; coverage: { total: number; verified: number }; topErrors: unknown[]; exams: Array<Record<string, unknown>> };
   expect(planned.plan.line).toMatch(/days to the exam/);
   expect(planned.plan.daysLeft).toBeGreaterThan(10);
   expect(planned.plan.hoursLeft).toBe(6);
   expect(planned.plan.defaulted).toBe(false);
   expect(planned.coverage.total).toBe(3);
   expect(planned.topErrors).toEqual([]);
+  // A total is spread over the days: half an hour each over the 12 days, today included.
+  const today = new Date().toISOString().slice(0, 10);
+  expect(Object.keys(planned.plan.perDay)).toHaveLength(12);
+  expect(planned.plan.perDay[today]).toBe(0.5);
+  expect(planned.plan.minutesToday).toBe(30);
+  expect(planned.plan.line).toMatch(/Today: /);
   // A summary carries each exam's scope by its size, not its entries (three live objectives in scope, the one excluded).
   expect(planned.exams[0]).not.toHaveProperty("scope");
   expect(planned.exams[0].scopeSummary).toMatchObject({ inScope: 3, excluded: 1, sources: ["professor"], budget: { hours: 6 } });
+  // "I have no time today": the budget's today, with objectives and sources left out, keeps the scope; the plan follows the day's hours.
+  const none0 = toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { budget: { today: 0 } } })) as { scope: { objectives: unknown[]; materialIds: string[]; budget: { hours: number; daysOut: string[]; perDay: Record<string, number> } } };
+  expect(none0.scope.objectives).toHaveLength(1);
+  expect(none0.scope.materialIds).toEqual([F.material]);
+  expect(none0.scope.budget).toMatchObject({ hours: 5.5, daysOut: [today] });
+  expect(none0.scope.budget.perDay[today]).toBe(0);
+  const dayOff = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; minutesToday: number; hoursLeft: number } };
+  expect(dayOff.plan.minutesToday).toBe(0);
+  expect(dayOff.plan.hoursLeft).toBe(5.5);
+  expect(dayOff.plan.line).not.toMatch(/Today: /);
+  // "I have an hour": today is an hour, the other days as they were.
+  const hour = toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { budget: { today: 1 } } })) as { scope: { budget: { hours: number; perDay: Record<string, number> } } };
+  expect(hour.scope.budget.hours).toBe(6.5);
+  expect(hour.scope.budget.perDay[today]).toBe(1);
+  const withHour = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; minutesToday: number; hoursLeft: number } };
+  expect(withHour.plan.minutesToday).toBe(60);
+  expect(withHour.plan.hoursLeft).toBe(6.5);
+  expect(withHour.plan.line).toMatch(/Today: /);
+  expect(toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { budget: { today: 0.75 } } }))).toMatchObject({ error: expect.stringMatching(/steps of 0.5/) });
   // A prose answer isn't graded by Orca's model: the key comes back for Claude to grade.
   const held = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." })) as { needsSelfGrade: boolean; reason: string; rubric?: { requiredIdeas: string[] } };
   expect(held.needsSelfGrade).toBe(true);
