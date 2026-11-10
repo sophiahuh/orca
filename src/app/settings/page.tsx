@@ -14,7 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { MarkerNotes } from "@/components/config/MarkerNotes";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
-import { AccountCard, ProfileCard, SignOutButton, TimezoneRow } from "@/components/settings/Account";
+import { AccountCard, SignOutButton, TimezoneRow } from "@/components/settings/Account";
 import { CanvasConnectionCard } from "@/components/settings/CanvasConnection";
 import { ClaudeConnectorCard } from "@/components/settings/ClaudeConnector";
 import { fadeSwap, fadeUp, stagger } from "@/lib/motion";
@@ -40,8 +40,7 @@ async function saveMarkerNotes(markers: string | null) {
 const SECTIONS = [
   { key: "preferences", label: "Preferences", blurb: "How Orca studies with you, in every class unless a class's own settings say otherwise." },
   { key: "connections", label: "Connections", blurb: "Study in Claude, and pull your classes from Canvas." },
-  { key: "profile", label: "Profile", blurb: "How you show up in Orca." },
-  { key: "account", label: "Account", blurb: "How you sign in." },
+  { key: "account", label: "Account", blurb: "Who you are in Orca and how you sign in." },
 ] as const;
 
 type SectionKey = (typeof SECTIONS)[number]["key"];
@@ -92,7 +91,6 @@ function SettingsBody() {
                   <CanvasConnectionCard />
                 </>
               )}
-              {section.key === "profile" && <ProfileCard />}
               {section.key === "account" && <AccountCard />}
             </motion.div>
           </AnimatePresence>

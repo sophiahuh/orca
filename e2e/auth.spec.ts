@@ -87,11 +87,11 @@ test.describe("sign up", () => {
 
     await page.goto(await emailedLink(email));
     await page.goto("/settings?section=account");
-    // The Account section edits contacts in place (e427e9c); the name is in Profile, the timezone in Review rhythm.
+    // The Account section edits contacts in place (e427e9c); the timezone is in Preferences.
     await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
     await page.goto("/settings");
     await expect(page.getByRole("combobox", { name: "Timezone" })).toHaveValue("America/New_York");
-    await page.goto("/settings?section=profile");
+    await page.goto("/settings?section=account");
     await expect(page.getByRole("textbox", { name: "Username" })).toHaveValue("Sophia");
     // The profile's avatar and name came from sign-up; the top bar shows the avatar.
     await expect(page.locator("[data-part=top-bar] [data-avatar=turtle]")).toBeVisible();

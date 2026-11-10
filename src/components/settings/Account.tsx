@@ -14,8 +14,8 @@ function zones(current: string): string[] {
   return all.includes(current) ? all : [current, ...all];
 }
 
-/** How the student shows up: their name and sea buddy. Each saves as it changes (the store shows a failed save). */
-export function ProfileCard() {
+/** How the student shows up: their name and sea buddy, at the top of the Account card. The buddy saves as it changes (the store shows a failed save). */
+function ProfileFields() {
   const { avatar, setAvatar, name, setName, hydrated } = useOrca();
   const [username, setUsername] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function ProfileCard() {
   };
 
   return (
-    <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[22px]" data-part="profile">
+    <div className="flex flex-col gap-[16px]" data-part="profile">
       {hydrated && (
         <>
           <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
@@ -52,7 +52,7 @@ export function ProfileCard() {
       )}
       {notice && <p role="status" className="text-[13px] font-semibold text-good-deep">{notice}</p>}
       {problem && <p role="alert" className="text-[13px] font-semibold text-prussian">{problem}</p>}
-    </Card>
+    </div>
   );
 }
 
@@ -80,7 +80,7 @@ export function SignOutButton() {
   );
 }
 
-/** The sign-in contacts: email and phone, each changed only once confirmed. */
+/** The Account section: name and sea buddy on top, then the sign-in contacts (email and phone, each changed only once confirmed). */
 export function AccountCard() {
   const { hydrated } = useOrca();
   const [email, setEmail] = useState<string | null>(null);
@@ -146,6 +146,8 @@ export function AccountCard() {
 
   return (
     <Card className="flex flex-col gap-[14px] px-[28px] pb-[24px] pt-[22px]" data-part="account">
+      <ProfileFields />
+      <div className="border-t border-alice-deep" />
       {email !== null && hydrated && (
         <>
           <div className="flex flex-col gap-[8px]">
