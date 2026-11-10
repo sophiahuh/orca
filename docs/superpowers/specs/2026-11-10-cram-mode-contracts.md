@@ -249,3 +249,51 @@ reads inside; `today` comes from the caller.
 ### Checks
 
 Unit tests for `cramPlan` (days, days out, behind, allocation, done topics, the line's forms). e2e `e2e/cram-page.spec.ts`: seed a course with an exam 5 days out, open the page, set 6 hours with one day out, confirm, assert the budget, the topic rows, the line, Stop cramming; and `e2e/connector.spec.ts` extended: `course_state` carries `plan.line` and `coverage` while cramming.
+
+
+### Per-day addendum (2026-11-10, owner: "time per day should be a number you can input per day, because it's not the same every day")
+
+**Budget shape** (`src/lib/data.ts`, no migration). `CramBudget` gains `perDay?: Record<string, number>`:
+YYYY-MM-DD in the student's timezone → hours in half-hour steps (0 = a day out), for every day from the
+day cramming started to the day before the exam. `hours` is now the sum of `perDay` and `daysOut` the
+days at 0, both kept so every earlier reader works; `since` unchanged. A budget saved before this change
+(no `perDay`) still works: `perDayOf` (`src/lib/mastery/cram-budget.ts`, pure, `tests/mastery/cram-budget.test.ts`)
+spreads `hours` evenly over the days from `since`'s date to the day before the exam minus `daysOut`
+(not rounded to half hours, so the days still sum to `hours`). `budgetFromPerDay` / `totalsOf` derive the
+totals; `withPerDay` normalises; `defaultBudget` is now 2 hours on each day from today.
+
+**The plan** (`cramPlan`). `CramPlanInput.spentMinutes` is `{ beforeToday, today }` (minutes since
+`budget.since`, split at the start of the student's today; same sources as before: `session_results`
+seconds by the day they finished + the connector estimate per day, `spentMinutesSplit` in
+`src/lib/server/connector/cram-plan.ts`; the browser splits its session results with `spentMinutesInOrca`).
+`CramPlan` gains `perDay` (the hours by day as read) and `minutesToday` = max(0, perDay[today] × 60 −
+spentMinutes.today); `studyDays` = the days from today to the day before the exam with hours > 0 (a day
+the budget doesn't name, the exam moved later, has none); `hoursLeft` = max(0, Σ perDay for today and
+later − spentMinutes.today / 60); `behindMinutes` = max(0, Σ perDay for the days before today × 60 −
+spentMinutes.beforeToday). `minutesPerDay` is kept equal to `minutesToday` for readers of the first
+plan (it was the average over the study days left). Allocation and the line are unchanged.
+
+**Connector.** `set_exam`'s `scope.budget` is an input merged over the exam's budget (`mergeBudget`;
+none yet: the assumed 2 hours a day, as the plan told Claude): `perDay` (dates and half-hour values
+checked, at most 366 entries) replaces the days it names, `today?: number` sets today only ("I have
+until 7"), `hours` without `perDay` is a total spread evenly over the days not out (the older form),
+`daysOut` zeroes those days, `since` is kept when left out (now for a new budget). `scope.objectives`
+and `scope.sources` may be left out together: the exam's objectives, sources, format and materialIds
+are kept, so a call can change only the budget (`mergeScope`, `src/lib/server/connector.ts`); a scope
+resent without a budget keeps the exam's budget. `course_state` shows every budget with its `perDay`
+(a budget saved the old way gets its spread). `INSTRUCTIONS`: when the student says how much time they
+have today or on a named day, save it with `set_exam` and read back the new `plan.line`.
+
+**The page and the card.** Setup replaces the quick picks and the days-out checkboxes with one row per
+remaining day (`cram-day[data-day]`, `data-today` on today's; an hours field `cram-day-hours`, half-hour
+steps, 0 allowed), prefilled from the exam review duration ÷ the days left, plus "Same for every day"
+(`cram-hours`) that fills every row; the total line (`cram-hours-total`: "12 hours before Friday, 4
+study days"). Confirm stores the rows as `perDay` (the past days' hours kept when a running cram's
+scope is edited). While cramming, "Your time" shows the days as chips (`cram-days` > `cram-day[data-day]`,
+`data-today`, `data-hours`) and `cram-spent` ("N min studied in Orca since you started · N study days
+left · N min left today"); the card's line reads the same `useCramPlan`.
+
+**Checks.** `tests/mastery/cram-budget.test.ts`, `tests/mastery/cram-plan.test.ts`, `tests/course/cram-page.test.ts`,
+`tests/server/cram-fields.test.ts`, `tests/server/merge-scope.test.ts`, `tests/connector/mcp.test.ts`; e2e
+`cram-page` and `exam-card` set days to different hours and one to 0 and assert the total and the stored
+`perDay`; `connector` sets today to 0 and to 1 hour and asserts `plan.minutesToday` and the line.

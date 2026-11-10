@@ -1,11 +1,11 @@
 /**
  * What the cram page and the exam card feed the plan (cram mode contract, section 6): the scope as
  * topics with weighted objectives and their statuses, the minutes studied in Orca since cramming
- * started, the hours a day a setup starts from, and the days a student can mark out. Pure.
+ * started (split at today), the hours a day a setup starts from, and the days it asks about. Pure.
  */
 import type { Duration, Exam, Objective, QuizResult, Relation, Topic } from "../data.ts";
 import { addDays } from "../mastery/agenda.ts";
-import type { CramPlanInput } from "../mastery/cram-plan.ts";
+import type { CramPlanInput, SpentMinutes } from "../mastery/cram-plan.ts";
 import { durationSeconds } from "../mastery/session.ts";
 import type { ObjectiveStatus } from "../mastery/types.ts";
 import { examObjectives } from "./exam-card.ts";
@@ -27,17 +27,26 @@ export function weekdayName(day: string): string {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
 }
 
-/** The days a student can mark out: today to the day before the exam (none on or after the day). */
+/** The days the setup asks about: today to the day before the exam (none on or after the day). */
 export function remainingDays(today: string, examDate: string): string[] {
   const days: string[] = [];
   for (let d = today; d < examDate; d = addDays(d, 1)) days.push(d);
   return days;
 }
 
-/** Minutes of finished sessions in this course since `since` ("in Orca": the connector's estimate is server-side). */
-export function spentMinutesInOrca(results: readonly QuizResult[], courseId: string, since: string): number {
-  const seconds = results.filter((r) => r.courseId === courseId && r.finishedAt >= since).reduce((n, r) => n + r.seconds, 0);
-  return seconds / 60;
+/**
+ * Minutes of finished sessions in this course since `since` ("in Orca": the connector's estimate is
+ * server-side), split at the start of today: `dayOf` puts a finish time on the student's day.
+ */
+export function spentMinutesInOrca(results: readonly QuizResult[], courseId: string, since: string, today: string, dayOf: (iso: string) => string): SpentMinutes {
+  const spent = { beforeToday: 0, today: 0 };
+  for (const r of results) {
+    if (r.courseId !== courseId || r.finishedAt < since) continue;
+    const day = dayOf(r.finishedAt);
+    if (day === today) spent.today += r.seconds / 60;
+    else if (day < today) spent.beforeToday += r.seconds / 60;
+  }
+  return spent;
 }
 
 /**

@@ -91,6 +91,64 @@ test("add_questions refuses per item with a reason and stores the rest; nothing 
   assert.equal(none.rpcCalls.length, 0, "no save when nothing passed");
 });
 
+const UNTAUGHT = "e0000000-0000-4000-8000-000000000003";
+const HELD_ONLY = "e0000000-0000-4000-8000-000000000004";
+const GONE_ONLY = "e0000000-0000-4000-8000-000000000005";
+const anchorless: AddQuestion = { objectiveId: UNTAUGHT, kind: "True or false", prompt: "A carry-save adder ripples its carries.", options: ["True", "False"], answer: 1, explanation: "It defers them." };
+
+/** The same course with three objectives nothing live teaches: no material at all, a held-back exam only, a removed lecture only. */
+function untaughtDb() {
+  const d = db();
+  d.tables.objectives.push(
+    objectiveRow(UNTAUGHT, { material_id: null }),
+    objectiveRow(HELD_ONLY, { material_id: EXAM, signals: [{ materialId: EXAM, materialType: "Past exam", places: [{ locator: "problem 2", excerpt: "x" }] }] }),
+    objectiveRow(GONE_ONLY, { material_id: GONE, signals: [{ materialId: GONE, materialType: "Lecture", places: [{ locator: "slide 4", excerpt: "x" }] }] }),
+  );
+  return d;
+}
+
+test("an objective no live material teaches takes a question without an anchor, stored as not course-specific with a note; one the material teaches still needs its anchor", async () => {
+  const d = untaughtDb();
+  const got = await addQuestions(d as never, OWNER, COURSE, [
+    anchorless,
+    { ...anchorless, objectiveId: HELD_ONLY },
+    { ...anchorless, objectiveId: GONE_ONLY },
+    // An anchor into a live file that doesn't teach the objective is dropped, not trusted.
+    { ...anchorless, anchor: { locator: "slide 4", excerpt: "defer the carries", materialId: L1 } },
+    { ...choice, anchor: undefined },
+  ]);
+  assert.ok(!("error" in got));
+  assert.deepEqual(got.refused, [{ index: 4, reason: "no source anchor" }]);
+  const note = "no course material teaches this objective; stored as not course-specific";
+  assert.deepEqual(
+    got.added.map((a) => [a.objectiveId, a.note]),
+    [
+      [UNTAUGHT, note],
+      [HELD_ONLY, note],
+      [GONE_ONLY, note],
+      [UNTAUGHT, note],
+    ],
+  );
+  assert.equal(d.rpcCalls.length, 1);
+  const rows = (d.rpcCalls[0].args as { rows: { questions: Array<Record<string, unknown>> } }).rows;
+  assert.deepEqual(
+    rows.questions.map((q) => [q.objective_id, q.anchor, q.material_id, q.source, q.unanchored]),
+    [
+      [UNTAUGHT, null, null, "claude", true],
+      [HELD_ONLY, null, null, "claude", true],
+      [GONE_ONLY, null, null, "claude", true],
+      [UNTAUGHT, null, null, "claude", true],
+    ],
+    "no anchor and no material on any of them, each marked unanchored",
+  );
+  // A taught objective's accepted question carries no note and no mark.
+  const d2 = db();
+  const taught = await addQuestions(d2 as never, OWNER, COURSE, [choice]);
+  assert.ok(!("error" in taught));
+  assert.equal("note" in taught.added[0], false);
+  assert.equal((d2.rpcCalls[0].args as { rows: { questions: Array<Record<string, unknown>> } }).rows.questions[0].unanchored, false);
+});
+
 test("add_questions names a course that isn't the student's", async () => {
   assert.deepEqual(await addQuestions(db() as never, "someone-else", COURSE, [choice]), { error: "No such course." });
 });
