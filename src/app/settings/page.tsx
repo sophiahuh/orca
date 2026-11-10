@@ -66,7 +66,7 @@ function SettingsBody() {
   const section = SECTIONS.find((s) => s.key === asked) ?? SECTIONS[0];
 
   return (
-    <div className="flex items-start gap-[20px] px-[24px] pb-[28px] pt-[20px]">
+    <div className="flex flex-1 items-start gap-[20px] px-[24px] pb-[28px] pt-[20px]">
       <SectionRail current={section.key} />
       <main className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-[14px]" data-part="settings-section" data-section={section.key}>
         <div className="flex flex-col gap-[4px] px-[4px]">
@@ -94,7 +94,7 @@ function SettingsBody() {
   );
 }
 
-/** Who's signed in, the sections, and Sign out at the end. */
+/** Who's signed in, the sections, and Sign out at the bottom; as tall as the page. */
 function SectionRail({ current }: { current: SectionKey }) {
   const { avatar, name } = useOrca();
   const [email, setEmail] = useState<string | null>(null);
@@ -109,7 +109,7 @@ function SectionRail({ current }: { current: SectionKey }) {
   }, []);
 
   return (
-    <Card className="sticky top-[20px] flex w-[260px] shrink-0 flex-col gap-[14px] px-[16px] pb-[18px] pt-[18px]" lip={6} radius={28}>
+    <Card className="flex w-[260px] shrink-0 self-stretch flex-col gap-[14px] px-[16px] pb-[18px] pt-[18px]" lip={6} radius={28}>
       <div className="flex items-center gap-[10px] px-[6px]" data-part="settings-identity">
         <Avatar creature={avatar} size={44} />
         <div className="flex min-w-0 flex-col">
@@ -137,7 +137,7 @@ function SectionRail({ current }: { current: SectionKey }) {
           </motion.div>
         ))}
       </motion.nav>
-      <div className="border-t border-alice-deep px-[6px] pt-[14px]">
+      <div className="mt-auto border-t border-alice-deep px-[6px] pt-[14px]">
         <SignOutButton />
       </div>
     </Card>
