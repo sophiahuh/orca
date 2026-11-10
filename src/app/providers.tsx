@@ -5,6 +5,7 @@ import { MotionConfig } from "motion/react";
 import { usePathname } from "next/navigation";
 import { AvatarPreviewProvider } from "@/components/brand/avatar-preview";
 import { FlagTopUpWatcher } from "@/components/layout/FlagTopUpWatcher";
+import { OnboardingTips } from "@/components/onboarding/OnboardingTips";
 import { Heartbeat } from "@/components/layout/Heartbeat";
 import { UploadToasts } from "@/components/layout/UploadToasts";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
@@ -42,6 +43,7 @@ function Loaded({ children }: { children: React.ReactNode }) {
           <Suspense fallback={null}>
             <UploadToasts />
           </Suspense>
+          <OnboardingTips />
         </>
       )}
     </>

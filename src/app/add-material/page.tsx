@@ -378,6 +378,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             role="button"
             tabIndex={0}
             aria-label="Choose a file"
+            data-part="drop-target"
             onClick={() => !busy && fileRef.current?.click()}
             onKeyDown={(e) => e.target === e.currentTarget && (e.key === "Enter" || e.key === " ") && fileRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
@@ -475,7 +476,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
 
         {/* Form */}
         <div className="flex w-[520px] max-w-full flex-col gap-[28px]">
-          <motion.section variants={fadeUp} className="flex flex-col gap-[14px]">
+          <motion.section variants={fadeUp} className="flex flex-col gap-[14px]" data-part="material-type" data-type={type}>
             <h2 className="text-[17px] font-bold text-prussian">What kind of material is this?</h2>
             <Select label="What kind of material is this?" value={type} options={MATERIAL_TYPES} labels={MATERIAL_TYPE_LABELS} onChange={(t) => setDefault({ type: t })} className="self-start" />
             {batch && <span className="text-[13px] font-medium text-wisteria-deep">Applies to every file on the list; change any one of them on its row.</span>}
