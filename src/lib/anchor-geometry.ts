@@ -27,10 +27,11 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), M
 
 /**
  * The bubble's top-left corner: below the target when it fits, else above, right, left; centred on
- * the target along the other axis and kept on screen. With no room on any side it sits below,
+ * the target along the other axis and kept on screen. A preferred side wins when it fits.
+ * With no room on any side it sits below,
  * clamped onto the screen (over the target, which then fills the screen anyway).
  */
-export function placeBubble(target: Box, bubble: Size, viewport: Size): { left: number; top: number; side: Side } {
+export function placeBubble(target: Box, bubble: Size, viewport: Size, preferredSide?: Side): { left: number; top: number; side: Side } {
   const maxLeft = viewport.width - bubble.width - MARGIN;
   const maxTop = viewport.height - bubble.height - MARGIN;
   const x = clamp(target.left + target.width / 2 - bubble.width / 2, MARGIN, maxLeft);
@@ -42,7 +43,8 @@ export function placeBubble(target: Box, bubble: Size, viewport: Size): { left: 
     { side: "left", left: target.left - GAP - bubble.width, top: y },
   ];
   const fits = (o: { left: number; top: number }) => o.left >= MARGIN && o.top >= MARGIN && o.left <= maxLeft && o.top <= maxTop;
-  return options.find(fits) ?? { side: "below", left: x, top: clamp(target.top + target.height + GAP, MARGIN, maxTop) };
+  const preferred = options.find((o) => o.side === preferredSide && fits(o));
+  return preferred ?? options.find(fits) ?? { side: "below", left: x, top: clamp(target.top + target.height + GAP, MARGIN, maxTop) };
 }
 
 /** The corner radius of the spotlight's hole and outline. */

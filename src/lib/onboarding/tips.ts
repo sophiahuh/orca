@@ -4,6 +4,8 @@
  * selector); it shows the first time that element is on screen, in the order listed here. Pure.
  */
 
+import type { Side } from "../anchor-geometry.ts";
+
 /** What a tip's conditions can read about the student. */
 export interface TipContext {
   pathname: string;
@@ -19,6 +21,8 @@ export interface Tip {
   route: RegExp;
   /** The element it points at; the tip waits until one is visible. */
   target: string;
+  /** Which side of the target to use when there is room. */
+  preferredSide?: Side;
   title: string;
   /** The orca speaking, first person. */
   body: string;
@@ -51,7 +55,7 @@ export const TIPS: readonly Tip[] = [
   { id: "canvas-import", route: NEW_COURSE, target: '[data-part="import-from-canvas"]', title: "On CourseWorks?", body: "Connect Canvas and I'll bring in the class's files and due dates, so you don't upload them one by one." },
   { id: "island", route: MAP, target: '[data-part="island-spot"]', when: (c) => c.courses >= 1, title: "Your island", body: "This is your class. It starts bare and grows as you master your weak spots. Open it." },
   { id: "course-settings", route: COURSE, target: '[data-part="course-settings-link"]', title: "Tell me about this class", body: "Open this class's settings and tell me how its exams work. I read your notes every time I write topics and questions." },
-  { id: "notes-for-orca", route: COURSE_SETTINGS, target: '[data-part="notes-for-orca"]', title: "Notes for Orca", body: "What kinds of questions does your teacher ask on exams? What does the class stress, and what can I skip? Write it here before you upload, and I'll shape your topics and questions around it." },
+  { id: "notes-for-orca", route: COURSE_SETTINGS, target: '[data-part="notes-for-orca"]', preferredSide: "right", title: "Notes for Orca", body: "What kinds of questions does your teacher ask on exams? What does the class stress, and what can I skip? Write it here before you upload, and I'll shape your topics and questions around it." },
   { id: "uncharted-add", route: COURSE, target: '[data-part="uncharted-add"]', title: "Add your material", body: "Give me your lecture slides, notes, homework or past exams. I'll map the class into topics." },
   { id: "drop-files", route: ADD_MATERIAL, target: '[data-part="drop-target"]', title: "Drop your files here", body: "Several files or a whole folder at once is fine. Reading takes a few minutes, so you can leave this page. I'll tell you when it's done." },
   { id: "handwritten", route: ADD_MATERIAL, target: '[data-part="material-type"][data-type="Handwritten notes"]', title: "Mark what confused you", body: "If you star or circle what lost you in your notes, I can make those your weak spots. Tell me how you mark things in Settings." },

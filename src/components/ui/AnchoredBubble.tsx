@@ -29,6 +29,7 @@ const TAIL_AT = 40;
 export function AnchoredBubble({
   target,
   width = 360,
+  preferredSide,
   arrow = true,
   speaker,
   onClose,
@@ -42,6 +43,8 @@ export function AnchoredBubble({
 }: {
   target: Box;
   width?: number;
+  /** Use this side when it fits; otherwise choose a side with room. */
+  preferredSide?: Side;
   /** Point at the target (default). */
   arrow?: boolean;
   /** Who is speaking: drawn outside the card, which becomes their speech bubble. */
@@ -63,7 +66,7 @@ export function AnchoredBubble({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const place = placeBubble(target, size, { width: window.innerWidth, height: window.innerHeight });
+  const place = placeBubble(target, size, { width: window.innerWidth, height: window.innerHeight }, preferredSide);
   const along = arrowOffset(target, size, place);
   const vertical = place.side === "below" || place.side === "above";
   // The speaker goes on the edge away from the target: above the card when the card is above it.

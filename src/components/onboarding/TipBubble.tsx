@@ -36,7 +36,7 @@ export function TipBubble({
   const [confirming, setConfirming] = useState(false);
   const last = index === total - 1;
   return (
-    <AnchoredBubble target={target} arrow={false} speaker={<OrcaLogo width={66} shadow={false} />} label={tip.title} onClose={onNext} closeLabel="Dismiss tip" closePart="tip-dismiss" data-part="orca-tip" data-tip={tip.id}>
+    <AnchoredBubble target={target} preferredSide={tip.preferredSide} arrow={false} speaker={<OrcaLogo width={66} shadow={false} />} label={tip.title} onClose={onNext} closeLabel="Dismiss tip" closePart="tip-dismiss" data-part="orca-tip" data-tip={tip.id}>
       <div className="flex flex-col gap-[6px] pr-[26px]" aria-live="polite">
         <p className="text-[18px] font-bold leading-tight text-prussian">{tip.title}</p>
         <p className="text-[15px] leading-[1.45] text-prussian">{tip.body}</p>
