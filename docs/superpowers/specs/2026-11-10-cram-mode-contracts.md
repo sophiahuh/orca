@@ -174,3 +174,63 @@ never opens vault items, sends progress lines unasked, follows `mode`).
   `signal` are written only on the server (connector). The rubric grader's schema gains
   `errorType` (nullable, the fixed list) with one sentence in the prompt; `GradeResult.errorType`.
 - Every e2e spec uses `data-part` names from this file. Don't rename existing ones.
+
+## 6. Step 8 addendum (2026-11-10, after the first deploy): the cram page, the time budget and the plan
+
+Decisions (owner): a cram has its own page; setup asks for the student's time budget; the plan is
+derived, never stored; Claude's progress lines and `course_state` read the same calculation.
+
+### Types (`src/lib/data.ts`, no migration: `exams.scope` is jsonb)
+
+```ts
+export interface CramBudget {
+  /** Hours the student can put in before the exam, asked at setup (prefilled from the course's exam review duration). */
+  hours: number;
+  /** Days with no study, YYYY-MM-DD, in the student's timezone. */
+  daysOut: string[];
+  /** When cramming started, ISO: minutes studied since then count against the budget. */
+  since: string;
+}
+// ExamScope gains: budget?: CramBudget
+```
+
+### The plan (`src/lib/mastery/cram-plan.ts`, pure, relative `.ts` imports, tests in `tests/mastery/cram-plan.test.ts`)
+
+```ts
+export interface CramPlanInput {
+  today: string;            // YYYY-MM-DD, student's timezone
+  examDate: string;         // YYYY-MM-DD
+  budget: CramBudget;
+  topics: Array<{ id: string; name: string; objectives: Array<{ id: string; name: string; weight: number; status: ObjectiveStatus }> }>;
+  /** Minutes studied since budget.since: session_results seconds (any mode) + connector estimate (span of a day's connector events, capped at 120 min/day). */
+  spentMinutes: number;
+}
+export interface CramPlan {
+  daysLeft: number;                       // calendar days from today to the exam, exam day excluded; 0 on the day
+  studyDays: string[];                    // days from today to the day before the exam, minus daysOut
+  hoursLeft: number;                      // max(0, budget.hours - spentMinutes / 60)
+  minutesPerDay: number;                  // hoursLeft * 60 / studyDays.length (0 when none)
+  behindMinutes: number;                  // max(0, expected spent by today - spentMinutes); expected = budget.hours*60 * (elapsed study days / all study days)
+  verified: { done: number; total: number; share: number };   // objectives verified or mastered over objectives in scope (weight > 0)
+  topics: Array<{ id: string; name: string; weight: number; unverifiedShare: number; done: boolean; minutesToday: number; weakSpots: string[] /* objective ids in rotation or check-due */ }>;
+  today: Array<{ topicId: string; minutes: number }>;   // topics with minutesToday > 0, largest first
+  line: string;   // "9 days to the exam. Done: A, B. Today: C, D. Verified: 60%." (day of: "Exam day. Light review only, nothing new." ; behind: append " 20 minutes behind: D gets shortened.")
+}
+export function cramPlan(input: CramPlanInput): CramPlan;
+```
+Allocation: today's minutes split across topics with weight > 0 by `weight × unverifiedShare` (unverified = objectives
+not verified/mastered; a topic with everything verified is `done` and gets 0); weak spots don't change the split
+but list first in the page and in Claude's order. Round to 5 minutes; drop topics under 5. Deterministic: no clock
+reads inside; `today` comes from the caller.
+
+### Connector (`course_state`, version stays 0.4)
+
+`course_state` gains `plan: CramPlan | null` (null when no exam is cramming) and `coverage: { verified, total, share, byTopic: Array<{ topicId, verified, total }> }` over the scoping exam's scope (the cramming exam, else the soonest within the window, else null), and `topErrors: Array<{ errorType: ErrorType; count: number }>` from the course's answer and work events since `budget.since` (or the last 30 days when not cramming), most frequent first, at most 6. `INSTRUCTIONS`: at the start of a session say `plan.line` as is; mention `topErrors` on the eve (`mode` day-of or `daysLeft` ≤ 1).
+
+### The page (`src/app/course/[slug]/cram/page.tsx`)
+
+`data-part="cram-page"`. Top: title, days left, the budget (`cram-budget`: hours left of hours, behind minutes when > 0), the plan line. Then the scope as topic rows (`cram-topic[data-topic]`): name, verified bar (verified/total), minutes today, the weak spots listed under it (objective names, status). Then today (`cram-today`), practice test status (`cram-mock`: "No practice test yet" until step 9), the vault files (`cram-vault`, by name), Study with Claude (the existing link rule), Edit scope, Stop cramming (`cram-stop`). Setup (`cram-setup`) lives on this page and replaces the card's modal: the professor's words, the Add material link (held back), worries picker, and **"How many hours can you put in before the exam?"** (`cram-hours`, number input prefilled from the course's `config.exam.duration` parsed to hours, 10 by default) with **days out** as checkboxes per remaining day (`cram-day-out[data-day]`). Confirm sets `cramming`, `scope.budget` (`since` = now) and opens the page's cramming view. The exam card (`src/components/course/ExamCard.tsx`): Cram for this exam links to the page's setup; while cramming it shows `plan.line` and links to the page. Spent minutes for the page come from the store (session results since `since`) plus the connector estimate from `GET /api/state`-style data if cheap; else session results only, labelled.
+
+### Checks
+
+Unit tests for `cramPlan` (days, days out, behind, allocation, done topics, the line's forms). e2e `e2e/cram-page.spec.ts`: seed a course with an exam 5 days out, open the page, set 6 hours with one day out, confirm, assert the budget, the topic rows, the line, Stop cramming; and `e2e/connector.spec.ts` extended: `course_state` carries `plan.line` and `coverage` while cramming.
