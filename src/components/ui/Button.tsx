@@ -5,7 +5,8 @@ import { cn } from "@/lib/cn";
 
 /**
  * Figma: Button/Primary, Button/Secondary, Button/Dark, Button/Ghost.
- * 20px radius, 17px bold label, 5px lip shadow, sinks on press.
+ * 20px radius, 17px bold label, 5px lip shadow, sinks on press. `xs` is the small pill (13px label,
+ * 2px lip) used beside other pills and inside popovers.
  */
 export type ButtonVariant = "primary" | "secondary" | "dark" | "ghost" | "danger";
 
@@ -13,8 +14,14 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   icon?: ReactNode;
   full?: boolean;
-  size?: "md" | "sm";
+  size?: "md" | "sm" | "xs";
 }
+
+const sizes = {
+  md: "rounded-[20px] lip-5 px-8 py-4 text-[17px]",
+  sm: "rounded-[20px] lip-5 px-5 py-3 text-[15px]",
+  xs: "rounded-pill lip-2 px-[12px] py-[7px] text-[13px]",
+} as const;
 
 const styles: Record<ButtonVariant, string> = {
   primary: "bg-wisteria text-parchment lip-wisteria",
@@ -30,8 +37,8 @@ export function Button({ variant = "primary", icon, full, size = "md", className
     <button
       type={type}
       className={cn(
-        "pressable inline-flex items-center justify-center gap-2 rounded-[20px] font-bold leading-none lip-5 select-none",
-        size === "md" ? "px-8 py-4 text-[17px]" : "px-5 py-3 text-[15px]",
+        "pressable inline-flex items-center justify-center gap-2 font-bold leading-none select-none",
+        sizes[size],
         styles[variant],
         full && "w-full",
         className,

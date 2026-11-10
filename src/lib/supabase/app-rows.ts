@@ -9,6 +9,7 @@
  */
 import { z } from "zod";
 import { type AvatarId, isAvatar } from "../avatars.ts";
+import { type OnboardingState, onboardingFromProfile } from "../onboarding/state.ts";
 import type {
   AnswerRubric,
   CalendarEvent,
@@ -440,6 +441,8 @@ export interface LoadedState {
   onboarded: boolean;
   /** The owner's admin flag (`profiles.is_admin`, set only in the database): shows the Admin link. */
   isAdmin: boolean;
+  /** The onboarding tips: which were seen, and whether they were all skipped. */
+  onboarding: OnboardingState;
   avatar: AvatarId;
   name: string | null;
   /** Settings' defaults for new courses; null = Orca's built-in ones. */
@@ -509,6 +512,8 @@ export function loadedState(d: MyData): LoadedState {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
     isAdmin: d.profile.is_admin === true,
+    // A database from before the column sends none (onboardingFromProfile turns the tips off).
+    onboarding: onboardingFromProfile(d.profile.onboarding),
     avatar: d.profile.avatar,
     name: d.profile.name,
     defaultConfig,
