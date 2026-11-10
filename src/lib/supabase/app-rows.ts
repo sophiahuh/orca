@@ -438,6 +438,8 @@ export interface MyData {
 export interface LoadedState {
   timezone: string;
   onboarded: boolean;
+  /** The owner's admin flag (`profiles.is_admin`, set only in the database): shows the Admin link. */
+  isAdmin: boolean;
   avatar: AvatarId;
   name: string | null;
   /** Settings' defaults for new courses; null = Orca's built-in ones. */
@@ -506,6 +508,7 @@ export function loadedState(d: MyData): LoadedState {
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
+    isAdmin: d.profile.is_admin === true,
     avatar: d.profile.avatar,
     name: d.profile.name,
     defaultConfig,
