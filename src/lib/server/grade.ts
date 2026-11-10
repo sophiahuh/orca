@@ -13,6 +13,9 @@
  * self-marks. Weak hits (phrasing honest answers also use) are logged and never counted.
  * Decision 10: at most `LIMITS.rate.grade` answers a minute per student (429), and the student's
  * and Orca's daily budgets apply (429).
+ *
+ * Cram mode (2026-11-10): the reply also names the kind of mistake (`errorType`, from the fixed
+ * list, or null), kept to the list by `validateGrade`; the connector's check_answer returns it.
  */
 import type { AnswerRubric } from "@/lib/data";
 import { GRADE_SYSTEM, GradeSchema, type GradeResult, RubricSchema, cleanAnswer, gradePrompt, parseGradeLoose, validateGrade } from "@/lib/grading";
