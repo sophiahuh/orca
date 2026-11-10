@@ -1,7 +1,7 @@
 # Cram mode: shared contracts (2026-11-10)
 
 > **Status (2026-11-10, integration):** shipped on branch `cram-mode` (PR to `main` open, not merged).
-> Foundation: migration `20261110090000_cram_mode.sql` (the `help` and `signal` column checks are named
+> Foundation: migration `20261110130000_cram_mode.sql` (the `help` and `signal` column checks are named
 > `evidence_events_help_values_check` / `evidence_events_signal_values_check`, since Postgres's default
 > names collide with the table-level ones named below), pgTAP `19_cram_mode.test.sql`, the types
 > (section 2), mastery rules v4 (section 3, `tests/mastery/cram-rules.test.ts`) and the connector's
@@ -32,7 +32,7 @@ step; later steps that need something it lacks report the gap instead of inventi
   questions, never returned by `material_for`, and never listed beyond its name.
 - Every signal is an appended evidence event; mastery is recomputed from the log (rules v4).
 
-## 1. Migration `supabase/migrations/20261110090000_cram_mode.sql` (foundation)
+## 1. Migration `supabase/migrations/20261110130000_cram_mode.sql` (foundation)
 
 ```sql
 alter table public.materials add column held_back boolean not null default false;

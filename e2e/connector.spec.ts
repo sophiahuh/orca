@@ -25,7 +25,7 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   // Plus an objective with no questions yet, for next_questions to write for.
   const noq = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.noq, name: "Factor an expression" };
   await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], mc, prose] } } });
-  await page.goto("/settings");
+  await page.goto("/settings?section=connections");
   const card = page.locator('[data-part="claude-connector"]');
   await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Not connected/);
   await card.locator('[data-part="connector-create"]').click();

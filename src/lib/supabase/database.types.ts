@@ -290,13 +290,13 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "avatar": string,"created_at": string,"default_review_config": Json | null,"marker_notes": string | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
+                    "avatar": string,"created_at": string,"default_review_config": Json | null,"is_admin": boolean,"last_active_at": string | null,"marker_notes": string | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
                   }
                   Insert: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
                   }
                   Update: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
                     
@@ -507,7 +507,31 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "course_structure":
+            "admin_feedback":
+{ Args: { "down_only"?: boolean,"lim"?: number,"off"?: number,"owner"?: string,"reason"?: string }; Returns: Json
+                           },
+"admin_feedback_counts":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"admin_overview":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"admin_spend":
+{ Args: { "days"?: number,"owner"?: string }; Returns: Json
+                           },
+"admin_user_courses":
+{ Args: { "uid": string }; Returns: Json
+                           },
+"admin_user_evidence":
+{ Args: { "lim"?: number,"off"?: number,"uid": string }; Returns: Json
+                           },
+"admin_user_uploads":
+{ Args: { "uid": string }; Returns: Json
+                           },
+"admin_users":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"course_structure":
 { Args: { "course": string,"owner": string }; Returns: Json
                            },
 "hit_rate_limit":

@@ -114,7 +114,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
 - **Since 2026-11-10: cram mode** (contract `docs/superpowers/specs/2026-11-10-cram-mode-contracts.md`; branch
   `cram-mode`): an exam is *cramming* (a flag, from the exam card or `set_exam`) or within the 7-day window; Claude
   writes and grades during a cram, Orca stores, counts and schedules (connector v0.4, rules v4, migration
-  `20261110090000`); past and practice exams are held back for a practice test. Details under "What exists".
+  `20261110130000`); past and practice exams are held back for a practice test. Details under "What exists".
 - **Upload toasts** (2026-11-08, `src/components/layout/UploadToasts.tsx`, mounted in `providers.tsx`): an upload
   that finishes (done or failed) while the app is open, from any tab or device, pops a toast unless the student is on
   that course's uploads; uploads of one course finishing while its toast is up share it. One upload's toast opens
@@ -424,7 +424,7 @@ All 11 Figma screens are built. Where things live:
   (one JSON-RPC message per POST, no stream); `INSTRUCTIONS` scripts the session (setup questions, check first,
   `material_for` before teaching, Claude writes and grades in a cram, confidence before the reveal, never opens the
   vault, progress lines unasked, follows `mode`). **v0.4 (2026-11-10, cram mode;** contract
-  `docs/superpowers/specs/2026-11-10-cram-mode-contracts.md`, migration `20261110090000_cram_mode.sql`, pgTAP 19;
+  `docs/superpowers/specs/2026-11-10-cram-mode-contracts.md`, migration `20261110130000_cram_mode.sql`, pgTAP 19;
   Orca makes no model calls in a cram: Claude writes and grades, Orca stores, counts and schedules**)**, eleven tools:
   `course_state` (exams with `cramming` and `scope`, topics with counts, every objective's derived status and recall with
   `detail: "full"` (the default) or none with `"summary"`, what's due now, `examFocus` (the topics of the exams in the
@@ -489,6 +489,22 @@ All 11 Figma screens are built. Where things live:
   (`api.ts`: classification, file picking, Link pagination; `client.ts`: bearer client with injectable fetch, downloads
   follow the signed redirect without the token) is tested in `tests/canvas/`; migration `20261104100000`, pgTAP 16.
   Token auth only; OAuth needs a developer key from the university's Canvas admins (`docs/SETUP-HOSTED.md` §9).
+- `src/lib/server/admin.ts` + `admin-queries.ts`, `src/app/admin/`, `src/app/api/admin/*` — **the admin view**
+  (2026-11-10, owner-only, read-only): `/admin` (tiles and the users table), `/admin/users` (sortable by spend and
+  last active), `/admin/users/[id]` (courses, uploads with run status and cost, spend by step and by day, sessions,
+  the last 200 evidence events a page at a time, feedback, security events, rate-limit windows), `/admin/questions`
+  (every thumbs down with its question, filter by reason; ups/downs per course) and `/admin/spend` (by day for 30
+  UTC days, by step, by model, grouped as `docs/COST-LOG.md`'s query is). **The gate:** `profiles.is_admin`
+  (migration `20261110120000`), written by nothing in the app, only by SQL in the dashboard
+  (`docs/SETUP-HOSTED.md` §10); a trigger refuses changes to it (and to `last_active_at`) from a student's session.
+  `forAdmin` fronts every `/api/admin/*` route and `requireAdmin` every `/admin` page: signed out, a plain student
+  and an unknown id all get **404**, never 401/403, so the routes don't say they exist; every admin read is a
+  `security_events` row (kind `admin_read`, the route in `quote`). The figures are summed by service-role-only SQL
+  functions (`admin_*`, revoked from students; pgTAP 20). The pages are server components rendered from the
+  database, so `isAdminPath` skips the store's loading screen (or the 404 would never reach the response).
+  Figures Orca doesn't record (page views) say "not recorded". **Heartbeat:** `POST /api/heartbeat`
+  (`src/components/layout/Heartbeat.tsx`, mounted once the store is ready) sets `profiles.last_active_at` for the
+  verified user once per 5 minutes while a tab is visible, under the `heartbeat` rate limit; nothing waits on it.
 - `src/lib/jobs/` + `src/lib/server/jobs/` + `src/trigger/` — upload and top-up jobs (`ORCA_JOBS=inline|trigger`). A queued
   upload can be **paused** from the Uploads tab (`POST /api/runs/pause`, one run or a whole course's; run status `paused`,
   uploads only, migration `20261031100000`): it leaves the queue (nothing waits behind it, never taken for dead) and

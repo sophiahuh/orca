@@ -62,6 +62,8 @@ export const LIMITS = {
     canvasFiles: { max: 60, windowSeconds: 3600 },
     /** A Claude connector call (POST /api/mcp/<token>): the link is the only credential, so a leaked one is bounded (2026-11-08). */
     connector: { max: 120, windowSeconds: 60 },
+    /** The browser's "still here" (POST /api/heartbeat): once per 5 minutes per tab; a few tabs fit, a loop doesn't (2026-11-10). */
+    heartbeat: { max: 6, windowSeconds: 300 },
   },
 
   /** One model call: the longest it may take, and how often a transient failure is retried. */
