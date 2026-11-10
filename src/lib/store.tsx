@@ -103,6 +103,8 @@ interface OrcaState {
   defaultConfig: ReviewConfig;
   results: QuizResult[];
   onboarded: boolean;
+  /** Whether this student is an admin (`profiles.is_admin`); the home page then links to /admin. */
+  isAdmin: boolean;
   /** The onboarding tips: which were seen, whether all were skipped (off until the student's data is in). */
   onboarding: OnboardingState;
   /** The student's IANA timezone (profile); every day boundary uses it. */
@@ -148,6 +150,7 @@ const initialState: OrcaState = {
   defaultConfig: DEFAULT_CONFIG,
   results: [],
   onboarded: false,
+  isAdmin: false,
   onboarding: TIPS_OFF,
   timezone: "UTC",
   avatar: DEFAULT_AVATAR,

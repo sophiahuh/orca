@@ -444,6 +444,8 @@ export interface MyData {
 export interface LoadedState {
   timezone: string;
   onboarded: boolean;
+  /** The owner's admin flag (`profiles.is_admin`, set only in the database): shows the Admin link. */
+  isAdmin: boolean;
   /** The onboarding tips: which were seen, and whether they were all skipped. */
   onboarding: OnboardingState;
   avatar: AvatarId;
@@ -514,6 +516,7 @@ export function loadedState(d: MyData): LoadedState {
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
+    isAdmin: d.profile.is_admin === true,
     // A database from before the column sends none (onboardingFromProfile turns the tips off).
     onboarding: onboardingFromProfile(d.profile.onboarding),
     avatar: d.profile.avatar,

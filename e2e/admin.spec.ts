@@ -15,6 +15,10 @@ test("a plain student gets 404 on /admin and its API; an admin sees the view", a
   expect(await api.json()).toEqual({ error: "Not found" });
   expect((await page.request.get("/api/admin/overview")).status()).toBe(404);
   expect((await page.request.get(`/api/admin/users/${student.id}`)).status()).toBe(404);
+  // No door to it on the map either.
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Add Course" })).toBeVisible();
+  await expect(page.locator('[data-part="admin-link"]')).toHaveCount(0);
 
   // A student can't flag themselves (RLS + trigger); the owner does it in the database.
   const self = await student.db.from("profiles").update({ is_admin: true }).eq("owner_id", student.id);
@@ -22,7 +26,10 @@ test("a plain student gets 404 on /admin and its API; an admin sees the view", a
   const { error } = await admin().from("profiles").update({ is_admin: true }).eq("owner_id", student.id);
   expect(error).toBeNull();
 
-  await page.goto("/admin");
+  // The map now shows the Admin badge, which opens the view (owner, 2026-11-10).
+  await page.goto("/");
+  await page.locator('[data-part="admin-link"]').click();
+  await expect(page).toHaveURL(/\/admin$/);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.locator('[data-part="admin-tiles"]')).toContainText("Users");
   const users = page.locator('[data-part="admin-users"]');
