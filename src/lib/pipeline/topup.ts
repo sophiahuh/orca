@@ -68,7 +68,7 @@ function survivorId(id: string, objectives: Readonly<Record<string, Objective>>)
 }
 
 /** The materials an objective is taught in, most coverage first, then the upload that created it. */
-function materialsFor(o: Objective): string[] {
+export function materialsFor(o: Objective): string[] {
   const bySignal = [...o.signals].sort((a, b) => b.places.length - a.places.length).map((s) => s.materialId);
   return [...new Set([...bySignal, ...(o.materialId ? [o.materialId] : [])])];
 }
