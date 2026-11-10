@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { catchUpFlags } from "@/lib/server/flag-top-up";
 import { checkRuns, ownersWithPendingRuns } from "@/lib/server/jobs/start";
 import { adminClient } from "@/lib/supabase/server";
 import { NO_STORE } from "@/lib/server/student";
@@ -36,5 +37,13 @@ export async function GET(request: Request) {
       failures.push(e instanceof Error ? e.message : String(e));
     }
   }
-  return json(failures.length ? 500 : 200, { students: owners.length, started, failures });
+  // Then the other promise: flagged objectives still without questions get a top-up asked for (2026-11-10).
+  let flags: Awaited<ReturnType<typeof catchUpFlags>> = { courses: 0, started: 0, failures: [] };
+  try {
+    flags = await catchUpFlags(db);
+  } catch (e) {
+    failures.push(`flags: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  failures.push(...flags.failures.map((f) => `flags ${f}`));
+  return json(failures.length ? 500 : 200, { students: owners.length, started, flaggedCourses: flags.courses, topUps: flags.started, failures });
 }

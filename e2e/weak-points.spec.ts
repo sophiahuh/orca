@@ -1,4 +1,4 @@
-import { COURSE_SLUG, F, FIXTURE_STATE, expect, ids, objective, seedFixtureCourse, seedPages, seedState, stored, test } from "./fixture";
+import { COURSE_SLUG, F, FIXTURE_STATE, daysAgo, expect, ids, objective, seedFixtureCourse, seedPages, seedState, stored, struggled, test } from "./fixture";
 
 /** Weak points first (docs/superpowers/specs/2026-11-04-weak-points-first-design.md): only flagged or missed objectives come due. */
 
@@ -72,4 +72,37 @@ test("a flag on an objective with no questions writes them, and the quick review
   await expect(page.getByText("Covers 3 objectives")).toBeVisible({ timeout: 60_000 });
   const after = await stored(page, student);
   expect(Object.values(after.questionBank[F.course] ?? {}).flat().filter((q) => q.objectiveId === X.bare).length).toBeGreaterThan(0);
+});
+
+test("a flag ends in questions even when the browser never asks: the server asks after recording it", async ({ page, student }) => {
+  test.setTimeout(90_000);
+  const X = ids("bare");
+  const fixture = FIXTURE_STATE.objectives[F.course];
+  const bare = objective(X.bare, F.twosComplement, "Detect overflow in 2's complement addition", { signals: [{ materialId: F.material, materialType: "Lecture", places: [{ locator: "slide 2", excerpt: "overflow" }] }] });
+  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...fixture, [X.bare]: bare } } });
+  await seedPages(student, { [F.material]: Array.from({ length: 9 }, (_, i) => ({ n: i + 1, text: i === 1 ? "Overflow: adding two positives gives a negative." : `Slide ${i + 1} of the fixture deck.` })) });
+  // The browser's own request for questions never arrives (a closed tab, a dropped connection).
+  await page.route("**/api/top-up", (route) => route.abort());
+  await page.goto(`/course/${COURSE_SLUG}`);
+  await page.locator("[data-part=path-show-all]").click();
+  await page.locator('[data-part="node"]').nth(1).click();
+  await page.locator('[data-part="flag-topic"]').click();
+  await expect(page.getByText("0 of 3 weak spots mastered")).toBeVisible();
+  // POST /api/evidence asked for the top-up itself (owner, 2026-11-10).
+  await expect.poll(async () => Object.values((await stored(page, student)).questionBank[F.course] ?? {}).flat().filter((q) => q.objectiveId === X.bare).length, { timeout: 60_000 }).toBeGreaterThan(0);
+});
+
+test("the daily sweep asks for questions for flagged objectives that still have none", async ({ page, student }) => {
+  test.setTimeout(90_000);
+  const X = ids("bare");
+  const fixture = FIXTURE_STATE.objectives[F.course];
+  const bare = objective(X.bare, F.twosComplement, "Detect overflow in 2's complement addition", { signals: [{ materialId: F.material, materialType: "Lecture", places: [{ locator: "slide 2", excerpt: "overflow" }] }] });
+  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...fixture, [X.bare]: bare } }, evidence: [struggled(F.course, F.twosComplement, X.bare, daysAgo(2))] });
+  await seedPages(student, { [F.material]: Array.from({ length: 9 }, (_, i) => ({ n: i + 1, text: i === 1 ? "Overflow: adding two positives gives a negative." : `Slide ${i + 1} of the fixture deck.` })) });
+  const sweep = await page.request.get("/api/cron/runs", { headers: { authorization: "Bearer e2e-cron-secret" } });
+  expect(sweep.status()).toBe(200);
+  const body = (await sweep.json()) as { flaggedCourses: number; topUps: number };
+  expect(body.flaggedCourses).toBeGreaterThanOrEqual(1);
+  expect(body.topUps).toBeGreaterThanOrEqual(1);
+  await expect.poll(async () => Object.values((await stored(page, student)).questionBank[F.course] ?? {}).flat().filter((q) => q.objectiveId === X.bare).length, { timeout: 60_000 }).toBeGreaterThan(0);
 });
