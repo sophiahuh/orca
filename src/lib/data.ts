@@ -62,7 +62,7 @@ export interface Course {
   trail?: string;
 }
 
-export type Cadence = "Daily" | "Twice a week" | "Weekly" | "1 wk before exam";
+export type Cadence = "Daily" | "Twice a week" | "Weekly" | "1 wk before exam" | "Never";
 export type Duration = "5 min" | "10 min" | "15 min" | "30 min" | "1 hour" | "3 hours" | "10 hours";
 
 export interface ReviewRow {

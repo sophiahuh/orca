@@ -169,7 +169,7 @@ function ReviewRhythm() {
       </div>
       <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="flex flex-col gap-[14px]">
         {(["quick", "deep", "exam"] as const).map((k) => (
-          <ConfigRow key={k} stacked label={REVIEW_LABELS[k]} row={defaultConfig[k]} onChange={(row) => setDefaults({ ...defaultConfig, [k]: row })} />
+          <ConfigRow key={k} stacked allowNever={k !== "exam"} label={REVIEW_LABELS[k]} row={defaultConfig[k]} onChange={(row) => setDefaults({ ...defaultConfig, [k]: row })} />
         ))}
       </motion.div>
       <div className="border-t border-alice-deep pt-[16px]">

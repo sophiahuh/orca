@@ -50,6 +50,8 @@ export interface CourseAgenda {
   heldForNext: RankedObjective[];
   /** Mastered objectives whose check comes due tomorrow. */
   dueTomorrow: RankedObjective[];
+  /** False when quick reviews are set to Never, including their scheduled spaced checks. */
+  quickReviewEnabled: boolean;
   /** Today's quick review hasn't been done yet, by the course's cadence, and something is due. */
   quickReviewDue: boolean;
   /** The next quick-review day on the course's cadence after today; null when none is coming (exam cadence, no exam ahead). */
@@ -190,7 +192,10 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const quick = config.quick.cadence;
   let quickCadenceDue: boolean;
   let nextQuickDay: string | null = null;
-  if (quick === "1 wk before exam") {
+  const quickReviewEnabled = quick !== "Never";
+  if (quick === "Never") {
+    quickCadenceDue = false;
+  } else if (quick === "1 wk before exam") {
     quickCadenceDue = inExamWindow(today) && !quickDays.includes(today);
     for (let d = tomorrow; d <= addDays(tomorrow, 366); d = addDays(d, 1)) {
       if (inExamWindow(d)) {
@@ -220,7 +225,7 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const deepDays = finishedOn("deep").sort();
   const lastDeep = deepDays.at(-1) ?? null;
   let dueDay: string | null = null;
-  if (candidates > 0) {
+  if (candidates > 0 && config.deep.cadence !== "Never") {
     if (config.deep.cadence === "1 wk before exam") {
       const upcoming = input.examDays.filter((e) => e >= today).sort()[0];
       if (upcoming) dueDay = addDays(upcoming, -AGENDA_RULES.examWindowDays);
@@ -240,5 +245,5 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   }
   const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, tomorrow: dueDay === tomorrow, candidates };
 
-  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewDue, nextQuickDay, upNext, quickTomorrow, deepReview };
+  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewEnabled, quickReviewDue, nextQuickDay, upNext, quickTomorrow, deepReview };
 }

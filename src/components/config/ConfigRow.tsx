@@ -15,7 +15,8 @@ export const REVIEW_LABELS = { quick: "Quick review", deep: "Dive in", exam: "Ex
  * Figma: Config Row — bell, label, duration select, cadence select. `stacked` puts the two selects
  * under the label, for a narrow column (account Settings' Preferences, beside the notes).
  */
-export function ConfigRow({ label, row, onChange, stacked = false }: { label: string; row: ReviewRow; onChange: (r: ReviewRow) => void; stacked?: boolean }) {
+export function ConfigRow({ label, row, onChange, stacked = false, allowNever = false }: { label: string; row: ReviewRow; onChange: (r: ReviewRow) => void; stacked?: boolean; allowNever?: boolean }) {
+  const cadences: readonly Cadence[] = allowNever ? [...CADENCES, "Never"] : CADENCES;
   const bell = (
     <span className="flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[10px] bg-alice text-wisteria-deep">
       <IconBell size={18} />
@@ -24,7 +25,7 @@ export function ConfigRow({ label, row, onChange, stacked = false }: { label: st
   const selects = (
     <>
       <Select label={`${label} duration`} value={row.duration} options={DURATIONS} onChange={(duration) => onChange({ ...row, duration })} />
-      <Select label={`${label} cadence`} value={row.cadence} options={CADENCES} onChange={(cadence) => onChange({ ...row, cadence })} />
+      <Select label={`${label} cadence`} value={row.cadence} options={cadences} onChange={(cadence) => onChange({ ...row, cadence })} />
     </>
   );
   if (stacked)

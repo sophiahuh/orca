@@ -49,7 +49,7 @@ const jsonValue = (v: object) => v as NonNullable<Json>;
 
 /* ── Course settings (read and written whole; checked on both sides) ── */
 
-const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Twice a week", "Weekly", "1 wk before exam"]) });
+const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Twice a week", "Weekly", "1 wk before exam", "Never"]) });
 export const ReviewConfigSchema = z.object({ quick: ReviewRowSchema, deep: ReviewRowSchema, exam: ReviewRowSchema });
 
 const WeekdaySchema = z.literal([0, 1, 2, 3, 4, 5, 6]);

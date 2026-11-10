@@ -62,7 +62,7 @@ export function todoCards(agenda: CourseAgenda, config: ReviewConfig, names: Tod
     }
   }
   const byTopic = new Map<string, number>();
-  for (const r of agenda.dueTomorrow) byTopic.set(r.topicId, (byTopic.get(r.topicId) ?? 0) + 1);
+  for (const r of agenda.quickReviewEnabled ? agenda.dueTomorrow : []) byTopic.set(r.topicId, (byTopic.get(r.topicId) ?? 0) + 1);
   for (const [topicId, n] of byTopic) {
     cards.push({ id: `${c}:checks:${topicId}`, courseId: c, kind: "checks", when: "tomorrow", title: `${names.topic(topicId)} · ${plural(n, "check")}`, detail: null, ref: topicId });
   }

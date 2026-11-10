@@ -18,6 +18,7 @@ const empty: CourseAgenda = {
   dueToday: [],
   heldForNext: [],
   dueTomorrow: [],
+  quickReviewEnabled: true,
   quickReviewDue: false,
   nextQuickDay: null,
   upNext: [],
@@ -27,6 +28,11 @@ const empty: CourseAgenda = {
 
 test("nothing due, no cards", () => {
   assert.deepEqual(todoCards(empty, DEFAULT_CONFIG, names), []);
+});
+
+test("Never omits scheduled check reminders while dives remain available", () => {
+  const agenda = { ...empty, quickReviewEnabled: false, dueTomorrow: [ranked("a", "t", "")], deepReview: { due: true, dueDay: "2026-10-05", tomorrow: false, candidates: 1 } };
+  assert.deepEqual(todoCards(agenda, DEFAULT_CONFIG, names).map((c) => c.kind), ["deep"]);
 });
 
 test("quick review shows how many objectives it covers", () => {
