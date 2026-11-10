@@ -65,16 +65,16 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
               ? `Delete ${material.filename}? Orca hasn't built from it yet: it leaves the queue and its file goes.`
               : `Remove ${material.filename} from the course? Its file and pages go; the objectives only it taught are archived.`}
           </span>
-          <button type="button" onClick={() => void act("remove")} className="font-bold text-bad-text underline underline-offset-2" data-part="remove-confirm">
+          <button type="button" onClick={() => void act("remove")} className="font-bold cursor-pointer text-bad-text" data-part="remove-confirm">
             {unbuilt ? "Delete" : "Remove"}
           </button>
-          <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
+          <button type="button" onClick={() => setConfirming(null)} className="font-bold cursor-pointer text-prussian">
             Keep
           </button>
         </>
       ) : (
         unbuilt ? (
-          <Button size="sm" variant="danger" icon={<IconTrash size={18} />} onClick={() => setConfirming("remove")} data-part="remove-material">
+          <Button size="sm" variant="danger" icon={<IconTrash size={18} />} onClick={() => setConfirming("remove")} className="cursor-pointer" data-part="remove-material">
             Delete upload
           </Button>
         ) : (
