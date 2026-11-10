@@ -6,6 +6,9 @@ export function progressMessage(p: { stage: string; [k: string]: unknown } | nul
     // Held by a daily budget (decision 10): the run's own message says which; it resumes on its own.
     return typeof p.message === "string" && p.message ? p.message : "Daily limit reached: processing resumes tomorrow.";
   }
+  if (p?.stage === "prepare") return "Preparing the file's pages…";
+  if (p?.stage === "structure") return "Waiting to map this file onto the course…";
+  if (p?.stage === "questions") return "Topics added. Preparing practice questions…";
   const x = p as Progress | null | undefined;
   switch (x?.stage) {
     case "transcribing":

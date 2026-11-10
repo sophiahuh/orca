@@ -1,3 +1,4 @@
+import { stagedPipeline, pipelineRpc } from "@/lib/server/staged/db";
 /**
  * Trigger.dev tasks (`ORCA_JOBS=trigger`, production). Each calls its job and nothing else: the
  * job's logic, its store scoping and its run record are the same as inline mode, which is what the
@@ -55,10 +56,24 @@ export const resumeWaitingTask = schedules.task({
   run: async () => {
     const db = adminClient();
     const started: string[] = [];
+    if (stagedPipeline()) await pipelineRpc(db, "cleanup", {});
     for (const ownerId of await ownersWithPendingRuns(db)) {
       const d = await resumeNext(db, ownerId);
       if (d) started.push(d.job.runId);
     }
     return { started };
+  },
+});
+
+/** A single fenced phase; a completed phase schedules its successors without retaining its lane. */
+export const stagedUploadTask = task({
+  id: "staged-upload",
+  retry: { maxAttempts: 1 },
+  maxDuration: JOB_MAX_SECONDS.upload,
+  run: async (payload: import("@/lib/jobs/staged/types").StageJob) => {
+    const { runPipelineStage } = await import("@/lib/server/staged/run");
+    const { scheduleStages } = await import("@/lib/server/staged/schedule");
+    await runPipelineStage(payload);
+    await scheduleStages(adminClient(), payload.ownerId, "now");
   },
 });

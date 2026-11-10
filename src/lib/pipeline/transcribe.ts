@@ -1,3 +1,4 @@
+import { PipelineDeferred } from "../jobs/staged/types.ts";
 /**
  * Pages read from their images (docs/superpowers/plans/2026-10-18-handwritten-notes.md):
  * - `transcribePages`: a handwritten or scanned page (`needs-vision`) is written out from its image,
@@ -40,6 +41,7 @@ async function readFromImages(
   render: Render,
   send: (pages: Array<{ n: number; text: string; image: string }>) => Promise<Map<number, string>>,
   textOf: (page: { n: number; text: string }, answer: string) => string,
+  checkpoint?: (pages: Array<{ n: number; text: string }>) => Promise<void>,
 ): Promise<ImageReadResult> {
   const result: ImageReadResult = { read: [], kept: [] };
   const batches: MaterialPages[] = [];
@@ -62,24 +64,29 @@ async function readFromImages(
       if (!ready.length) continue;
       try {
         const answers = await send(ready);
+        const saved = ready.flatMap((p) => { const answer = answers.get(p.n); return answer === undefined ? [] : [{ n: p.n, text: sanitize(textOf(p, answer)).text }]; });
+        if (checkpoint && saved.length) await checkpoint(saved);
         for (const p of ready) {
           const answer = answers.get(p.n);
           if (answer === undefined) result.kept.push({ n: p.n, reason: "the model didn't return this page" });
           else result.read.push({ n: p.n, text: sanitize(textOf(p, answer)).text });
         }
       } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
         for (const p of ready) result.kept.push({ n: p.n, reason: `couldn't be read from its image: ${e instanceof Error ? e.message : String(e)}` });
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(CONCURRENT, batches.length) }, worker));
+  const settled = await Promise.allSettled(Array.from({ length: Math.min(CONCURRENT, batches.length) }, worker));
+  const failed = settled.find((r) => r.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
   result.read.sort((a, b) => a.n - b.n);
   result.kept.sort((a, b) => a.n - b.n);
   return result;
 }
 
 /** `markers`: how the student marks confusion (screened); the reader then tags marked passages `[marked: …] … [/marked]` (./marked.ts). */
-export function transcribePages(input: ReadInput & { markers?: string | null }, deps: { call: CallStep; render: Render }): Promise<ImageReadResult> {
+export function transcribePages(input: ReadInput & { markers?: string | null }, deps: { call: CallStep; render: Render; checkpoint?: (pages: Array<{ n: number; text: string }>) => Promise<void> }): Promise<ImageReadResult> {
   return readFromImages(
     input.pages.filter((p) => p.source === "needs-vision"),
     deps.render,
@@ -93,10 +100,11 @@ export function transcribePages(input: ReadInput & { markers?: string | null }, 
       return new Map(out.pages.map((p) => [p.n, p.text]));
     },
     (_page, answer) => answer,
+    deps.checkpoint,
   );
 }
 
-export function describeFigures(input: ReadInput, deps: { call: CallStep; render: Render }): Promise<ImageReadResult> {
+export function describeFigures(input: ReadInput, deps: { call: CallStep; render: Render; checkpoint?: (pages: Array<{ n: number; text: string }>) => Promise<void> }): Promise<ImageReadResult> {
   return readFromImages(
     input.pages.filter((p) => p.source === "needs-figure"),
     deps.render,
@@ -106,5 +114,6 @@ export function describeFigures(input: ReadInput, deps: { call: CallStep; render
     },
     // Nothing worth describing (decoration only): the text as it was.
     (page, figures) => (figures.trim() ? `${page.text}\n\n[Figures: ${figures.trim()}]` : page.text),
+    deps.checkpoint,
   );
 }

@@ -69,6 +69,8 @@ export const NEVER_STARTED_ERROR = "Orca's job never started. Try again from the
 const NEVER_STARTED = { upload: NEVER_STARTED_ERROR, "top-up": "Orca's job never started.", "deep-review": DEAD_DEEP_REVIEW_ERROR } as const;
 
 export interface StartDeps {
+  /** Staged uploads use their own dispatcher; ordinary writers still use these entrypoints. */
+  protocol?: 1 | 2;
   db: OrcaSupabase;
   /** The model the server would use, or null without a key (nothing is generated then). */
   model: string | null;
@@ -113,22 +115,12 @@ const UNIQUE_VIOLATION = "23505";
 async function failDeadRuns(deps: StartDeps, ownerId: string): Promise<void> {
   const now = (deps.now?.() ?? new Date()).getTime();
   for (const kind of ["upload", "top-up", "deep-review"] as const) {
-    const { error } = await deps.db
-      .from("pipeline_runs")
-      .update({ status: "failed", error: DEAD_ERROR[kind], progress: null })
-      .eq("owner_id", ownerId)
-      .eq("kind", kind)
-      .eq("status", "running")
-      .lt("started_at", new Date(now - DEAD_RUN_MS[kind]).toISOString());
-    if (error) throw new Error(`Couldn't check the student's earlier runs: ${error.message}`);
-    // Handed off but never claimed (a queued run's started_at is when it was handed off; null until then).
-    const { error: dropped } = await deps.db
-      .from("pipeline_runs")
-      .update({ status: "failed", error: NEVER_STARTED[kind], progress: null })
-      .eq("owner_id", ownerId)
-      .eq("kind", kind)
-      .eq("status", "queued")
-      .lt("started_at", new Date(now - HANDOFF_MS).toISOString());
+    const running = deps.db.from("pipeline_runs").update({ status: "failed", error: DEAD_ERROR[kind], progress: null }).eq("owner_id", ownerId).eq("kind", kind).eq("status", "running");
+    const queued = deps.db.from("pipeline_runs").update({ status: "failed", error: NEVER_STARTED[kind], progress: null }).eq("owner_id", ownerId).eq("kind", kind).eq("status", "queued");
+    if (deps.protocol === 2) { running.or("protocol_version.eq.1,kind.neq.upload"); queued.or("protocol_version.eq.1,kind.neq.upload"); }
+    const { error } = await running.lt("started_at", new Date(now - DEAD_RUN_MS[kind]).toISOString());
+    if (error) throw new Error(`Couldn't check earlier runs: ${error.message}`);
+    const { error: dropped } = await queued.lt("started_at", new Date(now - HANDOFF_MS).toISOString());
     if (dropped) throw new Error(`Couldn't check the student's earlier runs: ${dropped.message}`);
   }
 }
@@ -138,7 +130,9 @@ async function failDeadRuns(deps: StartDeps, ownerId: string): Promise<void> {
  * behind it. Dives don't count: they run beside the queue (`startDeepReviewJob`).
  */
 async function hasJobInFlight(deps: StartDeps, ownerId: string): Promise<boolean> {
-  const { count, error } = await deps.db.from("pipeline_runs").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).neq("kind", "deep-review").in("status", [...LIVE]);
+  const query = deps.db.from("pipeline_runs").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).neq("kind", "deep-review").in("status", [...LIVE]);
+  if (deps.protocol === 2) query.neq("kind", "upload");
+  const { count, error } = await query;
   if (error) throw new Error(`Couldn't read the student's jobs: ${error.message}`);
   return (count ?? 0) > 0;
 }
@@ -296,12 +290,9 @@ export async function startUploadJob(deps: StartDeps, ownerId: string, materialI
 export async function resumeNext(deps: StartDeps, ownerId: string): Promise<Dispatch | null> {
   const { db } = deps;
   await failDeadRuns(deps, ownerId);
-  const { data: runs, error } = await db
-    .from("pipeline_runs")
-    .select("id, kind, status, material_id, objective_ids, deep_minutes, started_at")
-    .eq("owner_id", ownerId)
-    .in("status", [...LIVE])
-    .order("at", { ascending: true });
+  const query = db.from("pipeline_runs").select("id, kind, status, material_id, objective_ids, deep_minutes, started_at").eq("owner_id", ownerId).in("status", [...LIVE]).order("at", { ascending: true });
+  if (deps.protocol === 2) query.neq("kind", "upload");
+  const { data: runs, error } = await query;
   if (error) throw new Error(`Couldn't read the student's jobs: ${error.message}`);
   for (const r of runs) {
     if (r.kind !== "deep-review" || r.status === "running" || (r.status === "queued" && r.started_at)) continue;
@@ -410,6 +401,7 @@ async function insertTopUp(deps: StartDeps, ownerId: string, courseId: string, o
     course_id: courseId,
     material_id: null,
     kind: "top-up",
+    ...(deps.protocol === 2 ? { protocol_version: 2 } : {}),
     at,
     model: model!,
     status: "queued",
@@ -468,6 +460,7 @@ export async function startDeepReviewJob(deps: StartDeps, ownerId: string, req: 
     course_id: req.courseId,
     material_id: null,
     kind: "deep-review",
+    ...(deps.protocol === 2 ? { protocol_version: 2 } : {}),
     at,
     model,
     status: "queued",

@@ -1,3 +1,5 @@
+import { stagedPipeline } from "@/lib/server/staged/db";
+import { coordinatedStore } from "@/lib/server/staged/legacy-writing";
 /**
  * Running a job, wherever it runs: inline inside a route (`ORCA_JOBS=inline`) or in a Trigger.dev
  * task (`src/trigger/`, `ORCA_JOBS=trigger`). Builds the service-role store scoped to the job's
@@ -57,16 +59,18 @@ export function runMaterialJob(job: MaterialJob): Promise<JobOutcome> {
 
 export function runTopUpJob(job: TopUpJob): Promise<JobOutcome> {
   return guarded(job.ownerId, job.runId, async (store) => {
-    const call = stepCaller({ ownerId: job.ownerId, kind: "top-up", runId: job.runId }, { guard: "none" });
+    const coordinated = stagedPipeline() ? coordinatedStore(adminClient(), store, job.ownerId, job.runId, "top-up") : { store, dispose: () => {}, getToken: () => "" };
+    const call = stepCaller({ ownerId: job.ownerId, kind: "top-up", runId: job.runId, writingToken: coordinated.getToken }, { guard: "none" });
     if (!call) throw new Error("the server has no model key");
-    return topUp({ store, call, newId: () => crypto.randomUUID() }, job);
+    try { return await topUp({ ...coordinated, call, newId: () => crypto.randomUUID() }, job); } finally { coordinated.dispose(); }
   });
 }
 
 export function runDeepReviewJob(job: DeepReviewJob): Promise<JobOutcome> {
   return guarded(job.ownerId, job.runId, async (store) => {
-    const call = stepCaller({ ownerId: job.ownerId, kind: "deep-review", runId: job.runId }, { guard: "none" });
+    const coordinated = stagedPipeline() ? coordinatedStore(adminClient(), store, job.ownerId, job.runId, "deep-review") : { store, dispose: () => {}, getToken: () => "" };
+    const call = stepCaller({ ownerId: job.ownerId, kind: "deep-review", runId: job.runId, writingToken: coordinated.getToken }, { guard: "none" });
     if (!call) throw new Error("the server has no model key");
-    return deepReview({ store, call, newId: () => crypto.randomUUID() }, job);
+    try { return await deepReview({ ...coordinated, call, newId: () => crypto.randomUUID() }, job); } finally { coordinated.dispose(); }
   });
 }

@@ -1,3 +1,4 @@
+import { PipelineDeferred } from "@/lib/jobs/staged/types";
 /**
  * The shared front of every route that acts for a signed-in student: Supabase must be configured
  * (503 otherwise, saying so), the caller must be signed in (401), and the handler gets the verified
@@ -24,7 +25,11 @@ export async function forStudent(request: Request, handle: (student: { id: strin
     throw e;
   }
   if (!student) return reply(401, { error: "Sign in to continue." });
-  return handle(student, db);
+  try { return await handle(student, db); }
+  catch (error) {
+    if (error instanceof PipelineDeferred) return Response.json({ error: error.message, retryAfterSeconds: error.reason === "capacity" ? 5 : 60 }, { status: 429, headers: { ...NO_STORE, "retry-after": error.reason === "capacity" ? "5" : "60" } });
+    throw error;
+  }
 }
 
 /** Whether the course exists, is this student's and isn't deleted. */

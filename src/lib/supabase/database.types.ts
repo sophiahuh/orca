@@ -2,7 +2,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-  
+
   "public": {
           Tables: {
             "calendar_events": {
@@ -41,7 +41,7 @@ isOneToOne: false
                     "base_url"?: string,"canvas_user"?: string | null,"created_at"?: string,"last_used_at"?: string | null,"owner_id"?: string,"token_enc"?: string
                   }
                   Relationships: [
-                    
+
                   ]
                 },"canvas_links": {
                   Row: {
@@ -54,7 +54,7 @@ isOneToOne: false
                     "canvas_id"?: string,"created_at"?: string,"kind"?: string,"orca_id"?: string,"owner_id"?: string
                   }
                   Relationships: [
-                    
+
                   ]
                 },"connector_tokens": {
                   Row: {
@@ -67,20 +67,29 @@ isOneToOne: false
                     "created_at"?: string,"last_used_at"?: string | null,"owner_id"?: string,"token_hash"?: string
                   }
                   Relationships: [
-                    
+
                   ]
                 },"courses": {
                   Row: {
                     "created_at": string,"deleted_at": string | null,"id": string,"name": string,"orca_notes": string | null,"owner_id": string,"pos_x": number,"pos_y": number,"review_config": Json | null,"schedule": Json | null,"short": string,"slug": string,"trail": string | null,"variant": string
-                  }
+
+"structure_revision"?: number;
+"upload_sequence"?: number;
+}
                   Insert: {
                     "created_at"?: string,"deleted_at"?: string | null,"id": string,"name": string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x": number,"pos_y": number,"review_config"?: Json | null,"schedule"?: Json | null,"short": string,"slug": string,"trail"?: string | null,"variant": string
-                  }
+
+"structure_revision"?: number;
+"upload_sequence"?: number;
+}
                   Update: {
                     "created_at"?: string,"deleted_at"?: string | null,"id"?: string,"name"?: string,"orca_notes"?: string | null,"owner_id"?: string,"pos_x"?: number,"pos_y"?: number,"review_config"?: Json | null,"schedule"?: Json | null,"short"?: string,"slug"?: string,"trail"?: string | null,"variant"?: string
-                  }
+
+"structure_revision"?: number;
+"upload_sequence"?: number;
+}
                   Relationships: [
-                    
+
                   ]
                 },"evidence_events": {
                   Row: {
@@ -185,15 +194,30 @@ isOneToOne: false
                 },"model_usage": {
                   Row: {
                     "at": string,"cache_read_tokens": number,"cache_write_tokens": number,"cost_usd": number,"id": string,"input_tokens": number,"kind": string,"model": string,"output_tokens": number,"owner_id": string,"run_id": string | null
-                  }
+
+"attempt_id"?: string | null;
+"duration_ms"?: number | null;
+"phase"?: string | null;
+"step"?: string | null;
+}
                   Insert: {
                     "at"?: string,"cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd": number,"id"?: string,"input_tokens": number,"kind": string,"model": string,"output_tokens": number,"owner_id": string,"run_id"?: string | null
-                  }
+
+"attempt_id"?: string | null;
+"duration_ms"?: number | null;
+"phase"?: string | null;
+"step"?: string | null;
+}
                   Update: {
                     "at"?: string,"cache_read_tokens"?: number,"cache_write_tokens"?: number,"cost_usd"?: number,"id"?: string,"input_tokens"?: number,"kind"?: string,"model"?: string,"output_tokens"?: number,"owner_id"?: string,"run_id"?: string | null
-                  }
+
+"attempt_id"?: string | null;
+"duration_ms"?: number | null;
+"phase"?: string | null;
+"step"?: string | null;
+}
                   Relationships: [
-                    
+
                   ]
                 },"objective_state": {
                   Row: {
@@ -266,13 +290,28 @@ isOneToOne: false
                 },"pipeline_runs": {
                   Row: {
                     "at": string,"course_id": string,"deep_minutes": number | null,"dropped": NonNullable<Json>,"error": string | null,"hidden_text": Json | null,"id": string,"job_id": string | null,"kind": string,"material_id": string | null,"model": string,"objective_ids": (string)[],"objectives_attached": (string)[],"objectives_created": (string)[],"owner_id": string,"progress": Json | null,"question_ids": (string)[],"questions_added": number,"security": Json | null,"started_at": string | null,"status": string,"topics_created": (string)[]
-                  }
+
+"execution_token"?: string | null;
+"phase"?: string | null;
+"protocol_version"?: number;
+"structure_committed_at"?: string | null;
+}
                   Insert: {
                     "at": string,"course_id": string,"deep_minutes"?: number | null,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id": string,"job_id"?: string | null,"kind": string,"material_id"?: string | null,"model": string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"question_ids"?: (string)[],"questions_added"?: number,"security"?: Json | null,"started_at"?: string | null,"status"?: string,"topics_created"?: (string)[]
-                  }
+
+"execution_token"?: string | null;
+"phase"?: string | null;
+"protocol_version"?: number;
+"structure_committed_at"?: string | null;
+}
                   Update: {
                     "at"?: string,"course_id"?: string,"deep_minutes"?: number | null,"dropped"?: NonNullable<Json>,"error"?: string | null,"hidden_text"?: Json | null,"id"?: string,"job_id"?: string | null,"kind"?: string,"material_id"?: string | null,"model"?: string,"objective_ids"?: (string)[],"objectives_attached"?: (string)[],"objectives_created"?: (string)[],"owner_id"?: string,"progress"?: Json | null,"question_ids"?: (string)[],"questions_added"?: number,"security"?: Json | null,"started_at"?: string | null,"status"?: string,"topics_created"?: (string)[]
-                  }
+
+"execution_token"?: string | null;
+"phase"?: string | null;
+"protocol_version"?: number;
+"structure_committed_at"?: string | null;
+}
                   Relationships: [
                     {
       foreignKeyName: "pipeline_runs_course_id_owner_id_fkey"
@@ -299,7 +338,7 @@ isOneToOne: false
                     "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"onboarding"?: NonNullable<Json>,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
-                    
+
                   ]
                 },"question_feedback": {
                   Row: {
@@ -374,7 +413,7 @@ isOneToOne: false
                     "action"?: string,"count"?: number,"owner_id"?: string,"window_start"?: string
                   }
                   Relationships: [
-                    
+
                   ]
                 },"relations": {
                   Row: {
@@ -424,7 +463,7 @@ isOneToOne: false
                     "at"?: string,"check"?: string,"id"?: string,"kind"?: string,"material_id"?: string | null,"owner_id"?: string,"question_id"?: string | null,"quote"?: string,"run_id"?: string | null,"severity"?: string
                   }
                   Relationships: [
-                    
+
                   ]
                 },"session_progress": {
                   Row: {
@@ -502,7 +541,290 @@ isOneToOne: false
     }
                   ]
                 }
-          }
+
+"pipeline_call_reservations": {
+                  Row: {
+                    "created_at": string,"day_start": string,"id": string,"lease_until": string,"owner_id": string,"run_id": string | null,"state": string,"task_id": string | null,"task_token": string | null,"tokens": number,"usd": number,"utc_start": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"day_start": string,"id": string,"lease_until": string,"owner_id": string,"run_id"?: string | null,"state"?: string,"task_id"?: string | null,"task_token"?: string | null,"tokens": number,"usd": number,"utc_start": string
+                  }
+                  Update: {
+                    "created_at"?: string,"day_start"?: string,"id"?: string,"lease_until"?: string,"owner_id"?: string,"run_id"?: string | null,"state"?: string,"task_id"?: string | null,"task_token"?: string | null,"tokens"?: number,"usd"?: number,"utc_start"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_call_reservations_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_call_reservations_task_id_fkey"
+      columns: ["task_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_tasks"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_canvas_sessions": {
+                  Row: {
+                    "canvas_course_id": string,"course_id": string,"created_at": string,"id": string,"owner_id": string,"site": string,"summary": NonNullable<Json>
+                  }
+                  Insert: {
+                    "canvas_course_id": string,"course_id": string,"created_at"?: string,"id": string,"owner_id": string,"site": string,"summary": NonNullable<Json>
+                  }
+                  Update: {
+                    "canvas_course_id"?: string,"course_id"?: string,"created_at"?: string,"id"?: string,"owner_id"?: string,"site"?: string,"summary"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_canvas_sessions_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_control": {
+                  Row: {
+                    "enabled": boolean,"id": boolean
+                  }
+                  Insert: {
+                    "enabled"?: boolean,"id"?: boolean
+                  }
+                  Update: {
+                    "enabled"?: boolean,"id"?: boolean
+                  }
+                  Relationships: [
+
+                  ]
+                };
+"pipeline_flag_intents": {
+                  Row: {
+                    "event": NonNullable<Json>,"id": string,"owner_id": string,"recorded": boolean,"task_id": string
+                  }
+                  Insert: {
+                    "event": NonNullable<Json>,"id": string,"owner_id": string,"recorded"?: boolean,"task_id": string
+                  }
+                  Update: {
+                    "event"?: NonNullable<Json>,"id"?: string,"owner_id"?: string,"recorded"?: boolean,"task_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_flag_intents_task_id_fkey"
+      columns: ["task_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_tasks"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_items": {
+                  Row: {
+                    "batch_id": string,"course_id": string,"created_at": string,"error": string | null,"expires_at": string,"id": string,"material_id": string | null,"metadata": NonNullable<Json>,"name": string,"owner_id": string,"paused": boolean,"rate_charged": boolean,"run_id": string | null,"sequence": number,"source": string,"state": string
+                  }
+                  Insert: {
+                    "batch_id": string,"course_id": string,"created_at"?: string,"error"?: string | null,"expires_at"?: string,"id": string,"material_id"?: string | null,"metadata"?: NonNullable<Json>,"name": string,"owner_id": string,"paused"?: boolean,"rate_charged"?: boolean,"run_id"?: string | null,"sequence": number,"source": string,"state"?: string
+                  }
+                  Update: {
+                    "batch_id"?: string,"course_id"?: string,"created_at"?: string,"error"?: string | null,"expires_at"?: string,"id"?: string,"material_id"?: string | null,"metadata"?: NonNullable<Json>,"name"?: string,"owner_id"?: string,"paused"?: boolean,"rate_charged"?: boolean,"run_id"?: string | null,"sequence"?: number,"source"?: string,"state"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_items_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_items_material_id_fkey"
+      columns: ["material_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_items_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_page_charges": {
+                  Row: {
+                    "day_start": string,"material_id": string,"owner_id": string,"pages": number
+                  }
+                  Insert: {
+                    "day_start": string,"material_id": string,"owner_id": string,"pages": number
+                  }
+                  Update: {
+                    "day_start"?: string,"material_id"?: string,"owner_id"?: string,"pages"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_page_charges_material_id_fkey"
+      columns: ["material_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_question_claims": {
+                  Row: {
+                    "baseline": number,"deep": boolean,"lease_until": string,"need": number,"objective_id": string,"owner_id": string,"run_id": string,"token": string
+                  }
+                  Insert: {
+                    "baseline": number,"deep": boolean,"lease_until": string,"need": number,"objective_id": string,"owner_id": string,"run_id": string,"token": string
+                  }
+                  Update: {
+                    "baseline"?: number,"deep"?: boolean,"lease_until"?: string,"need"?: number,"objective_id"?: string,"owner_id"?: string,"run_id"?: string,"token"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_question_claims_objective_id_fkey"
+      columns: ["objective_id"]
+isOneToOne: false
+      referencedRelation: "objectives"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_question_claims_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_results": {
+                  Row: {
+                    "created_at": string,"input_hash": string,"result": NonNullable<Json>,"task_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"input_hash": string,"result": NonNullable<Json>,"task_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"input_hash"?: string,"result"?: NonNullable<Json>,"task_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_results_task_id_fkey"
+      columns: ["task_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_tasks"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_source_claims": {
+                  Row: {
+                    "course_id": string,"item_id": string,"owner_id": string,"source_key": string
+                  }
+                  Insert: {
+                    "course_id": string,"item_id": string,"owner_id": string,"source_key": string
+                  }
+                  Update: {
+                    "course_id"?: string,"item_id"?: string,"owner_id"?: string,"source_key"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_source_claims_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_source_claims_item_id_fkey"
+      columns: ["item_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_items"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_tasks": {
+                  Row: {
+                    "attempts": number,"available_at": string,"checkpoint": Json | null,"course_id": string,"created_at": string,"epoch": number,"error": string | null,"finished_at": string | null,"id": string,"lease_until": string | null,"material_id": string,"owner_id": string,"phase": string,"revision": number | null,"run_id": string,"started_at": string | null,"state": string,"token": string | null
+                  }
+                  Insert: {
+                    "attempts"?: number,"available_at"?: string,"checkpoint"?: Json | null,"course_id": string,"created_at"?: string,"epoch"?: number,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"lease_until"?: string | null,"material_id": string,"owner_id": string,"phase": string,"revision"?: number | null,"run_id": string,"started_at"?: string | null,"state"?: string,"token"?: string | null
+                  }
+                  Update: {
+                    "attempts"?: number,"available_at"?: string,"checkpoint"?: Json | null,"course_id"?: string,"created_at"?: string,"epoch"?: number,"error"?: string | null,"finished_at"?: string | null,"id"?: string,"lease_until"?: string | null,"material_id"?: string,"owner_id"?: string,"phase"?: string,"revision"?: number | null,"run_id"?: string,"started_at"?: string | null,"state"?: string,"token"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_tasks_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_tasks_material_id_fkey"
+      columns: ["material_id"]
+isOneToOne: false
+      referencedRelation: "materials"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_tasks_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_warmups": {
+                  Row: {
+                    "course_id": string,"run_id": string,"targets": NonNullable<Json>
+                  }
+                  Insert: {
+                    "course_id": string,"run_id": string,"targets": NonNullable<Json>
+                  }
+                  Update: {
+                    "course_id"?: string,"run_id"?: string,"targets"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_warmups_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: true
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "pipeline_warmups_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+"pipeline_writer_results": {
+                  Row: {
+                    "created_at": string,"input_hash": string,"result": NonNullable<Json>,"run_id": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"input_hash": string,"result": NonNullable<Json>,"run_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"input_hash"?: string,"result"?: NonNullable<Json>,"run_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "pipeline_writer_results_run_id_fkey"
+      columns: ["run_id"]
+isOneToOne: false
+      referencedRelation: "pipeline_runs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                };
+}
           Views: {
             [_ in never]: never
           }
@@ -549,7 +871,110 @@ isOneToOne: false
 "save_structure":
 { Args: { "course": string,"rows": Json }; Returns: undefined
                            }
-          }
+
+"pipeline_admit":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_attach":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_backfill":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_budget":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_cached":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_canvas_claim":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_canvas_finish":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_canvas_session":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_canvas_summary":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_charge_item":
+{ Args: { "payload": Json }; Returns: boolean
+                           };
+"pipeline_checkpoint":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_claim":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_claim_questions":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_claim_run":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_cleanup":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_commit_questions":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_commit_structure":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_control_run":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_enable":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_end_run":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_fail":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_finish":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_flags":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_ingestion":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_pages":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_prompt_key":
+{ Args: { "prompt": string }; Returns: string
+                           };
+"pipeline_record_flag":
+{ Args: { "payload": Json }; Returns: boolean
+                           };
+"pipeline_recoverable":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_remove_material":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_reserve_call":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_settle_call":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_snapshot":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_task":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+"pipeline_writer_result":
+{ Args: { "payload": Json }; Returns: Json
+                           };
+}
           Enums: {
             [_ in never]: never
           }
@@ -667,7 +1092,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            
+
           }
         }
 } as const

@@ -14,7 +14,7 @@ import { forStudent, reply } from "@/lib/server/student";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const Body = z.object({ canvasCourseId: z.string().regex(/^\d{1,12}$/), fileIds: z.array(z.string().regex(/^\d{1,12}$/)).max(1000).optional() });
+const Body = z.object({ importSessionId: z.uuid().optional(), resumeExpired: z.boolean().optional(), canvasCourseId: z.string().regex(/^\d{1,12}$/), fileIds: z.array(z.string().regex(/^\d{1,12}$/)).max(1000).optional() });
 
 export async function POST(request: Request) {
   return forStudent(request, async (student, db) => {
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const rate = await rateLimit(db, student.id, "canvasImport");
     if (!rate.ok) return tooManyRequests(rate);
     try {
-      return reply(200, await importCanvasCourse(db, student.id, client, parsed.data.canvasCourseId, { budgetMs: 200_000, timeZone: await timezoneOf(db, student.id), ...(parsed.data.fileIds ? { fileIds: new Set(parsed.data.fileIds) } : {}) }));
+      return reply(200, await importCanvasCourse(db, student.id, client, parsed.data.canvasCourseId, { budgetMs: 200_000, importSessionId: parsed.data.importSessionId, resumeExpired: parsed.data.resumeExpired, timeZone: await timezoneOf(db, student.id), ...(parsed.data.fileIds ? { fileIds: new Set(parsed.data.fileIds) } : {}) }));
     } catch (e) {
       if (e instanceof CanvasError) {
         if (e.status === 401) return reply(409, { error: "Canvas no longer accepts the token. Reconnect in Settings." });

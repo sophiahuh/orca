@@ -2,7 +2,7 @@
 -- reachable by API roles. They pass trivially until tables exist and keep later migrations honest.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(5);
+select plan(6);
 
 select has_schema('private', 'the private schema exists');
 
@@ -16,12 +16,14 @@ select is(
   (select array_agg(t.tablename::text order by t.tablename)
      from pg_tables t
     where t.schemaname = 'public'
+      -- Service-only singleton and task/course-owned children inherit ownership through FKs.
+      and t.tablename not in ('pipeline_control','pipeline_results','pipeline_warmups','pipeline_writer_results')
       and not exists (
         select 1 from information_schema.columns c
          where c.table_schema = 'public' and c.table_name = t.tablename
            and c.column_name = 'owner_id' and c.is_nullable = 'NO')),
   null,
-  'every table in public has a non-null owner_id'
+  'every directly owned table in public has a non-null owner_id'
 );
 
 select ok(
@@ -36,6 +38,14 @@ select is(
       and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'))),
   null,
   'no function in private is executable by API roles'
+);
+
+select is(
+  (select array_agg(tablename::text order by tablename) from pg_tables
+    where schemaname='public' and tablename in ('pipeline_control','pipeline_results','pipeline_warmups','pipeline_writer_results')
+      and (has_table_privilege('authenticated',format('public.%I',tablename),'select,insert,update,delete')
+        or has_table_privilege('anon',format('public.%I',tablename),'select,insert,update,delete'))),
+  null, 'service-only pipeline state is inaccessible to browser roles'
 );
 
 select * from finish();
