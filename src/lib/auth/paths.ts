@@ -6,6 +6,11 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/** The admin view (2026-11-10): server-rendered from the database, so it doesn't wait for the store. */
+export function isAdminPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 /** Pages that make no sense once signed in (reset-password does: it follows a recovery link). */
 export function isGuestOnlyPath(pathname: string): boolean {
   return ["/sign-in", "/sign-up", "/forgot-password"].includes(pathname);
