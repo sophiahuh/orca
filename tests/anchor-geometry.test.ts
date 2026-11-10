@@ -34,11 +34,15 @@ test("with no room anywhere it is clamped onto the screen", () => {
   assert.ok(p.top >= MARGIN && p.top + bubble.height <= viewport.height - MARGIN);
 });
 
-test("the spotlight is the whole screen with a padded hole at the target", () => {
+test("the spotlight is the whole screen with a padded, rounded hole at the target", () => {
   assert.equal(
-    spotlightClip({ left: 100.4, top: 50, width: 80, height: 30 }, 6),
-    "polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 94px 44px, 94px 86px, 186px 86px, 186px 44px, 94px 44px)",
+    spotlightClip({ left: 100.4, top: 50, width: 80, height: 30 }, viewport, 6, 10),
+    'path(evenodd, "M0 0H1194V834H0Z M104 44H176A10 10 0 0 1 186 54V76A10 10 0 0 1 176 86H104A10 10 0 0 1 94 76V54A10 10 0 0 1 104 44Z")',
   );
+});
+
+test("a hole smaller than its radius has its corners cut down to fit", () => {
+  assert.match(spotlightClip({ left: 0, top: 0, width: 4, height: 4 }, viewport, 0, 14), /A2 2 /);
 });
 
 test("the pointer arrow aims at the target's centre, kept off the bubble's corners", () => {

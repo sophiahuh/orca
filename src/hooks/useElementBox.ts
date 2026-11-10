@@ -22,7 +22,8 @@ const sameBox = (a: Box | null, b: Box | null) =>
 /**
  * Where the element matching `selector` is on screen, followed as the page scrolls, resizes or
  * moves it (checked every `pollMs` too, for layout changes no event announces). Null while there is
- * no selector or no visible match.
+ * no selector or no visible match. When the selector changes, the previous element's box is kept
+ * until the new one is measured (the next frame), so whatever is drawn there doesn't blink out.
  */
 export function useElementBox(selector: string | null, pollMs = 250): Box | null {
   const [state, setState] = useState<{ selector: string; box: Box | null } | null>(null);
@@ -48,6 +49,5 @@ export function useElementBox(selector: string | null, pollMs = 250): Box | null
       window.removeEventListener("resize", measure);
     };
   }, [selector, pollMs]);
-  // A box measured for another selector isn't this one's.
-  return selector && state?.selector === selector ? state.box : null;
+  return selector ? (state?.box ?? null) : null;
 }

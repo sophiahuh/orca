@@ -10,7 +10,7 @@ import type { Box } from "@/lib/anchor-geometry";
 import type { Tip } from "@/lib/onboarding/tips";
 
 /**
- * One onboarding tip, spoken by the orca, beside what it points at: a title and a line or two, an X
+ * One onboarding tip: the orca's speech bubble, beside what it points at (outlined by the Spotlight): a title and a line or two, an X
  * to dismiss it, Back and Next showing their arrow keys, and "Skip all tips", which asks first
  * because skipped tips never come back.
  */
@@ -36,7 +36,7 @@ export function TipBubble({
   const [confirming, setConfirming] = useState(false);
   const last = index === total - 1;
   return (
-    <AnchoredBubble target={target} label={tip.title} onClose={onNext} closeLabel="Dismiss tip" closePart="tip-dismiss" data-part="orca-tip" data-tip={tip.id}>
+    <AnchoredBubble target={target} arrow={false} speaker={<OrcaLogo width={66} shadow={false} />} label={tip.title} onClose={onNext} closeLabel="Dismiss tip" closePart="tip-dismiss" data-part="orca-tip" data-tip={tip.id}>
       <div className="flex flex-col gap-[6px] pr-[26px]" aria-live="polite">
         <p className="text-[18px] font-bold leading-tight text-prussian">{tip.title}</p>
         <p className="text-[15px] leading-[1.45] text-prussian">{tip.body}</p>
@@ -47,19 +47,15 @@ export function TipBubble({
         </div>
       ) : (
         <div className="mt-[18px] flex items-end justify-between gap-[12px]">
-          {/* The orca is the one speaking; Skip sits beside it. */}
-          <div className="flex items-center gap-[8px]">
-            <OrcaLogo width={34} shadow={false} />
-            <div className="flex flex-col gap-[2px]">
-              {total > 1 && (
-                <span className="text-[12px] font-semibold text-wisteria-deep" data-part="tip-count">
-                  {index + 1} of {total}
-                </span>
-              )}
-              <button type="button" onClick={() => setConfirming(true)} className="cursor-pointer text-left text-[13px] font-semibold text-wisteria-deep underline underline-offset-2" data-part="tip-skip">
-                Skip all tips
-              </button>
-            </div>
+          <div className="flex flex-col gap-[2px]">
+            {total > 1 && (
+              <span className="text-[12px] font-semibold text-wisteria-deep" data-part="tip-count">
+                {index + 1} of {total}
+              </span>
+            )}
+            <button type="button" onClick={() => setConfirming(true)} className="cursor-pointer text-left text-[13px] font-semibold text-wisteria-deep underline underline-offset-2" data-part="tip-skip">
+              Skip all tips
+            </button>
           </div>
           <div className="flex items-center gap-[8px]">
             {index > 0 && (

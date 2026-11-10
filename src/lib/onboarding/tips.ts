@@ -49,7 +49,7 @@ export const TIPS: readonly Tip[] = [
   /* ── Getting a course in ── */
   { id: "add-course", route: MAP, target: '[data-part="add-course"]', when: (c) => c.courses === 0, title: "Start with a class", body: "Hi, I'm Orca. Every class you take becomes an island here. Add your first one." },
   { id: "canvas-import", route: NEW_COURSE, target: '[data-part="import-from-canvas"]', title: "On CourseWorks?", body: "Connect Canvas and I'll bring in the class's files and due dates, so you don't upload them one by one." },
-  { id: "island", route: MAP, target: '[data-part="island-spot"]', when: (c) => c.courses >= 1, title: "Your island", body: "This is your class. It starts bare and grows greener as you master your weak spots. Open it." },
+  { id: "island", route: MAP, target: '[data-part="island-spot"]', when: (c) => c.courses >= 1, title: "Your island", body: "This is your class. It starts bare and grows as you master your weak spots. Open it." },
   { id: "course-settings", route: COURSE, target: '[data-part="course-settings-link"]', title: "Tell me about this class", body: "Open this class's settings and tell me how its exams work. I read your notes every time I write topics and questions." },
   { id: "notes-for-orca", route: COURSE_SETTINGS, target: '[data-part="notes-for-orca"]', title: "Notes for Orca", body: "What kinds of questions does your teacher ask on exams? What does the class stress, and what can I skip? Write it here before you upload, and I'll shape your topics and questions around it." },
   { id: "uncharted-add", route: COURSE, target: '[data-part="uncharted-add"]', title: "Add your material", body: "Give me your lecture slides, notes, homework or past exams. I'll map the class into topics." },
