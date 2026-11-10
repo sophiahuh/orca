@@ -5,7 +5,7 @@ Duolingo-style trail of topics inside each island, quizzes you, and nudges revie
 you configure per class. Mastery is tracked per learning objective from your answers, with spaced
 checks (FSRS), and each island's look shows how much of its course you've mastered.
 
-**Status (2026-11-08):** live at https://orca-lake-omega.vercel.app. Phases 1–4 are built: mastery
+**Status (2026-11-10):** live at https://orca.us.com. Phases 1–4 are built: mastery
 tracking, courses built from uploaded material (PDFs, .pptx decks, handwritten and typed notes,
 AI chats and web pages), scheduled quick reviews and dives, and a Supabase backend with accounts.
 Since then: a Claude connector (an MCP server Claude calls while a student studies in a chat) and
