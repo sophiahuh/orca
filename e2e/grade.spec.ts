@@ -53,7 +53,8 @@ test("a prose answer is graded through the fake API against the stored rubric, k
 
   const direct = await page.request.post("/api/grade", { data: { questionId: G.prose, response: ANSWER } });
   expect(direct.status()).toBe(200);
-  expect(await direct.json()).toEqual({ outcome: "partial", satisfied: ["Add one to the result"], misconception: null, feedback: "Half there: you forgot to invert." });
+  // The reply also names the kind of mistake (cram mode: `errorType`, null when the grader names none).
+  expect(await direct.json()).toEqual({ outcome: "partial", satisfied: ["Add one to the result"], misconception: null, feedback: "Half there: you forgot to invert.", errorType: null });
   expect(await fakeCalls()).toEqual(["grade"]);
 
   await page.goto(`/quiz/logic-e2e/${F.twosComplement}`);
