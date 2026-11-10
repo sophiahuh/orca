@@ -95,7 +95,7 @@ test("setup picks the files and the hours for each day, one at 0; the page then 
   await expect(chips.first()).toHaveAttribute("data-hours", "2");
   await expect(cram.locator(`[data-part=cram-days] [data-part=cram-day][data-day="${dayOut}"]`)).toHaveAttribute("data-hours", "0");
   await expect(cram.locator(`[data-part=cram-days] [data-part=cram-day][data-day="${inDays(1)}"]`)).toContainText("1.5 h");
-  await expect(cram.locator("[data-part=cram-plan]")).toHaveText("5 days to the exam. Today: Two's Complement. Verified: 0%.");
+  await expect(cram.locator("[data-part=cram-plan]")).toHaveText("5 days to the exam · 0% verified");
   const rows = cram.locator("[data-part=cram-topic]");
   await expect(rows).toHaveCount(1);
   const row = rows.first();

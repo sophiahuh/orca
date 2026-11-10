@@ -130,7 +130,7 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
   const statusOf = new Map(topics.flatMap((t) => t.objectives.map((o) => [o.id, o.status] as const)));
   return (
     <>
-      <div className="flex w-[600px] flex-col gap-[12px]">
+      <div className="flex w-[360px] flex-col gap-[12px]">
         <motion.div variants={fadeUp}>
           <Card className="flex flex-col gap-[10px] px-[24px] pb-[20px] pt-[20px]">
             <p className="eyebrow text-[13px] text-wisteria-deep">Your time</p>
@@ -163,56 +163,11 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
               </ul>
             )}
             <p className="text-[16px] font-semibold text-prussian" data-part="cram-plan">
-              {plan.line}
+              {plan.daysLeft === 0 ? "Exam day. Light review only, nothing new." : `${plan.daysLeft} ${plan.daysLeft === 1 ? "day" : "days"} to the exam · ${Math.round(plan.verified.share * 100)}% verified`}
             </p>
           </Card>
         </motion.div>
 
-        <motion.div variants={fadeUp}>
-          <Card className="flex flex-col gap-[14px] px-[24px] pb-[20px] pt-[20px]">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-[22px] font-bold text-prussian">The scope</h2>
-              <p className="text-[14px] font-medium text-wisteria-deep" data-part="cram-verified">
-                {plan.verified.done} of {plan.verified.total} verified
-              </p>
-            </div>
-            {plan.topics.length === 0 && <p className="text-[14px] font-medium text-wisteria-deep">This exam has no objectives in scope yet.</p>}
-            <ul className="flex flex-col gap-[12px]">
-              {plan.topics.map((t) => {
-                const inScope = scoped.get(t.id) ?? [];
-                const verified = inScope.filter((o) => isVerified(o.status)).length;
-                return (
-                  <li key={t.id} className="flex flex-col gap-[6px] rounded-[16px] border-2 border-alice-deep px-[16px] py-[12px]" data-part="cram-topic" data-topic={t.id} data-done={t.done ? "1" : undefined}>
-                    <div className="flex items-center justify-between gap-[12px]">
-                      <p className="text-[17px] font-bold text-prussian">{t.name}</p>
-                      <p className="text-[14px] font-semibold text-wisteria-deep" data-part="cram-topic-minutes">
-                        {t.done ? "Done" : t.minutesToday > 0 ? `${t.minutesToday} min today` : "Not today"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-[10px]">
-                      <ProgressBar value={inScope.length ? verified / inScope.length : 0} height={10} label={`${t.name} verified`} className="flex-1" />
-                      <span className="shrink-0 text-[13px] font-semibold text-wisteria-deep" data-part="cram-topic-verified">
-                        {verified}/{inScope.length} verified
-                      </span>
-                    </div>
-                    {t.weakSpots.length > 0 && (
-                      <ul className="flex flex-col gap-[2px]" data-part="cram-weak-spots">
-                        {t.weakSpots.map((id) => (
-                          <li key={id} className="text-[13px] font-medium text-prussian" data-part="cram-weak-spot" data-objective={id}>
-                            {objectiveName(id)} <span className="text-wisteria-deep">· {MASTERY_LABEL[statusOf.get(id) ?? "unseen"]}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        </motion.div>
-      </div>
-
-      <div className="flex w-[360px] flex-col gap-[12px]">
         <motion.div variants={fadeUp}>
           <Card className="flex flex-col gap-[8px] px-[24px] pb-[18px] pt-[18px]" data-part="cram-today">
             <h2 className="text-[20px] font-bold text-prussian">Today</h2>
@@ -276,6 +231,51 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
           <Button size="xs" variant="secondary" onClick={onStop} data-part="cram-stop">
             Stop cramming
           </Button>
+        </motion.div>
+      </div>
+
+      <div className="flex w-[600px] flex-col gap-[12px]">
+        <motion.div variants={fadeUp}>
+          <Card className="flex flex-col gap-[14px] px-[24px] pb-[20px] pt-[20px]">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-[22px] font-bold text-prussian">The scope</h2>
+              <p className="text-[14px] font-medium text-wisteria-deep" data-part="cram-verified">
+                {plan.verified.done} of {plan.verified.total} verified
+              </p>
+            </div>
+            {plan.topics.length === 0 && <p className="text-[14px] font-medium text-wisteria-deep">This exam has no objectives in scope yet.</p>}
+            <ul className="flex flex-col gap-[12px]">
+              {plan.topics.map((t) => {
+                const inScope = scoped.get(t.id) ?? [];
+                const verified = inScope.filter((o) => isVerified(o.status)).length;
+                return (
+                  <li key={t.id} className="flex flex-col gap-[6px] rounded-[16px] border-2 border-alice-deep px-[16px] py-[12px]" data-part="cram-topic" data-topic={t.id} data-done={t.done ? "1" : undefined}>
+                    <div className="flex items-center justify-between gap-[12px]">
+                      <p className="text-[17px] font-bold text-prussian">{t.name}</p>
+                      <p className="text-[14px] font-semibold text-wisteria-deep" data-part="cram-topic-minutes">
+                        {t.done ? "Done" : t.minutesToday > 0 ? `${t.minutesToday} min today` : "Not today"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-[10px]">
+                      <ProgressBar value={inScope.length ? verified / inScope.length : 0} height={10} label={`${t.name} verified`} className="flex-1" />
+                      <span className="shrink-0 text-[13px] font-semibold text-wisteria-deep" data-part="cram-topic-verified">
+                        {verified}/{inScope.length} verified
+                      </span>
+                    </div>
+                    {t.weakSpots.length > 0 && (
+                      <ul className="flex flex-col gap-[2px]" data-part="cram-weak-spots">
+                        {t.weakSpots.map((id) => (
+                          <li key={id} className="text-[13px] font-medium text-prussian" data-part="cram-weak-spot" data-objective={id}>
+                            {objectiveName(id)} <span className="text-wisteria-deep">· {MASTERY_LABEL[statusOf.get(id) ?? "unseen"]}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
         </motion.div>
       </div>
     </>
