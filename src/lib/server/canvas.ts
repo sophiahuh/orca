@@ -13,8 +13,9 @@ import { type CanvasClient, CanvasError, canvasClient } from "@/lib/canvas/clien
 import { placeIslands } from "@/lib/course/islands";
 import { COURSE_NAME_MAX, type IslandVariant, type MaterialType, shortName, slugify } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
-import { UPLOAD_MIMES, uploadKind } from "@/lib/material/kind";
 import { startUploadJob } from "@/lib/server/jobs/start";
+import { heldBackByDefault } from "@/lib/material/hold-back";
+import { UPLOAD_MIMES, uploadKind } from "@/lib/material/kind";
 import { BUCKET, processUpload, startUpload } from "@/lib/server/materials";
 import { isPublicAddress, publicHop } from "@/lib/server/public-page";
 import { serverSupabaseEnv } from "@/lib/supabase/env";
@@ -289,6 +290,8 @@ async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, c
     due: null,
     reflect: false,
     handwritten: false,
+    // A past or practice exam from Canvas is kept for a practice test (contract section 5).
+    heldBack: heldBackByDefault(pick.type),
   });
   if (started.status === 200 && "duplicate" in started.body) return { result: "duplicate", materialId: started.body.duplicate.id };
   if (started.status !== 201 || !("upload" in started.body)) return { result: "skipped", materialId: null };

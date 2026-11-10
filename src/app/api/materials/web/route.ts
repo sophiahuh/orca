@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { heldBackByDefault } from "@/lib/material/hold-back";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import { sanitize } from "@/lib/untrusted/sanitize";
 import { startUploadJob } from "@/lib/server/jobs/start";
@@ -11,7 +12,7 @@ import { ownsCourse } from "@/lib/server/student";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const requestSchema = z.object({ courseId: z.uuid(), url: z.string().url().max(2048), type: z.enum(["Syllabus", "Lecture", "Other"]), assigned: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() });
+const requestSchema = z.object({ courseId: z.uuid(), url: z.string().url().max(2048), type: z.enum(["Syllabus", "Lecture", "Other"]), assigned: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(), heldBack: z.boolean().optional() });
 
 function pageText(html: string) {
   const headings = [...html.matchAll(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi)].map((m) => m[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).filter(Boolean);
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     const { data: same, error: sameError } = await db.from("materials").select("id").eq("owner_id", student.id).eq("course_id", parsed.data.courseId).eq("content_hash", hash).neq("status", "removed").limit(1).maybeSingle();
     if (sameError) return reply(500, { error: "Orca couldn't check that website." });
     if (same) return reply(409, { error: "That course page was already added." });
-    const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/html" }).select().single();
+    const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type: parsed.data.type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, held_back: parsed.data.heldBack ?? heldBackByDefault(parsed.data.type), status: "ready", content_hash: hash, mime: "text/html" }).select().single();
     if (error) return reply(500, { error: "Orca couldn't save that website." });
     const pages = [{ owner_id: student.id, material_id: id, n: 1, text }];
     const inserted = await db.from("material_pages").insert(pages);

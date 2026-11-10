@@ -3,6 +3,7 @@ import { z } from "zod";
 import { MATERIAL_TYPES, type MaterialType } from "@/lib/data";
 import { aiChatFilename, chatPages, chatTextFromHtml, isAIChatHost, isPublicAIChatUrl, normaliseAIChatTranscript, pastedFilename, spokenChars, textPages } from "@/lib/material/ai-chat";
 import { LIMITS } from "@/lib/limits";
+import { heldBackByDefault } from "@/lib/material/hold-back";
 import { sanitize } from "@/lib/untrusted/sanitize";
 import { materialFromRow } from "@/lib/supabase/app-rows";
 import { startUploadJob } from "@/lib/server/jobs/start";
@@ -23,6 +24,8 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable();
 const requestSchema = z.object({
   courseId: z.uuid(), type: z.enum(MATERIAL_TYPES as [MaterialType, ...MaterialType[]]),
   assigned: date, due: date, text: z.string().trim().optional(), url: z.string().trim().max(2048).optional(),
+  /** Kept hidden for a practice test (contract section 5); default: the type is Past exam or Practice exam. */
+  heldBack: z.boolean().optional(),
 }).refine((value) => Boolean(value.text || value.url), { message: "Paste some text or enter a public AI chat link." });
 
 export async function POST(request: Request) {
@@ -59,7 +62,7 @@ export async function POST(request: Request) {
     if (sameError) return reply(500, { error: "Orca couldn't check that text." });
     if (same) return reply(200, { duplicate: same, generation: await startUploadJob(db, student.id, same.id) });
     const id = crypto.randomUUID();
-    const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, status: "ready", content_hash: hash, mime: "text/plain" }).select().single();
+    const { data, error } = await db.from("materials").insert({ id, owner_id: student.id, course_id: parsed.data.courseId, filename, type, assigned: parsed.data.assigned, due: parsed.data.due, reflect: false, held_back: parsed.data.heldBack ?? heldBackByDefault(type), status: "ready", content_hash: hash, mime: "text/plain" }).select().single();
     if (error) return reply(500, { error: "Orca couldn't save that text." });
     const saved = await db.from("material_pages").insert(pages.map((p) => ({ owner_id: student.id, material_id: id, ...p })));
     if (saved.error) return reply(500, { error: "Orca saved that text but couldn't read it." });

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip, ContextPill } from "@/components/ui/Chip";
 import { Select } from "@/components/ui/Select";
+import { heldBackByDefault } from "@/lib/material/hold-back";
 import { uploadKind } from "@/lib/material/kind";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
@@ -85,6 +86,8 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const { courses, addMaterial, hydrated, objectives, recordReflection } = useOrca();
   const courseSlug = typeof sp.course === "string" ? sp.course : undefined;
   const resumeId = typeof sp.material === "string" ? sp.material : undefined;
+  // The connector's add_material link (contract section 4) preselects the type and the hold-back.
+  const presetType = typeof sp.type === "string" && MATERIAL_TYPES.includes(sp.type as MaterialType) ? (sp.type as MaterialType) : "Lecture";
   const [pickedId, setPickedId] = useState<string | null>(null);
   const course = courses.find((c) => c.id === pickedId) ?? courses.find((c) => c.slug === courseSlug) ?? courses[0];
 
@@ -96,7 +99,9 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   const [pastedText, setPastedText] = useState("");
   const [chosenName, setChosenName] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
-  const [type, setType] = useState<MaterialType>("Lecture");
+  const [type, setType] = useState<MaterialType>(presetType);
+  /** Keep hidden for a practice test (contract section 5): checked by default for a past or practice exam. */
+  const [holdBack, setHoldBack] = useState<boolean>(sp.holdBack === "1" || heldBackByDefault(presetType));
   const [assigned, setAssigned] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -149,13 +154,15 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     setPastedText("");
     setChosenName(`${files.length} files`);
     setPhase({ kind: "idle" });
-    setBatch(files.map((f) => ({ id: crypto.randomUUID(), file: f, type, assigned, due, edited: false, problem: uploadProblem(f), status: { kind: "waiting" } })));
+    setBatch(files.map((f) => ({ id: crypto.randomUUID(), file: f, type, assigned, due, heldBack: holdBack, edited: false, problem: uploadProblem(f), status: { kind: "waiting" } })));
   };
-  /** A shared default changed: every row that wasn't edited by hand follows it. */
-  const setDefault = (patch: Partial<Pick<BatchItem, "type" | "assigned" | "due">>) => {
+  /** A shared default changed: every row that wasn't edited by hand follows it. A new type brings its own hold-back default. */
+  const setDefault = (given: Partial<Pick<BatchItem, "type" | "assigned" | "due" | "heldBack">>) => {
+    const patch = "type" in given && given.type && !("heldBack" in given) ? { ...given, heldBack: heldBackByDefault(given.type) } : given;
     if ("type" in patch && patch.type) setType(patch.type);
     if ("assigned" in patch) setAssigned(patch.assigned ?? null);
     if ("due" in patch) setDue(patch.due ?? null);
+    if ("heldBack" in patch && patch.heldBack !== undefined) setHoldBack(patch.heldBack);
     setBatch((b) => b && b.map((it) => (it.edited || it.status.kind !== "waiting" ? it : { ...it, ...patch })));
   };
 
@@ -185,7 +192,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     let failed = 0;
     let duplicates = 0;
     for (const it of batchPending) {
-      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", again: it.again === true };
+      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", again: it.again === true, heldBack: it.heldBack };
       try {
         const outcome = await uploadMaterial(it.file, meta, (stage) => patch(it.id, { status: { kind: "sending", message: STAGE_MESSAGE[stage] } }));
         if (outcome.kind === "read") addMaterial(outcome.material, { saved: true });
@@ -216,7 +223,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     if (batch) return submitBatch();
     if (!file && !websiteUrl.trim() && !aiChatUrl.trim() && !pastedText.trim()) return;
     const reflection = type === "Homework" ? note.trim() : "";
-    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf, again };
+    const meta = { courseId: course.id, type, assigned, due, reflect: reflection.length > 0, handwritten: type === "Handwritten notes" && isPdf, again, heldBack: holdBack };
     // The form is done with: it gives way to where the student goes next, so Back from there skips it.
     const leave = () => router.replace(due ? "/calendar" : `/course/${course.slug}`);
     // Pasted text, a chat link or a website: new material, or one the course already has (then nothing is added again).
@@ -479,6 +486,14 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
             <h2 className="text-[17px] font-bold text-prussian">What kind of material is this?</h2>
             <Select label="What kind of material is this?" value={type} options={MATERIAL_TYPES} labels={MATERIAL_TYPE_LABELS} onChange={(t) => setDefault({ type: t })} className="self-start" />
             {batch && <span className="text-[13px] font-medium text-wisteria-deep">Applies to every file on the list; change any one of them on its row.</span>}
+            {/* Hold-back (contract section 5): one file or pasted text; each batch row has its own box. */}
+            {!batch && (
+              <label className="flex items-center gap-[10px] text-[15px] font-semibold text-prussian">
+                <input type="checkbox" checked={holdBack} disabled={busy} onChange={(e) => setDefault({ heldBack: e.target.checked })} className="size-[18px] accent-wisteria" data-part="hold-back" />
+                Keep hidden for a practice test
+                <span className="text-[13px] font-medium text-wisteria-deep">Orca maps what it covers but writes no questions from it.</span>
+              </label>
+            )}
           </motion.section>
 
           <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
