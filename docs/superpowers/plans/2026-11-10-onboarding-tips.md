@@ -40,14 +40,14 @@
 - `react/no-danger` is an error. Tests never call a real model.
 - Node: `export PATH=$HOME/.nvm/versions/node/v24.20.0/bin:$PATH` before any `npm`/`npx` command.
 - Per commit (Fix mode): `npx tsc --noEmit`, `npx eslint <changed files>`, and the one unit test file for the change. Anything touching the local database or ports 3100/3101 goes through `npm run locked -- …`.
-- The new migration is `20261110090000_onboarding_tips.sql` (newest on `main` is `20261108100000`; if a newer one has landed, renumber after it).
+- The new migration is `20261110150000_onboarding_tips.sql` (newest on `main` is `20261108100000`; if a newer one has landed, renumber after it).
 - Tip copy: the orca speaks in the first person, at most two or three short sentences (the unit test caps a body at 220 characters).
 
 ## File Structure
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/20261110090000_onboarding_tips.sql` (new) | `profiles.onboarding` jsonb |
+| `supabase/migrations/20261110150000_onboarding_tips.sql` (new) | `profiles.onboarding` jsonb |
 | `supabase/tests/19_onboarding.test.sql` (new) | default, own update, shape check, isolation |
 | `src/lib/onboarding/state.ts` (new, pure) | `OnboardingState`, its zod schema, `withSeen`, `onboardingFromProfile` |
 | `src/lib/onboarding/tips.ts` (new, pure) | the tip catalogue `TIPS` and `eligibleTips` |
@@ -67,7 +67,7 @@
 ### Task 1: Saved state (migration, pure state module, store)
 
 **Files:**
-- Create: `supabase/migrations/20261110090000_onboarding_tips.sql`, `supabase/tests/19_onboarding.test.sql`, `src/lib/onboarding/state.ts`, `tests/onboarding/state.test.ts`
+- Create: `supabase/migrations/20261110150000_onboarding_tips.sql`, `supabase/tests/19_onboarding.test.sql`, `src/lib/onboarding/state.ts`, `tests/onboarding/state.test.ts`
 - Modify: `src/lib/supabase/app-rows.ts` (`LoadedState` ~line 438, `loadedState` ~line 506), `src/lib/store.tsx` (state ~line 99–148, actions ~line 193 and ~815, the context value ~line 944), `tests/supabase/app-rows.test.ts:57`, `src/lib/supabase/database.types.ts` (regenerated)
 
 **Interfaces:**
@@ -146,7 +146,7 @@ export function onboardingFromProfile(value: unknown): OnboardingState {
 
 Run: the command from Step 2. Expected: 4 tests pass.
 
-- [ ] **Step 5: Write the migration** — `supabase/migrations/20261110090000_onboarding_tips.sql`
+- [ ] **Step 5: Write the migration** — `supabase/migrations/20261110150000_onboarding_tips.sql`
 
 ```sql
 -- Onboarding tips (2026-11-10): which tips the student has seen and whether they skipped them all.
@@ -293,7 +293,7 @@ Add `markTipsSeen, skipTips,` to the context value object (beside `setOnboarded,
 Run: `npx tsc --noEmit` and `npx eslint src/lib/onboarding src/lib/store.tsx src/lib/supabase/app-rows.ts tests/onboarding` — expected: clean.
 
 ```bash
-git add supabase/migrations/20261110090000_onboarding_tips.sql supabase/tests/19_onboarding.test.sql src/lib/onboarding/state.ts tests/onboarding/state.test.ts src/lib/supabase/app-rows.ts src/lib/supabase/database.types.ts src/lib/store.tsx tests/supabase/app-rows.test.ts
+git add supabase/migrations/20261110150000_onboarding_tips.sql supabase/tests/19_onboarding.test.sql src/lib/onboarding/state.ts tests/onboarding/state.test.ts src/lib/supabase/app-rows.ts src/lib/supabase/database.types.ts src/lib/store.tsx tests/supabase/app-rows.test.ts
 git commit -m "Onboarding tips: profiles.onboarding (seen tips, skipped), loaded and saved by the store"
 ```
 
@@ -1278,7 +1278,7 @@ git commit -m "Onboarding tips: browser tests; test students have the tips off u
   `src/lib/onboarding/tips.ts` lists them (page, the `data-part` each points at, copy); `OnboardingTips`
   (`src/components/onboarding/`, mounted in `providers.tsx`) shows them with the rest of the page muted. X or
   Next (`→`) marks one seen, `←` goes back, "Skip all tips" turns them off for good (no way back on). Saved on the
-  account: `profiles.onboarding` (`{ seen, skipped }`, migration `20261110090000`). e2e students have them off
+  account: `profiles.onboarding` (`{ seen, skipped }`, migration `20261110150000`). e2e students have them off
   unless a spec says `test.use({ tips: true })`. A new feature worth pointing out gets a tip there.
 ```
 

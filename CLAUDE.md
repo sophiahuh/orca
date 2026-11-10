@@ -130,7 +130,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   `src/lib/onboarding/tips.ts` lists them (page, the element each points at, copy); `OnboardingTips`
   (`src/components/onboarding/`, mounted in `providers.tsx`) shows them with the rest of the page muted. X or
   Next (`→`) marks one seen, `←` goes back, "Skip all tips" turns them off for good (no way back on). Saved on the
-  account: `profiles.onboarding` (`{ seen, skipped }`, migration `20261110090000`). e2e students have them off
+  account: `profiles.onboarding` (`{ seen, skipped }`, migration `20261110150000`). e2e students have them off
   unless a spec says `test.use({ tips: true })`. A new feature worth pointing out gets a tip there. Built from
   reusable pieces: `ui/AnchoredBubble` (a popover pointing at an element, placed by `src/lib/anchor-geometry.ts`),
   `ui/Spotlight`, `ui/Kbd`, `ui/InlineConfirm`, `Button size="xs"`, `useElementBox`.
@@ -148,7 +148,7 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   pending migrations to production on every merge to `main` (its two secrets are set), so nobody
   pushes by hand; a new migration must be numbered after the newest one applied, or `db push`
   refuses it. The development project `mtztzsxgcopohlokragm` was brought up to date on 2026-11-10
-  (everything through `20261110090000_onboarding_tips`, pushed from branch `onboarding`); later ones go there only by hand. A migration the code
+  (everything through `20261110150000_onboarding_tips`, pushed from branch `onboarding`); later ones go there only by hand. A migration the code
   needs but the database lacks shows as "Could not find the table … in the schema cache". Check
   with `npx supabase migration list --linked` (read-only; from an IPv4-only network the CLI says
   "IPv6 is not supported" until `supabase link` is rerun). A migration that drops a column the
