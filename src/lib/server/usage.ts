@@ -1,3 +1,4 @@
+import { stagedPipeline, pipelineRpc } from "@/lib/server/staged/db";
 /**
  * Metering and the daily budgets (Phase 4 plan, decision 10). Every model call made with Orca's
  * key records its tokens and estimated cost in `model_usage` (through `completeJson`'s `onUsage`,
@@ -27,7 +28,8 @@ export async function recordUsage(db: OrcaSupabase, ctx: ModelCtx, model: string
     cache_write_tokens: usage.cacheWriteTokens,
     cache_read_tokens: usage.cacheReadTokens,
     cost_usd: costUsd(opts.pricedAs ?? model, usage),
-    at: (opts.at ?? new Date()).toISOString(),
+    at: (opts.at ?? (ctx.usageAt ? new Date(ctx.usageAt) : new Date())).toISOString(),
+    ...(process.env.ORCA_UPLOAD_PIPELINE === "staged" ? { step: ctx.step ?? null, phase: ctx.phase ?? null, duration_ms: ctx.durationMs ?? null, attempt_id: ctx.attemptId ?? null } : {}),
   });
   if (error) throw new Error(`Couldn't record the model call's usage: ${error.message}`);
 }
@@ -86,6 +88,7 @@ export async function globalCostSince(db: OrcaSupabase, since: Date): Promise<nu
 export async function usageToday(db: OrcaSupabase, ownerId: string, now = new Date()): Promise<UsageToday> {
   const since = dayStartIn(await timezoneOf(db, ownerId), now);
   const utcDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (stagedPipeline()) return pipelineRpc<UsageToday>(db, "budget", { ownerId, dayStart: since.toISOString(), utcStart: utcDay.toISOString() });
   const [pages, tokens, globalUsd] = await Promise.all([pagesSince(db, ownerId, since), tokensSince(db, ownerId, since), globalCostSince(db, utcDay)]);
   return { pages, tokens, globalUsd };
 }

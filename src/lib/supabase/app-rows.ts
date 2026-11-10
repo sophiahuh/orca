@@ -250,6 +250,9 @@ export function runToRow(r: PipelineRun): Omit<StructureRow<"pipeline_runs">, "j
 
 export function runFromRow(r: Row<"pipeline_runs">): PipelineRun {
   return {
+    ...(r.protocol_version ? { protocolVersion: r.protocol_version } : {}),
+    ...(r.structure_committed_at ? { structureCommittedAt: r.structure_committed_at } : {}),
+    ...(r.phase ? { phase: r.phase } : {}),
     id: r.id,
     kind: r.kind as NonNullable<PipelineRun["kind"]>,
     courseId: r.course_id,

@@ -218,11 +218,36 @@ export async function completeJson<T>(
     /** Tests only: the SDK's fetch and the retry pacing. */
     fetch?: typeof globalThis.fetch;
     retryBackoffMs?: number;
+    /** Injected reservation lifecycle for deterministic tests; production uses the shared database. */
+    reserveAttempt?: () => Promise<{ settle: (known: boolean) => Promise<unknown> }>;
   } = {},
 ): Promise<T> {
   if (PROVIDERS[config.provider].browserOnly) {
     throw new LlmError(`${PROVIDERS[config.provider].label} runs in your browser, not on the server.`, 400);
   }
+  const attempt = async <R>(work: (report: NonNullable<typeof opts.onUsage>) => Promise<R>): Promise<R> => {
+    const started = Date.now();
+    if (opts.ctx && process.env.ORCA_UPLOAD_PIPELINE === "staged") opts.ctx.usageAt = new Date(started).toISOString();
+    // Byte-level text bound includes schema and role framing. Images are rendered at <=1600px;
+    // reserve a deliberately conservative 64k tokens/image rather than estimating chars/4.
+    const inputBound = Buffer.byteLength(system + prompt + (opts.context ?? "") + JSON.stringify(openAiJsonSchema(schema)), "utf8") + 8192 + (opts.images?.length ?? 0) * 64_000;
+    const reservation = opts.reserveAttempt ? await opts.reserveAttempt() : process.env.ORCA_UPLOAD_PIPELINE === "staged" && opts.ctx
+      ? await (await import("./server/staged/call-admission.ts")).reserveAttempt(opts.ctx, config.model, inputBound, opts.maxTokens ?? 16000)
+      : null;
+    let known = false;
+    const report: NonNullable<typeof opts.onUsage> = async (usage, model) => {
+      if (opts.ctx) opts.ctx.durationMs = Date.now() - started;
+      await opts.onUsage?.(usage, model);
+      known = true;
+    };
+    try { return await work(report); }
+    catch (error) {
+      // A definite rejected request never started generation; timeouts remain conservatively held.
+      const status = error && typeof error === "object" && "status" in error ? Number(error.status) : 0;
+      if (status >= 400 && status < 500 && status !== 408) known = true;
+      throw error;
+    } finally { await reservation?.settle(known); }
+  };
   if (config.provider === "anthropic") {
     // The SDK's own retries are off: they would retry a spend-limit 429 too. withRetries decides.
     const client = new Anthropic({ apiKey: config.apiKey, maxRetries: 0, timeout: LIMITS.modelTimeoutMs, ...(config.baseUrl ? { baseURL: config.baseUrl } : {}), ...(opts.fetch ? { fetch: opts.fetch } : {}) });
@@ -231,7 +256,7 @@ export async function completeJson<T>(
       // Streamed: a long reply (generate may write 24k tokens) would outlast a plain request, which the
       // SDK refuses to send; finalMessage() gathers it and parses it against the schema the same way.
       const response = await withRetries(
-        async () => {
+        () => attempt(async (report) => {
           const stream = client.beta.messages.stream({
               model: config.model,
               max_tokens: opts.maxTokens ?? 16000,
@@ -269,12 +294,14 @@ export async function completeJson<T>(
             }
           });
           try {
-            return await stream.finalMessage();
+            const response = await stream.finalMessage();
+            await report(usageOf(response), response.model || config.model);
+            return response;
           } catch (error) {
             const { partial } = seen;
-            if (partial && opts.onUsage) {
+            if (partial) {
               try {
-                await opts.onUsage(partial.usage, partial.model);
+                await report(partial.usage, partial.model);
               } catch (meterError) {
                 console.error(`A cut-off model reply couldn't be metered: ${meterError instanceof Error ? meterError.message : String(meterError)}`);
               }
@@ -283,16 +310,16 @@ export async function completeJson<T>(
             if (error instanceof Anthropic.APIError) throw error;
             throw new Anthropic.APIConnectionError({ message: `The reply stream failed: ${error instanceof Error ? error.message : String(error)}`, cause: error instanceof Error ? error : undefined });
           }
-        },
+        }),
         { backoffMs: opts.retryBackoffMs },
       );
-      if (opts.onUsage) await opts.onUsage(usageOf(response), response.model || config.model);
       if (response.stop_reason === "refusal") throw new LlmError("The model declined to process this material.", 422);
       if (response.stop_reason === "max_tokens") throw new LlmError("The material is too long for one pass. Try a smaller file.", 413);
       if (response.parsed_output) return response.parsed_output;
       const text = response.content.filter((b) => b.type === "text").map((b) => b.text).join("");
       return parseLoose(text);
     } catch (error) {
+      if (error instanceof Error && error.name === "PipelineDeferred") throw error;
       if (error instanceof LlmError) throw error;
       mapAnthropicError(error, config.model);
     }
@@ -321,8 +348,11 @@ export async function completeJson<T>(
     };
     try {
       // Not streamed: a reply cut off by the timeout reports no token counts, so it can't be metered.
-      const response = await withRetries(() => openAiRequest(config, body, opts.fetch ?? globalThis.fetch), { backoffMs: opts.retryBackoffMs });
-      if (response.usage && opts.onUsage) await opts.onUsage(openAiUsageOf(response.usage), response.model || config.model);
+      const response = await withRetries(() => attempt(async (report) => {
+        const response = await openAiRequest(config, body, opts.fetch ?? globalThis.fetch);
+        if (response.usage) await report(openAiUsageOf(response.usage), response.model || config.model);
+        return response;
+      }), { backoffMs: opts.retryBackoffMs });
       if (response.status === "incomplete") {
         if (response.incomplete_details?.reason === "max_output_tokens") throw new LlmError("The material is too long for one pass. Try a smaller file.", 413);
         throw new LlmError("The model declined to process this material.", 422);
@@ -337,6 +367,7 @@ export async function completeJson<T>(
         throw new LlmError(`The model's reply didn't match the expected shape: ${error instanceof Error ? error.message.slice(0, 160) : "parse error"}`, 502);
       }
     } catch (error) {
+      if (error instanceof Error && error.name === "PipelineDeferred") throw error;
       if (error instanceof LlmError) throw error;
       mapOpenAiError(error, config.model);
     }

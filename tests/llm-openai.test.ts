@@ -114,3 +114,19 @@ test("an older model gets no explicit cache options and a model without reasonin
   assert.equal(body.reasoning, undefined);
   assert.equal(body.input[0].content[0].prompt_cache_breakpoint, undefined);
 });
+
+test("each provider retry reserves separately and an unknown billed attempt is not refunded", async () => {
+  const settlements: boolean[] = [];
+  let calls = 0; let reservations = 0;
+  const api: typeof fetch = async () => {
+    if (++calls === 1) throw new Error("connection interrupted after sending request");
+    return new Response(JSON.stringify({ status: "completed", model: "gpt-6.1-sol", usage: { input_tokens: 12, output_tokens: 5 }, output: [{ type: "message", content: [{ type: "output_text", text: '{"ok":true}' }] }] }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const schema = z.object({ ok: z.boolean() });
+  await completeJson({ provider: "openai", model: "gpt-6.1-sol", apiKey: "fake" }, "sys", "prompt", schema, (text) => schema.parse(JSON.parse(text)), {
+    fetch: api, retryBackoffMs: 0,
+    reserveAttempt: async () => { reservations++; return { settle: async (known) => { settlements.push(known); } }; },
+  });
+  assert.equal(reservations, 2);
+  assert.deepEqual(settlements, [false, true]);
+});

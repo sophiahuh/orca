@@ -1,3 +1,5 @@
+import { stagedPipeline, pipelineRpc } from "./staged/db";
+import { singleton } from "./staged/admission";
 /**
  * Pasted text (or a public AI-chat link) as material: what `POST /api/materials/text` does once the
  * request is parsed, shared with the connector's `add_material` (docs/superpowers/specs/
@@ -43,6 +45,10 @@ export async function addTextMaterial(db: OrcaSupabase, ownerId: string, input: 
   const rate = await rateLimit(db, ownerId, "text");
   if (!rate.ok) return { status: 429, body: { error: rate.message, retryAfterSeconds: rate.retryAfterSeconds }, verdict: rate };
 
+  const admissionId = stagedPipeline() ? crypto.randomUUID() : undefined;
+  if (admissionId) await singleton(db, ownerId, input.courseId, admissionId, input.filename ?? "Pasted material", "text");
+  let attached = false;
+  try {
   let text: string;
   let sourceUrl: string | undefined;
   let type = input.type;
@@ -67,7 +73,11 @@ export async function addTextMaterial(db: OrcaSupabase, ownerId: string, input: 
   const hash = createHash("sha256").update(text).digest("hex");
   const { data: same, error: sameError } = await db.from("materials").select("id, filename").eq("owner_id", ownerId).eq("course_id", input.courseId).eq("content_hash", hash).order("created_at").limit(1).maybeSingle();
   if (sameError) return { status: 500, body: { error: "Orca couldn't check that text." } };
-  if (same) return { status: 200, body: { duplicate: same, generation: await startUploadJob(db, ownerId, same.id) } };
+  if (same) {
+    const generation = await startUploadJob(db, ownerId, same.id, admissionId);
+    attached = true;
+    return { status: 200, body: { duplicate: same, generation } };
+  }
   const id = crypto.randomUUID();
   const { data, error } = await db
     .from("materials")
@@ -77,5 +87,10 @@ export async function addTextMaterial(db: OrcaSupabase, ownerId: string, input: 
   if (error) return { status: 500, body: { error: "Orca couldn't save that text." } };
   const saved = await db.from("material_pages").insert(pages.map((p) => ({ owner_id: ownerId, material_id: id, ...p })));
   if (saved.error) return { status: 500, body: { error: "Orca saved that text but couldn't read it." } };
-  return { status: 201, body: { material: materialFromRow(data), pages, generation: await startUploadJob(db, ownerId, id) } };
+  const generation = await startUploadJob(db, ownerId, id, admissionId);
+  attached = true;
+  return { status: 201, body: { material: materialFromRow(data), pages, generation } };
+  } finally {
+    if (admissionId && !attached) await pipelineRpc(db, "ingestion", { ownerId, itemId: admissionId, action: "fail", error: "The material could not be added. Try again." });
+  }
 }

@@ -56,7 +56,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
   };
   // A queued or paused upload hasn't been built: deleting it takes it out of the queue (its job is
   // cancelled) and removes the file, the same soft delete as removing built material.
-  const unbuilt = run.status === "queued" || run.status === "paused";
+  const unbuilt = run.protocolVersion === 2 ? !run.structureCommittedAt : run.status === "queued" || run.status === "paused";
   const removeOffer = material && (
     <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep" data-part="remove-offer">
       {confirming === "remove" ? (
@@ -117,7 +117,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-waiting")} data-status={run.status} role="status">
         {head}
-        <span className="text-[14px] font-semibold text-wisteria-deep">{progressMessage(run.progress)} Nothing to do: Orca builds the topics and questions when the limit resets, and they appear here.</span>
+        <span className="text-[14px] font-semibold text-wisteria-deep">{progressMessage(run.progress)} {run.structureCommittedAt ? "Your topics are saved; the remaining questions appear when allowance is available." : "Nothing to do: Orca builds the topics and questions when the limit resets, and they appear here."}</span>
         <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep">
           {confirming === "stop" ? (
             <InlineConfirm question="Stop waiting? The file stays, so uploading it again retries." confirm="Stop" cancel="Keep waiting" onConfirm={() => void act("stop")} onCancel={() => setConfirming(null)} confirmPart="stop-confirm" />
@@ -150,6 +150,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-progress")} data-status={run.status} role="status">
         {head}
+        {run.structureCommittedAt && <span className="text-[14px] font-semibold text-good-text">Topics added. Questions are being prepared separately.</span>}
         <ProgressBar value={run.status === "running" ? stageShare(run.progress?.stage) : 0.05} height={10} label="Building" />
         {run.status === "queued" && (
           <div className="flex flex-wrap items-center gap-[10px]">
@@ -164,7 +165,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
             <span>{progressMessage(run.progress)}</span>
             {confirming === "stop" ? (
               <InlineConfirm
-                question="Stop it? What it has built so far is dropped; the file stays, so uploading it again retries."
+                question={run.structureCommittedAt ? "Stop preparing questions? The topics and questions already saved stay in your course." : "Stop it? Unsaved work is dropped; the file stays, so you can try again."}
                 confirm="Stop"
                 cancel="Keep going"
                 onConfirm={() => void act("stop")}
@@ -186,13 +187,13 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[8px] px-[22px] py-[18px]" data-part={part("run-failed")} data-status={run.status} role="alert">
         {head}
-        <span className="text-[15px] font-semibold text-prussian">Nothing was added from {material?.filename ?? "this upload"}.</span>
+        <span className="text-[15px] font-semibold text-prussian">{run.structureCommittedAt ? "Topics were added; the remaining work failed." : `Nothing was added from ${material?.filename ?? "this upload"}.`}</span>
         <span className="text-[15px] text-prussian/80">{run.error}</span>
         <span className="flex flex-wrap items-center gap-[10px] text-[14px] text-prussian/70">
           The file is saved.
           {material && (
             <button type="button" onClick={() => void act("retry")} className="font-bold text-prussian underline underline-offset-2" data-part="retry-upload">
-              Try again
+              {run.structureCommittedAt ? "Retry remaining work" : "Try again"}
             </button>
           )}
         </span>

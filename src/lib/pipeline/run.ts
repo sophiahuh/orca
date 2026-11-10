@@ -1,3 +1,4 @@
+import { PipelineDeferred } from "../jobs/staged/types.ts";
 /**
  * The upload pipeline: extract → match duplicates → write questions. Model calls are
  * injected (`call`), so the orchestration is tested with fakes; the result is a plan that
@@ -69,6 +70,8 @@ export interface RunDeps {
   onProgress?: (p: Progress) => void;
   /** Stop after the structure (topics, objectives, relations): no questions are written or checked. */
   structureOnly?: boolean;
+  /** Durable writers reserve objective stock before paying for it. */
+  claimWriting?: (input: WriteInput) => Promise<WriteTarget[]>;
 }
 
 export interface UploadPlan {
@@ -94,7 +97,7 @@ const QUESTIONS_PER_CALL = { generate: 16, deep: 8 } as const;
 async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
   let next = 0;
-  await Promise.all(
+  const settled = await Promise.allSettled(
     Array.from({ length: Math.min(limit, items.length) }, async () => {
       while (next < items.length) {
         const i = next++;
@@ -102,6 +105,8 @@ async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T, inde
       }
     }),
   );
+  const failed = settled.find((r) => r.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
   return out;
 }
 
@@ -153,6 +158,7 @@ async function resolve(
     if (r.decision === "uncertain") return { kind: "new", uncertain: { candidateId: match ?? close[0].id, reasoning: shown(r.reasoning) } };
     return { kind: "new" };
   } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
     return { kind: "new", uncertain: { candidateId: close[0].id, reasoning: `Couldn't check for a duplicate: ${errorText(e)}` } };
   }
 }
@@ -311,6 +317,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     try {
       mapped = await call("map", { course, material, pages: part, part: { index: i + 1, count: parts.length }, toc, ...notes });
     } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
       dropped.push({ prompt: pagesLabel(first, last), reason: `couldn't be mapped: ${errorText(e)}` });
       lastFailure = e;
       continue;
@@ -414,6 +421,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       try {
         found = await call("objectives", { course, material, pages: sent.map(({ n, text }) => ({ n, text })), topic: { id: topic.id, name: topic.name, summary: topic.summary ?? "" }, existingObjectives: listed(own), ...notes });
       } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
         dropped.push({ prompt: `Objectives for "${topic.name}"`, reason: `couldn't be found: ${errorText(e)}` });
         return;
       }
@@ -498,6 +506,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       relations.splice(0, relations.length, ...relations.filter((r) => !replaced.has(r.id)), ...linked.links);
       dropped.push(...linked.dropped);
     } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
       dropped.push({ prompt: "Links between topics", reason: `couldn't be found: ${errorText(e)}` });
     }
   }
@@ -533,10 +542,37 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
 
   /* Questions only for objectives marked in this upload (weak points first), from their own pages:
      every other objective gets them when it's flagged (a top-up) or practised (a dive). */
+  const { byTopic, topicsNow } = uploadWritingTargets(input, { newTopics, topicSources, newObjectives, objectiveUpdates, relations, flags }, dropped);
+  const questions: UploadPlan["questions"] = {};
+  const written = await pool([...byTopic.values()], 2, ({ targets, pages }) =>
+    writeQuestions(
+      // Written from the objectives' own pages, checked against the whole file (an anchor may name a page beside them).
+      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), facts, topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}), ...notes },
+      deps,
+    ),
+  );
+  for (const w of written) {
+    dropped.push(...w.dropped);
+    for (const [topicId, qs] of Object.entries(w.questions)) questions[topicId] = [...(questions[topicId] ?? []), ...qs];
+  }
+
+  return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions, flags, run: runRecord(questions) };
+}
+
+/** Select writing targets independently of extraction. Staged jobs persist these before releasing the structure lane. */
+export function uploadWritingTargets(input: RunInput, plan: Pick<UploadPlan, "newTopics" | "topicSources" | "newObjectives" | "objectiveUpdates" | "relations" | "flags">, dropped: PipelineRun["dropped"] = []) {
+  const { newTopics, newObjectives, objectiveUpdates, relations, flags } = plan;
+  const allTopics = () => [...input.course.topics, ...newTopics];
+  const sourceOf = (id: string) => newTopics.find((t) => t.id === id)?.source ?? plan.topicSources[id] ?? input.course.topics.find((t) => t.id === id)?.source ?? [];
   const objectiveById = new Map<string, Objective>([...Object.values(input.objectives), ...newObjectives].map((o) => [o.id, o]));
+  for (const [id, update] of Object.entries(objectiveUpdates)) {
+    const o = objectiveById.get(id);
+    if (o && update.signal) objectiveById.set(id, { ...o, signals: [...o.signals, update.signal] });
+  }
   const liveQuestions = (id: string) => Object.values(input.bank).flat().filter((q) => survivor(q.objectiveId, objectiveById)?.id === id);
   const topicsNow = new Map(allTopics().map((t) => [t.id, { ...t, source: sourceOf(t.id) }]));
   const byTopic = new Map<string, { targets: WriteTarget[]; pages: Set<number> }>();
+  if (input.material.heldBack) return { byTopic, topicsNow };
   for (const id of new Set(flags.map((f) => f.objectiveId))) {
     const o = objectiveById.get(id)!;
     if (o.review === "archived") continue;
@@ -573,20 +609,7 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
       byTopic.set(o.topicId, group);
     }
   }
-  const questions: UploadPlan["questions"] = {};
-  const written = await pool([...byTopic.values()], 2, ({ targets, pages }) =>
-    writeQuestions(
-      // Written from the objectives' own pages, checked against the whole file (an anchor may name a page beside them).
-      { course: input.course, material: input.material, pages: input.pages.filter((p) => pages.has(p.n)), facts, topics: topicsNow, targets, bank: input.bank, ...(input.flagged ? { flagged: input.flagged } : {}), ...notes },
-      deps,
-    ),
-  );
-  for (const w of written) {
-    dropped.push(...w.dropped);
-    for (const [topicId, qs] of Object.entries(w.questions)) questions[topicId] = [...(questions[topicId] ?? []), ...qs];
-  }
-
-  return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions, flags, run: runRecord(questions) };
+  return { byTopic, topicsNow };
 }
 
 export interface WriteTarget {
@@ -622,14 +645,15 @@ export interface WriteInput {
  */
 export async function writeQuestions(
   input: WriteInput,
-  deps: Pick<RunDeps, "call" | "newId" | "renderFigure" | "onProgress">,
+  deps: Pick<RunDeps, "call" | "newId" | "renderFigure" | "onProgress" | "claimWriting">,
 ): Promise<{ questions: Record<string, QuizQuestion[]>; dropped: PipelineRun["dropped"] }> {
   const { call, newId } = deps;
   const progress = deps.onProgress ?? (() => {});
   const dropped: PipelineRun["dropped"] = [];
   const facts = input.facts ?? materialFacts(input.pages);
   /* Write */
-  const touched = input.targets.map((t) => ({ o: t.objective, asked: t.existing.map((q) => q.prompt), need: t.need }));
+  const targets = deps.claimWriting ? await deps.claimWriting(input) : input.targets;
+  const touched = targets.map((t) => ({ o: t.objective, asked: t.existing.map((q) => q.prompt), need: t.need }));
   progress({ stage: "writing", objectives: touched.length });
   const topicsById = input.topics;
   const perCall = QUESTIONS_PER_CALL[input.deep ? "deep" : "generate"];
@@ -754,6 +778,7 @@ export async function writeQuestions(
           }
           return kept;
         } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
           dropped.push({ prompt: `Questions for "${topic.name}"`, reason: `couldn't be written: ${errorText(e)}` });
           return [];
         }

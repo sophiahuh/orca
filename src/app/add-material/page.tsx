@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { MATERIAL_TYPES, MATERIAL_TYPE_LABELS, type MaterialType, formatUSDate, toISODate } from "@/lib/data";
 import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { type UploadOutcome, type UploadStage, filesFromDataTransfer, importText, importWebsite, uploadMaterial, uploadProblem } from "@/lib/uploads";
+import { type UploadOutcome, type UploadStage, filesFromDataTransfer, importText, importWebsite, uploadMaterial, uploadProblem, admitUploads, concurrent, PIPELINE_LIMITS } from "@/lib/uploads";
 import { type BatchItem, BatchList } from "@/components/upload/BatchList";
 import type { MaterialPages } from "@/lib/data";
 import type { ReflectOutput } from "@/lib/pipeline/schemas";
@@ -180,7 +180,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
   };
 
   /**
-   * The files of a folder, one after another (the server builds one job at a time anyway), each row
+   * The files of a folder, admitted in display order before bounded parallel transfers, each row
    * showing where it is. Then the review, which lists every upload; a failed row stays on the list
    * with why, and the button offers to send the failed ones again.
    */
@@ -191,8 +191,11 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
     let firstRun: string | null = null;
     let failed = 0;
     let duplicates = 0;
-    for (const it of batchPending) {
-      const meta = { courseId: course.id, type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", again: it.again === true, heldBack: it.heldBack };
+    let staged: boolean;
+    try { staged = await admitUploads(course.id, batchPending.map((it) => ({ id: it.id, name: it.file.name, again: it.again, retry: it.status.kind === "failed" })), batch[0].id); }
+    catch (error) { setPhase({ kind: "error", message: error instanceof Error ? error.message : "Couldn't prepare the upload list." }); return; }
+    await concurrent(batchPending, staged ? PIPELINE_LIMITS.ingest : 1, async (it) => {
+      const meta = { courseId: course.id, ...(staged ? { admissionId: it.id } : {}), type: it.type, assigned: it.assigned, due: it.due, reflect: false, handwritten: it.type === "Handwritten notes" && uploadKind(it.file.name, it.file.type) === "pdf", again: it.again === true, heldBack: it.heldBack };
       try {
         const outcome = await uploadMaterial(it.file, meta, (stage) => patch(it.id, { status: { kind: "sending", message: STAGE_MESSAGE[stage] } }));
         if (outcome.kind === "read") addMaterial(outcome.material, { saved: true });
@@ -204,7 +207,7 @@ export default function AddMaterialPage({ searchParams }: PageProps<"/add-materi
         failed++;
         patch(it.id, { status: { kind: "failed", message: error instanceof Error ? error.message : "The upload failed." } });
       }
-    }
+    });
     if (failed > 0) {
       setPhase({ kind: "error", message: `${failed} of ${batchPending.length} files didn't go through. Fix what each one says and send them again, or go on to the review.` });
       return;

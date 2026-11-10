@@ -1,5 +1,7 @@
 "use client";
 
+import { concurrent, PIPELINE_LIMITS } from "./jobs/staged/types";
+
 /**
  * The browser's side of uploads (Phase 4 plan, decision 7): hash the file, ask
  * POST /api/materials for a signed upload URL (or learn the course already has it), send the file
@@ -22,6 +24,7 @@ export function hiddenNote(hidden: Material["hiddenText"]): string | null {
 export type UploadStage = "hashing" | "uploading" | "reading";
 
 export interface UploadMeta {
+  admissionId?: string;
   courseId: string;
   type: MaterialType;
   assigned: string | null;
@@ -150,10 +153,24 @@ export function uploadProblem(file: File): string | null {
   return null;
 }
 
+/** Reserve file order before any concurrent hash/transfer/parse work. Older servers return staged:false. */
+export async function admitUploads(courseId: string, items: Array<{ id: string; name: string; again?: boolean; retry?: boolean }>, batchId = crypto.randomUUID()): Promise<boolean> {
+  const result = await post<{ staged: boolean }>("/api/materials/admit", { courseId, batchId, items: items.map((it) => ({ id: it.id, name: it.name, metadata: { again: !!it.again, retry: !!it.retry } })) });
+  return result.staged;
+}
+export { concurrent, PIPELINE_LIMITS };
+
 /** `onStarted` gets the material's id as soon as the server has made it (the page keeps it in its URL, so a reload can follow it). */
 export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: UploadStage) => void, onStarted?: (materialId: string) => void): Promise<UploadOutcome> {
   const problem = uploadProblem(file);
   if (problem) throw new Error(problem);
+  if (!meta.admissionId) {
+    const id = crypto.randomUUID();
+    if (await admitUploads(meta.courseId, [{ id, name: file.name, again: meta.again }], id)) meta = { ...meta, admissionId: id };
+  }
+  const renew = () => meta.admissionId ? fetch("/api/materials/admit", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ itemId: meta.admissionId, action: "renew" }) }).catch(() => undefined) : Promise.resolve();
+  const heartbeat = meta.admissionId ? setInterval(() => { void renew(); }, 45_000) : null;
+  try {
   onStage("hashing");
   const hash = await sha256(file);
   const mime = UPLOAD_MIMES[uploadKind(file.name, file.type) ?? "pdf"];
@@ -171,7 +188,11 @@ export async function uploadMaterial(file: File, meta: UploadMeta, onStage: (s: 
 
   onStage("reading");
   type Processed = { material: Material; pages: MaterialPages; hidden: { items: number; pages: number[] }; generation: Generation } | Duplicate;
-  const processed = await post<Processed>(`/api/materials/${started.material.id}/process`, meta.again ? { again: true } : undefined);
+  const processed = await post<Processed>(`/api/materials/${started.material.id}/process`, { again: meta.again === true, admissionId: meta.admissionId });
   if ("duplicate" in processed) return { kind: "duplicate", ...processed.duplicate, generation: processed.generation };
   return { kind: "read", ...processed };
+  } catch (error) {
+    if (meta.admissionId) await fetch("/api/materials/admit", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ itemId: meta.admissionId, action: "fail", error: error instanceof Error ? error.message.slice(0, 500) : "Upload failed" }) }).catch(() => undefined);
+    throw error;
+  } finally { if (heartbeat) clearInterval(heartbeat); }
 }

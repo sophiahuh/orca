@@ -1,3 +1,5 @@
+import { stagedPipeline, pipelineRpc } from "@/lib/server/staged/db";
+import { singleton } from "@/lib/server/staged/admission";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { heldBackByDefault } from "@/lib/material/hold-back";
@@ -28,6 +30,10 @@ export async function POST(request: Request) {
     if (!(await ownsCourse(db, student.id, parsed.data.courseId))) return reply(404, { error: "No such course." });
     const rate = await rateLimit(db, student.id, "web");
     if (!rate.ok) return tooManyRequests(rate);
+    const admissionId = stagedPipeline() ? crypto.randomUUID() : undefined;
+    if (admissionId) await singleton(db, student.id, parsed.data.courseId, admissionId, "Website", "web");
+    let attached = false;
+    try {
     const page = await fetchPublicPage(url.href, { schemes: ["https:", "http:"], userAgent: "Orca course-material importer" });
     if (!page.ok) {
       if (page.reason === "blocked") return reply(400, { error: "Use a public http(s) website." });
@@ -48,6 +54,10 @@ export async function POST(request: Request) {
     const pages = [{ owner_id: student.id, material_id: id, n: 1, text }];
     const inserted = await db.from("material_pages").insert(pages);
     if (inserted.error) return reply(500, { error: "Orca saved the website but couldn't read it." });
-    return reply(201, { material: materialFromRow(data), pages: [{ n: 1, text }], generation: await startUploadJob(db, student.id, id) });
+    attached = true;
+    return reply(201, { material: materialFromRow(data), pages: [{ n: 1, text }], generation: await startUploadJob(db, student.id, id, admissionId) });
+    } finally {
+      if (admissionId && !attached) await pipelineRpc(db, "ingestion", { ownerId: student.id, itemId: admissionId, action: "fail", error: "The material could not be added. Try again." });
+    }
   });
 }
