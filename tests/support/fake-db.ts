@@ -1,6 +1,6 @@
 /**
  * A small in-memory stand-in for the Supabase client, for server modules whose queries are plain
- * filters (select … eq/is/in … order/limit/range … maybeSingle/single), inserts and rpc calls.
+ * filters (select … eq/is/in/gte … order/limit/range … maybeSingle/single), inserts and rpc calls.
  * Every query returns whole rows whatever columns it selected (a superset is fine for the code
  * under test). `rpc` records its calls and answers nothing, so a test can assert what was saved.
  */
@@ -29,6 +29,7 @@ export function fakeDb(tables: Record<string, FakeRow[]>, rpcAnswers: Record<str
       eq: (k: string, v: unknown) => (filters.push((r) => r[k] === v), q),
       is: (k: string, v: unknown) => (filters.push((r) => r[k] === v || (v === null && r[k] === undefined)), q),
       in: (k: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[k])), q),
+      gte: (k: string, v: unknown) => (filters.push((r) => typeof r[k] === "number" && typeof v === "number" ? r[k] >= v : String(r[k]) >= String(v)), q),
       order: (k: string, o?: { ascending?: boolean }) => ((order ??= { key: k, ascending: o?.ascending ?? true }), q),
       limit: (n: number) => ((limit = n), q),
       range: (a: number, b: number) => ((range = [a, b]), q),
