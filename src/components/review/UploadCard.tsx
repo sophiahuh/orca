@@ -213,7 +213,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
           <button
             type="button"
             onClick={() => setPickingSlides(true)}
-            className="pressable shrink-0 cursor-pointer rounded-pill bg-parchment px-[10px] py-[3px] text-[12px] font-bold text-wisteria-deep ring-2 ring-inset ring-wisteria lip-2 lip-wisteria"
+            className="pressable shrink-0 cursor-pointer rounded-pill bg-wisteria px-[10px] py-[3px] text-[12px] font-bold text-parchment lip-2 lip-wisteria"
             data-part="hard-slides"
           >
             Identify weak spots
