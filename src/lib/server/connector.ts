@@ -5,13 +5,14 @@
  * query scoped to that student.
  */
 import { createHash, randomBytes } from "node:crypto";
-import type { AnswerKey, AnswerReport, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
+import type { AnswerKey, AnswerReport, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, MaterialLine, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, ScopeSummary, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
 import { addMaterial } from "@/lib/server/connector/add-material";
 import { addQuestions } from "@/lib/server/connector/add-questions";
 import { cramFields } from "@/lib/server/connector/cram-plan";
 import { logEvidence } from "@/lib/server/connector/log-evidence";
 import { materialFor } from "@/lib/server/connector/material-for";
-import type { ExamScope, MaterialType } from "@/lib/data";
+import type { ExamScope, MaterialType, ObjectiveSignal } from "@/lib/data";
+import { objectiveMaterialIds } from "@/lib/course/exam-card";
 import { AGENDA_RULES } from "@/lib/mastery/agenda";
 import { dayStartIn } from "@/lib/jobs/budget";
 import { startFlagTopUpJob } from "@/lib/server/jobs/start";
@@ -120,6 +121,24 @@ export function orcaOutcome(q: QuizQuestion, response: string): AnswerEvent["out
   return null;
 }
 
+/**
+ * An exam's scope by its counts, over the live objectives of its topics (every topic when it names
+ * none): in scope when the scope's weight (1 unlisted) is above 0, excluded at 0. As the exam card
+ * counts them.
+ */
+export function scopeSummary(scope: ExamScope, topicIds: readonly string[], objectives: ReadonlyArray<Pick<ObjectiveLine, "id" | "topicId">>): ScopeSummary {
+  const named = new Set(topicIds);
+  const weights = new Map(scope.objectives.map((o) => [o.objectiveId, o.weight]));
+  let inScope = 0;
+  let excluded = 0;
+  for (const o of objectives) {
+    if (named.size && !named.has(o.topicId)) continue;
+    if ((weights.get(o.id) ?? 1) > 0) inScope++;
+    else excluded++;
+  }
+  return { inScope, excluded, sources: scope.sources, ...(scope.budget ? { budget: scope.budget } : {}) };
+}
+
 export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Date = () => new Date()): ConnectorTools {
   const owns = async (courseId: string) => {
     const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).eq("id", courseId).is("deleted_at", null).maybeSingle();
@@ -130,9 +149,9 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
   const courseState = async (courseId: string, options: { detail?: "summary" | "full"; topicIds?: string[] } = {}): Promise<CourseState | null> => {
     const course = await owns(courseId);
     if (!course) return null;
-    const [topics, objectives, questions, exams, profile, snapshots, feedback, runs, budget, vault] = await Promise.all([
+    const [topics, objectives, questions, exams, profile, snapshots, feedback, runs, budget, materials] = await Promise.all([
       db.from("topics").select("id, name, review, merged_into, sort_order").eq("owner_id", ownerId).eq("course_id", courseId),
-      db.from("objectives").select("id, topic_id, name, review, merged_into").eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("objectives").select("id, topic_id, name, review, merged_into, material_id, signals").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("questions").select("id, objective_id, deep").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("exams").select("id, title, date, topic_ids, cramming, scope").eq("owner_id", ownerId).eq("course_id", courseId).order("date"),
       db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle(),
@@ -140,10 +159,10 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       db.from("question_feedback").select("question_id").eq("owner_id", ownerId).eq("rating", "down"),
       db.from("pipeline_runs").select("id, status, objective_ids").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "top-up").in("status", ["queued", "waiting", "running"]).order("at"),
       checkBudget(db, ownerId, 0),
-      // Held-back materials (every non-removed one): listed by name only, never opened.
-      db.from("materials").select("id, filename, type").eq("owner_id", ownerId).eq("course_id", courseId).neq("status", "removed").eq("held_back", true).order("created_at"),
+      // The course's materials (every non-removed one): by name only; the held-back ones make the vault, never opened.
+      db.from("materials").select("id, filename, type, held_back").eq("owner_id", ownerId).eq("course_id", courseId).neq("status", "removed").order("created_at"),
     ]);
-    for (const r of [topics, objectives, questions, exams, profile, feedback, runs, vault]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
+    for (const r of [topics, objectives, questions, exams, profile, feedback, runs, materials]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
 
     const at = now();
     const topicById = new Map((topics.data ?? []).map((t) => [t.id, t]));
@@ -161,6 +180,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const questionCount = new Map<string, number>();
     for (const q of questions.data ?? []) if (q.objective_id && !q.deep && !down.has(q.id)) questionCount.set(q.objective_id, (questionCount.get(q.objective_id) ?? 0) + 1);
     const stateOf = new Map(snapshots.objectives.map((s) => [s.objectiveId, stateAt(s.objectiveId, s.accumulator, at)]));
+    const materialLines: MaterialLine[] = (materials.data ?? []).map((m) => ({ id: m.id, filename: m.filename, type: m.type as MaterialType, heldBack: m.held_back }));
+    const knownMaterials = new Set(materialLines.map((m) => m.id));
 
     const lines: ObjectiveLine[] = [];
     for (const o of objectives.data ?? []) {
@@ -176,6 +197,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         status: state?.status ?? "unseen",
         recall: state?.recall ?? null,
         questions: questionCount.get(o.id) ?? 0,
+        // The materials it's taught in, among the course's (a removed one is no longer listed).
+        materialIds: objectiveMaterialIds({ materialId: o.material_id, signals: (o.signals as unknown as ObjectiveSignal[] | null) ?? [] }).filter((id) => knownMaterials.has(id)),
       });
     }
     const dueNow = lines
@@ -194,7 +217,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const examFocus = [...new Set(examLines.filter((e) => e.cramming || (e.date >= today && e.date <= weekOut)).flatMap((e) => (e.topicIds.length ? e.topicIds : liveTopics.map((t) => t.id))))];
     const mode = examLines.reduce<CourseMode>((m, e) => (MODE_ORDER[e.mode] > MODE_ORDER[m] ? e.mode : m), "normal");
     const cramming = examLines.find((e) => e.cramming)?.id ?? null;
-    const vaultLines: VaultLine[] = (vault.data ?? []).map((m) => ({ materialId: m.id, filename: m.filename, type: m.type as MaterialType }));
+    const vaultLines: VaultLine[] = materialLines.filter((m) => m.heldBack).map((m) => ({ materialId: m.id, filename: m.filename, type: m.type }));
     const topicLines: TopicLine[] = liveTopics.map((t) => {
       const mine = lines.filter((l) => l.topicId === t.id);
       return { id: t.id, name: t.name, objectives: mine.length, weak: mine.filter((l) => DUE_STATUSES.has(l.status as ObjectiveStatus)).length, askable: mine.filter((l) => l.questions > 0).length };
@@ -205,13 +228,18 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const resetsAt = new Date(dayStartIn(timezone, at).getTime() + 86_400_000).toISOString();
     // The cram plan, coverage and top errors (contract section 6) read the agenda's effective weights: course × scope inside the window.
     const cram = await cramFields(db, ownerId, { courseId, at, timezone, today, exams: examLines, topics: liveTopics, objectives: lines, weights: await effectiveWeights(courseId, examLines, today) });
+    // A summary carries each exam's scope by its size (a full scope lists every objective with its evidence: too much for a check-in).
+    const summarised = (e: ExamLine): ExamLine => {
+      const { scope, ...rest } = e;
+      return { ...rest, scopeSummary: scope ? scopeSummary(scope, e.topicIds, lines) : null };
+    };
 
     return {
       course: { id: course.id, name: course.name },
       today,
-      exams: examLines,
+      exams: options.detail === "summary" ? examLines.map(summarised) : examLines,
       topics: topicLines,
-      ...(options.detail === "summary" ? {} : { objectives: shown ? lines.filter((l) => shown.has(l.topicId)) : lines }),
+      ...(options.detail === "summary" ? {} : { objectives: shown ? lines.filter((l) => shown.has(l.topicId)) : lines, materials: materialLines }),
       dueNow,
       examFocus,
       budget: budget.ok ? { ok: true, resetsAt } : { ok: false, reason: budget.message, resetsAt },
@@ -249,7 +277,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     ]);
     for (const r of [topics, objectives, relations]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
     const computed = courseObjectiveWeights(Object.fromEntries((objectives.data ?? []).map((o) => [o.id, objectiveFromRow(o)])), (topics.data ?? []).map(topicFromRow), (relations.data ?? []).map(relationFromRow));
-    return examScopeWeights(exams.map((e) => ({ courseId, date: e.date, cramming: e.cramming, scope: e.scope })), courseId, today, computed);
+    return examScopeWeights(exams.map((e) => ({ courseId, date: e.date, cramming: e.cramming, scope: e.scope ?? null })), courseId, today, computed);
   };
 
   /** Askable questions (not dive-only, not thumbed down) for some objectives, with what the student has answered. */
@@ -585,6 +613,14 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         const known = new Set((live ?? []).map((o) => o.id));
         const unknownObjectives = wanted.filter((id) => !known.has(id));
         if (unknownObjectives.length) return { error: `These aren't objective ids in this course: ${unknownObjectives.join(", ")}. Use ids from course_state (detail "full").` };
+      }
+      // The materials a scope names are this course's, not removed.
+      if (exam.scope?.materialIds?.length) {
+        const { data: known, error: knownError } = await db.from("materials").select("id").eq("owner_id", ownerId).eq("course_id", courseId).neq("status", "removed").in("id", exam.scope.materialIds);
+        if (knownError) throw new Error(`Couldn't read the materials: ${knownError.message}`);
+        const ids = new Set((known ?? []).map((m) => m.id));
+        const unknownMaterials = exam.scope.materialIds.filter((id) => !ids.has(id));
+        if (unknownMaterials.length) return { error: `These aren't material ids in this course: ${unknownMaterials.join(", ")}. Use ids from course_state's materials (detail "full").` };
       }
       // cramming and scope left out keep what the exam already has (false and null for a new one).
       let kept: { cramming: boolean; scope: ExamScope | null } = { cramming: false, scope: null };

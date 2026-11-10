@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cramPlan, type CramPlanInput } from "../../src/lib/mastery/cram-plan.ts";
+import { DEFAULT_HOURS_PER_DAY, cramPlan, defaultBudget, type CramPlanInput } from "../../src/lib/mastery/cram-plan.ts";
 import type { ObjectiveStatus } from "../../src/lib/mastery/types.ts";
 
 const obj = (id: string, status: ObjectiveStatus, weight = 1) => ({ id, name: `Objective ${id}`, weight, status });
@@ -86,4 +86,16 @@ test("the line: its normal form names what's done and today's topics, the behind
 
 test("the plan is deterministic", () => {
   assert.deepEqual(cramPlan(base), cramPlan(base));
+});
+
+test("a plan says when its budget was assumed: 2 hours for every study day from today, nothing spent", () => {
+  assert.equal(cramPlan(base).defaulted, false);
+  const assumed = defaultBudget("2026-11-10", "2026-11-19", "2026-11-10T15:00:00.000Z");
+  assert.deepEqual(assumed, { hours: DEFAULT_HOURS_PER_DAY * 9, daysOut: [], since: "2026-11-10T15:00:00.000Z" });
+  const plan = cramPlan({ ...base, budget: assumed, defaulted: true });
+  assert.equal(plan.defaulted, true);
+  assert.equal(plan.hoursLeft, 18);
+  assert.equal(plan.minutesPerDay, 120);
+  assert.equal(plan.behindMinutes, 0);
+  assert.deepEqual(defaultBudget("2026-11-19", "2026-11-19", "2026-11-19T08:00:00.000Z").hours, 0, "on the day there are no study days");
 });

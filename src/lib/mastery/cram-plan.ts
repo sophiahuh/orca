@@ -18,6 +18,8 @@ export interface CramPlanInput {
   topics: Array<{ id: string; name: string; objectives: Array<{ id: string; name: string; weight: number; status: ObjectiveStatus }> }>;
   /** Minutes studied since budget.since: session_results seconds (any mode) + connector estimate (span of a day's connector events, capped at 120 min/day). */
   spentMinutes: number;
+  /** The budget was assumed (`defaultBudget`), not set by the student. */
+  defaulted?: boolean;
 }
 
 export interface CramPlanTopic {
@@ -52,6 +54,19 @@ export interface CramPlan {
   today: Array<{ topicId: string; minutes: number }>;
   /** "9 days to the exam. Done: A, B. Today: C, D. Verified: 60%." (day of: "Exam day. Light review only, nothing new."; behind: " 20 minutes behind: D gets shortened." appended) */
   line: string;
+  /** The budget was assumed: DEFAULT_HOURS_PER_DAY a study day from today, nothing spent. Claude says so and asks. */
+  defaulted: boolean;
+}
+
+/** What a cram without a time budget is assumed to get, per study day (course_state's plan then says `defaulted`). */
+export const DEFAULT_HOURS_PER_DAY = 2;
+
+/**
+ * The budget assumed for a cramming exam whose scope has none: DEFAULT_HOURS_PER_DAY for every day
+ * from today to the day before the exam, no days out, starting now (so nothing counts as spent).
+ */
+export function defaultBudget(today: string, examDate: string, now: string): CramBudget {
+  return { hours: DEFAULT_HOURS_PER_DAY * studyDaysFrom(today, examDate, new Set()).length, daysOut: [], since: now };
 }
 
 const DAY_MS = 86_400_000;
@@ -143,5 +158,5 @@ export function cramPlan(input: CramPlanInput): CramPlan {
     if (behindMinutes > 0) line += todayNames.length ? ` ${behindMinutes} minutes behind: ${todayNames[todayNames.length - 1]} gets shortened.` : ` ${behindMinutes} minutes behind.`;
   }
 
-  return { daysLeft, studyDays, hoursLeft, minutesPerDay, behindMinutes, verified: { done, total, share }, topics, today: todayList, line };
+  return { daysLeft, studyDays, hoursLeft, minutesPerDay, behindMinutes, verified: { done, total, share }, topics, today: todayList, line, defaulted: input.defaulted ?? false };
 }

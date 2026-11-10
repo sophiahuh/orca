@@ -13,6 +13,21 @@
 > pipeline's structural rules too (four options for multiple choice, an anchor for a material objective)
 > and refuses a question anchored to a held-back material; `course_state.vault` lists every
 > non-removed held-back material. Open product questions: `docs/TO-DISCUSS.md` (2026-11-10).
+>
+> **Status (2026-11-10, after the step 8 deploy, branch `cram-scope`):** three defects seen on a real
+> course fixed. (1) The scope narrows: setup picks the files the exam covers (`cram-materials`,
+> `cram-material[data-id]`; lectures and notes ticked, held-back files tickable), `scopeFromSetup`
+> weighs objectives taught only elsewhere 0 with a `professor` "not in the files the exam covers"
+> note, stores `ExamScope.materialIds`, and the count shows before Confirm (`cram-scope-size`, "68 of
+> 151 objectives in scope"; nothing picked keeps everything in scope). The hours question became
+> hours a day (`cram-hours-pick[data-hours]`, `cram-hours`, `cram-hours-total`), prefilled from the
+> exam review duration over the study days left; `budget.hours` still stores the total. (2)
+> `course_state` detail full lists `materials` (`{ id, filename, type, heldBack }`) and each
+> `ObjectiveLine.materialIds`; `set_exam` takes `scope.materialIds`; `INSTRUCTIONS` map named lectures
+> to materials by filename. (3) Detail summary replaces each exam's `scope` with `scopeSummary`
+> (`{ inScope, excluded, sources, budget }`, counted over the live objectives of its topics). A cramming
+> exam without a budget gets a `plan` from an assumed 2 hours a study day (`defaultBudget`), with
+> `plan.defaulted: true` for Claude to say so.
 
 The owner's plan ("Orca Cram Mode Plan", 2026-11-09) and the decisions of 2026-11-10 (living doc
 "Orca Cram Mode: how it works"). This file is the single source of truth for every surface more

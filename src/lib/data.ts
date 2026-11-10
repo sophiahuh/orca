@@ -143,6 +143,11 @@ export interface ExamScope {
   sources: ScopeSignal[];
   /** The time budget while cramming (set at cram setup); absent until then. */
   budget?: CramBudget;
+  /**
+   * The materials the exam covers, as picked at cram setup (or named to Claude): objectives taught
+   * only elsewhere weigh 0. Absent when nothing was picked (everything in scope).
+   */
+  materialIds?: string[];
 }
 
 export interface CalendarEvent {

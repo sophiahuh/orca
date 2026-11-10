@@ -25,8 +25,9 @@ const hoursText = (h: number) => (Number.isInteger(h) ? `${h}` : (Math.round(h *
 const minutesText = (m: number) => `${Math.round(m)} min`;
 
 /**
- * The cram page (cram mode contract, section 6): setup (the professor's words, Add material held
- * back, worries, hours and days out) until the exam is cramming with a budget, then the plan: days
+ * The cram page (cram mode contract, section 6): setup (the professor's words, the files the exam
+ * covers, Add material held back, worries, hours a day and days out) until the exam is cramming
+ * with a budget, then the plan: days
  * left, the budget, the line, the scope as topic rows with weak spots, today, the practice test,
  * the vault, Study with Claude, Edit scope and Stop cramming. The plan is computed here from the
  * store; nothing about it is stored.
@@ -72,10 +73,12 @@ export default function CramPage({ params, searchParams }: PageProps<"/course/[s
   }
 
   const catalogue = objectives[course.id] ?? {};
-  const covered = examObjectives(exam, course.topics, catalogue);
+  // What the setup starts from: every live objective of the exam's topics (the scope set aside, so a narrowed one can be widened).
+  const candidates = examObjectives({ topicIds: exam.topicIds, scope: null }, course.topics, catalogue);
   const days = daysUntil(exam.date, today);
   const cramming = exam.cramming && planned !== null && !editing;
-  const vault = materials.filter((mat) => mat.courseId === course.id && mat.heldBack);
+  const mine = materials.filter((mat) => mat.courseId === course.id);
+  const vault = mine.filter((mat) => mat.heldBack);
 
   return (
     <Screen bg="ocean" className="overflow-auto">
@@ -99,7 +102,7 @@ export default function CramPage({ params, searchParams }: PageProps<"/course/[s
           <motion.div variants={fadeUp} className="w-[600px]">
             <Card className="px-[28px] pb-[24px] pt-[24px]">
               {/* Mounted fresh per exam, so its fields start from the exam as it is then. */}
-              <CramSetup key={exam.id} exam={exam} course={course} covered={covered} catalogue={catalogue} mastery={m} today={today} onDone={() => setEditing(false)} onCancel={() => setEditing(false)} />
+              <CramSetup key={exam.id} exam={exam} course={course} candidates={candidates} materials={mine} catalogue={catalogue} mastery={m} today={today} onDone={() => setEditing(false)} onCancel={() => setEditing(false)} />
               {exam.cramming && !planned && <p className="mt-[12px] text-[13px] font-medium text-wisteria-deep">Cramming already, with no time budget yet: confirm to set one.</p>}
             </Card>
           </motion.div>

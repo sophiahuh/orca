@@ -1,7 +1,7 @@
 import { type Page } from "@playwright/test";
 import type { QuizQuestion } from "../src/lib/data";
 import { fakeCalls, fakeModel } from "./fake-model";
-import { expect, test, F, FIXTURE_STATE, ids, seedState, stored } from "./fixture";
+import { expect, test, F, FIXTURE_STATE, fixtureMaterial, ids, seedState, stored } from "./fixture";
 
 /**
  * The Claude connector, end to end: the link minted in Settings, then the MCP route as Claude
@@ -204,16 +204,31 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   const far = new Date(Date.now() + 12 * 86_400_000).toISOString().slice(0, 10);
   const exam = toolText(await call(page, url, "set_exam", { courseId: F.course, title: "Final", date: far, topicIds: [], cramming: true })) as { id: string; mode: string };
   expect(exam.mode).toBe("exam-week");
-  expect(toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" }))).toMatchObject({ mode: "exam-week", cramming: exam.id, plan: null });
-  // The time budget (set at cram setup, or here) makes course_state carry the derived plan and the scope's coverage.
-  const budgeted = toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { objectives: [], sources: [], budget: { hours: 6, daysOut: [], since: new Date().toISOString() } } })) as { scope: { budget: { hours: number } } };
+  // No budget yet: the plan assumes 2 hours a study day (12 days: 24 hours) and says so.
+  const assumed = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { mode: string; cramming: string; plan: { defaulted: boolean; hoursLeft: number; behindMinutes: number } };
+  expect(assumed).toMatchObject({ mode: "exam-week", cramming: exam.id });
+  expect(assumed.plan).toMatchObject({ defaulted: true, hoursLeft: 24, behindMinutes: 0 });
+  // Full: the course's materials, and each objective's materialIds, so Claude can map "lectures 11 to 16" to files.
+  const full = toolText(await call(page, url, "course_state", { courseId: F.course })) as { materials: unknown[]; objectives: Array<{ id: string; materialIds: string[] }>; exams: Array<{ scope: unknown }> };
+  expect(full.materials).toEqual([{ id: F.material, filename: fixtureMaterial(F.course).filename, type: "Lecture", heldBack: false }]);
+  expect(full.objectives.find((o) => o.id === F.convert)?.materialIds).toEqual([F.material]);
+  expect(full.exams[0]).toHaveProperty("scope", null);
+  // The time budget (set at cram setup, or here) makes course_state carry the derived plan and the scope's coverage; the scope names the deck and excludes one objective.
+  const scope = { objectives: [{ objectiveId: id.noq, weight: 0, evidence: [{ signal: "professor", quote: "not in the files the exam covers" }] }], sources: ["professor"], materialIds: [F.material], budget: { hours: 6, daysOut: [], since: new Date().toISOString() } };
+  const budgeted = toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope })) as { scope: { budget: { hours: number }; materialIds: string[] } };
   expect(budgeted.scope.budget.hours).toBe(6);
-  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number }; coverage: { total: number; verified: number }; topErrors: unknown[] };
+  expect(budgeted.scope.materialIds).toEqual([F.material]);
+  expect(toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { ...scope, materialIds: [crypto.randomUUID()] } }))).toMatchObject({ error: expect.stringMatching(/material ids/) });
+  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number; defaulted: boolean }; coverage: { total: number; verified: number }; topErrors: unknown[]; exams: Array<Record<string, unknown>> };
   expect(planned.plan.line).toMatch(/days to the exam/);
   expect(planned.plan.daysLeft).toBeGreaterThan(10);
   expect(planned.plan.hoursLeft).toBe(6);
-  expect(planned.coverage.total).toBeGreaterThan(0);
+  expect(planned.plan.defaulted).toBe(false);
+  expect(planned.coverage.total).toBe(3);
   expect(planned.topErrors).toEqual([]);
+  // A summary carries each exam's scope by its size, not its entries (three live objectives in scope, the one excluded).
+  expect(planned.exams[0]).not.toHaveProperty("scope");
+  expect(planned.exams[0].scopeSummary).toMatchObject({ inScope: 3, excluded: 1, sources: ["professor"], budget: { hours: 6 } });
   // A prose answer isn't graded by Orca's model: the key comes back for Claude to grade.
   const held = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." })) as { needsSelfGrade: boolean; reason: string; rubric?: { requiredIdeas: string[] } };
   expect(held.needsSelfGrade).toBe(true);
