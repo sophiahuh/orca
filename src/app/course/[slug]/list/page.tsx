@@ -54,7 +54,7 @@ export default function ListPage({ params }: PageProps<"/course/[slug]/list">) {
           <motion.div variants={fadeUp} initial="hidden" animate="show">
             <BackButton href={`/course/${course.slug}`} />
           </motion.div>
-          <div className="flex min-w-0 max-w-[560px] flex-1 flex-col">
+          <div className="flex min-w-0 max-w-[720px] flex-1 flex-col">
             <motion.header variants={stagger()} initial="hidden" animate="show" className="flex flex-col gap-[6px] pt-[2px]">
               <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-none text-prussian">
                 {course.name}
