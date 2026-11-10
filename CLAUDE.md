@@ -457,7 +457,10 @@ All 11 Figma screens are built. Where things live:
   a held-back or removed material, `heldBack` counts the skipped ones; `src/lib/server/connector/material-for.ts`),
   `add_questions` (questions Claude wrote, checked like generated ones in `src/lib/connector/question-check.ts`: the
   pipeline's structural rules, `isExpressionAnswer`, the math check, the sanitiser, anchor pages that exist; refused per
-  item with a reason; stored `source: "claude"`, `tier: null`), `add_material` (pasted text through
+  item with a reason; stored `source: "claude"`, `tier: null`; since 2026-11-10 an objective no live, non-held-back
+  material teaches takes a question without an anchor, stored `unanchored` (`questions.unanchored`, migration
+  `20261110170000`, the one way past the database's anchor check) and shown as not course-specific like an inferred
+  objective's, the result's `note` saying so), `add_material` (pasted text through
   `src/lib/server/text-material.ts`, shared with `POST /api/materials/text`, `holdBack` defaulting by type; or
   `file: true` for an upload link to `/add-material?course=…&type=…&holdBack=1`, which the page reads) and
   `log_evidence` (a `work` event: a problem Claude set and judged, with `basis`, `outcome`, `help`; or a `signal`:
@@ -619,7 +622,9 @@ now, so that part needs rethinking before it's planned.
 - Check exactly when the domain allows (bit strings, numbers, Boolean expressions by truth table).
   Use a model grader only with a structured rubric.
 - Course-specific questions carry a source anchor into the course material. Questions for inferred
-  objectives have no anchor and must not present themselves as course-specific.
+  objectives have no anchor and must not present themselves as course-specific. The one exception
+  (2026-11-10): an objective no live, non-held-back material teaches may take a connector question
+  without an anchor, stored `unanchored` and shown exactly like an inferred objective's.
 - No silent placeholders: a fallback or unknown value must never look like a computed one. Throw, or
   show an explicit empty or unknown state. This applies to existing code you touch.
 - When live credentials exist (Supabase, Anthropic), run the live check. A typecheck around a live

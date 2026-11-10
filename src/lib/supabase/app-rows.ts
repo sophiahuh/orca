@@ -199,6 +199,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     material_id: q.materialId ?? null,
     deep: q.deep ?? false,
     source: q.source ?? "orca",
+    unanchored: q.unanchored ?? false,
   };
 }
 
@@ -221,6 +222,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     objectiveId: r.objective_id,
     ...(r.deep ? { deep: true } : {}),
     ...(r.source === "claude" ? { source: "claude" as const } : {}),
+    ...(r.unanchored ? { unanchored: true as const } : {}),
   };
 }
 
