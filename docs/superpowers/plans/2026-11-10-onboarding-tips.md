@@ -336,7 +336,7 @@ test("copy stays short: a title, and a body of at most 220 characters", () => {
 });
 
 test("a student with no course is pointed at Add Course; with one, at the island", () => {
-  assert.deepEqual(ids(eligibleTips({ pathname: "/", courses: 0, sessions: 0 }, none, noToast)), ["add-course"]);
+  assert.deepEqual(ids(eligibleTips({ pathname: "/", courses: 0, sessions: 0 }, none, (s) => noToast(s) && !s.includes("data-todo"))), ["add-course"]);
   assert.deepEqual(ids(eligibleTips({ pathname: "/", courses: 1, sessions: 0 }, none, noToast)), ["island", "quick-review"]);
 });
 
