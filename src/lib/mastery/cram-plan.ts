@@ -149,7 +149,8 @@ export function cramPlan(input: CramPlanInput): CramPlan {
     const todayNames = todayList.map((t) => nameOf.get(t.topicId) ?? t.topicId);
     line = `${daysLeft} ${daysLeft === 1 ? "day" : "days"} to the exam.`;
     if (doneNames.length) line += ` Done: ${doneNames.join(", ")}.`;
-    if (todayNames.length) line += ` Today: ${todayNames.join(", ")}.`;
+    // At most three named, so the line stays one sentence; the page and the plan list them all.
+    if (todayNames.length) line += ` Today: ${todayNames.slice(0, 3).join(", ")}${todayNames.length > 3 ? ` and ${todayNames.length - 3} more` : ""}.`;
     line += ` Verified: ${Math.round(share * 100)}%.`;
     if (behindMinutes > 0) line += todayNames.length ? ` ${behindMinutes} minutes behind: ${todayNames[todayNames.length - 1]} gets shortened.` : ` ${behindMinutes} minutes behind.`;
   }
