@@ -112,6 +112,24 @@ export function IconSettings({ size = 24, ...props }: IconProps) {
   );
 }
 
+/** Pause (24 px grid, 2.2 px round stroke, matching Icon/Settings): two bars. */
+export function IconPause({ size = 24, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" {...base(size, props)} strokeWidth={2.2}>
+      <path d="M9 5v14M15 5v14" />
+    </svg>
+  );
+}
+
+/** Delete (24 px grid, 2.2 px round stroke, matching Icon/Settings): a bin with a lid. */
+export function IconTrash({ size = 24, ...props }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" {...base(size, props)} strokeWidth={2.2}>
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+    </svg>
+  );
+}
+
 /** Figma: Icon/Log out (Header & Nav Assets). */
 export function IconLogOut({ size = 24, ...props }: IconProps) {
   return (
