@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { ExamScope, Objective, Topic } from "../../src/lib/data.ts";
-import { cardExam, daysUntil, examObjectives, scopeFromSetup } from "../../src/lib/course/exam-card.ts";
+import { NOT_IN_FILES, cardExam, daysUntil, examObjectives, objectiveMaterialIds, scopeFromSetup, splitByMaterials } from "../../src/lib/course/exam-card.ts";
 
 const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, review: "confirmed", pos: { x: 0, y: 0 }, source: [], ...extra });
 const objective = (id: string, topicId: string, extra: Partial<Objective> = {}): Objective => ({ id, topicId, name: id, description: "", origin: "material", review: "confirmed", materialId: "m", runId: "r", signals: [], ...extra });
@@ -63,4 +63,38 @@ test("the setup's scope lists every covered objective at weight 1 with the profe
   assert.deepEqual(edited.format, { minutes: 90 });
   assert.deepEqual(edited.sources, ["practice-exam", "professor"]);
   assert.equal(scopeFromSetup(before, ["a"], ""), before);
+});
+
+test("the picked materials split the candidates: an objective is in scope when the material that created it or one its signals name was picked", () => {
+  const signal = (materialId: string) => ({ materialId, materialType: "Lecture" as const, places: [] });
+  const catalogue = {
+    a: objective("a", "t1", { materialId: "m1" }),
+    b: objective("b", "t1", { materialId: "m2", signals: [signal("m2"), signal("m1")] }),
+    c: objective("c", "t2", { materialId: "m3" }),
+    d: objective("d", "t2", { materialId: null, origin: "inferred" }),
+  };
+  assert.deepEqual(objectiveMaterialIds(catalogue.b), ["m2", "m1"]);
+  assert.deepEqual(objectiveMaterialIds(catalogue.d), []);
+  assert.deepEqual(splitByMaterials(["a", "b", "c", "d"], ["m1"], catalogue), { inScope: ["a", "b"], excluded: ["c", "d"] });
+  assert.deepEqual(splitByMaterials(["a", "b", "c", "d"], [], catalogue), { inScope: ["a", "b", "c", "d"], excluded: [] }, "nothing picked: everything in scope");
+
+  // The scope: picked ones weigh 1 with the professor's words; the rest weigh 0 with a note saying why; the pick is stored.
+  const made = scopeFromSetup(null, ["a", "b", "c", "d"], "Lectures 11 to 16.", ["m1"], catalogue)!;
+  const words = { signal: "professor", strength: "strong", quote: "Lectures 11 to 16." };
+  const out = { signal: "professor", strength: "strong", quote: NOT_IN_FILES };
+  assert.deepEqual(made.objectives, [
+    { objectiveId: "a", weight: 1, evidence: [words] },
+    { objectiveId: "b", weight: 1, evidence: [words] },
+    { objectiveId: "c", weight: 0, evidence: [out] },
+    { objectiveId: "d", weight: 0, evidence: [out] },
+  ]);
+  assert.deepEqual([made.sources, made.materialIds], [["professor"], ["m1"]]);
+  // Without words, a pick still narrows (no quote on the in-scope ones).
+  const silent = scopeFromSetup(null, ["a", "c"], "", ["m1"], catalogue)!;
+  assert.deepEqual(silent.objectives, [{ objectiveId: "a", weight: 1, evidence: [] }, { objectiveId: "c", weight: 0, evidence: [out] }]);
+  // Re-picking widens again: an objective excluded before comes back at 1, other evidence kept; nothing picked drops the stored pick.
+  const widened = scopeFromSetup({ ...made, objectives: made.objectives.map((o) => (o.objectiveId === "c" ? { ...o, evidence: [{ signal: "homework", strength: "medium" }, ...o.evidence] } : o)) }, ["a", "b", "c", "d"], "All of it.", [], catalogue)!;
+  assert.deepEqual(widened.objectives.map((o) => [o.objectiveId, o.weight]), [["a", 1], ["b", 1], ["c", 1], ["d", 1]]);
+  assert.deepEqual(widened.objectives[2].evidence, [{ signal: "homework", strength: "medium" }, { signal: "professor", strength: "strong", quote: "All of it." }]);
+  assert.equal("materialIds" in widened, false);
 });

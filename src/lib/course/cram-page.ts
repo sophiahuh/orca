@@ -1,7 +1,7 @@
 /**
  * What the cram page and the exam card feed the plan (cram mode contract, section 6): the scope as
  * topics with weighted objectives and their statuses, the minutes studied in Orca since cramming
- * started, the hours a setup starts from, and the days a student can mark out. Pure.
+ * started, the hours a day a setup starts from, and the days a student can mark out. Pure.
  */
 import type { Duration, Exam, Objective, QuizResult, Relation, Topic } from "../data.ts";
 import { addDays } from "../mastery/agenda.ts";
@@ -14,6 +14,17 @@ import { courseObjectiveWeights, survivingTopic } from "./weights.ts";
 /** The hours a setup starts from: the course's exam review duration ("10 hours" → 10, "30 min" → 0.5). */
 export function hoursFromDuration(d: Duration): number {
   return durationSeconds(d) / 3600;
+}
+
+/** Hours a day from a total over some study days, to the nearest half hour and at least half an hour (the setup's prefill). */
+export function perDayHours(total: number, studyDays: number): number {
+  return Math.max(0.5, Math.round((total / Math.max(1, studyDays)) * 2) / 2);
+}
+
+/** "Friday" for a YYYY-MM-DD day (pure date arithmetic, so the zone can't shift it). */
+export function weekdayName(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
 }
 
 /** The days a student can mark out: today to the day before the exam (none on or after the day). */

@@ -30,14 +30,20 @@ export const INSTRUCTIONS =
   "mode, which exam is being crammed for (cramming), the vault, whether Orca's daily model budget " +
   "is spent (budget) and whether questions are being written (writing). When plan isn't null (an " +
   "exam is being crammed for), start the session by saying plan.line as is, then follow plan.today's " +
-  "order, weak spots first. On the eve (mode day-of, or plan.daysLeft is 1 or less), mention " +
+  "order, weak spots first. When plan.defaulted is true the student set no time budget and Orca " +
+  "assumed 2 hours a study day: say so and ask if it's different (set_exam with scope.budget). On " +
+  "the eve (mode day-of, or plan.daysLeft is 1 or less), mention " +
   "topErrors: the kinds of mistake the student makes most. Follow mode: normal, a " +
   "short review of what's due; exam-week, work through the exam's scope, heaviest first; day-of, a " +
   "quick pass over what's weak and nothing new. 2) Setup: when an exam is near and has no scope, " +
   "ask what the professor said it covers, whether there's a practice exam or study guide " +
   "(add_material: pasted text, or file true for an upload link; past and practice exams are held " +
   "back), and what the student is worried about (flag_check with strength struggled); then record " +
-  "the scope with set_exam (cramming true when they're cramming). Call set_exam too when the " +
+  "the scope with set_exam (cramming true when they're cramming). When the student names which " +
+  "lectures or files the exam covers, map them to the course's materials by filename (course_state " +
+  "detail full lists materials, and each objective's materialIds) and record the scope with weight 0 " +
+  "for objectives taught only elsewhere (evidence professor, quote \"not in the files the exam " +
+  "covers\"), passing scope.materialIds. Call set_exam too when the " +
   "student says what an exam covers or when it's cancelled. 3) Check first: before explaining, ask " +
   "one question at a time from next_questions (it picks what's due, then exam focus, then the " +
   "heaviest unflagged objectives; pass objectiveIds or topicIds to steer it). Before revealing an " +
@@ -78,6 +84,8 @@ export interface ObjectiveLine {
   recall: number | null;
   /** How many questions Orca has for it (0: it can't be checked until some are written). */
   questions: number;
+  /** The materials it's taught in (the one that created it and the ones its signals name), among course_state's materials. */
+  materialIds: string[];
 }
 
 /** The course's footing: day-of when an exam is today; exam-week when an exam is cramming or within 7 days; else normal. */
@@ -92,10 +100,31 @@ export interface ExamLine {
   topicIds: string[];
   /** The student is cramming for it (the exam window applies whatever the date). */
   cramming: boolean;
-  /** Per-objective weights inside the window and where they came from; null = no scope beyond topicIds. */
-  scope: ExamScope | null;
+  /** Per-objective weights inside the window and where they came from; null = no scope beyond topicIds. Left out with detail summary (scopeSummary says its size). */
+  scope?: ExamScope | null;
+  /** With detail summary: the scope's size instead of its entries; null without a scope. */
+  scopeSummary?: ScopeSummary | null;
   /** The mode this exam puts the course in: day-of today, exam-week while cramming or within 7 days, else normal. */
   mode: CourseMode;
+}
+
+/** An exam's scope by its counts (course_state detail summary): over the live objectives of the exam's topics, as the exam card counts them. */
+export interface ScopeSummary {
+  /** Objectives weighing more than 0 (unlisted ones weigh 1). */
+  inScope: number;
+  /** Objectives the scope excludes (weight 0). */
+  excluded: number;
+  sources: ScopeSignal[];
+  budget?: CramBudget;
+}
+
+/** A material of the course (not removed), so Claude can map "lectures 11 to 16" to files. */
+export interface MaterialLine {
+  id: string;
+  filename: string;
+  type: MaterialType;
+  /** Kept for a practice test: never opened, never used to write questions. */
+  heldBack: boolean;
 }
 
 /** A held-back material (a past or practice exam kept for a practice test): listed by name only, never opened. */
@@ -154,6 +183,8 @@ export interface CourseState {
   topics: TopicLine[];
   /** Every live objective (detail "full"); left out for "summary". */
   objectives?: ObjectiveLine[];
+  /** The course's materials, not removed (detail "full"); left out for "summary". */
+  materials?: MaterialLine[];
   /** Objective ids Orca would have the student work on now, most urgent first. */
   dueNow: string[];
   /** Topic ids an exam within the next week covers (every topic when it names none). */
@@ -165,7 +196,7 @@ export interface CourseState {
   mode: CourseMode;
   /** The exam being crammed for, or null. */
   cramming: string | null;
-  /** The cram plan over the cramming exam (src/lib/mastery/cram-plan.ts); null when no exam is cramming, or its scope has no budget yet. */
+  /** The cram plan over the cramming exam (src/lib/mastery/cram-plan.ts); null when no exam is cramming. Without a budget it's computed from an assumed one (2 hours a study day) and says `defaulted`. */
   plan: CramPlan | null;
   /** Coverage of the scoping exam's scope (the cramming exam, else the soonest within the window); null outside every window. */
   coverage: CoverageLine | null;
@@ -367,6 +398,7 @@ const TEXT_MATERIAL_CHARS = 200_000;
 const QUOTE_CHARS = 500;
 const BUDGET_HOURS_MAX = 1000;
 const BUDGET_DAYS_OUT_MAX = 366;
+const MATERIALS_MAX = 200;
 
 export const TOOLS = [
   {
@@ -378,7 +410,8 @@ export const TOOLS = [
       "only schedules weak points: objectives the student struggled with, missed or asked to be checked " +
       "on. Call this first. check_answer and record_answer already return each objective's new status, so " +
       "there's no need to call it after every answer; detail summary is a cheap check-in (topics with " +
-      "counts, what's due, exam focus, budget, what's being written), full lists every objective. While an " +
+      "counts, each exam's scope by its size, what's due, exam focus, budget, what's being written), full " +
+      "lists every objective with the materials it's taught in, the course's materials and each exam's full scope. While an " +
       "exam is being crammed for, plan holds the day's plan (plan.line is the one-line summary to say), " +
       "coverage how much of the exam's scope is verified, and topErrors the kinds of mistake made most. " +
       "With no course, lists the courses so you can pick one.",
@@ -386,7 +419,7 @@ export const TOOLS = [
       type: "object",
       properties: {
         courseId: { ...UUID, description: "The course to describe. Omit to list the courses." },
-        detail: { type: "string", enum: ["summary", "full"], description: "summary: no objective lines; full (default): every objective." },
+        detail: { type: "string", enum: ["summary", "full"], description: "summary: no objective or material lines, exams' scopes by size; full (default): every objective, the materials, full scopes." },
         topicIds: { type: "array", items: { type: "string" }, description: "With full: only these topics' objectives." },
       },
       additionalProperties: false,
@@ -483,6 +516,7 @@ export const TOOLS = [
               required: ["hours", "daysOut", "since"],
               additionalProperties: false,
             },
+            materialIds: { type: "array", items: UUID, maxItems: MATERIALS_MAX, description: "The materials the exam covers (ids from course_state's materials), when the student named files or lectures; objectives taught only elsewhere weigh 0." },
           },
           required: ["objectives", "sources"],
           additionalProperties: false,
@@ -751,7 +785,7 @@ async function screenText(tools: ConnectorTools, raw: string, maxChars: number, 
 
 /** An exam scope as set_exam takes it: ids, weights, evidence (quotes screened), format and sources checked field by field. */
 async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope: ExamScope } | { error: string }> {
-  if (!isObject(raw)) return { error: "scope is an object: objectives, sources and optionally format and budget." };
+  if (!isObject(raw)) return { error: "scope is an object: objectives, sources and optionally format, budget and materialIds." };
   if (!Array.isArray(raw.objectives) || raw.objectives.length > 400) return { error: "scope.objectives is a list of up to 400 { objectiveId, weight, evidence }." };
   if (!Array.isArray(raw.sources) || raw.sources.length > 6 || !raw.sources.every((x) => isOneOf(SCOPE_SIGNALS, x))) return { error: `scope.sources is a list of ${SCOPE_SIGNALS.join(", ")}.` };
   const objectives: ExamScope["objectives"] = [];
@@ -793,7 +827,12 @@ async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope:
     if (typeof b.since !== "string" || Number.isNaN(Date.parse(b.since))) return { error: "scope.budget.since is an ISO date-time: when cramming started." };
     budget = { hours: b.hours, daysOut: [...new Set(b.daysOut as string[])].sort(), since: new Date(b.since).toISOString() };
   }
-  return { scope: { objectives, ...(format !== undefined ? { format } : {}), sources: [...new Set(raw.sources as ScopeSignal[])], ...(budget !== undefined ? { budget } : {}) } };
+  let materialIds: string[] | undefined;
+  if (raw.materialIds !== undefined) {
+    if (!Array.isArray(raw.materialIds) || raw.materialIds.length > MATERIALS_MAX || !raw.materialIds.every(isUuid)) return { error: `scope.materialIds is a list of up to ${MATERIALS_MAX} material ids from course_state.` };
+    materialIds = [...new Set(raw.materialIds as string[])];
+  }
+  return { scope: { objectives, ...(format !== undefined ? { format } : {}), sources: [...new Set(raw.sources as ScopeSignal[])], ...(budget !== undefined ? { budget } : {}), ...(materialIds !== undefined ? { materialIds } : {}) } };
 }
 
 /** One question as add_questions takes it, checked field by field (the deeper checks, like a generated question's, are the implementation's). */
