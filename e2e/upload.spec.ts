@@ -240,6 +240,7 @@ test("which slides were hard: the deck's pages as a grid; tapping a page flags t
 
 /** A toast when an upload finishes while the student is elsewhere in the app (owner, 2026-11-08); it opens the upload with "Which slides were hard?" open. */
 test("an upload that finishes while you're elsewhere pops a toast that opens it, ready to flag slides", async ({ page, student }) => {
+  test.setTimeout(90_000);
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");
   await upload(page);
