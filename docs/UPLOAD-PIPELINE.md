@@ -67,7 +67,7 @@ Use the same flag on the web server and Trigger workers. Do not switch a running
 flag independently of its workers. The migration is additive with its control row disabled.
 
 1. Finish the repository merge gate and apply
-   `supabase/migrations/20261110150000_staged_upload_pipeline.sql` to the intended environment
+   `supabase/migrations/20261110160000_staged_upload_pipeline.sql` to the intended environment
    through the normal reviewed migration workflow. Deploy compatible web and worker code.
 2. Stop new admissions temporarily and drain legacy running or handed-off jobs. Inspect
    `npm run pipeline:uploads -- status`. The database refuses cutover while legacy workers remain.
@@ -98,7 +98,7 @@ saved structure or migrate protocol-2 work backwards.
   configuration; does not reset the shared local stack or copy student rows.
 - `npm run test:uploads:integration`: isolated disposable database/PostgREST and fake provider;
   executes the real phase workers, folder overlap, topic reuse, source union, once-only warm-up,
-  and question-only retry. Outbound model requests are restricted to the local fake server.
+  question-only retry, and held-back exams. Outbound model requests are restricted to the local fake server.
 
 The local production build is blocked by this environment denying Turbopack's internal process
 port bind while processing KaTeX CSS. Browser, HTTP isolation and evidence merge-gate suites still

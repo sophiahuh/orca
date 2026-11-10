@@ -80,3 +80,23 @@ const obj = check(await db.from("objectives").select("signals").eq("course_id", 
 assert.ok(obj && Array.isArray(obj.signals));
 assert.equal(obj.signals.length, 3, "all files' source signals survive ordered extraction");
 console.log("Folder overlap, catalogue reuse, source union, once-only warm-up and question-only retry passed.");
+
+// A held-back exam may arrive before any ordinary material. It maps structure without
+// writing from the exam or consuming the once-only course warm-up allocation.
+const vaultCourse = crypto.randomUUID();
+check(await db.from("courses").insert({ id: vaultCourse, owner_id: ownerId, slug: "vault-integration", name: "Logic vault", short: "VAULT", variant: "ald", pos_x: 0, pos_y: 0 }));
+const vaultItem = crypto.randomUUID(), vaultMaterial = crypto.randomUUID();
+await pipelineRpc(db, "admit", { ownerId, courseId: vaultCourse, batchId: vaultItem, source: "browser", items: [{ id: vaultItem, name: "Practice exam.pdf" }] });
+await pipelineRpc(db, "charge_item", { ownerId, itemId: vaultItem });
+check(await db.from("materials").insert({ id: vaultMaterial, owner_id: ownerId, course_id: vaultCourse, filename: "Practice exam.pdf", type: "Practice exam", held_back: true, status: "ready", content_hash: "vault-test" }));
+check(await db.from("material_pages").insert([1, 2].map((n) => ({ owner_id: ownerId, material_id: vaultMaterial, n, text: "Absorption: x + xy = x. Simplify Boolean expressions." }))));
+const vault = await pipelineRpc<{ runId: string }>(db, "attach", { ownerId, itemId: vaultItem, materialId: vaultMaterial, model: "claude-opus-5-5" });
+for (let i = 0; i < 4; i++) { const job = await pipelineRpc<StageJob | null>(db, "claim", { ownerId }); if (!job) break; await runPipelineStage(job); }
+const vaultRun = check(await db.from("pipeline_runs").select("status,questions_added,objectives_created,error").eq("id", vault.runId).single());
+assert.equal(vaultRun?.status, "done", vaultRun?.error ?? "held-back run missing");
+assert.ok(vaultRun.objectives_created.length > 0, "held-back exam still maps its objectives");
+assert.equal(vaultRun.questions_added, 0, "held-back exam never generates questions");
+assert.equal(check(await db.from("pipeline_warmups").select("course_id").eq("course_id", vaultCourse))!.length, 0, "held-back upload preserves warm-up for ordinary material");
+const vaultCalls = await (await fetch("http://127.0.0.1:55331/__calls")).json() as { step: string }[];
+assert.equal(vaultCalls.filter((c) => c.step === "generate").length, afterRetry.filter((c) => c.step === "generate").length, "no model question calls are paid for held-back material");
+console.log("Held-back first upload maps structure without writing questions or consuming warm-up.");
