@@ -71,14 +71,14 @@ export default function ListPage({ params }: PageProps<"/course/[slug]/list">) {
             Flag what&apos;s hard, or miss a question, and its topic shows up here.
           </p>
         ) : (
-          <motion.ul variants={stagger()} initial="hidden" animate="show" className="mt-[24px] flex max-w-[860px] flex-col overflow-hidden rounded-[20px] bg-parchment lip-4 lip-alice" data-part="weak-list">
+          <motion.ul variants={stagger()} initial="hidden" animate="show" className="mt-[24px] flex max-w-[860px] flex-col gap-[12px]" data-part="weak-list">
             {rows.map(({ topic, status, progress }) => (
               <motion.li
                 key={topic.id}
                 variants={fadeUp}
                 data-part="weak-row"
                 data-status={status}
-                className="flex items-center gap-[16px] border-b-2 border-alice px-[22px] py-[14px] last:border-b-0"
+                className="flex items-center gap-[16px] rounded-[20px] bg-parchment px-[22px] py-[14px] lip-4 lip-alice"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[19px] font-bold text-prussian">{topic.name}</p>

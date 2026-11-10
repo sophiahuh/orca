@@ -206,7 +206,18 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
   const aimed = run.security && (run.security.screen.some((h) => h.severity !== "weak") || run.security.instructionsFound.length > 0);
   return (
     <Card radius={20} lip={4} className="flex flex-col gap-[8px] px-[22px] py-[18px]" data-part={part("run-summary")} data-status={run.status}>
-      {head}
+      {/* Weak points first (Plan C): "Identify weak spots" (owner, 2026-11-10) opens the slide picker. Only a stored PDF or .pptx has pages to show. */}
+      {material?.storagePath && /\.(pdf|pptx)$/i.test(material.filename) && course ? (
+        <div className="flex items-start justify-between gap-[12px]">
+          {head}
+          <Button size="sm" variant="secondary" onClick={() => setPickingSlides(true)} className="shrink-0" data-part="hard-slides">
+            Identify weak spots
+          </Button>
+          <HardSlides course={course} material={material} open={pickingSlides} onClose={() => setPickingSlides(false)} />
+        </div>
+      ) : (
+        head
+      )}
       <span className="text-[15px] text-prussian/80">
         {plural(run.topicsCreated.length, "new topic")}, {plural(run.objectivesCreated.length, "new objective")}, {run.objectivesAttached.length} existing objective
         {run.objectivesAttached.length === 1 ? "" : "s"} covered again
@@ -217,15 +228,6 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
         <span className="text-[14px] font-medium text-wisteria-deep" data-part="questions-later">
           Questions are written when you flag something or start a dive.
         </span>
-      )}
-      {/* Weak points first (Plan C): tap the slides that were hard. Only a stored PDF or .pptx has pages to show. */}
-      {material?.storagePath && /\.(pdf|pptx)$/i.test(material.filename) && course && (
-        <>
-          <button type="button" onClick={() => setPickingSlides(true)} className="self-start text-[14px] font-bold text-prussian underline underline-offset-2" data-part="hard-slides">
-            Which slides were hard?
-          </button>
-          <HardSlides course={course} material={material} open={pickingSlides} onClose={() => setPickingSlides(false)} />
-        </>
       )}
       {removeOffer}
       {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}

@@ -62,7 +62,7 @@ export const TIPS: readonly Tip[] = [
 
   /* ── After the first upload ── */
   { id: "upload-toast", route: ANY, target: '[data-part="upload-toast"]', title: "Your upload is ready", body: "Click this to open it and tell me which slides were hard." },
-  { id: "hard-slides", route: REVIEW, target: '[data-part="hard-slides"]', title: "Which slides were hard?", body: "Tap the slides that lost you. Those become your weak spots, and weak spots are what I bring back for review." },
+  { id: "hard-slides", route: REVIEW, target: '[data-part="hard-slides"]', title: "Identify weak spots", body: "Tap the slides that lost you. Those become your weak spots, and weak spots are what I bring back for review." },
   { id: "reject", route: REVIEW, target: '[data-part="new-topic"]', title: "Not relevant? Reject it", body: "These are the topics I found. Reject a topic, or a single objective, if it isn't really part of the class, and I'll stop asking about it." },
 
   /* ── The course page ── */
