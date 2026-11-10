@@ -5,7 +5,8 @@
  * Every covering place counts 1 whatever its material type: the material-type sliders were removed
  * (2026-10-25); Notes for Orca can set an objective's emphasis instead.
  */
-import type { Objective, Relation, Topic } from "../data.ts";
+import type { ExamScope, Objective, Relation, Topic } from "../data.ts";
+import { AGENDA_RULES, addDays } from "../mastery/agenda.ts";
 
 export const WEIGHT_RULES = {
   /** Coverage factor = floor + span × (1 − e^(−s / scale)), s = summed place values. */
@@ -95,4 +96,44 @@ export function topicWeight(topicId: string, objectives: Readonly<Record<string,
       return w;
     });
   return ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
+}
+
+/* ── Exam weights (cram mode contract, section 5) ── */
+
+/** What `examScopeWeights` reads of an exam: when it is, whether the student is cramming for it, and its scope. */
+export interface ScopedExam {
+  courseId: string;
+  /** ISO date, YYYY-MM-DD */
+  date: string;
+  cramming: boolean;
+  scope: ExamScope | null;
+}
+
+/** Today is inside the exam's window: the student is cramming for it, or it's within `AGENDA_RULES.examWindowDays` (today included). */
+export function inExamWindow(exam: Pick<ScopedExam, "date" | "cramming">, today: string): boolean {
+  return exam.cramming || (exam.date >= today && addDays(exam.date, -AGENDA_RULES.examWindowDays) <= today);
+}
+
+/**
+ * The exam whose scope applies today, for one course: the cramming exam (soonest first, the one
+ * `course_state.cramming` names), else the soonest exam within the window; null outside every window.
+ */
+export function scopingExam<E extends ScopedExam>(exams: readonly E[], courseId: string, today: string): E | null {
+  const open = exams.filter((e) => e.courseId === courseId && inExamWindow(e, today)).sort((a, b) => Number(b.cramming) - Number(a.cramming) || a.date.localeCompare(b.date));
+  return open[0] ?? null;
+}
+
+/**
+ * The agenda's effective weights: inside the exam window, each objective's course weight × its
+ * scope weight (1 when the scope doesn't list it, 0 when it's excluded or weighs 0); outside the
+ * window, or with an exam that has no scope, the course weights unchanged. Every id in `weights`
+ * stays present, so `agendaWeights` still finds each one.
+ */
+export function examScopeWeights(exams: readonly ScopedExam[], courseId: string, today: string, weights: ReadonlyMap<string, number>): Map<string, number> {
+  const exam = scopingExam(exams, courseId, today);
+  if (!exam?.scope) return new Map(weights);
+  const scoped = new Map(exam.scope.objectives.map((o) => [o.objectiveId, Math.max(0, o.weight)]));
+  const out = new Map<string, number>();
+  for (const [id, w] of weights) out.set(id, w * (scoped.get(id) ?? 1));
+  return out;
 }
