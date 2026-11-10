@@ -17,7 +17,7 @@ const SINCE = "2026-11-10T09:00:00.000Z";
 const perDay = { "2026-11-10": 1, "2026-11-11": 1, "2026-11-12": 1, "2026-11-13": 1, "2026-11-14": 0.5, "2026-11-15": 0, "2026-11-16": 1, "2026-11-17": 1, "2026-11-18": 1 };
 const budget = { hours: 7.5, daysOut: ["2026-11-15"], since: SINCE, perDay };
 const none = { beforeToday: 0, today: 0 };
-const base: CramPlanInput = { today: "2026-11-10", examDate: "2026-11-19", budget, topics, spentMinutes: none };
+const base: CramPlanInput = { today: "2026-11-10", examDate: "2026-11-19", budget, topics, spentMinutes: none, touchedObjectiveIds: [] };
 
 test("days left exclude the exam day; study days are the days ahead with hours, and the plan carries the hours by day", () => {
   const plan = cramPlan(base);
@@ -118,4 +118,76 @@ test("a plan says when its budget was assumed: 2 hours for every study day from 
   assert.equal(plan.hoursLeft, 18);
   assert.equal(plan.minutesToday, 120);
   assert.equal(plan.behindMinutes, 0);
+});
+
+/* ── The schedule (schedule addendum) ── */
+
+/** A fifth topic with three unseen objectives, so the walk has something to work through. */
+const withE: CramPlanInput["topics"] = [...topics, { id: "E", name: "Encoders", objectives: [obj("e1", "unseen"), obj("e2", "unseen"), obj("e3", "unseen")] }];
+const dayOf = (plan: ReturnType<typeof cramPlan>, day: string) => plan.days.find((d) => d.day === day)!;
+
+test("the schedule has a column for every day of the budget, today flagged, the days before it past, and carries each day's hours", () => {
+  const plan = cramPlan({ ...base, today: "2026-11-13" });
+  assert.deepEqual(plan.days.map((d) => d.day), Object.keys(perDay));
+  assert.deepEqual(plan.days.map((d) => d.hours), Object.values(perDay));
+  assert.deepEqual(plan.days.map((d) => (d.today ? "today" : d.past ? "past" : "later")), ["past", "past", "past", "today", "later", "later", "later", "later", "later"]);
+  assert.deepEqual(dayOf(plan, "2026-11-13").topics, plan.today, "today's column is today's split");
+  // The exam day and anything after it never show; on the day every column is past.
+  const examDay = cramPlan({ ...base, today: "2026-11-19" });
+  assert.equal(examDay.days.length, 9);
+  assert.ok(examDay.days.every((d) => d.past && !d.today));
+  // The exam moved later: a day the budget doesn't name has no column.
+  assert.equal(cramPlan({ ...base, examDate: "2026-11-21" }).days.length, 9);
+});
+
+test("the days after today walk through what's left, weak spots first then the heaviest, one topic after another, until the budget is used", () => {
+  const plan = cramPlan({ ...base, topics: withE });
+  // Today's split is proportional (E 3 unseen of 3, A 1 of 2, B 1 of 1: shares 3, 1, 1 of 60 minutes).
+  assert.deepEqual(plan.today, [{ topicId: "E", minutes: 35 }, { topicId: "A", minutes: 10 }, { topicId: "B", minutes: 10 }]);
+  // The need: 60 minutes per unverified objective at its weight (A 60, B 60, E 180: 300) stretched over the 7.5 hours (450 minutes), less today's split.
+  // From tomorrow: Adders (the weak spot) first, then Encoders (the heaviest), then Buses, each finished before the next starts.
+  assert.deepEqual(
+    plan.days.filter((d) => !d.today).map((d) => [d.day, d.topics]),
+    [
+      ["2026-11-11", [{ topicId: "A", minutes: 60 }]],
+      ["2026-11-12", [{ topicId: "A", minutes: 20 }, { topicId: "E", minutes: 40 }]],
+      ["2026-11-13", [{ topicId: "E", minutes: 60 }]],
+      ["2026-11-14", [{ topicId: "E", minutes: 30 }]],
+      ["2026-11-15", []],
+      ["2026-11-16", [{ topicId: "E", minutes: 60 }]],
+      ["2026-11-17", [{ topicId: "E", minutes: 45 }, { topicId: "B", minutes: 15 }]],
+      ["2026-11-18", [{ topicId: "B", minutes: 60 }]],
+    ],
+  );
+  // Every later day's minutes are its hours (the needs are scaled to the time ahead); a day at 0 gets nothing.
+  for (const d of plan.days.filter((d) => !d.today)) assert.equal(d.topics.reduce((sum, t) => sum + t.minutes, 0), d.hours * 60, d.day);
+  // Done and out-of-scope topics are never scheduled.
+  assert.ok(plan.days.every((d) => d.topics.every((t) => t.topicId !== "C" && t.topicId !== "D")));
+  // Short of time, the need is squeezed into the hours: a one-day cram with an hour covers the scope in proportion, weak spot first.
+  const squeezed = cramPlan({ ...base, topics: withE, examDate: "2026-11-12", budget: { hours: 1.5, daysOut: [], since: SINCE, perDay: { "2026-11-10": 0.5, "2026-11-11": 1 } } });
+  assert.deepEqual(squeezed.today, [{ topicId: "E", minutes: 20 }, { topicId: "A", minutes: 5 }, { topicId: "B", minutes: 5 }]);
+  assert.deepEqual(dayOf(squeezed, "2026-11-11").topics, [{ topicId: "A", minutes: 15 }, { topicId: "E", minutes: 35 }, { topicId: "B", minutes: 10 }]);
+  // Nothing left to do: empty columns.
+  const allDone = cramPlan({ ...base, topics: [topics[2]] });
+  assert.ok(allDone.days.every((d) => d.topics.length === 0));
+});
+
+test("past days carry the walk from the start of the cram, with whether they were met when the minutes studied are known", () => {
+  const later = { ...base, topics: withE, today: "2026-11-13", spentMinutes: { beforeToday: 130, today: 20 } };
+  const unknown = cramPlan(later);
+  assert.deepEqual(unknown.days.slice(0, 3).map((d) => d.topics), [[{ topicId: "A", minutes: 60 }], [{ topicId: "A", minutes: 30 }, { topicId: "E", minutes: 30 }], [{ topicId: "E", minutes: 60 }]]);
+  assert.ok(unknown.days.every((d) => d.spentMinutes === null && d.met === null), "not known: no mark");
+  const known = cramPlan({ ...later, spentByDay: { "2026-11-10": 60, "2026-11-11": 40, "2026-11-13": 20 } });
+  assert.deepEqual(known.days.slice(0, 4).map((d) => [d.spentMinutes, d.met]), [[60, true], [40, false], [0, false], [20, null]]);
+  assert.ok(known.days.slice(4).every((d) => d.spentMinutes === 0 && d.met === null), "a day not yet past is never marked");
+  // A day off with nothing studied is met.
+  const offMet = cramPlan({ ...later, today: "2026-11-16", spentByDay: {} });
+  assert.deepEqual([dayOf(offMet, "2026-11-15").met, dayOf(offMet, "2026-11-14").met], [true, false]);
+});
+
+test("a topic is done when every in-scope objective is verified, in progress once one has evidence since the cram started, else untouched", () => {
+  const covered = (plan: ReturnType<typeof cramPlan>) => Object.fromEntries(plan.topics.map((t) => [t.id, t.covered]));
+  assert.deepEqual(covered(cramPlan(base)), { A: "untouched", B: "untouched", C: "done", D: "untouched" });
+  assert.deepEqual(covered(cramPlan({ ...base, touchedObjectiveIds: ["a1", "d1"] })), { A: "in-progress", B: "untouched", C: "done", D: "untouched" }, "an out-of-scope objective doesn't count");
+  assert.deepEqual(covered(cramPlan({ ...base, touchedObjectiveIds: ["c1"] })), { A: "untouched", B: "untouched", C: "done", D: "untouched" }, "done stays done");
 });

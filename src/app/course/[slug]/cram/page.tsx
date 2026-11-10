@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
 import { cardExam, daysUntil, examObjectives } from "@/lib/course/exam-card";
-import type { CramPlan, CramPlanInput, SpentMinutes } from "@/lib/mastery/cram-plan";
+import type { CramCovered, CramPlan, CramPlanDay, CramPlanInput, SpentMinutes } from "@/lib/mastery/cram-plan";
 import type { ObjectiveStatus } from "@/lib/mastery/types";
 import { useCourse, useDayKey, useMasteryByCourse, useOrca } from "@/lib/store";
 import { useNow } from "@/hooks/useNow";
@@ -23,6 +23,12 @@ const PILL = "pressable rounded-pill bg-parchment px-[12px] py-[6px] text-[13px]
 const daysText = (days: number) => (days === 0 ? "Exam day" : days === 1 ? "Tomorrow" : days > 1 ? `${days} days left` : days === -1 ? "Yesterday" : `${-days} days ago`);
 const hoursText = (h: number) => (Number.isInteger(h) ? `${h}` : (Math.round(h * 10) / 10).toFixed(1));
 const minutesText = (m: number) => `${Math.round(m)} min`;
+/** The covered state's label and look (a chip on the topic row and a tint on the schedule's topics). */
+const COVERED: Record<CramCovered, { label: string; chip: string }> = {
+  untouched: { label: "Not started", chip: "bg-parchment text-wisteria-deep ring-alice-deep" },
+  "in-progress": { label: "In progress", chip: "bg-periwinkle text-prussian ring-periwinkle-deep" },
+  done: { label: "Done", chip: "bg-wisteria text-parchment ring-wisteria-deep" },
+};
 /** "Tue 11" for a YYYY-MM-DD day (pure date arithmetic, so the zone can't shift it). */
 const dayChip = (day: string) => {
   const [y, m, d] = day.split("-").map(Number);
@@ -33,9 +39,11 @@ const dayChip = (day: string) => {
  * The cram page (cram mode contract, section 6 and its per-day addendum): setup (the professor's
  * words, the files the exam covers, Add material held back, worries, the hours for each day) until
  * the exam is cramming with a budget, then the plan: days left, the budget with its hours by day
- * (today highlighted), the line, the scope as topic rows with weak spots, today, the practice
- * test, the vault, Study with Claude, Edit scope and Stop cramming. The plan is computed here from
- * the store, as the exam card's line is; nothing about it is stored.
+ * (today highlighted), the line, the schedule (a column per day of the cram: its topics and
+ * minutes, today highlighted, past days muted and marked met or short), the scope as topic rows
+ * with their covered state and weak spots, today, the practice test, the vault, Study with Claude,
+ * Edit scope and Stop cramming. The plan is computed here from the store, as the exam card's line
+ * is; nothing about it is stored.
  */
 export default function CramPage({ params, searchParams }: PageProps<"/course/[slug]/cram">) {
   const { slug } = use(params);
@@ -125,6 +133,7 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
   const hours = days.reduce((sum, d) => sum + plan.perDay[d], 0);
   const studied = spentMinutes.beforeToday + spentMinutes.today;
   const topicName = new Map(plan.topics.map((t) => [t.id, t.name]));
+  const coveredOf = new Map(plan.topics.map((t) => [t.id, t.covered]));
   // Per topic: its in-scope objectives (weight > 0), how many are verified, and each one's status.
   const scoped = new Map(topics.map((t) => [t.id, t.objectives.filter((o) => o.weight > 0)]));
   const statusOf = new Map(topics.flatMap((t) => t.objectives.map((o) => [o.id, o.status] as const)));
@@ -169,6 +178,24 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
         </motion.div>
 
         <motion.div variants={fadeUp}>
+          <Card className="flex flex-col gap-[12px] px-[24px] pb-[20px] pt-[20px]">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-[22px] font-bold text-prussian">The schedule</h2>
+              <p className="text-[13px] font-medium text-wisteria-deep">Weak spots first, then the heaviest topics</p>
+            </div>
+            {plan.days.length === 0 ? (
+              <p className="text-[14px] font-medium text-wisteria-deep">No days before the exam.</p>
+            ) : (
+              <ol className="flex gap-[8px] overflow-x-auto pb-[4px]" data-part="cram-schedule" aria-label="The schedule by day">
+                {plan.days.map((d) => (
+                  <ScheduleDay key={d.day} day={d} topicName={(id) => topicName.get(id) ?? id} covered={(id) => coveredOf.get(id) ?? "untouched"} />
+                ))}
+              </ol>
+            )}
+          </Card>
+        </motion.div>
+
+        <motion.div variants={fadeUp}>
           <Card className="flex flex-col gap-[14px] px-[24px] pb-[20px] pt-[20px]">
             <div className="flex items-baseline justify-between">
               <h2 className="text-[22px] font-bold text-prussian">The scope</h2>
@@ -182,10 +209,15 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
                 const inScope = scoped.get(t.id) ?? [];
                 const verified = inScope.filter((o) => isVerified(o.status)).length;
                 return (
-                  <li key={t.id} className="flex flex-col gap-[6px] rounded-[16px] border-2 border-alice-deep px-[16px] py-[12px]" data-part="cram-topic" data-topic={t.id} data-done={t.done ? "1" : undefined}>
+                  <li key={t.id} className={`flex flex-col gap-[6px] rounded-[16px] border-2 px-[16px] py-[12px] ${t.covered === "done" ? "border-wisteria bg-alice/40" : t.covered === "in-progress" ? "border-periwinkle-deep" : "border-alice-deep"}`} data-part="cram-topic" data-topic={t.id} data-done={t.done ? "1" : undefined} data-covered={t.covered}>
                     <div className="flex items-center justify-between gap-[12px]">
-                      <p className="text-[17px] font-bold text-prussian">{t.name}</p>
-                      <p className="text-[14px] font-semibold text-wisteria-deep" data-part="cram-topic-minutes">
+                      <div className="flex min-w-0 items-center gap-[8px]">
+                        <p className="truncate text-[17px] font-bold text-prussian">{t.name}</p>
+                        <span className={`shrink-0 rounded-pill px-[8px] py-[2px] text-[11px] font-bold ring-2 ring-inset ${COVERED[t.covered].chip}`} data-part="cram-topic-covered">
+                          {COVERED[t.covered].label}
+                        </span>
+                      </div>
+                      <p className="shrink-0 text-[14px] font-semibold text-wisteria-deep" data-part="cram-topic-minutes">
                         {t.done ? "Done" : t.minutesToday > 0 ? `${t.minutesToday} min today` : "Not today"}
                       </p>
                     </div>
@@ -282,3 +314,52 @@ function CrammingView({ course, today, plan, topics, spentMinutes, objectiveName
   );
 }
 
+/**
+ * One column of the schedule: the weekday, date and hours, then its topics with their minutes
+ * (tinted by their covered state). Today is highlighted; a past day is muted and, when the minutes
+ * studied on it are known, marked met or short.
+ */
+function ScheduleDay({ day, topicName, covered }: { day: CramPlanDay; topicName: (id: string) => string; covered: (id: string) => CramCovered }) {
+  const frame = day.today ? "bg-wisteria/15 ring-wisteria" : day.past ? "bg-parchment ring-alice-deep opacity-60" : "bg-parchment ring-alice-deep";
+  const mark = !day.past ? null : day.met === null ? "Not tracked" : day.met ? "Met" : "Short";
+  return (
+    <li
+      className={`flex w-[128px] shrink-0 flex-col gap-[6px] rounded-[14px] px-[10px] py-[8px] ring-2 ring-inset ${frame}`}
+      data-part="cram-day-col"
+      data-day={day.day}
+      data-today={day.today ? "1" : undefined}
+      data-past={day.past ? "1" : undefined}
+      data-met={day.met === null ? undefined : day.met ? "1" : "0"}
+      data-hours={day.hours}
+    >
+      <div className="flex flex-col">
+        <p className="text-[13px] font-bold text-prussian">{dayChip(day.day)}</p>
+        <p className="text-[12px] font-semibold text-wisteria-deep" data-part="cram-day-col-hours">
+          {day.hours > 0 ? `${hoursText(day.hours)} h` : "Day off"}
+          {day.today ? " · today" : ""}
+        </p>
+      </div>
+      {day.topics.length > 0 ? (
+        <ul className="flex flex-col gap-[4px]">
+          {day.topics.map((t) => {
+            const state = covered(t.topicId);
+            return (
+              <li key={t.topicId} className={`rounded-[8px] px-[6px] py-[3px] text-[12px] font-semibold leading-tight ${state === "done" ? "bg-wisteria/25 text-prussian" : state === "in-progress" ? "bg-periwinkle/40 text-prussian" : "bg-alice text-prussian"}`} data-part="cram-day-topic" data-topic={t.topicId} data-covered={state}>
+                <span className="line-clamp-2 block">{topicName(t.topicId)}</span>
+                <span className="text-wisteria-deep">{t.minutes} min</span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-[12px] font-medium text-wisteria-deep">{day.hours > 0 ? "Nothing planned" : ""}</p>
+      )}
+      {mark && (
+        <p className={`mt-auto text-[12px] font-bold ${day.met ? "text-wisteria-deep" : day.met === false ? "text-prussian" : "text-wisteria-deep"}`} data-part="cram-day-col-mark">
+          {mark}
+          {day.spentMinutes !== null ? ` · ${minutesText(day.spentMinutes)}` : ""}
+        </p>
+      )}
+    </li>
+  );
+}

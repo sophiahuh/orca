@@ -598,6 +598,7 @@ test("course_state carries the plan, coverage and top errors, and the instructio
   assert.match(INSTRUCTIONS, /plan\.line as is/);
   assert.match(INSTRUCTIONS, /topErrors/);
   assert.match(INSTRUCTIONS, /day-of, or plan\.daysLeft is 1 or less/);
+  assert.match(INSTRUCTIONS, /plan\.days is the schedule/);
   const tool = TOOLS.find((t) => t.name === "set_exam");
   assert.ok(tool);
   const scope = (tool.inputSchema.properties as Record<string, { properties?: Record<string, unknown> }>).scope;

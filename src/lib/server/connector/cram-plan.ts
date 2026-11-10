@@ -6,7 +6,8 @@
  * is verified) and `topErrors` (the kinds of mistake made most). No model calls; two reads beyond
  * what course_state already holds: the sessions finished and the evidence recorded since the cram
  * started (or the last 30 days), each put on the student's day so the plan knows what was spent
- * before today and today (the per-day addendum).
+ * on each day, before today and today (the per-day and schedule addenda), and which objectives
+ * have evidence since the cram started (the topics' `covered`).
  */
 import type { CourseState, CoverageLine, ExamLine, ObjectiveLine, TopError } from "@/lib/connector/mcp";
 import { scopingExam } from "@/lib/course/weights";
@@ -66,20 +67,33 @@ export function connectorMinutes(events: ReadonlyArray<{ at: string; source: str
 }
 
 /**
- * The minutes studied since the cram started, split at the start of today (the plan's
- * `spentMinutes`): the course's finished sessions by the day they finished, plus the connector
- * estimate by day.
+ * The minutes studied on each day (the student's) since the cram started (the plan's `spentByDay`):
+ * the course's finished sessions by the day they finished, plus the connector estimate by day.
  */
-export function spentMinutesSplit(sessions: ReadonlyArray<{ finished_at: string; seconds: number }>, events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string, today: string): SpentMinutes {
+export function spentMinutesByDay(sessions: ReadonlyArray<{ finished_at: string; seconds: number }>, events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string): Record<string, number> {
   const dayKey = dayKeyIn(timezone);
-  const spent = { beforeToday: 0, today: 0 };
+  const byDay: Record<string, number> = {};
   const add = (day: string, minutes: number) => {
-    if (day === today) spent.today += minutes;
-    else if (day < today) spent.beforeToday += minutes;
+    byDay[day] = (byDay[day] ?? 0) + minutes;
   };
   for (const s of sessions) add(dayKey(s.finished_at), s.seconds / 60);
   for (const [day, minutes] of connectorMinutesByDay(events, timezone)) add(day, minutes);
+  return byDay;
+}
+
+/** The minutes studied since the cram started, split at the start of today (the plan's `spentMinutes`), from `spentMinutesByDay`. */
+export function spentMinutesSplit(sessions: ReadonlyArray<{ finished_at: string; seconds: number }>, events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string, today: string): SpentMinutes {
+  const spent = { beforeToday: 0, today: 0 };
+  for (const [day, minutes] of Object.entries(spentMinutesByDay(sessions, events, timezone))) {
+    if (day === today) spent.today += minutes;
+    else if (day < today) spent.beforeToday += minutes;
+  }
   return spent;
+}
+
+/** The objectives with any evidence at or after `since` (the plan's `touchedObjectiveIds`): a topic with one is in progress. */
+export function touchedSince(events: ReadonlyArray<{ at: string; objective_id: string }>, since: string): string[] {
+  return [...new Set(events.filter((e) => e.at >= since).map((e) => e.objective_id))];
 }
 
 /** The kinds of mistake on answer and work events, most frequent first (ties by name), at most six. */
@@ -129,17 +143,19 @@ export async function cramFields(db: OrcaSupabase, ownerId: string, input: CramF
 
   const [sessions, events] = await Promise.all([
     budget ? db.from("session_results").select("finished_at, seconds").eq("owner_id", ownerId).eq("course_id", input.courseId).gte("finished_at", since) : Promise.resolve({ data: [], error: null }),
-    db.from("evidence_events").select("at, kind, source, error_type").eq("owner_id", ownerId).eq("course_id", input.courseId).gte("at", since),
+    db.from("evidence_events").select("at, kind, source, error_type, objective_id").eq("owner_id", ownerId).eq("course_id", input.courseId).gte("at", since),
   ]);
   for (const r of [sessions, events]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
 
   const coverage = scoping ? coverageOf(planTopics(scoping, input)) : null;
   let plan: CourseState["plan"] = null;
   if (cramming && budget) {
-    plan = cramPlan({ today: input.today, examDate: cramming.date, budget, topics: planTopics(cramming, input), spentMinutes: spentMinutesSplit(sessions.data ?? [], events.data ?? [], input.timezone, input.today) });
+    const spentByDay = spentMinutesByDay(sessions.data ?? [], events.data ?? [], input.timezone);
+    plan = cramPlan({ today: input.today, examDate: cramming.date, budget, topics: planTopics(cramming, input), spentMinutes: spentMinutesSplit(sessions.data ?? [], events.data ?? [], input.timezone, input.today), spentByDay, touchedObjectiveIds: touchedSince(events.data ?? [], budget.since) });
   } else if (cramming) {
-    // No budget set yet: the plan assumes one (2 hours a study day from now, nothing spent) and says so, so Claude can ask.
-    plan = cramPlan({ today: input.today, examDate: cramming.date, budget: defaultBudget(input.today, cramming.date, input.at.toISOString()), topics: planTopics(cramming, input), spentMinutes: { beforeToday: 0, today: 0 }, defaulted: true });
+    // No budget set yet: the plan assumes one (2 hours a study day from now, nothing spent, nothing touched) and says so, so Claude can ask.
+    const assumed = defaultBudget(input.today, cramming.date, input.at.toISOString());
+    plan = cramPlan({ today: input.today, examDate: cramming.date, budget: assumed, topics: planTopics(cramming, input), spentMinutes: { beforeToday: 0, today: 0 }, spentByDay: {}, touchedObjectiveIds: [], defaulted: true });
   }
   return { plan, coverage, topErrors: topErrorsOf(events.data ?? []) };
 }

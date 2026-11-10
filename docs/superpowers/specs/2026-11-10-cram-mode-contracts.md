@@ -297,3 +297,49 @@ left · N min left today"); the card's line reads the same `useCramPlan`.
 `tests/server/cram-fields.test.ts`, `tests/server/merge-scope.test.ts`, `tests/connector/mcp.test.ts`; e2e
 `cram-page` and `exam-card` set days to different hours and one to 0 and assert the total and the stored
 `perDay`; `connector` sets today to 0 and to 1 hour and asserts `plan.minutesToday` and the line.
+
+### Schedule addendum (2026-11-10, owner: "the cram page should visualise the schedule across the remaining days, and show which topics have been covered")
+
+**The plan** (`cramPlan`). `CramPlanInput` gains `touchedObjectiveIds: string[]` (objectives with any
+evidence event, an answer, work, a flag or a signal, at or after `budget.since`; the server reads
+`evidence_events` since then, the page the store's evidence) and `spentByDay?: Record<string, number>`
+(minutes studied on each day since `budget.since`, the student's day; a day left out is 0; left out
+when not known: the server passes sessions by the day they finished plus the connector estimate by day,
+`spentMinutesByDay`; the page its session results by day, `spentMinutesByDayInOrca`). Each topic row
+gains `covered: "untouched" | "in-progress" | "done"`: done when every in-scope objective is verified or
+mastered (the row's `done`), in progress when any in-scope objective is in `touchedObjectiveIds`, else
+untouched. `CramPlan` gains `days: CramPlanDay[]`, one per day of the budget from the day cramming
+started to the day before the exam: `{ day, hours, topics: [{ topicId, minutes }], today, past,
+spentMinutes: number | null, met: boolean | null }` (`met`: a past day whose `spentMinutes` reached
+`hours × 60`, null for today and later and when the minutes aren't known). `today`, `minutesToday`,
+`minutesPerDay`, `line` and the rest are unchanged.
+
+**The allocation rule.** A topic's *need* is a nominal `MINUTES_PER_UNVERIFIED` (60) minutes for each
+unverified objective at its weight, i.e. `weight × unverifiedShare × 60` (a done or out-of-scope topic
+needs 0). The needs are scaled so they sum to the minutes ahead (`minutesToday` plus the later days'
+hours × 60): squeezed into the hours when the scope needs more, stretched over them when it needs less,
+so the schedule both fits the budget and covers the scope. Today's column is today's split (`today`,
+proportional by `weight × unverifiedShare`, as before) and is taken off the needs. The days after today
+are filled in order by a walk: the topics are ranked once (ones with weak spots first, then the largest
+need, then the plan's order) and each day's minutes go to them in that order, each topic taking what it
+still needs up to what's left of the day, rounded to 5 minutes (under 5 dropped); a topic's need shrinks
+day by day, so the schedule works through the scope one topic after another instead of repeating
+today's split. A day at 0 hours gets nothing. The days before today carry the same walk from the start
+of the cram over the needs scaled to the whole budget: what was planned for them as derivable now
+(the plan is derived, so it's recomputed from the scope as it stands, not what the page showed then).
+
+**Connector.** `course_state.plan` carries `days` and the topics' `covered` (same type). `INSTRUCTIONS`:
+`plan.days` is the schedule; when the student asks what's on which day, read it rather than inventing one.
+
+**The page.** A schedule card (`cram-schedule`) under "Your time": one column per day
+(`cram-day-col[data-day]`, `data-today`, `data-past`, `data-met` 1/0 when known, `data-hours`), its
+weekday and date, hours (`cram-day-col-hours`, "Day off" at 0, "· today" on today), its topics with
+minutes (`cram-day-topic[data-topic][data-covered]`), today highlighted, past days muted with a mark
+(`cram-day-col-mark`: "Met · N min", "Short · N min", or "Not tracked"). Topic rows (`cram-topic`) gain
+`data-covered` and a chip (`cram-topic-covered`: Not started / In progress / Done) and a border by state.
+
+**Checks.** `tests/mastery/cram-plan.test.ts` (days count and flags, the walk's progression, the squeezed
+case, zero-hour days, past days and met, covered); `tests/server/cram-fields.test.ts` (the server's
+`spentByDay` and `touchedObjectiveIds`); e2e `cram-page`: a three-day cram with different hours shows
+three columns, today highlighted, yesterday met, a topic answered since the cram started in progress;
+`connector` asserts `plan.days` and `covered`.

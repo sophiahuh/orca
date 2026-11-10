@@ -219,7 +219,7 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   expect(budgeted.scope.budget.hours).toBe(6);
   expect(budgeted.scope.materialIds).toEqual([F.material]);
   expect(toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { ...scope, materialIds: [crypto.randomUUID()] } }))).toMatchObject({ error: expect.stringMatching(/material ids/) });
-  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number; minutesToday: number; defaulted: boolean; perDay: Record<string, number> }; coverage: { total: number; verified: number }; topErrors: unknown[]; exams: Array<Record<string, unknown>> };
+  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number; minutesToday: number; defaulted: boolean; perDay: Record<string, number>; days: Array<{ day: string; hours: number; today: boolean; topics: unknown[] }>; topics: Array<{ covered: string }> }; coverage: { total: number; verified: number }; topErrors: unknown[]; exams: Array<Record<string, unknown>> };
   expect(planned.plan.line).toMatch(/days to the exam/);
   expect(planned.plan.daysLeft).toBeGreaterThan(10);
   expect(planned.plan.hoursLeft).toBe(6);
@@ -232,6 +232,11 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   expect(planned.plan.perDay[today]).toBe(0.5);
   expect(planned.plan.minutesToday).toBe(30);
   expect(planned.plan.line).toMatch(/Today: /);
+  // The schedule: a column per day of the budget, today flagged once; every topic says how far it has got.
+  expect(planned.plan.days).toHaveLength(12);
+  expect(planned.plan.days.filter((d) => d.today).map((d) => d.day)).toEqual([today]);
+  expect(planned.plan.days.every((d) => d.hours === 0.5 && Array.isArray(d.topics))).toBe(true);
+  expect(planned.plan.topics.map((t) => t.covered)).toEqual(["untouched", "untouched"]);
   // A summary carries each exam's scope by its size, not its entries (three live objectives in scope, the one excluded).
   expect(planned.exams[0]).not.toHaveProperty("scope");
   expect(planned.exams[0].scopeSummary).toMatchObject({ inScope: 3, excluded: 1, sources: ["professor"], budget: { hours: 6 } });

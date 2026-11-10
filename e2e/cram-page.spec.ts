@@ -1,4 +1,5 @@
-import { admin, expect, F, FIXTURE_STATE, fixtureMaterial, ids, objective, seedState, stored, test } from "./fixture";
+import { admin, daysAgo, expect, F, FIXTURE_STATE, fixtureMaterial, ids, objective, seedState, stored, test } from "./fixture";
+import type { AnswerEvent } from "../src/lib/mastery/types";
 import { NOT_IN_FILES } from "../src/lib/course/exam-card";
 
 /**
@@ -6,9 +7,10 @@ import { NOT_IN_FILES } from "../src/lib/course/exam-card";
  * the exam covers (the materials picked narrow the scope) and for the time budget, hours for each
  * remaining day (0 for a day off; the days are stored, the total derived) beside the professor's
  * words and worries; Confirm stores cramming and the budget and shows the
- * plan: the budget, the line, the topic rows with their verified share and weak spots, today, the
- * practice test status, the vault by name, Edit scope and Stop cramming. The plan is computed in
- * the browser from the store; nothing about it is stored.
+ * plan: the budget, the line, the schedule (a column per day), the topic rows with their covered
+ * state, verified share and weak spots, today, the practice test status, the vault by name, Edit
+ * scope and Stop cramming. The plan is computed in the browser from the store; nothing about it is
+ * stored.
  */
 const SLUG = FIXTURE_STATE.courses[0].slug;
 const inDays = (n: number) => {
@@ -151,4 +153,62 @@ test("setup picks the files and the hours for each day, one at 0; the page then 
   await expect(cram).not.toHaveAttribute("data-cramming", "1");
   state = await stored(page, student);
   expect(state.exams.find((e) => e.id === examId)!.cramming).toBe(false);
+});
+
+test("the schedule shows a column per day of the cram with its hours and topics, today highlighted, a past day marked met; a topic answered since the cram started is in progress", async ({ page, student }) => {
+  // A three-day cram that started yesterday: an hour yesterday (studied in full), two hours today, half an hour tomorrow; the exam the day after.
+  const since = new Date(Date.now() - 86_400_000 - 60_000).toISOString();
+  const yesterday = inDays(-1);
+  const perDay = { [yesterday]: 1, [inDays(0)]: 2, [inDays(1)]: 0.5 };
+  const miss: AnswerEvent = { kind: "answer", id: crypto.randomUUID(), at: new Date(Date.now() - 30 * 60_000).toISOString(), courseId: F.course, topicId: F.booleanAlgebra, objectiveId: F.simplify, questionId: F.ba1, tier: "retrieval", outcome: "incorrect", grader: "exact", source: "quiz", sessionId: "cram-1" };
+  await seedState(student, {
+    ...FIXTURE_STATE,
+    results: [{ courseId: F.course, topicId: F.booleanAlgebra, mode: "topic", sessionId: "cram-0", correct: 1, total: 2, seconds: 3600, finishedAt: daysAgo(1) }],
+    evidence: [miss],
+  });
+  const seeded = await admin()
+    .from("exams")
+    .insert({ id: crypto.randomUUID(), owner_id: student.id, course_id: F.course, title: "Quiz 3", date: inDays(2), topic_ids: [], cramming: true, scope: { objectives: [], sources: [], budget: { hours: 3.5, daysOut: [], since, perDay } } });
+  if (seeded.error) throw new Error(`Couldn't seed the exam: ${seeded.error.message}`);
+
+  await page.goto(`/course/${SLUG}/cram`);
+  const cram = page.locator("[data-part=cram-page]");
+  await expect(cram).toHaveAttribute("data-cramming", "1");
+  await expect(cram.locator("[data-part=cram-spent]")).toHaveText("60 min studied in Orca since you started · 2 study days left · 120 min left today");
+  // Three columns, yesterday to tomorrow, each with its hours; today highlighted; yesterday past and met (60 minutes studied of the 60 asked).
+  const cols = cram.locator("[data-part=cram-schedule] [data-part=cram-day-col]");
+  await expect(cols).toHaveCount(3);
+  await expect(cols.nth(0)).toHaveAttribute("data-day", yesterday);
+  await expect(cols.nth(1)).toHaveAttribute("data-day", inDays(0));
+  await expect(cols.nth(2)).toHaveAttribute("data-day", inDays(1));
+  await expect(cols.nth(1)).toHaveAttribute("data-today", "1");
+  await expect(cols.nth(0)).not.toHaveAttribute("data-today", "1");
+  await expect(cols.nth(2)).not.toHaveAttribute("data-today", "1");
+  await expect(cols.nth(0)).toHaveAttribute("data-past", "1");
+  await expect(cols.nth(0)).toHaveAttribute("data-met", "1");
+  await expect(cols.nth(0).locator("[data-part=cram-day-col-mark]")).toHaveText("Met · 60 min");
+  await expect(cols.nth(1).locator("[data-part=cram-day-col-mark]")).toHaveCount(0);
+  await expect(cols.nth(0).locator("[data-part=cram-day-col-hours]")).toHaveText("1 h");
+  await expect(cols.nth(1).locator("[data-part=cram-day-col-hours]")).toHaveText("2 h · today");
+  await expect(cols.nth(2).locator("[data-part=cram-day-col-hours]")).toHaveText("0.5 h");
+  // Today's column is today's split (the two topics by weight × unverified share: Two's Complement 80, Boolean Algebra 40);
+  // tomorrow works through what's left, the weak spot (Boolean Algebra, missed) first; yesterday carries the walk from the start.
+  const topicsOf = async (col: ReturnType<typeof cols.nth>) => col.locator("[data-part=cram-day-topic]").evaluateAll((els) => els.map((el) => [el.getAttribute("data-topic"), el.textContent]));
+  expect(await topicsOf(cols.nth(1))).toEqual([
+    [F.twosComplement, "Two's Complement80 min"],
+    [F.booleanAlgebra, "Boolean Algebra40 min"],
+  ]);
+  expect(await topicsOf(cols.nth(2))).toEqual([
+    [F.booleanAlgebra, "Boolean Algebra10 min"],
+    [F.twosComplement, "Two's Complement20 min"],
+  ]);
+  expect(await topicsOf(cols.nth(0))).toEqual([[F.booleanAlgebra, "Boolean Algebra60 min"]]);
+  // The covered state: Boolean Algebra has an answer since the cram started, Two's Complement nothing yet.
+  const ba = cram.locator(`[data-part=cram-topic][data-topic="${F.booleanAlgebra}"]`);
+  const tc = cram.locator(`[data-part=cram-topic][data-topic="${F.twosComplement}"]`);
+  await expect(ba).toHaveAttribute("data-covered", "in-progress");
+  await expect(ba.locator("[data-part=cram-topic-covered]")).toHaveText("In progress");
+  await expect(tc).toHaveAttribute("data-covered", "untouched");
+  await expect(tc.locator("[data-part=cram-topic-covered]")).toHaveText("Not started");
+  await expect(cols.nth(1).locator(`[data-part=cram-day-topic][data-topic="${F.booleanAlgebra}"]`)).toHaveAttribute("data-covered", "in-progress");
 });

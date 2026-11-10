@@ -487,7 +487,13 @@ All 11 Figma screens are built. Where things live:
   `daysOut` derived; `src/lib/mastery/cram-budget.ts`; the setup shows a row per remaining day, `cram-day[data-day]` +
   `cram-day-hours`, and "Same for every day", `cram-hours`), the plan uses each day's own hours with spent minutes split
   at today, and `set_exam`'s `scope.budget` merges over the exam's (`perDay`, `today`, or the older `hours`; objectives
-  and sources left out keep the scope), per the contract's per-day addendum. The rubric grader names an `errorType` from the fixed list
+  and sources left out keep the scope), per the contract's per-day addendum. **Since 2026-11-10 (branch `cram-schedule`):**
+  the plan carries `days`, a schedule from the start of the cram to the day before the exam (today = today's split; later
+  days walk through the remaining need, 60 nominal minutes per unverified objective at its weight scaled to the hours
+  ahead, weak spots first then the heaviest, one topic after another; past days recomputed and marked met or short from
+  `spentByDay`), and each topic a `covered` state (untouched / in-progress from `touchedObjectiveIds`, evidence since
+  `budget.since` / done); the page shows them as a column per day (`cram-schedule` > `cram-day-col[data-day]`) and a chip
+  on each topic row (`cram-topic[data-covered]`), per the contract's schedule addendum. The rubric grader names an `errorType` from the fixed list
   (`src/lib/grading.ts`). The token is minted in Settings → Claude connector (`/api/connector`; only its sha256 is
   stored, `connector_tokens`, migration `20261104090000`) and pasted into Claude as a custom connector with no sign-in:
   the URL is the secret, so the proper OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is

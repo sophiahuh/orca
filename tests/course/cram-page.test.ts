@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Objective, QuizResult, Topic } from "../../src/lib/data.ts";
-import { hoursFromDuration, perDayHours, planTopics, remainingDays, spentMinutesInOrca, weekdayName } from "../../src/lib/course/cram-page.ts";
+import { hoursFromDuration, perDayHours, planTopics, remainingDays, spentMinutesByDayInOrca, spentMinutesInOrca, touchedObjectives, weekdayName } from "../../src/lib/course/cram-page.ts";
+import type { EvidenceEvent } from "../../src/lib/mastery/types.ts";
 import { cramPlan } from "../../src/lib/mastery/cram-plan.ts";
 
 const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, review: "confirmed", pos: { x: 0, y: 0 }, source: [], ...extra });
@@ -33,6 +34,15 @@ test("spent minutes count this course's sessions finished since cramming started
   assert.deepEqual(spentMinutesInOrca(results, "c", "2026-11-10T00:00:00Z", "2026-11-10", (iso) => new Date(Date.parse(iso) - 5 * 3_600_000).toISOString().slice(0, 10)), { beforeToday: 0, today: 20 });
 });
 
+test("the page's minutes by day and the objectives touched since cramming started come from the store's results and evidence", () => {
+  const results = [result("c", "2026-11-09T10:00:00Z", 600), result("c", "2026-11-10T10:00:00Z", 900), result("c", "2026-11-10T12:00:00Z", 300), result("d", "2026-11-11T11:00:00Z", 900)];
+  const utcDay = (iso: string) => iso.slice(0, 10);
+  assert.deepEqual(spentMinutesByDayInOrca(results, "c", "2026-11-10T00:00:00Z", utcDay), { "2026-11-10": 20 });
+  const flag = (courseId: string, objectiveId: string, at: string): EvidenceEvent => ({ kind: "confusion", id: objectiveId + at, at, courseId, topicId: "t", objectiveId, materialId: null, note: null, flagSource: "manual", page: null });
+  const evidence = [flag("c", "a", "2026-11-09T10:00:00Z"), flag("c", "b", "2026-11-10T10:00:00Z"), flag("c", "b", "2026-11-11T10:00:00Z"), flag("d", "x", "2026-11-11T10:00:00Z")];
+  assert.deepEqual(touchedObjectives(evidence, "c", "2026-11-10T00:00:00Z"), ["b"]);
+});
+
 test("the plan's topics carry the covered objectives at course × scope weight, by surviving topic, with their status", () => {
   const topics = [topic("t1"), topic("t2"), topic("old", { mergedInto: "t2" }), topic("empty")];
   const objectives = { a: objective("a", "t1"), b: objective("b", "t2"), c: objective("c", "old"), x: objective("x", "t1", { review: "archived" }) };
@@ -56,6 +66,7 @@ test("the page's plan: an exam 5 days out, 6 hours by day with one day out, noth
     budget: { hours: 6, daysOut: ["2026-11-12"], since: "2026-11-10T09:00:00Z", perDay: { "2026-11-10": 1.5, "2026-11-11": 2, "2026-11-12": 0, "2026-11-13": 1.5, "2026-11-14": 1 } },
     topics: [{ id: "t", name: "Two's Complement", objectives: [{ id: "a", name: "a", weight: 1, status: "learning" }, { id: "b", name: "b", weight: 1, status: "unseen" }] }],
     spentMinutes: { beforeToday: 0, today: 0 },
+    touchedObjectiveIds: [],
   });
   assert.equal(plan.daysLeft, 5);
   assert.deepEqual(plan.studyDays, ["2026-11-10", "2026-11-11", "2026-11-13", "2026-11-14"]);

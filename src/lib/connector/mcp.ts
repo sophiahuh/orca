@@ -36,7 +36,9 @@ export const INSTRUCTIONS =
   "budget is hours per day (scope.budget.perDay, YYYY-MM-DD to hours in half-hour steps, 0 for a " +
   "day off): when the student says how much time they have today or on a named day, save it with " +
   "set_exam (scope.budget.today for today, or perDay for the days named; leave objectives and " +
-  "sources out to keep the scope) and read back the new plan.line from course_state. On " +
+  "sources out to keep the scope) and read back the new plan.line from course_state. plan.days is " +
+  "the schedule (each day's topics and minutes, and each topic's covered state in plan.topics): when " +
+  "the student asks what's on which day, read it rather than inventing one. On " +
   "the eve (mode day-of, or plan.daysLeft is 1 or less), mention " +
   "topErrors: the kinds of mistake the student makes most. Follow mode: normal, a " +
   "short review of what's due; exam-week, work through the exam's scope, heaviest first; day-of, a " +

@@ -1,9 +1,11 @@
 /**
  * What the cram page and the exam card feed the plan (cram mode contract, section 6): the scope as
  * topics with weighted objectives and their statuses, the minutes studied in Orca since cramming
- * started (split at today), the hours a day a setup starts from, and the days it asks about. Pure.
+ * started (split at today, and by day), the objectives touched since, the hours a day a setup
+ * starts from, and the days it asks about. Pure.
  */
 import type { Duration, Exam, Objective, QuizResult, Relation, Topic } from "../data.ts";
+import type { EvidenceEvent } from "../mastery/types.ts";
 import { addDays } from "../mastery/agenda.ts";
 import type { CramPlanInput, SpentMinutes } from "../mastery/cram-plan.ts";
 import { durationSeconds } from "../mastery/session.ts";
@@ -47,6 +49,22 @@ export function spentMinutesInOrca(results: readonly QuizResult[], courseId: str
     else if (day < today) spent.beforeToday += r.seconds / 60;
   }
   return spent;
+}
+
+/** Minutes of finished sessions in this course since `since`, by the student's day (the plan's `spentByDay`; "in Orca", as `spentMinutesInOrca`). */
+export function spentMinutesByDayInOrca(results: readonly QuizResult[], courseId: string, since: string, dayOf: (iso: string) => string): Record<string, number> {
+  const byDay: Record<string, number> = {};
+  for (const r of results) {
+    if (r.courseId !== courseId || r.finishedAt < since) continue;
+    const day = dayOf(r.finishedAt);
+    byDay[day] = (byDay[day] ?? 0) + r.seconds / 60;
+  }
+  return byDay;
+}
+
+/** The course's objectives with any evidence (an answer, work, a flag or a signal) at or after `since` (the plan's `touchedObjectiveIds`). */
+export function touchedObjectives(evidence: readonly EvidenceEvent[], courseId: string, since: string): string[] {
+  return [...new Set(evidence.filter((e) => e.courseId === courseId && e.at >= since).map((e) => e.objectiveId))];
 }
 
 /**
