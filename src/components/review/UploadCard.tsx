@@ -138,7 +138,6 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-paused")} data-status={run.status} role="status">
         {head}
-        <span className="text-[14px] font-semibold text-wisteria-deep">Paused: Orca won&apos;t build from it until you resume it. Later uploads go ahead of it meanwhile.</span>
         <div className="flex flex-wrap items-center gap-[10px]">
           <Button size="sm" variant="secondary" icon={<IconPlay size={18} />} onClick={() => void setPaused(false)} data-part="resume-upload">
             Resume
