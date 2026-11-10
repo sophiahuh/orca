@@ -67,7 +67,8 @@ function fakeTools() {
     async recordAnswer(courseId, questionId, outcome, session, response, report) {
       if (courseId !== COURSE || questionId !== Q) return { error: "No such question in this course; use an id from questions_for." };
       recorded.push({ questionId, outcome, session, ...(response ? { response } : {}), report });
-      return { recorded: true, objectiveId: OBJ, status: "learning" };
+      // The server's record_answer checks the words against a choice or exact key and says when its result won.
+      return { recorded: true, objectiveId: OBJ, status: "learning", ...(response === "the stored key disagrees" ? { corrected: true as const } : {}) };
     },
     async setExam(courseId, exam) {
       if (courseId !== COURSE) return { error: "No such course." };
@@ -325,6 +326,16 @@ test("record_answer carries the help given, the student's confidence and the kin
     assert.equal(isError(await handleRpc(call("record_answer", { courseId: COURSE, questionId: Q, outcome: "correct", ...extra }), tools, "s")), true, JSON.stringify(extra));
   }
   assert.equal(recorded.length, 1, "refused calls record nothing");
+});
+
+test("record_answer passes on corrected when the stored key disagreed with Claude's grade", async () => {
+  const { tools, COURSE, OBJ, Q } = fakeTools();
+  const agreed = text(await handleRpc(call("record_answer", { courseId: COURSE, questionId: Q, outcome: "correct", response: "no ripple" }), tools, "s"));
+  assert.equal("corrected" in agreed, false);
+  const corrected = text(await handleRpc(call("record_answer", { courseId: COURSE, questionId: Q, outcome: "correct", response: "the stored key disagrees" }), tools, "s"));
+  assert.deepEqual(corrected, { recorded: true, objectiveId: OBJ, status: "learning", corrected: true });
+  const record = TOOLS.find((t) => t.name === "record_answer")!;
+  assert.match(record.description, /corrected/);
 });
 
 test("check_answer passes confidence and help along and refuses values off the lists", async () => {

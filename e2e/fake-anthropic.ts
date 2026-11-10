@@ -38,7 +38,7 @@ export interface Scenario {
   /** What the link step finds, by topic name. */
   links?: Array<{ from: string; to: string; type: string; reason?: string }>;
   /** What the grade step answers (default: correct). */
-  grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string };
+  grade?: { outcome: "correct" | "partial" | "incorrect"; satisfied?: string[]; misconception?: string | null; feedback?: string; errorType?: "arithmetic" | "units" | "sign" | "misread" | "notation" | "concept" | null };
   /** Wait this long before answering each call (to watch progress). */
   delayMs?: number;
 }
@@ -142,7 +142,7 @@ function answer(step: string, prompt: string): unknown {
       };
     }
     case "grade":
-      return { satisfied: [], misconception: null, feedback: "The fake API graded it.", outcome: "correct", ...(scenario.grade ?? {}) };
+      return { satisfied: [], misconception: null, feedback: "The fake API graded it.", outcome: "correct", errorType: null, ...(scenario.grade ?? {}) };
     default:
       throw new Error(`no answer for ${step}`);
   }

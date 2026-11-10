@@ -4,7 +4,7 @@
  * client, every query scoped to that student.
  */
 import { createHash, randomBytes } from "node:crypto";
-import type { AnswerKey, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
+import type { AnswerKey, AnswerReport, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
 import { addMaterial } from "@/lib/server/connector/add-material";
 import { addQuestions } from "@/lib/server/connector/add-questions";
 import { logEvidence } from "@/lib/server/connector/log-evidence";
@@ -101,6 +101,20 @@ export function pickOption(response: string, options: readonly string[]): number
   // The option's text inside a longer answer ("I'd say XOR"), when only one option fits.
   const within = options.map((o, i) => (normaliseExact(o).length >= 2 && want.includes(normaliseExact(o)) ? i : -1)).filter((i) => i >= 0);
   return within.length === 1 ? within[0] : null;
+}
+
+/**
+ * Orca's own result for the student's words against a stored key it can check itself: a choice
+ * question (the option as check_answer reads it) or an exact answer. Null when Orca can't tell
+ * (a prose question, or no option fits the words), so the outcome Claude stated stands.
+ */
+export function orcaOutcome(q: QuizQuestion, response: string): AnswerEvent["outcome"] | null {
+  if (q.kind !== "Short answer") {
+    const picked = pickOption(response, q.options);
+    return picked === null ? null : picked === q.answer ? "correct" : "incorrect";
+  }
+  if (q.exact?.length) return gradeExact(response, q.exact).outcome;
+  return null;
 }
 
 export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Date = () => new Date()): ConnectorTools {
@@ -236,8 +250,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     return { q: questionFromRow(row), objectiveId: row.objective_id, topicId: objective.topic_id, tier: row.tier as AnswerEvent["tier"] };
   };
 
-  /** One answer event from the connector, recorded against the student's snapshot. */
-  const record = async (a: { courseId: string; topicId: string; objectiveId: string; questionId: string; tier: AnswerEvent["tier"]; outcome: AnswerEvent["outcome"]; grader: AnswerEvent["grader"]; sessionId: string; response?: string }): Promise<RecordedAnswer | { error: string }> => {
+  /** One answer event from the connector, recorded against the student's snapshot, with what Claude reported (help, confidence, the kind of mistake). */
+  const record = async (a: { courseId: string; topicId: string; objectiveId: string; questionId: string; tier: AnswerEvent["tier"]; outcome: AnswerEvent["outcome"]; grader: AnswerEvent["grader"]; sessionId: string; response?: string; help?: AnswerEvent["help"]; confidence?: AnswerEvent["confidence"]; errorType?: AnswerEvent["errorType"] }): Promise<RecordedAnswer | { error: string }> => {
     const at = now();
     const event: AnswerEvent = {
       kind: "answer",
@@ -253,6 +267,9 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       source: "connector",
       sessionId: a.sessionId,
       ...(a.response ? { response: a.response } : {}),
+      ...(a.help ? { help: a.help } : {}),
+      ...(a.confidence ? { confidence: a.confidence } : {}),
+      ...(a.errorType ? { errorType: a.errorType } : {}),
     };
     try {
       const r = await recordEvent(supabaseSnapshotStore(db, ownerId, a.courseId), event);
@@ -376,8 +393,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       return { removed: true };
     },
 
-    // `report` (help, confidence) is accepted and not yet recorded: B3 writes it on the event.
-    async checkAnswer(courseId, questionId, response, sessionId): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }> {
+    // `report` (help, confidence) is stored on the event; the rubric grader's errorType too.
+    async checkAnswer(courseId, questionId, response, sessionId, report = {}): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }> {
       const found = await questionWithObjective(courseId, questionId);
       if ("error" in found) return found;
       const { q, objectiveId, topicId, tier } = found;
@@ -387,6 +404,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       let outcome: AnswerEvent["outcome"];
       let feedback: string;
       let grader: CheckedAnswer["grader"];
+      // The kind of mistake: only the rubric grader names one; choice and exact answers never have one.
+      let errorType: CheckedAnswer["errorType"] = null;
       if (q.kind !== "Short answer") {
         const picked = pickOption(words, q.options);
         if (picked === null) return { error: `Pass the option the student chose: its number as shown (1 to ${q.options.length}), its letter, or its text.` };
@@ -405,23 +424,26 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         outcome = g.body.outcome;
         feedback = g.body.feedback;
         grader = "rubric";
+        errorType = g.body.errorType ?? null;
       } else {
         return { error: "This question has no key Orca can check against." };
       }
-      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader, sessionId, response: words });
+      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader, sessionId, response: words, help: report.help, confidence: report.confidence, ...(errorType ? { errorType } : {}) });
       if ("error" in recorded) return recorded;
-      // errorType: the rubric grader names one from B3 on; choice and exact answers never have one.
-      return { recorded: true, outcome, grader, feedback, errorType: null, ...key, objectiveId: recorded.objectiveId, status: recorded.status, ...(recorded.note ? { note: recorded.note } : {}) };
+      return { recorded: true, outcome, grader, feedback, errorType, ...key, objectiveId: recorded.objectiveId, status: recorded.status, ...(recorded.note ? { note: recorded.note } : {}) };
     },
 
-    // `report` (help, confidence, errorType) is accepted and not yet recorded: B3 writes it on the
-    // event, records with grader claude and checks the stored key (corrected).
-    async recordAnswer(courseId, questionId, outcome, sessionId, response): Promise<RecordedAnswer | { error: string }> {
+    // An answer Claude graded against the key (grader claude: full credit unless `help` says
+    // otherwise, src/lib/mastery/objective-state.ts). When the student's words are given and the
+    // key is one Orca can check itself (a choice or exact answer), Orca's result wins (corrected).
+    async recordAnswer(courseId, questionId, outcome, sessionId, response, report: AnswerReport): Promise<RecordedAnswer | { error: string }> {
       const found = await questionWithObjective(courseId, questionId);
       if ("error" in found) return found;
-      const { objectiveId, topicId, tier } = found;
-      // Claude graded it, not Orca's own grader: self-marked (half credit, never clears a mix-up).
-      return record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader: "self", sessionId, ...(response ? { response } : {}) });
+      const { q, objectiveId, topicId, tier } = found;
+      const checked = response ? orcaOutcome(q, response) : null;
+      const corrected = checked !== null && checked !== outcome;
+      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome: corrected ? checked : outcome, grader: "claude", sessionId, ...(response ? { response } : {}), help: report.help, confidence: report.confidence, errorType: report.errorType });
+      return "error" in recorded || !corrected ? recorded : { ...recorded, corrected: true };
     },
 
     materialFor: (courseId, objectiveIds) => materialFor(db, ownerId, courseId, objectiveIds),

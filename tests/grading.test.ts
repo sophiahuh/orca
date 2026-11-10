@@ -76,17 +76,19 @@ test("the grader's prompt keeps the answer inside a JSON data block, after the r
 
 test("the model's reply is kept to the rubric: unknown ideas and misconceptions are dropped, feedback is cleaned", () => {
   const rubric = { requiredIdeas: ["Invert every bit", "Add one"], acceptableAlternatives: [], knownMisconceptions: [{ description: "Only inverts", indicativePhrasing: [] }] };
-  assert.deepEqual(validateGrade({ outcome: "partial", satisfied: ["Add one", "Add one", "Knows the sign bit"], misconception: "Only inverts", feedback: "Half​ there.\nMore." }, rubric), {
+  assert.deepEqual(validateGrade({ outcome: "partial", satisfied: ["Add one", "Add one", "Knows the sign bit"], misconception: "Only inverts", feedback: "Half​ there.\nMore.", errorType: "sign" }, rubric), {
     outcome: "partial",
     satisfied: ["Add one"],
     misconception: "Only inverts",
     feedback: "Half there. More.",
+    errorType: "sign",
   });
   assert.deepEqual(validateGrade({ outcome: "incorrect", satisfied: [], misconception: "Made up", feedback: "" }, rubric), {
     outcome: "incorrect",
     satisfied: [],
     misconception: null,
     feedback: "Not quite; compare with the key below.",
+    errorType: null,
   });
   assert.equal(validateGrade({ outcome: "correct", feedback: "well done ".repeat(100) }, rubric).feedback, "well done ".repeat(100).trim(), "kept whole, not cut");
 });
@@ -103,7 +105,22 @@ test("answers are sanitised and cut before grading; stored rubrics may lack the 
 
 test("over-long feedback from the model still grades, shown whole (the model is asked to keep it short)", () => {
   const long = "You name file-backed and anonymous memory correctly. " + "You also explain where heap and stack data come from in detail. ".repeat(6);
-  assert.equal(GradeSchema.safeParse({ outcome: "correct", satisfied: [], misconception: null, feedback: long }).success, true);
+  assert.equal(GradeSchema.safeParse({ outcome: "correct", satisfied: [], misconception: null, feedback: long, errorType: null }).success, true);
   assert.equal(validateGrade({ outcome: "correct", feedback: long }, { requiredIdeas: ["x"], acceptableAlternatives: [], knownMisconceptions: [] }).feedback, long.trim());
   assert.match(GRADE_SYSTEM, /under 300 characters/);
+});
+
+test("the rubric grader names the kind of mistake from the fixed list, or null; it never sticks to a right answer or comes from off the list", () => {
+  const rubric = { requiredIdeas: ["x"], acceptableAlternatives: [], knownMisconceptions: [] };
+  const base = { satisfied: [], misconception: null, feedback: "Nearly." };
+  assert.equal(GradeSchema.safeParse({ ...base, outcome: "partial", errorType: "units" }).success, true);
+  assert.equal(GradeSchema.safeParse({ ...base, outcome: "partial", errorType: null }).success, true);
+  assert.equal(GradeSchema.safeParse({ ...base, outcome: "partial", errorType: "typo" }).success, false, "only the fixed kinds");
+  assert.equal(GradeSchema.safeParse({ ...base, outcome: "partial" }).success, false, "the field is always present (strict output schemas take no optional field)");
+  assert.equal(validateGrade({ outcome: "incorrect", feedback: "No.", errorType: "concept" }, rubric).errorType, "concept");
+  assert.equal(validateGrade({ outcome: "correct", feedback: "Yes.", errorType: "concept" }, rubric).errorType, null, "a right answer has no mistake behind it");
+  assert.equal(validateGrade({ outcome: "incorrect", feedback: "No.", errorType: "typo" as never }, rubric).errorType, null, "a kind off the list is dropped");
+  assert.equal(validateGrade({ outcome: "incorrect", feedback: "No." }, rubric).errorType, null);
+  assert.match(GRADE_SYSTEM, /errorType \(arithmetic, units, sign, misread, notation or concept\)/);
+  assert.match(gradePrompt("Q?", rubric, "a"), /"errorType": "arithmetic" \| "units" \| "sign" \| "misread" \| "notation" \| "concept" \| null/);
 });
