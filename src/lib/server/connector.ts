@@ -123,8 +123,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       db.from("question_feedback").select("question_id").eq("owner_id", ownerId).eq("rating", "down"),
       db.from("pipeline_runs").select("id, status, objective_ids").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "top-up").in("status", ["queued", "waiting", "running"]).order("at"),
       checkBudget(db, ownerId, 0),
-      // Held-back materials: listed by name only, never opened.
-      db.from("materials").select("id, filename, type").eq("owner_id", ownerId).eq("course_id", courseId).eq("status", "ready").eq("held_back", true).order("created_at"),
+      // Held-back materials (every non-removed one): listed by name only, never opened.
+      db.from("materials").select("id, filename, type").eq("owner_id", ownerId).eq("course_id", courseId).neq("status", "removed").eq("held_back", true).order("created_at"),
     ]);
     for (const r of [topics, objectives, questions, exams, profile, feedback, runs, vault]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
 

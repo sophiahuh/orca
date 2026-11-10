@@ -102,6 +102,12 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
         {STATUS[run.status].label}
       </span>
       <span className="text-[13px] font-medium text-prussian/60">{when(run.at)}</span>
+      {/* Hold-back (contract section 5): kept for a practice test, so no questions are written from it. */}
+      {material?.heldBack && (
+        <span className="rounded-pill bg-alice px-[9px] py-[4px] text-[11px] font-bold text-prussian" data-part="held-back" title="Kept hidden for a practice test: Orca writes no questions from it.">
+          Held back
+        </span>
+      )}
     </span>
   );
 

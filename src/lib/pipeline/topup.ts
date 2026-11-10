@@ -91,11 +91,16 @@ export function pagesFor(o: Objective, topic: Topic | undefined, material: Mater
   return picked.length ? picked : null;
 }
 
-/** The material to write an objective's questions from and its pages there, or why there's none. */
+/**
+ * The material to write an objective's questions from and its pages there, or why there's none.
+ * A held-back material (a past or practice exam kept for a practice test) is never written from
+ * (contract section 5), so an objective taught only there is skipped with that reason.
+ */
 function sourceFor(o: Objective, input: Pick<TopUpInput, "course" | "materials" | "materialPages">): { material: Material; pages: MaterialPages } | { reason: string } {
   const sources = materialsFor(o);
-  const source = sources.find((m) => input.materialPages[m] && input.materials.some((x) => x.id === m));
-  if (!source) return { reason: sources.length ? "its material's text isn't stored (it was added without its file); upload the file again" : "no course material to write from" };
+  const stored = sources.filter((m) => input.materialPages[m] && input.materials.some((x) => x.id === m));
+  const source = stored.find((m) => !input.materials.find((x) => x.id === m)!.heldBack);
+  if (!source) return { reason: stored.length ? "its material is held back for a practice test, so Orca writes nothing from it" : sources.length ? "its material's text isn't stored (it was added without its file); upload the file again" : "no course material to write from" };
   const material = input.materials.find((m) => m.id === source)!;
   const topic = input.course.topics.find((t) => t.id === o.topicId);
   const pages = pagesFor(o, topic, material, input.materialPages[source]);

@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { MATERIAL_TYPES, type Material, type MaterialType } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
+import { heldBackByDefault } from "@/lib/material/hold-back";
 import { UNSUPPORTED_UPLOAD, UPLOAD_MIMES, type UploadKind, uploadKind } from "@/lib/material/kind";
 import { type HiddenText, type ReadPage, UnreadablePdfError, looksLikePdf, readPdf } from "@/lib/material/read-pdf";
 import { readPptx } from "@/lib/material/read-pptx";
@@ -61,6 +62,8 @@ export const UploadRequest = z.object({
   handwritten: z.boolean().default(false),
   /** The student chose "Upload again" for a file the course already has: it's added as a new copy. */
   again: z.boolean().optional(),
+  /** Kept hidden for a practice test: mapped to objectives, never used to write questions. Default: the type is Past exam or Practice exam. */
+  heldBack: z.boolean().optional(),
 });
 export type UploadRequest = z.infer<typeof UploadRequest>;
 
@@ -109,6 +112,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
       due: body.due,
       reflect: body.reflect,
       handwritten: body.handwritten,
+      held_back: body.heldBack ?? heldBackByDefault(body.type),
       storage_path: path,
       size_bytes: body.size,
       mime: UPLOAD_MIMES[kind],

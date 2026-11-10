@@ -431,3 +431,16 @@ test("an upload writes questions for the objectives marked in it; a course's fir
   const later = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
   assert.equal(later.run.questionsAdded, 0, "nothing marked, nothing written (and no generate call: the fake would throw)");
 });
+
+test("a held-back upload (a practice exam kept for a practice test) maps objectives and flags but writes no questions and no warm-up", async () => {
+  // No generate handler: a generate call would throw, so the fake proves none is made.
+  const model = fakeModel({ extract: () => markAll(lectureExtract) });
+  const plan = await runUpload(input({ ...marking(), material: { ...material("Practice exam"), heldBack: true } }), { call: model.call, newId });
+  assert.equal(plan.newTopics.length, 2);
+  assert.equal(plan.newObjectives.length, 3);
+  assert.ok(plan.flags.length > 0, "marked passages still become flags");
+  assert.deepEqual(plan.questions, {});
+  assert.equal(plan.run.questionsAdded, 0);
+  assert.deepEqual(model.calls.filter((c) => c.step === "generate"), []);
+  assert.deepEqual(plan.run.dropped.filter((d) => d.prompt.startsWith("Questions from")), [{ prompt: "Questions from L02.pdf", reason: "skipped: the file is held back for a practice test, so Orca mapped its objectives but wrote nothing from it" }]);
+});

@@ -229,3 +229,19 @@ test("a dive question may be a long multi-step problem: a 1,500-character prompt
   assert.equal(DeepOutput.safeParse({ questions: [question] }).success, true);
   assert.equal(DeepOutput.safeParse({ questions: [{ ...question, prompt: "x".repeat(4001) }] }).success, false);
 });
+
+test("a held-back material is never written from: an objective taught only there is skipped with that reason; another material that teaches it is used instead", async () => {
+  const held: Material = { ...material("L1"), type: "Practice exam", heldBack: true };
+  const reason = "its material is held back for a practice test, so Orca writes nothing from it";
+  assert.deepEqual(topUpTargets(base({ materials: [held] })).skipped, [{ objectiveId: "a", reason }]);
+  // The same objective also anchored in a lecture: written from the lecture, never the exam.
+  const twice = objective("a", { signals: [{ materialId: "L1", materialType: "Practice exam", places: [{ locator: "slide 2", excerpt: "x" }] }, { materialId: "L2", materialType: "Lecture", places: [{ locator: "slide 2", excerpt: "x" }] }] });
+  const both = topUpTargets(base({ objectives: { a: twice, b: objective("b") }, materials: [held, material("L2")], materialPages: { L1: [{ n: 2, text: "exam" }], L2: [{ n: 2, text: "lecture" }] } }));
+  assert.deepEqual(both.skipped, []);
+  assert.deepEqual([...both.byMaterial.keys()], ["L2"]);
+  // A deep review skips it the same way, without a model call.
+  const call: CallStep = async () => { throw new Error("no call expected"); };
+  const deep = await runDeepReview({ ...base({ materials: [held] }), objectiveIds: ["a"], count: 2 }, { call, newId: () => "d1" });
+  assert.deepEqual(deep.skipped, [{ objectiveId: "a", reason }]);
+  assert.deepEqual(deep.questions, {});
+});

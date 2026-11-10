@@ -523,6 +523,12 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     },
   });
   if (deps.structureOnly) return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, flags, run: runRecord({}) };
+  /* Hold-back (contract section 5): a past or practice exam is mapped (objectives, coverage, emphasis)
+     but never written from, so it stays fresh for a practice test: no targets, no warm-up. */
+  if (input.material.heldBack) {
+    dropped.push({ prompt: `Questions from ${input.material.filename}`, reason: "skipped: the file is held back for a practice test, so Orca mapped its objectives but wrote nothing from it" });
+    return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, flags, run: runRecord({}) };
+  }
 
   /* Questions only for objectives marked in this upload (weak points first), from their own pages:
      every other objective gets them when it's flagged (a top-up) or practised (a dive). */
