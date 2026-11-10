@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { BROWSER_FLAG_SOURCES, FLAG_STRENGTH, canFlagHard, flagStrength, isInRotation } from "../../src/lib/mastery/flags.ts";
 import type { ObjectiveStatus } from "../../src/lib/mastery/types.ts";
 
-test("only the connector asks for a check; every other source is struggled", () => {
+test("only the connector's flag_check asks for a check; every other source, Claude's struggled flag included, is struggled", () => {
   assert.equal(flagStrength({ flagSource: "connector" }), "check");
-  for (const s of ["homework", "handwritten-marker", "slide", "manual"] as const) assert.equal(flagStrength({ flagSource: s }), "struggled");
-  assert.deepEqual(Object.keys(FLAG_STRENGTH).sort(), ["connector", "handwritten-marker", "homework", "manual", "slide"]);
+  for (const s of ["homework", "handwritten-marker", "slide", "manual", "connector-struggled"] as const) assert.equal(flagStrength({ flagSource: s }), "struggled");
+  assert.deepEqual(Object.keys(FLAG_STRENGTH).sort(), ["connector", "connector-struggled", "handwritten-marker", "homework", "manual", "slide"]);
 });
 
 test("the browser may send homework, slide and manual flags only", () => {

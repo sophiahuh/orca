@@ -6,7 +6,7 @@
  */
 import { type Card, type Grade, Rating, type State, createEmptyCard, fsrs, generatorParameters } from "ts-fsrs";
 import { flagStrength } from "./flags.ts";
-import type { AnswerEvent, ConfusionEvent, EvidenceEvent, ObjectiveState, ObjectiveStatus, Outcome } from "./types.ts";
+import type { AnswerEvent, ConfusionEvent, EvidenceEvent, Help, ObjectiveState, ObjectiveStatus, Outcome, SignalEvent, WorkEvent } from "./types.ts";
 
 export const MASTERY_RULES = {
   /** Credited answers needed for mastery. */
@@ -46,12 +46,14 @@ export const MASTERY_RULES = {
  * A snapshot with an older version counts as stale and is rebuilt from the evidence log. Bump it
  * whenever the result of the fold could change: a constant in MASTERY_RULES, the FSRS parameters
  * (including a ts-fsrs upgrade that moves its default weights), or the logic of applyAnswer,
- * applyConfusion or a day key, or FLAG_STRENGTH (src/lib/mastery/flags.ts). tests/mastery/snapshot.test.ts
- * fails when the constants, the FSRS parameters or the flag strengths change without a bump (it
- * hashes them) and when the logic does (golden replays recorded per version); record the new hash
- * and golden accumulators there with the bump.
+ * applyWork, applySignal, applyConfusion or a day key, or FLAG_STRENGTH (src/lib/mastery/flags.ts).
+ * tests/mastery/snapshot.test.ts fails when the constants, the FSRS parameters or the flag strengths
+ * change without a bump (it hashes them) and when the logic does (golden replays recorded per
+ * version); record the new hash and golden accumulators there with the bump.
+ * Version 4 (2026-11-10, cram mode): help (hint = assisted, shown = a miss), grader claude, work
+ * and signal events, and the connector-struggled flag source.
  */
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 /** Deterministic (no fuzz), day-based (no same-day learning steps; sessions are daily), capped at 60 days. */
 export const FSRS_PARAMETERS = Object.freeze(
@@ -224,28 +226,82 @@ export const EMPTY_ACCUMULATOR: ObjectiveAccumulator = Object.freeze({
   verifiedUnaided: false,
 }) as ObjectiveAccumulator;
 
-function timeOf(e: EvidenceEvent) {
+function timeOf(e: Pick<EvidenceEvent, "id" | "at">) {
   const t = Date.parse(e.at);
   if (Number.isNaN(t)) throw new Error(`Evidence ${e.id} has an unparseable timestamp: "${e.at}"`);
   return t;
 }
 
-/** How an answer grades for FSRS: wrong → Again; partial or self-marked → Hard; unaided correct → Good. */
-function gradeOf(e: AnswerEvent): Grade {
-  if (e.outcome === "incorrect") return Rating.Again;
-  if (e.outcome === "partial" || e.grader === "self") return Rating.Hard;
+/**
+ * A graded attempt as the fold sees it, whether it came from a question in the bank (an answer) or
+ * a problem Claude set (work, with the event's own id as the question). `assisted`: the grade came
+ * from the student or Claude alone, or a hint was given (half credit, never verifies). `help`
+ * "shown" (the answer was revealed first) counts as a miss whatever the outcome says.
+ */
+interface GradedAttempt {
+  id: string;
+  at: string;
+  objectiveId: string;
+  questionId: string;
+  tier: AnswerEvent["tier"];
+  outcome: Outcome;
+  assisted: boolean;
+  source: AnswerEvent["source"];
+  sessionId: string;
+}
+
+/** How an attempt grades for FSRS: wrong (or shown) → Again; partial, self-marked or hinted → Hard; unaided correct → Good. */
+function gradeOf(a: Pick<GradedAttempt, "outcome" | "assisted">): Grade {
+  if (a.outcome === "incorrect") return Rating.Again;
+  if (a.outcome === "partial" || a.assisted) return Rating.Hard;
   return Rating.Good;
 }
 
-/** One step of the fold. Returns a new accumulator; never mutates the one it was given. */
+/** The outcome an attempt counts as: a miss when the answer was shown before it, else what the grader said. */
+const effectiveOutcome = (outcome: Outcome, help: Help | undefined): Outcome => (help === "shown" ? "incorrect" : outcome);
+
+/**
+ * A graded attempt the student made alone, as the fold sees it: graded (not self-marked, and work
+ * judged against a solution or a known answer, not by Claude alone) with no hint and no answer
+ * shown first. What the agenda reads as clearing an open confusion, and what keeps the streak alive.
+ */
+export function unaidedAttempt(e: AnswerEvent | WorkEvent): boolean {
+  const graded = e.kind === "answer" ? e.grader !== "self" : e.basis !== "claude";
+  return graded && e.help !== "hint" && e.help !== "shown";
+}
+
+/** One step of the fold for an answer. Returns a new accumulator; never mutates the one it was given. */
 export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
+  // Self-marked or hinted: assisted. Claude grading against the stored key (grader claude) with no
+  // help, like Orca's own graders, is not.
+  return applyAttempt(
+    acc,
+    { id: e.id, at: e.at, objectiveId: e.objectiveId, questionId: e.questionId, tier: e.tier, outcome: effectiveOutcome(e.outcome, e.help), assisted: e.grader === "self" || e.help === "hint", source: e.source, sessionId: e.sessionId },
+    options,
+  );
+}
+
+/**
+ * One step of the fold for a piece of work (a problem Claude set during a cram): folds like an
+ * answer to a question with the event's own id. Judged against an official solution or a known
+ * answer it is graded; judged by Claude alone it is assisted (half credit, never verifies).
+ */
+export function applyWork(acc: ObjectiveAccumulator, e: WorkEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
+  return applyAttempt(
+    acc,
+    { id: e.id, at: e.at, objectiveId: e.objectiveId, questionId: e.id, tier: null, outcome: effectiveOutcome(e.outcome, e.help), assisted: e.basis === "claude" || e.help === "hint", source: e.source, sessionId: e.sessionId },
+    options,
+  );
+}
+
+function applyAttempt(acc: ObjectiveAccumulator, e: GradedAttempt, options: ObjectiveStateOptions): ObjectiveAccumulator {
   const R = MASTERY_RULES;
   const t = timeOf(e);
   if (acc.lastAt !== null && t < Date.parse(acc.lastAt)) {
     throw new Error(`Evidence ${e.id} is older than the last answer applied to objective ${e.objectiveId}; rebuild its state from the log`);
   }
   const dayKey = options.dayKey ?? localDayKey;
-  const assisted = e.grader === "self";
+  const assisted = e.assisted;
   const checkWasDue = acc.checkDueAt !== null && t >= Date.parse(acc.checkDueAt);
   const before = acc.card === null ? createEmptyCard(new Date(t)) : toCard(acc.card);
   const card = capInterval(scheduler.next(before, new Date(t), gradeOf(e)).card, t);
@@ -340,10 +396,31 @@ export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): Ob
     if (acc.mastered) return { ...acc, lastAt: e.at, checkDueAt: acc.checkDueAt !== null && Date.parse(acc.checkDueAt) < t ? acc.checkDueAt : e.at, retired: false };
     return { ...acc, lastAt: e.at };
   }
+  return struggled(acc, e.at, t);
+}
+
+/**
+ * What the student did in a cram chat. lost: exactly what a struggled flag does (in rotation, back
+ * to learning, FSRS rated Again). got-it: opens a check on an objective not in rotation and not
+ * mastered ("I get it" is checked, not believed), else nothing. asked-answer and asked-harder: no
+ * state change (the plan and the recap read them). Signals never add credit.
+ */
+export function applySignal(acc: ObjectiveAccumulator, e: SignalEvent): ObjectiveAccumulator {
+  const t = timeOf(e);
+  if (acc.lastAt !== null && t < Date.parse(acc.lastAt)) {
+    throw new Error(`Evidence ${e.id} is older than the last event applied to objective ${e.objectiveId}; rebuild its state from the log`);
+  }
+  if (e.signal === "lost") return struggled(acc, e.at, t);
+  if (e.signal === "got-it" && !acc.inRotation && !acc.mastered) return { ...acc, lastAt: e.at, checkOpen: true };
+  return acc;
+}
+
+/** Back to learning and into rotation, the bar cleared and FSRS rated Again (a struggled flag, or "lost"). */
+function struggled(acc: ObjectiveAccumulator, at: string, t: number): ObjectiveAccumulator {
   const card = acc.card === null ? null : toStored(capInterval(scheduler.next(toCard(acc.card), new Date(t), Rating.Again).card, t));
   return {
     ...acc,
-    lastAt: e.at,
+    lastAt: at,
     card,
     inRotation: true,
     checkOpen: false,
@@ -366,7 +443,16 @@ export function applyConfusion(acc: ObjectiveAccumulator, e: ConfusionEvent): Ob
 
 /** One step of the fold for any event. */
 export function applyEvidence(acc: ObjectiveAccumulator, e: EvidenceEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
-  return e.kind === "confusion" ? applyConfusion(acc, e) : applyAnswer(acc, e, options);
+  switch (e.kind) {
+    case "answer":
+      return applyAnswer(acc, e, options);
+    case "confusion":
+      return applyConfusion(acc, e);
+    case "work":
+      return applyWork(acc, e, options);
+    case "signal":
+      return applySignal(acc, e);
+  }
 }
 
 /** Read an accumulator against the clock. Fading is computed here, never by a timer. */

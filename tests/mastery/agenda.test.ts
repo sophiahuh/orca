@@ -239,6 +239,16 @@ test("an exam is in its window from 7 days before it, through its day", () => {
   assert.equal(examInWindow(exams, "other", "2026-11-15"), null);
 });
 
+test("an exam being crammed for is in the window whatever its date, and comes before a nearer one (cram mode contract)", () => {
+  const far = { courseId: "k", date: "2026-11-25", topicIds: ["t2"], cramming: true };
+  const near = { courseId: "k", date: "2026-11-16", topicIds: ["t1"], cramming: false };
+  assert.deepEqual(examInWindow([far], "k", "2026-11-13"), { topicIds: ["t2"] });
+  assert.deepEqual(examInWindow([{ ...far, cramming: false }], "k", "2026-11-13"), null);
+  assert.deepEqual(examInWindow([near, far], "k", "2026-11-13"), { topicIds: ["t2"] });
+  assert.deepEqual(examInWindow([near, { ...far, cramming: false }], "k", "2026-11-13"), { topicIds: ["t1"] });
+  assert.equal(examInWindow([{ ...far, courseId: "other" }], "k", "2026-11-13"), null);
+});
+
 test("an exam naming a merged-away topic covers its survivor", () => {
   const exams = [{ courseId: "k", date: "2026-11-20", topicIds: ["old", "t1"] }];
   const current = survivingTopic([{ id: "old", mergedInto: "mid" }, { id: "mid", mergedInto: "t1" }, { id: "t1" }]);

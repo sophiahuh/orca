@@ -1,10 +1,17 @@
 /**
  * The Claude connector against Supabase: the student's secret link (one per account, only its hash
- * stored) and the five tools in `src/lib/connector/mcp.ts` read and written with the service-role
- * client, every query scoped to that student.
+ * stored) and the tools in `src/lib/connector/mcp.ts` (v0.4; the material, question and evidence
+ * tools live one per file under `connector/`) read and written with the service-role client, every
+ * query scoped to that student.
  */
 import { createHash, randomBytes } from "node:crypto";
-import type { AnswerKey, CheckedAnswer, ConnectorTools, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, WritingLine } from "@/lib/connector/mcp";
+import type { AnswerKey, AnswerReport, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
+import { addMaterial } from "@/lib/server/connector/add-material";
+import { addQuestions } from "@/lib/server/connector/add-questions";
+import { logEvidence } from "@/lib/server/connector/log-evidence";
+import { materialFor } from "@/lib/server/connector/material-for";
+import type { ExamScope, MaterialType } from "@/lib/data";
+import { AGENDA_RULES } from "@/lib/mastery/agenda";
 import { dayStartIn } from "@/lib/jobs/budget";
 import { startFlagTopUpJob } from "@/lib/server/jobs/start";
 import { rateLimit } from "@/lib/server/rate-limit";
@@ -18,7 +25,9 @@ import { topUpAfterFlag } from "@/lib/server/flag-top-up";
 import { recordSecurityEvents } from "@/lib/server/security";
 import { checkBudget } from "@/lib/server/usage";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
-import { questionFromRow } from "@/lib/supabase/app-rows";
+import { objectiveFromRow, questionFromRow, relationFromRow, topicFromRow } from "@/lib/supabase/app-rows";
+import { courseObjectiveWeights, examScopeWeights } from "@/lib/course/weights";
+import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 
 /* ── The link ── */
@@ -61,6 +70,14 @@ const DUE_ORDER: Record<ObjectiveStatus, number> = { fading: 0, "mixed-up": 1, l
 const DUE_STATUSES: ReadonlySet<ObjectiveStatus> = new Set(["fading", "mixed-up", "learning", "check-due"]);
 const DUE_LIMIT = 20;
 
+/** The mode an exam puts the course in: day-of today, exam-week while cramming or within the agenda's exam window, else normal. */
+function examMode(exam: { date: string; cramming: boolean }, today: string, weekOut: string): CourseMode {
+  if (exam.date === today) return "day-of";
+  if (exam.cramming || (exam.date > today && exam.date <= weekOut)) return "exam-week";
+  return "normal";
+}
+const MODE_ORDER: Record<CourseMode, number> = { normal: 0, "exam-week": 1, "day-of": 2 };
+
 /** The key Claude teaches from once an answer is checked. */
 function keyOf(q: QuizQuestion): AnswerKey {
   if (q.kind !== "Short answer") return { answer: q.options[q.answer] ?? "", explanation: q.explanation };
@@ -88,6 +105,20 @@ export function pickOption(response: string, options: readonly string[]): number
   return within.length === 1 ? within[0] : null;
 }
 
+/**
+ * Orca's own result for the student's words against a stored key it can check itself: a choice
+ * question (the option as check_answer reads it) or an exact answer. Null when Orca can't tell
+ * (a prose question, or no option fits the words), so the outcome Claude stated stands.
+ */
+export function orcaOutcome(q: QuizQuestion, response: string): AnswerEvent["outcome"] | null {
+  if (q.kind !== "Short answer") {
+    const picked = pickOption(response, q.options);
+    return picked === null ? null : picked === q.answer ? "correct" : "incorrect";
+  }
+  if (q.exact?.length) return gradeExact(response, q.exact).outcome;
+  return null;
+}
+
 export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Date = () => new Date()): ConnectorTools {
   const owns = async (courseId: string) => {
     const { data, error } = await db.from("courses").select("id, name").eq("owner_id", ownerId).eq("id", courseId).is("deleted_at", null).maybeSingle();
@@ -98,18 +129,20 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
   const courseState = async (courseId: string, options: { detail?: "summary" | "full"; topicIds?: string[] } = {}): Promise<CourseState | null> => {
     const course = await owns(courseId);
     if (!course) return null;
-    const [topics, objectives, questions, exams, profile, snapshots, feedback, runs, budget] = await Promise.all([
+    const [topics, objectives, questions, exams, profile, snapshots, feedback, runs, budget, vault] = await Promise.all([
       db.from("topics").select("id, name, review, merged_into, sort_order").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("objectives").select("id, topic_id, name, review, merged_into").eq("owner_id", ownerId).eq("course_id", courseId),
       db.from("questions").select("id, objective_id, deep").eq("owner_id", ownerId).eq("course_id", courseId),
-      db.from("exams").select("id, title, date, topic_ids").eq("owner_id", ownerId).eq("course_id", courseId).order("date"),
+      db.from("exams").select("id, title, date, topic_ids, cramming, scope").eq("owner_id", ownerId).eq("course_id", courseId).order("date"),
       db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle(),
       readCourseState(supabaseSnapshotStore(db, ownerId, courseId)),
       db.from("question_feedback").select("question_id").eq("owner_id", ownerId).eq("rating", "down"),
       db.from("pipeline_runs").select("id, status, objective_ids").eq("owner_id", ownerId).eq("course_id", courseId).eq("kind", "top-up").in("status", ["queued", "waiting", "running"]).order("at"),
       checkBudget(db, ownerId, 0),
+      // Held-back materials (every non-removed one): listed by name only, never opened.
+      db.from("materials").select("id, filename, type").eq("owner_id", ownerId).eq("course_id", courseId).neq("status", "removed").eq("held_back", true).order("created_at"),
     ]);
-    for (const r of [topics, objectives, questions, exams, profile, feedback, runs]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
+    for (const r of [topics, objectives, questions, exams, profile, feedback, runs, vault]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
 
     const at = now();
     const topicById = new Map((topics.data ?? []).map((t) => [t.id, t]));
@@ -152,10 +185,15 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
 
     const timezone = profile.data?.timezone ?? "UTC";
     const today = dayKeyIn(timezone)(at.toISOString());
-    const weekOut = new Date(at.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
-    const examLines = (exams.data ?? []).map((e) => ({ id: e.id, title: e.title, date: e.date, topicIds: e.topic_ids }));
-    // The next week's exams' topics; an exam that names none covers every topic.
-    const examFocus = [...new Set(examLines.filter((e) => e.date >= today && e.date <= weekOut).flatMap((e) => (e.topicIds.length ? e.topicIds : liveTopics.map((t) => t.id))))];
+    const weekOut = new Date(at.getTime() + AGENDA_RULES.examWindowDays * 86_400_000).toISOString().slice(0, 10);
+    // The exams table holds scope to an object (or null); its shape is the app's ExamScope.
+    const examLines: ExamLine[] = (exams.data ?? []).map((e) => ({ id: e.id, title: e.title, date: e.date, topicIds: e.topic_ids, cramming: e.cramming, scope: e.scope as unknown as ExamScope | null, mode: examMode(e, today, weekOut) }));
+    // The topics of the exams in the window (the next week's, and one being crammed for whatever its date:
+    // cramming is the window, contract section 5); an exam that names none covers every topic.
+    const examFocus = [...new Set(examLines.filter((e) => e.cramming || (e.date >= today && e.date <= weekOut)).flatMap((e) => (e.topicIds.length ? e.topicIds : liveTopics.map((t) => t.id))))];
+    const mode = examLines.reduce<CourseMode>((m, e) => (MODE_ORDER[e.mode] > MODE_ORDER[m] ? e.mode : m), "normal");
+    const cramming = examLines.find((e) => e.cramming)?.id ?? null;
+    const vaultLines: VaultLine[] = (vault.data ?? []).map((m) => ({ materialId: m.id, filename: m.filename, type: m.type as MaterialType }));
     const topicLines: TopicLine[] = liveTopics.map((t) => {
       const mine = lines.filter((l) => l.topicId === t.id);
       return { id: t.id, name: t.name, objectives: mine.length, weak: mine.filter((l) => DUE_STATUSES.has(l.status as ObjectiveStatus)).length, askable: mine.filter((l) => l.questions > 0).length };
@@ -175,7 +213,39 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       examFocus,
       budget: budget.ok ? { ok: true, resetsAt } : { ok: false, reason: budget.message, resetsAt },
       writing,
+      vault: vaultLines,
+      mode,
+      cramming,
     };
+  };
+
+  /**
+   * The course is in a cram (`course_state.mode` isn't normal: an exam the student is cramming for, or one within
+   * the window). Orca makes no model calls in a cram (contract, decisions): Claude grades prose and writes questions.
+   */
+  const inCram = async (courseId: string): Promise<boolean> => {
+    const [exams, profile] = await Promise.all([
+      db.from("exams").select("date, cramming").eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle(),
+    ]);
+    if (exams.error || profile.error) throw new Error(`Couldn't read the exams: ${(exams.error ?? profile.error)!.message}`);
+    const at = now();
+    const today = dayKeyIn(profile.data?.timezone ?? "UTC")(at.toISOString());
+    const weekOut = new Date(at.getTime() + AGENDA_RULES.examWindowDays * 86_400_000).toISOString().slice(0, 10);
+    return (exams.data ?? []).some((e) => examMode(e, today, weekOut) !== "normal");
+  };
+  const CRAM_WRITES = "Orca writes no questions during a cram (an exam being crammed for, or within the week): write them with add_questions, anchored to material_for's pieces.";
+
+  /** The agenda's weights for the course's live objectives: the course weights, times the exam's scope inside its window (src/lib/course/weights.ts). */
+  const effectiveWeights = async (courseId: string, exams: readonly ExamLine[], today: string): Promise<Map<string, number>> => {
+    const [topics, objectives, relations] = await Promise.all([
+      db.from("topics").select().eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("objectives").select().eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("relations").select().eq("owner_id", ownerId).eq("course_id", courseId),
+    ]);
+    for (const r of [topics, objectives, relations]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
+    const computed = courseObjectiveWeights(Object.fromEntries((objectives.data ?? []).map((o) => [o.id, objectiveFromRow(o)])), (topics.data ?? []).map(topicFromRow), (relations.data ?? []).map(relationFromRow));
+    return examScopeWeights(exams.map((e) => ({ courseId, date: e.date, cramming: e.cramming, scope: e.scope })), courseId, today, computed);
   };
 
   /** Askable questions (not dive-only, not thumbed down) for some objectives, with what the student has answered. */
@@ -212,8 +282,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     return { q: questionFromRow(row), objectiveId: row.objective_id, topicId: objective.topic_id, tier: row.tier as AnswerEvent["tier"] };
   };
 
-  /** One answer event from the connector, recorded against the student's snapshot. */
-  const record = async (a: { courseId: string; topicId: string; objectiveId: string; questionId: string; tier: AnswerEvent["tier"]; outcome: AnswerEvent["outcome"]; grader: AnswerEvent["grader"]; sessionId: string; response?: string }): Promise<RecordedAnswer | { error: string }> => {
+  /** One answer event from the connector, recorded against the student's snapshot, with what Claude reported (help, confidence, the kind of mistake). */
+  const record = async (a: { courseId: string; topicId: string; objectiveId: string; questionId: string; tier: AnswerEvent["tier"]; outcome: AnswerEvent["outcome"]; grader: AnswerEvent["grader"]; sessionId: string; response?: string; help?: AnswerEvent["help"]; confidence?: AnswerEvent["confidence"]; errorType?: AnswerEvent["errorType"] }): Promise<RecordedAnswer | { error: string }> => {
     const at = now();
     const event: AnswerEvent = {
       kind: "answer",
@@ -229,6 +299,9 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       source: "connector",
       sessionId: a.sessionId,
       ...(a.response ? { response: a.response } : {}),
+      ...(a.help ? { help: a.help } : {}),
+      ...(a.confidence ? { confidence: a.confidence } : {}),
+      ...(a.errorType ? { errorType: a.errorType } : {}),
     };
     try {
       const r = await recordEvent(supabaseSnapshotStore(db, ownerId, a.courseId), event);
@@ -302,8 +375,17 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       else if (topicIds?.length) candidates = lines.filter((l) => topicIds.includes(l.topicId)).map((l) => l.id);
       else {
         const focus = new Set(state.examFocus);
+        // The effective weight: the course weight, times the exam's scope inside its window (contract section 5); weight 0 is never
+        // drawn (as the agenda's due list). The due group keeps its urgency order; the exam-focus and unflagged groups go heaviest first.
+        const weights = await effectiveWeights(courseId, state.exams, state.today);
+        const weightOf = (id: string) => {
+          const w = weights.get(id);
+          if (w === undefined) throw new Error(`No weight computed for objective ${id}`);
+          return w;
+        };
+        const heaviest = (ids: string[]) => ids.map((id, i) => ({ id, i, w: weightOf(id) })).filter((x) => x.w > 0).sort((a, b) => b.w - a.w || a.i - b.i).map((x) => x.id);
         const rest = lines.filter((l) => !state.dueNow.includes(l.id) && (l.status === "unseen" || l.status === "verified"));
-        candidates = [...state.dueNow, ...rest.filter((l) => focus.has(l.topicId)).map((l) => l.id), ...rest.filter((l) => !focus.has(l.topicId) && l.status === "unseen").map((l) => l.id)];
+        candidates = [...state.dueNow.filter((id) => weightOf(id) > 0), ...heaviest(rest.filter((l) => focus.has(l.topicId)).map((l) => l.id)), ...heaviest(rest.filter((l) => !focus.has(l.topicId) && l.status === "unseen").map((l) => l.id))];
       }
       if (!candidates.length) return { questions: [], reason: objectiveIds?.length || topicIds?.length ? "None of those are live objectives of this course." : "This course has no objectives yet: add its material in Orca first." };
       const { byObjective, lastAnswered } = await askableFor(courseId, candidates);
@@ -336,6 +418,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         return { questions: [], pending: { runId: inFlight.runId, objectiveIds: inFlight.objectiveIds, state: waiting ? "waiting" : "queued", retryAfterSeconds: waiting ? untilReset : 90, reason: waiting ? `Orca is writing questions for these, but its daily model limit is spent; they're written when it resets. ${state.budget.reason ?? ""}`.trim() : "Orca is writing questions for these now." } };
       }
       if (!write) return { questions: [], reason: "No questions written for these yet (write is false)." };
+      if (state.mode !== "normal") return { questions: [], reason: `No questions written for these yet. ${CRAM_WRITES}` };
       if (!state.budget.ok) return { questions: [], pending: { runId: null, objectiveIds: targets, state: "waiting", retryAfterSeconds: untilReset, reason: `Orca's daily model limit is spent, so it can't write questions until it resets. ${state.budget.reason ?? ""}`.trim() } };
       if (!(await rateLimit(db, ownerId, "topUp")).ok) return { questions: [], reason: "Orca has written questions as often as it allows this hour; ask again later." };
       const started = await startFlagTopUpJob(db, ownerId, { courseId, objectiveIds: targets });
@@ -352,7 +435,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       return { removed: true };
     },
 
-    async checkAnswer(courseId, questionId, response, sessionId): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }> {
+    // `report` (help, confidence) is stored on the event; the rubric grader's errorType too.
+    async checkAnswer(courseId, questionId, response, sessionId, report = {}): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }> {
       const found = await questionWithObjective(courseId, questionId);
       if ("error" in found) return found;
       const { q, objectiveId, topicId, tier } = found;
@@ -362,6 +446,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       let outcome: AnswerEvent["outcome"];
       let feedback: string;
       let grader: CheckedAnswer["grader"];
+      // The kind of mistake: only the rubric grader names one; choice and exact answers never have one.
+      let errorType: CheckedAnswer["errorType"] = null;
       if (q.kind !== "Short answer") {
         const picked = pickOption(words, q.options);
         if (picked === null) return { error: `Pass the option the student chose: its number as shown (1 to ${q.options.length}), its letter, or its text.` };
@@ -374,33 +460,48 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         feedback = r.feedback;
         grader = "exact";
       } else if (q.rubric) {
+        // In a cram Claude grades prose (Orca makes no model calls): the key is handed over, as when the grader can't run.
+        if (await inCram(courseId)) return { needsSelfGrade: true, reason: "The course is in a cram, so Claude grades prose answers: grade against this key and call record_answer with the help you gave.", ...key };
         // Orca's own prose grader, on Orca's key: its rate limit, budgets and the grading-off rule apply.
         const g = await gradeAnswer(db, ownerId, questionId, words);
         if (g.status !== 200 || "error" in g.body) return { needsSelfGrade: true, reason: "error" in g.body ? g.body.error : "Orca couldn't grade this answer.", ...key };
         outcome = g.body.outcome;
         feedback = g.body.feedback;
         grader = "rubric";
+        errorType = g.body.errorType ?? null;
       } else {
         return { error: "This question has no key Orca can check against." };
       }
-      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader, sessionId, response: words });
+      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader, sessionId, response: words, help: report.help, confidence: report.confidence, ...(errorType ? { errorType } : {}) });
       if ("error" in recorded) return recorded;
-      return { recorded: true, outcome, grader, feedback, ...key, objectiveId: recorded.objectiveId, status: recorded.status, ...(recorded.note ? { note: recorded.note } : {}) };
+      return { recorded: true, outcome, grader, feedback, errorType, ...key, objectiveId: recorded.objectiveId, status: recorded.status, ...(recorded.note ? { note: recorded.note } : {}) };
     },
 
-    async recordAnswer(courseId, questionId, outcome, sessionId, response): Promise<RecordedAnswer | { error: string }> {
+    // An answer Claude graded against the key (grader claude: full credit unless `help` says
+    // otherwise, src/lib/mastery/objective-state.ts). When the student's words are given and the
+    // key is one Orca can check itself (a choice or exact answer), Orca's result wins (corrected).
+    async recordAnswer(courseId, questionId, outcome, sessionId, response, report: AnswerReport): Promise<RecordedAnswer | { error: string }> {
       const found = await questionWithObjective(courseId, questionId);
       if ("error" in found) return found;
-      const { objectiveId, topicId, tier } = found;
-      // Claude graded it, not Orca's own grader: self-marked (half credit, never clears a mix-up).
-      return record({ courseId, topicId, objectiveId, questionId, tier, outcome, grader: "self", sessionId, ...(response ? { response } : {}) });
+      const { q, objectiveId, topicId, tier } = found;
+      const checked = response ? orcaOutcome(q, response) : null;
+      const corrected = checked !== null && checked !== outcome;
+      const final = corrected ? checked : outcome;
+      // The kind of mistake belongs to an answer that wasn't right (as validateGrade in src/lib/grading.ts keeps it): none on one Orca found correct.
+      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome: final, grader: "claude", sessionId, ...(response ? { response } : {}), help: report.help, confidence: report.confidence, ...(final === "correct" ? {} : { errorType: report.errorType }) });
+      return "error" in recorded || !corrected ? recorded : { ...recorded, corrected: true };
     },
+
+    materialFor: (courseId, objectiveIds) => materialFor(db, ownerId, courseId, objectiveIds),
+    addQuestions: (courseId, questions) => addQuestions(db, ownerId, courseId, questions),
+    addMaterial: (courseId, input) => addMaterial(db, ownerId, courseId, input),
+    logEvidence: (courseId, objectiveId, entry, sessionId) => logEvidence(db, ownerId, courseId, objectiveId, entry, sessionId),
 
     async screened(hits) {
       await recordSecurityEvents(db, ownerId, "reflection_note", hits);
     },
 
-    async flagCheck(courseId, objectiveIds, said): Promise<FlagCheckResult | { error: string }> {
+    async flagCheck(courseId, objectiveIds, said, strength): Promise<FlagCheckResult | { error: string }> {
       if (!(await owns(courseId))) return { error: "No such course." };
       const [objectives, topics] = await Promise.all([
         db.from("objectives").select("id, topic_id, review, merged_into").eq("owner_id", ownerId).eq("course_id", courseId),
@@ -426,7 +527,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       const at = now();
       const flagged: FlagCheckResult["flagged"] = [];
       for (const o of live.values()) {
-        const event: ConfusionEvent = { kind: "confusion", id: crypto.randomUUID(), at: at.toISOString(), courseId, topicId: o.topic_id, objectiveId: o.id, materialId: null, note: said, flagSource: "connector", page: null };
+        // The flag's strength follows its source (src/lib/mastery/flags.ts): check me, or struggled.
+        const event: ConfusionEvent = { kind: "confusion", id: crypto.randomUUID(), at: at.toISOString(), courseId, topicId: o.topic_id, objectiveId: o.id, materialId: null, note: said, flagSource: strength === "struggled" ? "connector-struggled" : "connector", page: null };
         try {
           const r = await recordEvent(supabaseSnapshotStore(db, ownerId, courseId), event);
           flagged.push({ objectiveId: o.id, status: r.objectiveId && r.accumulator ? stateAt(r.objectiveId, r.accumulator, at).status : "unseen" });
@@ -448,6 +550,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       }
       const withoutQuestions = ids.filter((id) => !asked.has(id));
       if (!withoutQuestions.length) return { flagged, unknown, withoutQuestions };
+      if (await inCram(courseId)) return { flagged, unknown, withoutQuestions, note: CRAM_WRITES };
       const started = await topUpAfterFlag(db, ownerId, courseId, withoutQuestions);
       // The job itself holds on a spent daily budget (it goes `waiting`), which the hand-off can't
       // see; say so here rather than promising questions in a few minutes (owner, 2026-11-07).
@@ -470,15 +573,32 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       const known = new Set((topics ?? []).map((t) => t.id));
       const unknown = exam.topicIds.filter((id) => !known.has(id));
       if (unknown.length) return { error: `These aren't topic ids in this course: ${unknown.join(", ")}. Use ids from course_state.` };
-      const row = { id: exam.id ?? crypto.randomUUID(), owner_id: ownerId, course_id: courseId, title: exam.title, date: exam.date, topic_ids: exam.topicIds };
+      // A scope names live objectives of this course (archived and merged ones are no longer live).
+      if (exam.scope?.objectives.length) {
+        const wanted = [...new Set(exam.scope.objectives.map((o) => o.objectiveId))];
+        const { data: live, error: liveError } = await db.from("objectives").select("id").eq("owner_id", ownerId).eq("course_id", courseId).neq("review", "archived").is("merged_into", null).in("id", wanted);
+        if (liveError) throw new Error(`Couldn't read the objectives: ${liveError.message}`);
+        const known = new Set((live ?? []).map((o) => o.id));
+        const unknownObjectives = wanted.filter((id) => !known.has(id));
+        if (unknownObjectives.length) return { error: `These aren't objective ids in this course: ${unknownObjectives.join(", ")}. Use ids from course_state (detail "full").` };
+      }
+      // cramming and scope left out keep what the exam already has (false and null for a new one).
+      let kept: { cramming: boolean; scope: ExamScope | null } = { cramming: false, scope: null };
       if (exam.id) {
-        const { data: existing, error } = await db.from("exams").select("id").eq("owner_id", ownerId).eq("course_id", courseId).eq("id", exam.id).maybeSingle();
+        const { data: existing, error } = await db.from("exams").select("id, cramming, scope").eq("owner_id", ownerId).eq("course_id", courseId).eq("id", exam.id).maybeSingle();
         if (error) throw new Error(`Couldn't read the exam: ${error.message}`);
         if (!existing) return { error: "No such exam in this course; use an id from course_state, or omit examId to add one." };
+        kept = { cramming: existing.cramming, scope: existing.scope as unknown as ExamScope | null };
       }
+      const cramming = exam.cramming ?? kept.cramming;
+      const scope = exam.scope ?? kept.scope;
+      const row = { id: exam.id ?? crypto.randomUUID(), owner_id: ownerId, course_id: courseId, title: exam.title, date: exam.date, topic_ids: exam.topicIds, cramming, scope: scope as unknown as Json };
       const { error } = await db.from("exams").upsert(row);
       if (error) throw new Error(`Couldn't save the exam: ${error.message}`);
-      return { id: row.id, title: row.title, date: row.date, topicIds: row.topic_ids };
+      const at = now();
+      const today = dayKeyIn((await db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle()).data?.timezone ?? "UTC")(at.toISOString());
+      const weekOut = new Date(at.getTime() + AGENDA_RULES.examWindowDays * 86_400_000).toISOString().slice(0, 10);
+      return { id: row.id, title: row.title, date: row.date, topicIds: row.topic_ids, cramming, scope, mode: examMode({ date: row.date, cramming }, today, weekOut) };
     },
   };
 }

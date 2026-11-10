@@ -16,6 +16,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { ExamsModal } from "@/components/config/ExamsModal";
+import { ExamCard } from "@/components/course/ExamCard";
 import { duration, useUserMetrics } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
 import { COURSE_NAME_MAX, DEFAULT_CONFIG, trailTopics } from "@/lib/data";
@@ -155,6 +156,10 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </div>
         )}
       </motion.div>
+      {/* The soonest upcoming exam (or the one being crammed for): days left, scope, verified share, Cram for this exam. */}
+      <div className="absolute right-[28px] top-[84px]">
+        <ExamCard course={course} mastery={m} />
+      </div>
       <ExamsModal course={editingExams ? course : null} onClose={closeExams} />
       <DiveModal
         topic={diving}

@@ -8,6 +8,7 @@ import {
 } from "@/lib/data";
 import { Select } from "@/components/ui/Select";
 import { cn } from "@/lib/cn";
+import { heldBackByDefault } from "@/lib/material/hold-back";
 
 /** One file of a folder or multi-file pick, with its own details and where its upload has got to. */
 export interface BatchItem {
@@ -16,6 +17,8 @@ export interface BatchItem {
   type: MaterialType;
   assigned: string | null;
   due: string | null;
+  /** Keep hidden for a practice test (contract section 5): the default follows its type. */
+  heldBack: boolean;
   /** Its details were changed by hand, so a change to the shared defaults leaves it alone. */
   edited: boolean;
   /** The course already had it and the student chose "Upload again": sent as a new copy. */
@@ -64,7 +67,7 @@ export function BatchList({
   /** A bulk upload (old content, usually): dates start hidden behind "Add dates" on each row. */ compact?: boolean;
   onChange: (
     id: string,
-    patch: Partial<Pick<BatchItem, "type" | "assigned" | "due">>,
+    patch: Partial<Pick<BatchItem, "type" | "assigned" | "due" | "heldBack">>,
   ) => void;
   onRemove: (id: string) => void;
   /** "Upload again" on a row the course already had. */
@@ -123,9 +126,20 @@ export function BatchList({
                   value={it.type}
                   options={MATERIAL_TYPES}
                   labels={MATERIAL_TYPE_LABELS}
-                  onChange={(type) => onChange(it.id, { type })}
+                  onChange={(type) => onChange(it.id, { type, heldBack: heldBackByDefault(type) })}
                   disabled={busy || settled}
                 />
+                <label className="flex items-center gap-[6px] text-[12px] font-semibold text-wisteria-deep">
+                  <input
+                    type="checkbox"
+                    checked={it.heldBack}
+                    disabled={busy || settled}
+                    onChange={(e) => onChange(it.id, { heldBack: e.target.checked })}
+                    className="size-[14px] accent-wisteria"
+                    data-part="hold-back"
+                  />
+                  Keep hidden for a practice test
+                </label>
                 {compact &&
                 !dated.has(it.id) &&
                 it.assigned === null &&

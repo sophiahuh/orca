@@ -111,6 +111,10 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   between `\( \)` / `\[ \]`, drawn by KaTeX (PR #8: `src/lib/math-text.ts`,
   `src/components/ui/MathText.tsx`); question validation refuses math that doesn't render, and exact
   answers stay plain text.
+- **Since 2026-11-10: cram mode** (contract `docs/superpowers/specs/2026-11-10-cram-mode-contracts.md`; branch
+  `cram-mode`): an exam is *cramming* (a flag, from the exam card or `set_exam`) or within the 7-day window; Claude
+  writes and grades during a cram, Orca stores, counts and schedules (connector v0.4, rules v4, migration
+  `20261110130000`); past and practice exams are held back for a practice test. Details under "What exists".
 - **Upload toasts** (2026-11-08, `src/components/layout/UploadToasts.tsx`, mounted in `providers.tsx`): an upload
   that finishes (done or failed) while the app is open, from any tab or device, pops a toast unless the student is on
   that course's uploads; uploads of one course finishing while its toast is up share it. One upload's toast opens
@@ -426,27 +430,57 @@ All 11 Figma screens are built. Where things live:
   "Find connections" on the Atlas, `POST /api/relink`).
 - `src/lib/connector/mcp.ts` + `src/lib/server/connector.ts` — **the Claude connector** (2026-11-04, owner's pivot:
   Claude teaches in the chat the student already uses; Orca keeps score). An MCP server at `POST /api/mcp/<token>`
-  (one JSON-RPC message per POST, no stream) with seven tools (v0.3, 2026-11-08; `INSTRUCTIONS` scripts the session): `flag_check` (a *check me* flag per objective the student
-  asked about or got wrong in the chat, `said` screened; writes questions for ones with none), `course_state` (exams, topics with
-  counts, every objective's derived status and recall with `detail: "full"` (the default) or none with `"summary"`, what's due now,
-  `examFocus` (the next week's exams' topics), `budget` (the daily model budget: ok, reason, resetsAt) and `writing` (top-up runs in
-  flight)), `next_questions` (Orca picks: what's due, then exam focus, then unflagged objectives in course order; per objective
-  unseen questions first, then least recently answered; `count` 1 to 5; when nothing askable exists and `write` (default) it starts a
-  top-up and answers `pending {runId, objectiveIds, state, retryAfterSeconds, reason}`, or says why it won't: the budget, the
-  hourly top-up limit, no model; never an empty list without a reason), `set_exam` (date + topic ids = the exam's scope; with
-  `remove: true` deletes it), `questions_for` (the older draw, kept; no keys), `check_answer` (owner, 2026-11-08: the student's words; Orca grades choice and
-  exact answers itself and prose through `gradeAnswer` on Orca's key with the grade rate limit and budgets, records
-  full credit with its own grader and `source: "connector"`, and returns the key and explanation; when it can't grade
-  it answers `needsSelfGrade` with the key) and `record_answer` (the fallback: an answer Claude graded, recorded as
-  `grader: "self"`: half credit, never clears a mix-up; the student's words, screened, stored on the event as
-  `response`, the row's `note`). Mastery rules changed with it (`RULES_VERSION` 3): `verified` takes an unaided
-  correct answer, a struggled flag rates the FSRS card Again, a question missed before earns half credit when answered
-  right on a later day (`retryCredit`), a graded partial ends a run of misses, and exact answers that are algebraic or
-  Boolean expressions are refused at writing time (`isExpressionAnswer`; numbers compare by value). The token is minted in
-  Settings → Claude connector (`/api/connector`; only its sha256 is stored, `connector_tokens`, migration
-  `20261104090000`) and pasted into Claude as a custom connector with no sign-in: the URL is the secret, so the proper
-  OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is pure and tested with a fake
-  `ConnectorTools` (`tests/connector/`); the Supabase-backed tools only read and write the token's student.
+  (one JSON-RPC message per POST, no stream); `INSTRUCTIONS` scripts the session (setup questions, check first,
+  `material_for` before teaching, Claude writes and grades in a cram, confidence before the reveal, never opens the
+  vault, progress lines unasked, follows `mode`). **v0.4 (2026-11-10, cram mode;** contract
+  `docs/superpowers/specs/2026-11-10-cram-mode-contracts.md`, migration `20261110130000_cram_mode.sql`, pgTAP 19;
+  Orca makes no model calls in a cram: Claude writes and grades, Orca stores, counts and schedules**)**, eleven tools:
+  `course_state` (exams with `cramming` and `scope`, topics with counts, every objective's derived status and recall with
+  `detail: "full"` (the default) or none with `"summary"`, what's due now, `examFocus` (the topics of the exams in the
+  window: within 7 days or cramming), `budget` (the daily model budget), `writing` (top-up runs in flight), `vault`
+  (held-back materials by name only), `mode` (`day-of` / `exam-week` / `normal`) and `cramming` (the exam's id)),
+  `next_questions` (Orca picks: what's due (in urgency order), then exam focus, then unflagged objectives, those two
+  groups heaviest first by course weight × exam-scope weight inside the window (`examScopeWeights`,
+  `src/lib/course/weights.ts`; weight 0 never drawn, as the agenda's due list); per objective unseen questions first; `count` 1 to 5; when nothing askable exists and `write` (default) it
+  starts a top-up and answers `pending`, or says why it won't; never an empty list without a reason), `set_exam` (date +
+  topic ids, `cramming`, `scope` (`ExamScope`: per-objective weights with their evidence, validated against the course's
+  live objectives); `remove: true` deletes it), `questions_for` (the older draw, kept; no keys), `check_answer` (the
+  student's words; Orca grades choice and exact answers itself and prose through `gradeAnswer`, records full credit with
+  its own grader, `source: "connector"`, and the reported `help` and `confidence`, returns the key, explanation and the
+  rubric grader's `errorType`; when it can't grade, or in a cram (`mode` isn't normal: Orca makes no model calls then, so
+  `next_questions` and `flag_check` start no top-up either), it answers `needsSelfGrade` with the key), `record_answer` (an answer
+  Claude graded against the key: `grader: "claude"`, full credit with `help: "none"`, half with `hint`, a miss with
+  `shown`, no `errorType` on an answer found correct; for a choice or exact question Orca checks the words against the stored key and its result wins,
+  `corrected: true`), `flag_check` (a *check me* flag per objective the student asked about or got wrong, `said`
+  screened; `strength: "struggled"` writes `flag_source: "connector-struggled"`, back to learning; writes questions for
+  ones with none), `material_for` (each objective's anchored pages, at most 6 pieces cut at 2,500 characters, never from
+  a held-back or removed material, `heldBack` counts the skipped ones; `src/lib/server/connector/material-for.ts`),
+  `add_questions` (questions Claude wrote, checked like generated ones in `src/lib/connector/question-check.ts`: the
+  pipeline's structural rules, `isExpressionAnswer`, the math check, the sanitiser, anchor pages that exist; refused per
+  item with a reason; stored `source: "claude"`, `tier: null`), `add_material` (pasted text through
+  `src/lib/server/text-material.ts`, shared with `POST /api/materials/text`, `holdBack` defaulting by type; or
+  `file: true` for an upload link to `/add-material?course=…&type=…&holdBack=1`, which the page reads) and
+  `log_evidence` (a `work` event: a problem Claude set and judged, with `basis`, `outcome`, `help`; or a `signal`:
+  `got-it` opens a check, `lost` is a struggled flag, `asked-answer` / `asked-harder` are read only; only the server
+  writes these, `POST /api/evidence` refuses them). **Mastery rules v4** (`RULES_VERSION` 4, `tests/mastery/cram-rules.test.ts`):
+  `help: "shown"` counts as a miss (Again), `hint` is assisted (half credit, Hard), `grader: "claude"` unassisted;
+  `applyWork` folds like an answer (`basis: "claude"` assisted); `applySignal` as above; `AnswerEvent` carries `help`,
+  `confidence`, `errorType`. **Hold-back** (`materials.held_back`, `src/lib/material/hold-back.ts`: default for Past
+  exam and Practice exam): `startUpload`, the text and web routes and the Canvas import take `heldBack`; the upload
+  pipeline maps a held-back material's objectives but writes no questions and no warm-up from it; top-ups and dives
+  skip it (`sourceFor`); "Keep hidden for a practice test" (`data-part="hold-back"`) on Add material and per batch
+  row, a "Held back" badge (`data-part="held-back"`) on the upload card. **Cramming** (`exams.cramming`,
+  `exams.scope`): the exam card (`src/components/course/ExamCard.tsx`, `data-part="exam-card"`) on the course page
+  shows the soonest exam, days left, scope size and verified share; Cram for this exam (`cram-start`) opens the setup
+  (the professor's words as `professor` evidence, Add material held back, worries as manual struggled flags, Confirm
+  sets `cramming`); while cramming: the plan line, Study with Claude (`/settings#connector` until a token exists),
+  Edit scope, Stop cramming (`cram-stop`); the Exams modal has a Cramming switch per exam. Inside the window the agenda
+  weighs objectives by course × scope weight (`useAgenda`). The rubric grader names an `errorType` from the fixed list
+  (`src/lib/grading.ts`). The token is minted in Settings → Claude connector (`/api/connector`; only its sha256 is
+  stored, `connector_tokens`, migration `20261104090000`) and pasted into Claude as a custom connector with no sign-in:
+  the URL is the secret, so the proper OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is
+  pure and tested with a fake `ConnectorTools` (`tests/connector/`); the Supabase-backed tools only read and write the
+  token's student. Open cram-mode questions are in `docs/TO-DISCUSS.md` (2026-11-10).
 - `src/lib/canvas/` + `src/lib/server/canvas.ts` — **Canvas import** (2026-11-04, plan
   `docs/superpowers/plans/2026-11-04-canvas-import.md`): Settings → Canvas takes the student's Canvas site and access
   token (checked against `/users/self`, stored AES-256-GCM-encrypted with a key derived from `SUPABASE_SECRET_KEY`;

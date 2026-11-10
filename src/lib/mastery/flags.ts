@@ -1,20 +1,21 @@
 /** Struggle flags (docs/superpowers/specs/2026-11-04-weak-points-first-design.md). Pure. */
 import type { ConfusionEvent, FlagSource, FlagStrength, ObjectiveStatus } from "./types.ts";
 
-/** A flag's strength follows from its source: only Claude, through the connector, asks for a check. */
+/** A flag's strength follows from its source: only Claude's flag_check (connector) asks for a check; Claude's struggled flag is struggled like the rest. */
 export const FLAG_STRENGTH: Readonly<Record<FlagSource, FlagStrength>> = {
   homework: "struggled",
   "handwritten-marker": "struggled",
   slide: "struggled",
   manual: "struggled",
   connector: "check",
+  "connector-struggled": "struggled",
 };
 
 export function flagStrength(e: Pick<ConfusionEvent, "flagSource">): FlagStrength {
   return FLAG_STRENGTH[e.flagSource];
 }
 
-/** The sources the browser may send through POST /api/evidence; the others are written on the server. */
+/** The sources the browser may send through POST /api/evidence; the others (handwritten-marker, connector, connector-struggled) are written on the server. */
 export const BROWSER_FLAG_SOURCES = ["homework", "slide", "manual"] as const satisfies readonly FlagSource[];
 
 const OUT_OF_ROTATION: ReadonlySet<ObjectiveStatus> = new Set(["unseen", "verified", "check-due"]);

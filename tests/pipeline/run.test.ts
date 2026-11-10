@@ -27,7 +27,7 @@ function fakeModel(h: Handlers) {
 
 let n = 0;
 const newId = () => `id${++n}`;
-const material = (type: Material["type"] = "Lecture"): Material => ({ id: "mat", courseId: "c", filename: "L02.pdf", type, assigned: null, due: null, reflect: false });
+const material = (type: Material["type"] = "Lecture"): Material => ({ id: "mat", courseId: "c", filename: "L02.pdf", type, assigned: null, due: null, reflect: false, heldBack: false });
 const pages = [1, 2, 3, 4].map((i) => ({ n: i, text: `slide ${i} text about logic` }));
 const input = (over: Partial<RunInput> = {}): RunInput => ({
   course: { id: "c", name: "Logic", short: "LOG", topics: [] },
@@ -430,4 +430,17 @@ test("an upload writes questions for the objectives marked in it; a course's fir
   // A later upload (the course already has questions): only marked objectives.
   const later = await runUpload(input({ bank: { other: [{ id: "old", prompt: "old question.", objectiveId: "x" } as QuizQuestion] } }), { call: fakeModel({ extract: () => lectureExtract }).call, newId });
   assert.equal(later.run.questionsAdded, 0, "nothing marked, nothing written (and no generate call: the fake would throw)");
+});
+
+test("a held-back upload (a practice exam kept for a practice test) maps objectives and flags but writes no questions and no warm-up", async () => {
+  // No generate handler: a generate call would throw, so the fake proves none is made.
+  const model = fakeModel({ extract: () => markAll(lectureExtract) });
+  const plan = await runUpload(input({ ...marking(), material: { ...material("Practice exam"), heldBack: true } }), { call: model.call, newId });
+  assert.equal(plan.newTopics.length, 2);
+  assert.equal(plan.newObjectives.length, 3);
+  assert.ok(plan.flags.length > 0, "marked passages still become flags");
+  assert.deepEqual(plan.questions, {});
+  assert.equal(plan.run.questionsAdded, 0);
+  assert.deepEqual(model.calls.filter((c) => c.step === "generate"), []);
+  assert.deepEqual(plan.run.dropped.filter((d) => d.prompt.startsWith("Questions from")), [{ prompt: "Questions from L02.pdf", reason: "skipped: the file is held back for a practice test, so Orca mapped its objectives but wrote nothing from it" }]);
 });

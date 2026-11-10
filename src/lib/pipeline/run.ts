@@ -158,7 +158,8 @@ async function resolve(
 }
 
 /** Problems that make a generated question unusable, before any model checks it. */
-function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | null {
+/** The shape rules of a question Orca stores (also applied to one Claude writes, src/lib/connector/question-check.ts). */
+export function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | null {
   if (q.kind === "Multiple choice" && (q.options.length !== 4 || q.answer < 0 || q.answer > 3)) return "multiple choice needs four options and a valid answer";
   if (q.kind === "True or false" && (q.options.length !== 2 || q.answer < 0 || q.answer > 1)) return "true/false needs two options and a valid answer";
   if (q.kind === "Short answer" && !(q.exact && q.exact.length) && !q.rubric) return "short answer with neither an exact answer nor a rubric";
@@ -523,6 +524,12 @@ export async function runUpload(input: RunInput, deps: RunDeps): Promise<UploadP
     },
   });
   if (deps.structureOnly) return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, flags, run: runRecord({}) };
+  /* Hold-back (contract section 5): a past or practice exam is mapped (objectives, coverage, emphasis)
+     but never written from, so it stays fresh for a practice test: no targets, no warm-up. */
+  if (input.material.heldBack) {
+    dropped.push({ prompt: `Questions from ${input.material.filename}`, reason: "skipped: the file is held back for a practice test, so Orca mapped its objectives but wrote nothing from it" });
+    return { newTopics, topicSources, newObjectives, objectiveUpdates, relations, questions: {}, flags, run: runRecord({}) };
+  }
 
   /* Questions only for objectives marked in this upload (weak points first), from their own pages:
      every other objective gets them when it's flagged (a top-up) or practised (a dive). */

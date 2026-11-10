@@ -38,6 +38,7 @@ import {
   type QuestionRating,
   type SessionProgress,
   type Course,
+  type ExamScope,
   type IslandVariant,
   type Material,
   type QuizResult,
@@ -65,7 +66,7 @@ import { askableQuestions } from "./askable";
 import { type CourseAgenda, agendaWeights, courseAgenda, examInWindow, survivingTopic } from "./mastery/agenda";
 import { type ObjectiveAccumulator, dayKeyIn } from "./mastery/objective-state";
 import { isUsable } from "./mastery/snapshots";
-import { courseObjectiveWeights } from "./course/weights";
+import { courseObjectiveWeights, examScopeWeights } from "./course/weights";
 import { laidOut } from "./course/layout";
 import { placeIslands } from "./course/islands";
 import { streakDays } from "./mastery/streak";
@@ -169,7 +170,7 @@ interface OrcaActions {
   clearConfigOverride: (courseId: string) => void;
   /** A course's exams (the exams table): add one, rename it, move it, change its topics, or remove it. */
   addExam: (courseId: string, title: string, date: string, topicIds: string[]) => void;
-  updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[] }) => void;
+  updateExam: (id: string, change: { title?: string; date?: string; topicIds?: string[]; cramming?: boolean; scope?: ExamScope | null }) => void;
   removeExam: (id: string) => void;
   /** Save an unfinished session's progress (after every question), or clear it (`null`, when it finishes or is abandoned). */
   saveProgress: (courseId: string, kind: SessionProgress["kind"], progress: SessionProgress | null) => void;
@@ -570,7 +571,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const addExam = useCallback<OrcaActions["addExam"]>(
     (courseId, title, date, topicIds) => {
-      const exam: Exam = { id: crypto.randomUUID(), courseId, title, date, topicIds };
+      const exam: Exam = { id: crypto.randomUUID(), courseId, title, date, topicIds, cramming: false, scope: null };
       setState((s) => ({ ...s, exams: [...s.exams, exam] }));
       save(async () => void must(await browserSupabase().from("exams").insert(examToRow(exam))));
     },
@@ -580,7 +581,13 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
   const updateExam = useCallback<OrcaActions["updateExam"]>(
     (id, change) => {
       setState((s) => ({ ...s, exams: s.exams.map((e) => (e.id === id ? { ...e, ...change } : e)) }));
-      const row = { ...(change.title !== undefined ? { title: change.title } : {}), ...(change.date !== undefined ? { date: change.date } : {}), ...(change.topicIds !== undefined ? { topic_ids: change.topicIds } : {}) };
+      const row = {
+        ...(change.title !== undefined ? { title: change.title } : {}),
+        ...(change.date !== undefined ? { date: change.date } : {}),
+        ...(change.topicIds !== undefined ? { topic_ids: change.topicIds } : {}),
+        ...(change.cramming !== undefined ? { cramming: change.cramming } : {}),
+        ...(change.scope !== undefined ? { scope: change.scope as unknown as Json } : {}),
+      };
       save(async () => mustChange(await browserSupabase().from("exams").update(row).eq("id", id).select("id")));
     },
     [save],
@@ -1097,7 +1104,9 @@ export function useAgenda(): Record<string, CourseAgenda> {
         courses.map((c) => {
           const m = mastery[c.id];
           if (!m) throw new Error(`No mastery computed for course ${c.id}`);
-          const computed = courseObjectiveWeights(objectives[c.id] ?? {}, c.topics, relations[c.id] ?? []);
+          const today = dayKey(new Date(nowMs).toISOString());
+          // Inside an exam's window (cramming or 7 days out), its scope multiplies the course weights (contract section 5).
+          const computed = examScopeWeights(exams, c.id, today, courseObjectiveWeights(objectives[c.id] ?? {}, c.topics, relations[c.id] ?? []));
           const agenda = courseAgenda({
             courseId: c.id,
             mastery: m,
@@ -1107,7 +1116,7 @@ export function useAgenda(): Record<string, CourseAgenda> {
             results,
             // Exams, and any uploaded exam's due date on the calendar.
             examDays: [...exams.filter((e) => e.courseId === c.id).map((e) => e.date), ...events.filter((e) => e.kind === "exam" && e.courseId === c.id).map((e) => e.date)],
-            examTopics: new Set(examInWindow(exams, c.id, dayKey(new Date(nowMs).toISOString()), survivingTopic(c.topics))?.topicIds ?? []),
+            examTopics: new Set(examInWindow(exams, c.id, today, survivingTopic(c.topics))?.topicIds ?? []),
             now: new Date(nowMs),
             dayKey,
           });

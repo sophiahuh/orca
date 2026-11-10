@@ -77,7 +77,7 @@ export function ClaudeConnectorCard() {
   };
 
   return (
-    <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]" data-part="claude-connector">
+    <Card id="connector" className="flex flex-col gap-[12px] scroll-mt-[24px] px-[24px] pb-[22px] pt-[20px]" data-part="claude-connector">
       <div className="flex flex-col gap-[4px]">
         <h2 className="text-[22px] font-bold text-prussian">Claude connector</h2>
         <p className="text-[14px] font-medium text-wisteria-deep">
