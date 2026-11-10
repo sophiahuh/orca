@@ -16,6 +16,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { ExamsModal } from "@/components/config/ExamsModal";
+import { ExamCard } from "@/components/course/ExamCard";
 import { duration, useUserMetrics } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
 import { COURSE_NAME_MAX, DEFAULT_CONFIG, trailTopics } from "@/lib/data";
@@ -76,7 +77,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-[12px] text-center">
           <p className="text-[22px] font-bold text-prussian">This island is uncharted.</p>
           <p className="text-[16px] text-wisteria-deep">Add lecture slides or homework and Orca will map its topics.</p>
-          <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)}>
+          <Button size="sm" onClick={() => router.push(`/add-material?course=${course.slug}`)} data-part="uncharted-add">
             Add material
           </Button>
         </div>
@@ -117,7 +118,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           >
             {course.name}
           </motion.h1>
-          <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep">
+          <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part={topics.length > 0 ? "weak-count" : undefined}>
             {weak ? `${held} of ${weak} weak spots mastered` : "No weak spots flagged yet"}
             {studied && <span data-part="course-studied"> · {duration(studied.seconds)} studied · {studied.solved} solved</span>}
           </motion.p>
@@ -155,6 +156,10 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </div>
         )}
       </motion.div>
+      {/* The soonest upcoming exam (or the one being crammed for): days left, scope, verified share, Cram for this exam. */}
+      <div className="absolute right-[28px] top-[84px]">
+        <ExamCard course={course} mastery={m} />
+      </div>
       <ExamsModal course={editingExams ? course : null} onClose={closeExams} />
       <DiveModal
         topic={diving}

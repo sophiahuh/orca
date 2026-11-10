@@ -6,6 +6,56 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
 
 ## Open
 
+### Cram mode (2026-11-10)
+- **Source:** the owner's Cram Mode plan (2026-11-09) and decisions (2026-11-10); contract
+  `docs/superpowers/specs/2026-11-10-cram-mode-contracts.md`, branch `cram-mode`. What is built:
+  an exam is *cramming* or within the 7-day window; Claude writes and grades during a cram
+  (connector v0.4), Orca stores, counts and schedules (rules v4); past and practice exams are held
+  back. The questions the plan left open:
+- **Hold-back default.** Built: "Keep hidden for a practice test" is checked by default for Past
+  exam and Practice exam only (`src/lib/material/hold-back.ts`), the student can untick it, and a
+  held-back material is mapped to objectives but never written from or shown. Open: whether a
+  study guide or a problem set with solutions should default to held back too, and whether a
+  held-back material should come out of the vault once the practice test has been sat.
+- **Unflagged objectives in scope.** Built: inside the window, an objective's agenda weight is its
+  course weight × its scope weight (unlisted 1, excluded 0), and `next_questions` orders the
+  exam-focus and unflagged groups heaviest first; but only objectives in rotation come due, so a
+  scoped objective nobody flagged is still never *due*, only practised when asked for. Open: whether
+  a cram should put every scoped objective into rotation (a check each), or keep weak points first.
+- **Photo credit.** Not built: a photo of handwritten work (a worked problem on paper) can't be
+  sent through the connector, and Orca's page reader only reads uploads. Open: whether a judged
+  photo of work counts as `work` evidence (and at what credit: `basis` official-solution, known-answer
+  or claude), and whether the connector or the upload page takes it.
+- **First practice test timing.** Not built: Orca doesn't schedule the practice test; the vault
+  lists it and `INSTRUCTIONS` tell Claude to say when to sit it. Open: whether the plan should fix a
+  day (e.g. when the scope's verified share passes a mark, or N days before the exam) and whether a
+  second practice exam is held back for a second sitting.
+- **Confidence and scheduling.** Built: `confidence` (1 to 3, asked before the reveal) is stored on
+  the answer and work events and never changes mastery or spacing. Open: whether a confident miss
+  should rate Again (a mix-up signal) and a guessed right answer should rate Hard rather than Good,
+  and whether the recap should show calibration.
+- **Plan in calendar.** Not built: the cram plan is a line on the exam card ("N days. Verified:
+  X%."); the calendar shows the exam and the course's scheduled reviews only. Open: whether a cram
+  should put its days on the calendar (what to work each day, the practice test day) and move the
+  course's cadence while it lasts.
+- **Also assumed (integration, 2026-11-10):** `course_state.vault` lists every non-removed held-back
+  material; `examFocus` includes a cramming exam's topics whatever its date; `add_questions` refuses a
+  question anchored to a held-back material and applies the pipeline's structural rules (four options
+  for multiple choice, an anchor for an objective the material teaches); when several exams are in
+  the window one scope applies (the cramming exam, else the soonest); the cram setup records the
+  professor's words as `professor` evidence at weight 1 on every covered objective (no per-objective
+  weighting from the words yet; the "proposed scope to confirm" is the count and Confirm); the
+  rubric grader's `errorType` is stored on `check_answer`'s event too; `record_answer` keeps the stated
+  outcome when no option fits the student's words on a choice question, and drops `errorType` from one
+  Orca found correct; `log_evidence` refuses an archived or merged-away objective with an error.
+  "Orca makes no model calls in a cram" is read as: while `course_state.mode` isn't normal (an exam
+  cramming or within the week), `check_answer` hands prose back as `needsSelfGrade`, and
+  `next_questions` and `flag_check` start no top-up (Claude writes with `add_questions`); choice and
+  exact answers are still checked by Orca (no model). The app's own sessions keep Orca's grader.
+  The agenda's exam focus (`examInWindow`) and streak follow the rules: a cramming exam is the window
+  whatever its date, and only an unaided graded attempt (no hint, nothing shown, not self-marked or
+  judged by Claude alone) keeps the streak or clears an open struggled flag; a `lost` signal opens one.
+
 ### Deleting a course (2026-11-08)
 - **Source:** owner, 2026-11-08 ("soft delete with a `deleted_at` column"); migration
   `20261108090000_course_soft_delete.sql`, `DELETE /api/courses/:id` (`src/lib/server/courses.ts`),
@@ -475,6 +525,20 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
   "unreviewed" tag.
 - **Watch for:** a bad extraction filling due lists and dragging islands down before the student
   reviews it.
+
+### Onboarding tips (2026-11-10): assumed
+- **Assumed:** the X dismisses that one tip for good, and the next tip on the page follows (the
+  same as Next). "Skip all tips" is the way out of all of them.
+- **Assumed:** existing accounts get the tips too (the column defaults to nothing seen). They are
+  contextual, so an existing student sees each once, or skips them in two clicks.
+- **Assumed:** a tip the student ignores (they leave the page without touching it or its target)
+  shows again on the next visit. Clicking the thing it points at counts as seen.
+- **Assumed:** no "Getting started" checklist in this version: the later features (Canvas, the
+  Claude connector, marker notes, account-wide Notes for Orca) are covered by tips on Settings,
+  shown once the student has finished one session.
+- **Assumed:** the Canvas tip doesn't promise exams pulled from Canvas (not built yet).
+- **Changed with it:** the upload card's Stop confirms lost their underlines, matching Delete/Keep
+  (they share `InlineConfirm` now).
 
 ## Decided (recorded in the roadmap)
 

@@ -108,7 +108,14 @@ export async function requestReset(_: AuthState, data: FormData): Promise<AuthSt
   const email = text(data, "email").trim();
   if (!validEmail(email)) return { error: "Enter a valid email address." };
   return withClient(async (client) => {
-    await client.auth.resetPasswordForEmail(email, { redirectTo: `${await origin()}/auth/callback?next=/reset-password` });
+    const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: `${await origin()}/auth/callback?next=/reset-password` });
+    if (error) {
+      console.error("auth: password reset email failed", { code: error.code, status: error.status });
+      if (error.status === 429 || error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit") {
+        return { error: "Too many email requests. Wait a few minutes, then try again." };
+      }
+      return { error: "Couldn't send the reset email. Try again in a moment. If this continues, contact support." };
+    }
     return { notice: "If that email has an account, we sent a link to reset the password." };
   });
 }

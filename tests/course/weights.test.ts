@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Objective, ObjectiveSignal, Relation, Topic } from "../../src/lib/data.ts";
-import { WEIGHT_RULES, courseObjectiveWeights, objectiveWeight, topicUses, topicWeight } from "../../src/lib/course/weights.ts";
+import type { ExamScope, Objective, ObjectiveSignal, Relation, Topic } from "../../src/lib/data.ts";
+import { WEIGHT_RULES, courseObjectiveWeights, examScopeWeights, objectiveWeight, scopingExam, topicUses, topicWeight } from "../../src/lib/course/weights.ts";
 
 const lecture = (places: number, extra: Partial<ObjectiveSignal> = {}): ObjectiveSignal => ({
   materialId: "m",
@@ -76,4 +76,54 @@ test("an objective counts the topics its topic is used in, through merges, leavi
   close(weights.get("a")!, objectiveWeight(objectives.a, 2));
   close(topicWeight("t", objectives, weights)!, (weights.get("a")! + weights.get("c")!) / 2);
   assert.equal(topicWeight("empty", objectives, weights), null);
+});
+
+/* ── Exam weights (cram mode contract, section 5) ── */
+
+const scope = (objectives: Array<[string, number]>): ExamScope => ({ objectives: objectives.map(([objectiveId, weight]) => ({ objectiveId, weight, evidence: [] })), sources: ["professor"] });
+const exam = (date: string, extra: Partial<{ cramming: boolean; scope: ExamScope | null; courseId: string }> = {}) => ({ courseId: "c", date, cramming: false, scope: null, ...extra });
+const base = new Map([
+  ["a", 1.2],
+  ["b", 0.8],
+  ["c", 1],
+]);
+
+test("inside the exam window, the scope multiplies the course weights: unlisted 1, excluded 0", () => {
+  const out = examScopeWeights([exam("2026-11-15", { scope: scope([["a", 2], ["b", 0]]) })], "c", "2026-11-10", base);
+  close(out.get("a")!, 2.4);
+  assert.equal(out.get("b"), 0);
+  assert.equal(out.get("c"), 1, "unlisted objectives keep their course weight");
+  assert.deepEqual([...out.keys()], ["a", "b", "c"], "every objective stays present");
+});
+
+test("outside the window the course weights are unchanged, and so are they with an exam that has no scope", () => {
+  const far = examScopeWeights([exam("2026-12-15", { scope: scope([["a", 2]]) })], "c", "2026-11-10", base);
+  assert.deepEqual([...far], [...base]);
+  const noScope = examScopeWeights([exam("2026-11-12")], "c", "2026-11-10", base);
+  assert.deepEqual([...noScope], [...base]);
+  const past = examScopeWeights([exam("2026-11-09", { scope: scope([["a", 2]]) })], "c", "2026-11-10", base);
+  assert.deepEqual([...past], [...base], "an exam that has passed scopes nothing");
+  const otherCourse = examScopeWeights([exam("2026-11-12", { courseId: "d", scope: scope([["a", 2]]) })], "c", "2026-11-10", base);
+  assert.deepEqual([...otherCourse], [...base]);
+});
+
+test("the window is 7 days, today included, and cramming opens it whatever the date", () => {
+  const seven = examScopeWeights([exam("2026-11-17", { scope: scope([["a", 0]]) })], "c", "2026-11-10", base);
+  assert.equal(seven.get("a"), 0);
+  const eight = examScopeWeights([exam("2026-11-18", { scope: scope([["a", 0]]) })], "c", "2026-11-10", base);
+  assert.equal(eight.get("a"), 1.2);
+  const today = examScopeWeights([exam("2026-11-10", { scope: scope([["a", 0]]) })], "c", "2026-11-10", base);
+  assert.equal(today.get("a"), 0);
+  const cram = examScopeWeights([exam("2026-12-20", { cramming: true, scope: scope([["a", 0]]) })], "c", "2026-11-10", base);
+  assert.equal(cram.get("a"), 0);
+});
+
+test("the cramming exam's scope wins, soonest first; else the soonest exam in the window", () => {
+  const exams = [exam("2026-11-12", { scope: scope([["a", 3]]) }), exam("2026-12-01", { cramming: true, scope: scope([["a", 0]]) }), exam("2026-12-20", { cramming: true, scope: scope([["a", 5]]) })];
+  assert.equal(scopingExam(exams, "c", "2026-11-10")?.date, "2026-12-01");
+  assert.equal(examScopeWeights(exams, "c", "2026-11-10", base).get("a"), 0);
+  const noCram = [exam("2026-11-14", { scope: scope([["a", 2]]) }), exam("2026-11-12", { scope: scope([["a", 3]]) })];
+  assert.equal(scopingExam(noCram, "c", "2026-11-10")?.date, "2026-11-12");
+  close(examScopeWeights(noCram, "c", "2026-11-10", base).get("a")!, 3.6);
+  assert.equal(scopingExam([], "c", "2026-11-10"), null);
 });

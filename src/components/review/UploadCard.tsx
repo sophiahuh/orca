@@ -8,6 +8,7 @@ import { isFinished, useRun } from "@/hooks/useRun";
 import { useOrca } from "@/lib/store";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { IconPause, IconPlay, IconTrash } from "@/components/icons";
 import { HardSlides } from "@/components/review/HardSlides";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -59,19 +60,18 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
   const removeOffer = material && (
     <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep" data-part="remove-offer">
       {confirming === "remove" ? (
-        <>
-          <span className="text-prussian">
-            {unbuilt
+        <InlineConfirm
+          question={
+            unbuilt
               ? `Delete ${material.filename}? Orca hasn't built from it yet: it leaves the queue and its file goes.`
-              : `Remove ${material.filename} from the course? Its file and pages go; the objectives only it taught are archived.`}
-          </span>
-          <button type="button" onClick={() => void act("remove")} className="font-bold cursor-pointer text-bad-text" data-part="remove-confirm">
-            {unbuilt ? "Delete" : "Remove"}
-          </button>
-          <button type="button" onClick={() => setConfirming(null)} className="font-bold cursor-pointer text-prussian">
-            Keep
-          </button>
-        </>
+              : `Remove ${material.filename} from the course? Its file and pages go; the objectives only it taught are archived.`
+          }
+          confirm={unbuilt ? "Delete" : "Remove"}
+          cancel="Keep"
+          onConfirm={() => void act("remove")}
+          onCancel={() => setConfirming(null)}
+          confirmPart="remove-confirm"
+        />
       ) : (
         unbuilt ? (
           <Button size="sm" variant="danger" icon={<IconTrash size={18} />} onClick={() => setConfirming("remove")} className="cursor-pointer" data-part="remove-material">
@@ -102,6 +102,12 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
         {STATUS[run.status].label}
       </span>
       <span className="text-[13px] font-medium text-prussian/60">{when(run.at)}</span>
+      {/* Hold-back (contract section 5): kept for a practice test, so no questions are written from it. */}
+      {material?.heldBack && (
+        <span className="rounded-pill bg-alice px-[9px] py-[4px] text-[11px] font-bold text-prussian" data-part="held-back" title="Kept hidden for a practice test: Orca writes no questions from it.">
+          Held back
+        </span>
+      )}
     </span>
   );
 
@@ -114,15 +120,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
         <span className="text-[14px] font-semibold text-wisteria-deep">{progressMessage(run.progress)} Nothing to do: Orca builds the topics and questions when the limit resets, and they appear here.</span>
         <span className="flex flex-wrap items-center gap-[10px] text-[13px] font-semibold text-wisteria-deep">
           {confirming === "stop" ? (
-            <>
-              <span className="text-prussian">Stop waiting? The file stays, so uploading it again retries.</span>
-              <button type="button" onClick={() => void act("stop")} className="font-bold text-bad-text underline underline-offset-2" data-part="stop-confirm">
-                Stop
-              </button>
-              <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
-                Keep waiting
-              </button>
-            </>
+            <InlineConfirm question="Stop waiting? The file stays, so uploading it again retries." confirm="Stop" cancel="Keep waiting" onConfirm={() => void act("stop")} onCancel={() => setConfirming(null)} confirmPart="stop-confirm" />
           ) : (
             <button type="button" onClick={() => setConfirming("stop")} className="font-bold text-prussian underline underline-offset-2" data-part="stop-upload">
               Stop
@@ -165,15 +163,14 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
           <span className="flex flex-wrap items-center gap-[10px] text-[14px] font-semibold text-wisteria-deep">
             <span>{progressMessage(run.progress)}</span>
             {confirming === "stop" ? (
-              <>
-                <span className="text-prussian">Stop it? What it has built so far is dropped; the file stays, so uploading it again retries.</span>
-                <button type="button" onClick={() => void act("stop")} className="font-bold text-bad-text underline underline-offset-2" data-part="stop-confirm">
-                  Stop
-                </button>
-                <button type="button" onClick={() => setConfirming(null)} className="font-bold text-prussian underline underline-offset-2">
-                  Keep going
-                </button>
-              </>
+              <InlineConfirm
+                question="Stop it? What it has built so far is dropped; the file stays, so uploading it again retries."
+                confirm="Stop"
+                cancel="Keep going"
+                onConfirm={() => void act("stop")}
+                onCancel={() => setConfirming(null)}
+                confirmPart="stop-confirm"
+              />
             ) : (
               <button type="button" onClick={() => setConfirming("stop")} className="font-bold text-prussian underline underline-offset-2" data-part="stop-upload">
                 Stop

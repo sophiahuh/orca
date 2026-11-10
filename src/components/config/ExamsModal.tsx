@@ -7,6 +7,7 @@ import { IconClose, IconPlus } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RoundButton } from "@/components/ui/RoundButton";
+import { Toggle } from "@/components/ui/Toggle";
 import { useOrca } from "@/lib/store";
 import { overlayFade, popIn } from "@/lib/motion";
 
@@ -70,7 +71,6 @@ export function ExamsModal({ course, onClose }: { course: Course | null; onClose
             <h2 id="exams-title" className="pr-[56px] text-[28px] font-semibold text-prussian">
               {course.name} exams
             </h2>
-            <p className="mt-[8px] text-[15px] font-medium text-wisteria-deep">Exams show on your calendar, and Orca steps up review before each one. Pick the topics an exam covers if you know them.</p>
 
             <ul className="mt-[24px] flex flex-col gap-[10px]" aria-label="Exams">
               {exams.length === 0 && <li className="text-[15px] font-medium text-prussian">No exams yet.</li>}
@@ -93,7 +93,14 @@ export function ExamsModal({ course, onClose }: { course: Course | null; onClose
                     Delete
                   </Button>
                   </div>
-                  <TopicPicker label="Topics covered" topics={topics} chosen={e.topicIds.filter((id) => live.has(id))} onToggle={(id) => updateExam(e.id, { topicIds: toggled(e.topicIds.filter((x) => live.has(x)), id) })} />
+                  <div className="flex flex-wrap items-center justify-between gap-[10px]">
+                    <TopicPicker label="Topics covered" topics={topics} chosen={e.topicIds.filter((id) => live.has(id))} onToggle={(id) => updateExam(e.id, { topicIds: toggled(e.topicIds.filter((x) => live.has(x)), id) })} />
+                    {/* Cramming: the exam's window applies whatever its date (the exam card sets it too). */}
+                    <div className="flex items-center gap-[8px]" data-part="exam-cramming">
+                      <span className="text-[14px] font-semibold text-prussian">Cramming</span>
+                      <Toggle checked={e.cramming} onChange={(v) => updateExam(e.id, { cramming: v })} label={`Cramming for ${e.title}`} />
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>

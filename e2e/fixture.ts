@@ -64,14 +64,20 @@ export async function settled(page: Page) {
   if (await failed.count()) throw new Error(`The app couldn't save: ${await failed.first().textContent()}`);
 }
 
-export const test = base.extend<{ student: Student }>({
+export const test = base.extend<{ student: Student; tips: boolean }>({
+  /** Onboarding tips are off for test students (a bubble would sit over what a spec clicks); `test.use({ tips: true })` leaves them on. */
+  tips: [false, { option: true }],
   student: [
-    async ({ context, baseURL }, use) => {
+    async ({ context, baseURL, tips }, use) => {
       await fakeModel(); // the fake API's default answers; a test sets its own scenario after this
       const email = `e2e-${crypto.randomUUID()}@example.test`;
       const password = "e2e-password-1";
       const { data, error } = await admin().auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { timezone: TIMEZONE } });
       if (error || !data.user) throw new Error(`Couldn't create the test student: ${error?.message}`);
+      if (!tips) {
+        const off = await admin().from("profiles").update({ onboarding: { seen: [], skipped: true } }).eq("owner_id", data.user.id).select("owner_id");
+        if (off.error || off.data.length !== 1) throw new Error(`Couldn't turn the test student's tips off: ${off.error?.message ?? "no profile row"}`);
+      }
       await signIn(context, email, password, baseURL!);
       const db = createClient(env().url, env().publishable, noSession);
       const own = await db.auth.signInWithPassword({ email, password });
@@ -209,7 +215,7 @@ export const objective = (id: string, topicId: string, name: string, extra: Part
 });
 
 /** The deck the fixture's objectives came from, in `courseId`. */
-export const fixtureMaterial = (courseId: string): Material => ({ id: F.material, courseId, filename: DECK, type: "Lecture", assigned: null, due: null, reflect: false });
+export const fixtureMaterial = (courseId: string): Material => ({ id: F.material, courseId, filename: DECK, type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false });
 
 export const FIXTURE_STATE = {
   courses: [

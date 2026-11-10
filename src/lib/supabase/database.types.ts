@@ -84,13 +84,13 @@ isOneToOne: false
                   ]
                 },"evidence_events": {
                   Row: {
-                    "at": string,"course_id": string,"flag_source": string | null,"grader": string | null,"id": string,"kind": string,"material_id": string | null,"note": string | null,"objective_id": string,"outcome": string | null,"owner_id": string,"page": number | null,"question_id": string | null,"session_id": string | null,"source": string | null,"tier": string | null,"topic_id": string
+                    "at": string,"basis": string | null,"confidence": number | null,"course_id": string,"error_type": string | null,"flag_source": string | null,"grader": string | null,"help": string | null,"id": string,"kind": string,"material_id": string | null,"note": string | null,"objective_id": string,"outcome": string | null,"owner_id": string,"page": number | null,"problem": string | null,"question_id": string | null,"session_id": string | null,"signal": string | null,"source": string | null,"tier": string | null,"topic_id": string
                   }
                   Insert: {
-                    "at": string,"course_id": string,"flag_source"?: string | null,"grader"?: string | null,"id": string,"kind": string,"material_id"?: string | null,"note"?: string | null,"objective_id": string,"outcome"?: string | null,"owner_id": string,"page"?: number | null,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id": string
+                    "at": string,"basis"?: string | null,"confidence"?: number | null,"course_id": string,"error_type"?: string | null,"flag_source"?: string | null,"grader"?: string | null,"help"?: string | null,"id": string,"kind": string,"material_id"?: string | null,"note"?: string | null,"objective_id": string,"outcome"?: string | null,"owner_id": string,"page"?: number | null,"problem"?: string | null,"question_id"?: string | null,"session_id"?: string | null,"signal"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id": string
                   }
                   Update: {
-                    "at"?: string,"course_id"?: string,"flag_source"?: string | null,"grader"?: string | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"note"?: string | null,"objective_id"?: string,"outcome"?: string | null,"owner_id"?: string,"page"?: number | null,"question_id"?: string | null,"session_id"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id"?: string
+                    "at"?: string,"basis"?: string | null,"confidence"?: number | null,"course_id"?: string,"error_type"?: string | null,"flag_source"?: string | null,"grader"?: string | null,"help"?: string | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"note"?: string | null,"objective_id"?: string,"outcome"?: string | null,"owner_id"?: string,"page"?: number | null,"problem"?: string | null,"question_id"?: string | null,"session_id"?: string | null,"signal"?: string | null,"source"?: string | null,"tier"?: string | null,"topic_id"?: string
                   }
                   Relationships: [
                     {
@@ -127,13 +127,13 @@ isOneToOne: false
                   ]
                 },"exams": {
                   Row: {
-                    "course_id": string,"created_at": string,"date": string,"id": string,"owner_id": string,"title": string,"topic_ids": (string)[]
+                    "course_id": string,"cramming": boolean,"created_at": string,"date": string,"id": string,"owner_id": string,"scope": Json | null,"title": string,"topic_ids": (string)[]
                   }
                   Insert: {
-                    "course_id": string,"created_at"?: string,"date": string,"id": string,"owner_id"?: string,"title": string,"topic_ids"?: (string)[]
+                    "course_id": string,"cramming"?: boolean,"created_at"?: string,"date": string,"id": string,"owner_id"?: string,"scope"?: Json | null,"title": string,"topic_ids"?: (string)[]
                   }
                   Update: {
-                    "course_id"?: string,"created_at"?: string,"date"?: string,"id"?: string,"owner_id"?: string,"title"?: string,"topic_ids"?: (string)[]
+                    "course_id"?: string,"cramming"?: boolean,"created_at"?: string,"date"?: string,"id"?: string,"owner_id"?: string,"scope"?: Json | null,"title"?: string,"topic_ids"?: (string)[]
                   }
                   Relationships: [
                     {
@@ -165,13 +165,13 @@ isOneToOne: false
                   ]
                 },"materials": {
                   Row: {
-                    "assigned": string | null,"content_hash": string | null,"course_id": string,"created_at": string,"due": string | null,"error": string | null,"filename": string,"handwritten": boolean,"hidden_text": Json | null,"id": string,"mime": string | null,"owner_id": string,"reading_since": string | null,"reflect": boolean,"reflection": Json | null,"size_bytes": number | null,"status": string,"storage_path": string | null,"type": string
+                    "assigned": string | null,"content_hash": string | null,"course_id": string,"created_at": string,"due": string | null,"error": string | null,"filename": string,"handwritten": boolean,"held_back": boolean,"hidden_text": Json | null,"id": string,"mime": string | null,"owner_id": string,"reading_since": string | null,"reflect": boolean,"reflection": Json | null,"size_bytes": number | null,"status": string,"storage_path": string | null,"type": string
                   }
                   Insert: {
-                    "assigned"?: string | null,"content_hash"?: string | null,"course_id": string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename": string,"handwritten"?: boolean,"hidden_text"?: Json | null,"id": string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type": string
+                    "assigned"?: string | null,"content_hash"?: string | null,"course_id": string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename": string,"handwritten"?: boolean,"held_back"?: boolean,"hidden_text"?: Json | null,"id": string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type": string
                   }
                   Update: {
-                    "assigned"?: string | null,"content_hash"?: string | null,"course_id"?: string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename"?: string,"handwritten"?: boolean,"hidden_text"?: Json | null,"id"?: string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type"?: string
+                    "assigned"?: string | null,"content_hash"?: string | null,"course_id"?: string,"created_at"?: string,"due"?: string | null,"error"?: string | null,"filename"?: string,"handwritten"?: boolean,"held_back"?: boolean,"hidden_text"?: Json | null,"id"?: string,"mime"?: string | null,"owner_id"?: string,"reading_since"?: string | null,"reflect"?: boolean,"reflection"?: Json | null,"size_bytes"?: number | null,"status"?: string,"storage_path"?: string | null,"type"?: string
                   }
                   Relationships: [
                     {
@@ -290,13 +290,13 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "avatar": string,"created_at": string,"default_review_config": Json | null,"is_admin": boolean,"last_active_at": string | null,"marker_notes": string | null,"name": string | null,"onboarded": boolean,"orca_notes": string | null,"owner_id": string,"timezone": string
+                    "avatar": string,"created_at": string,"default_review_config": Json | null,"is_admin": boolean,"last_active_at": string | null,"marker_notes": string | null,"name": string | null,"onboarded": boolean,"onboarding": NonNullable<Json>,"orca_notes": string | null,"owner_id": string,"timezone": string
                   }
                   Insert: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"onboarding"?: NonNullable<Json>,"orca_notes"?: string | null,"owner_id": string,"timezone"?: string
                   }
                   Update: {
-                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
+                    "avatar"?: string,"created_at"?: string,"default_review_config"?: Json | null,"is_admin"?: boolean,"last_active_at"?: string | null,"marker_notes"?: string | null,"name"?: string | null,"onboarded"?: boolean,"onboarding"?: NonNullable<Json>,"orca_notes"?: string | null,"owner_id"?: string,"timezone"?: string
                   }
                   Relationships: [
                     
@@ -328,13 +328,13 @@ isOneToOne: false
                   ]
                 },"questions": {
                   Row: {
-                    "anchor": Json | null,"answer": number,"course_id": string,"created_at": string,"deep": boolean,"exact": (string)[] | null,"explanation": string,"figure": Json | null,"id": string,"kind": string,"material_id": string | null,"objective_id": string,"options": (string)[],"owner_id": string,"prompt": string,"rubric": Json | null,"sort_order": number,"table": Json | null,"tier": string | null,"topic_id": string,"topic_name": string
+                    "anchor": Json | null,"answer": number,"course_id": string,"created_at": string,"deep": boolean,"exact": (string)[] | null,"explanation": string,"figure": Json | null,"id": string,"kind": string,"material_id": string | null,"objective_id": string,"options": (string)[],"owner_id": string,"prompt": string,"rubric": Json | null,"sort_order": number,"source": string,"table": Json | null,"tier": string | null,"topic_id": string,"topic_name": string
                   }
                   Insert: {
-                    "anchor"?: Json | null,"answer": number,"course_id": string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation": string,"figure"?: Json | null,"id": string,"kind": string,"material_id"?: string | null,"objective_id": string,"options"?: (string)[],"owner_id"?: string,"prompt": string,"rubric"?: Json | null,"sort_order": number,"table"?: Json | null,"tier"?: string | null,"topic_id": string,"topic_name": string
+                    "anchor"?: Json | null,"answer": number,"course_id": string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation": string,"figure"?: Json | null,"id": string,"kind": string,"material_id"?: string | null,"objective_id": string,"options"?: (string)[],"owner_id"?: string,"prompt": string,"rubric"?: Json | null,"sort_order": number,"source"?: string,"table"?: Json | null,"tier"?: string | null,"topic_id": string,"topic_name": string
                   }
                   Update: {
-                    "anchor"?: Json | null,"answer"?: number,"course_id"?: string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation"?: string,"figure"?: Json | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"objective_id"?: string,"options"?: (string)[],"owner_id"?: string,"prompt"?: string,"rubric"?: Json | null,"sort_order"?: number,"table"?: Json | null,"tier"?: string | null,"topic_id"?: string,"topic_name"?: string
+                    "anchor"?: Json | null,"answer"?: number,"course_id"?: string,"created_at"?: string,"deep"?: boolean,"exact"?: (string)[] | null,"explanation"?: string,"figure"?: Json | null,"id"?: string,"kind"?: string,"material_id"?: string | null,"objective_id"?: string,"options"?: (string)[],"owner_id"?: string,"prompt"?: string,"rubric"?: Json | null,"sort_order"?: number,"source"?: string,"table"?: Json | null,"tier"?: string | null,"topic_id"?: string,"topic_name"?: string
                   }
                   Relationships: [
                     {

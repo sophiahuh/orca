@@ -9,12 +9,14 @@
  */
 import { z } from "zod";
 import { type AvatarId, isAvatar } from "../avatars.ts";
+import { type OnboardingState, onboardingFromProfile } from "../onboarding/state.ts";
 import type {
   AnswerRubric,
   CalendarEvent,
   Course,
   CourseSchedule,
   Exam,
+  ExamScope,
   IslandVariant,
   Material,
   Objective,
@@ -47,7 +49,7 @@ const jsonValue = (v: object) => v as NonNullable<Json>;
 
 /* ── Course settings (read and written whole; checked on both sides) ── */
 
-const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Twice a week", "Weekly", "1 wk before exam"]) });
+const ReviewRowSchema = z.object({ duration: z.enum(["5 min", "10 min", "15 min", "30 min", "1 hour", "3 hours", "10 hours"]), cadence: z.enum(["Daily", "Twice a week", "Weekly", "1 wk before exam", "Never"]) });
 export const ReviewConfigSchema = z.object({ quick: ReviewRowSchema, deep: ReviewRowSchema, exam: ReviewRowSchema });
 
 const WeekdaySchema = z.literal([0, 1, 2, 3, 4, 5, 6]);
@@ -196,6 +198,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     figure: json(q.figure ?? null),
     material_id: q.materialId ?? null,
     deep: q.deep ?? false,
+    source: q.source ?? "orca",
   };
 }
 
@@ -217,6 +220,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     ...(r.material_id !== null ? { materialId: r.material_id } : {}),
     objectiveId: r.objective_id,
     ...(r.deep ? { deep: true } : {}),
+    ...(r.source === "claude" ? { source: "claude" as const } : {}),
   };
 }
 
@@ -353,6 +357,7 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     error: null,
     hidden_text: null,
     reading_since: null,
+    held_back: m.heldBack,
   };
 }
 
@@ -361,8 +366,8 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
  * is a record without a file, which the database marks ready.
  */
 export function materialInsertRow(m: Material) {
-  const { id, course_id, filename, type, assigned, due, reflect, reflection } = materialToRow(m);
-  return { id, course_id, filename, type, assigned, due, reflect, reflection };
+  const { id, course_id, filename, type, assigned, due, reflect, reflection, held_back } = materialToRow(m);
+  return { id, course_id, filename, type, assigned, due, reflect, reflection, held_back };
 }
 
 export function materialFromRow(r: Row<"materials">): Material {
@@ -377,6 +382,7 @@ export function materialFromRow(r: Row<"materials">): Material {
     ...(r.reflection !== null ? { reflection: r.reflection as unknown as NonNullable<Material["reflection"]> } : {}),
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<Material["hiddenText"]> } : {}),
     ...(r.storage_path ? { storagePath: r.storage_path } : {}),
+    heldBack: r.held_back,
   };
 }
 
@@ -406,11 +412,11 @@ export function calendarFromRow(r: Row<"calendar_events">): CalendarEvent {
 }
 
 export function examToRow(e: Exam): Omit<Row<"exams">, "owner_id" | "created_at"> {
-  return { id: e.id, course_id: e.courseId, title: e.title, date: e.date, topic_ids: e.topicIds };
+  return { id: e.id, course_id: e.courseId, title: e.title, date: e.date, topic_ids: e.topicIds, cramming: e.cramming, scope: json(e.scope) };
 }
 
 export function examFromRow(r: Row<"exams">): Exam {
-  return { id: r.id, courseId: r.course_id, title: r.title, date: r.date, topicIds: r.topic_ids };
+  return { id: r.id, courseId: r.course_id, title: r.title, date: r.date, topicIds: r.topic_ids, cramming: r.cramming, scope: r.scope as unknown as ExamScope | null };
 }
 
 /* ── Everything at once (public.my_data()) ── */
@@ -438,6 +444,10 @@ export interface MyData {
 export interface LoadedState {
   timezone: string;
   onboarded: boolean;
+  /** The owner's admin flag (`profiles.is_admin`, set only in the database): shows the Admin link. */
+  isAdmin: boolean;
+  /** The onboarding tips: which were seen, and whether they were all skipped. */
+  onboarding: OnboardingState;
   avatar: AvatarId;
   name: string | null;
   /** Settings' defaults for new courses; null = Orca's built-in ones. */
@@ -506,6 +516,9 @@ export function loadedState(d: MyData): LoadedState {
   return {
     timezone: d.profile.timezone,
     onboarded: d.profile.onboarded,
+    isAdmin: d.profile.is_admin === true,
+    // A database from before the column sends none (onboardingFromProfile turns the tips off).
+    onboarding: onboardingFromProfile(d.profile.onboarding),
     avatar: d.profile.avatar,
     name: d.profile.name,
     defaultConfig,

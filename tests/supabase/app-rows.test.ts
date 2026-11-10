@@ -5,6 +5,8 @@ import { DEFAULT_CONFIG } from "../../src/lib/data.ts";
 import {
   type MyData,
   type StructureState,
+  defaultsToRow,
+  courseToRow,
   loadedState,
   objectiveFromRow,
   objectiveToRow,
@@ -54,7 +56,7 @@ test("a row that disappears is refused: nothing is ever deleted", () => {
 
 test("loading groups rows by course and puts questions in stock order", () => {
   const data: MyData = {
-    profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, default_review_config: null, orca_notes: null, marker_notes: null, is_admin: false, last_active_at: null, created_at: owned.created_at },
+    profile: { owner_id: "u", timezone: "America/New_York", onboarded: true, avatar: "orca", name: null, default_review_config: null, orca_notes: null, marker_notes: null, is_admin: false, last_active_at: null, onboarding: { seen: ["add-course"], skipped: false }, created_at: owned.created_at },
     courses: [{ id: "c", owner_id: "u", slug: "logic", name: "Logic", short: "LOG", variant: "circuit", pos_x: 70, pos_y: 110, trail: null, review_config: { quick: { duration: "10 min", cadence: "Daily" }, deep: { duration: "30 min", cadence: "Weekly" }, exam: { duration: "10 hours", cadence: "1 wk before exam" } }, schedule: null, orca_notes: "No proofs.", created_at: owned.created_at, deleted_at: null }],
     materials: [],
     runs: [],
@@ -69,6 +71,7 @@ test("loading groups rows by course and puts questions in stock order", () => {
     snapshots: [],
   };
   const s = loadedState(data);
+  assert.deepEqual(s.onboarding, { seen: ["add-course"], skipped: false });
   assert.equal(s.timezone, "America/New_York");
   assert.equal(s.defaultConfig, null);
   assert.equal(s.accountNotes, null);
@@ -89,6 +92,15 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.equal(inherit.configOverrides.c, null);
   assert.deepEqual(s.configOverrides.c, s.configs.c, "an override wins over the account default");
 
+  const never = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "Never" as const }, deep: { ...DEFAULT_CONFIG.deep, cadence: "Never" as const } };
+  const profile = { ...data.profile!, ...defaultsToRow(never) };
+  const accountNever = loadedState({ ...data, profile, courses: [{ ...data.courses[0], review_config: null }] });
+  assert.deepEqual(accountNever.defaultConfig, never);
+  assert.deepEqual(accountNever.configs.c, never, "courses inherit Never from account defaults");
+  const row = { ...data.courses[0], ...courseToRow(s.courses[0], never, null) };
+  const courseNever = loadedState({ ...data, courses: [row] });
+  assert.deepEqual(courseNever.configOverrides.c, never, "Never round-trips through a course override");
+
   // When the class meets: read and checked like the settings; null = not set.
   assert.equal(s.schedules.c, null);
   const schedule = { meetings: [{ day: 2, start: "10:10", end: "11:25" }], quickDays: [1], deepDays: null };
@@ -96,7 +108,7 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], schedule: { ...schedule, meetings: [{ day: 2, start: "11:25", end: "10:10" }] } }] }), /ends after it starts/);
   assert.throws(() => loadedState({ ...data, courses: [{ ...data.courses[0], schedule: { ...schedule, quickDays: [1, 1] } }] }), /listed twice/);
 
-  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", handwritten: false, status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, created_at: owned.created_at };
+  const material = { id: "m", course_id: "c", owner_id: "u", filename: "L01.pdf", type: "Lecture", assigned: null, due: null, reflect: false, reflection: null, storage_path: "u/m/L01.pdf", content_hash: "h", size_bytes: 10, mime: "application/pdf", handwritten: false, status: "ready", error: null, hidden_text: { items: 2, pages: [3] }, reading_since: null, held_back: false, created_at: owned.created_at };
   const withFiles = loadedState({ ...data, materials: [material, { ...material, id: "m2", status: "uploaded", hidden_text: null }, { ...material, id: "m3", status: "failed", error: "unreadable" }] });
   assert.deepEqual(withFiles.materials.map((m) => [m.id, m.hiddenText]), [["m", { items: 2, pages: [3] }]], "only read uploads are part of the course; the hidden-text record comes along");
 });

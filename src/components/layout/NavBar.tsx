@@ -32,7 +32,7 @@ export function NavBar({ className }: { className?: string }) {
         if (href === "/settings" && pathname === "/") return null;
         if (href === "/settings" && course) {
           return (
-            <Link key={href} href={`/course/${course.slug}/settings`} aria-label={`${course.short} settings`} title={`${course.short} settings`} className={cn(BUTTON, IDLE)}>
+            <Link key={href} href={`/course/${course.slug}/settings`} data-part="course-settings-link" aria-label={`${course.short} settings`} title={`${course.short} settings`} className={cn(BUTTON, IDLE)}>
               <Icon size={24} />
             </Link>
           );

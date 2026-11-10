@@ -94,6 +94,9 @@ const RULES_HASHES: Record<number, string> = {
   // 2026-11-08 (owner): retryCredit; verified needs an unaided correct (verifiedUnaided); a struggled
   // flag rates the card Again; a graded partial ends a run of misses; credited / attemptDays.
   3: "b9fd01a6527e54fd458ff86201e1dc9c17413d38ca529e3115618b1b7229683d",
+  // 2026-11-10 (cram mode): FLAG_STRENGTH gains connector-struggled; help (hint assisted, shown a miss),
+  // grader claude, work and signal events (tests/mastery/cram-rules.test.ts).
+  4: "e6ecc7ef35cee403314de08652aa8e7b427115b18ca2dd8ffe8c50754335f756",
 };
 
 /**
@@ -166,6 +169,8 @@ const GOLDEN: Record<number, Golden> = {
     },
   },
 };
+// Version 4 changes nothing for a log without help, work or signals: the same accumulators as version 3.
+GOLDEN[4] = GOLDEN[3];
 
 // Version 1 was hashed before flag strengths existed; from version 2 they're part of the rules.
 const rulesHash = () => createHash("sha256").update(JSON.stringify({ rules: MASTERY_RULES, fsrs: FSRS_PARAMETERS, flags: FLAG_STRENGTH })).digest("hex");
@@ -291,6 +296,7 @@ GOLDEN_FLAGS[3] = {
     verifiedUnaided: true,
   },
 };
+GOLDEN_FLAGS[4] = GOLDEN_FLAGS[3];
 
 test("the flags log reads check-due, verified, fading, mastered, fading, learning as it goes", () => {
   const statuses = FLAGS_LOG.map((e, i) => stateAt("o", replayObjective("o", FLAGS_LOG.slice(0, i + 1), GOLDEN_OPTIONS), new Date(Date.parse(e.at) + 60_000)).status);

@@ -31,6 +31,8 @@ export interface UploadMeta {
   handwritten?: boolean;
   /** "Upload again": the course already has this file, and the student wants it added anyway. */
   again?: boolean;
+  /** Keep hidden for a practice test: mapped to objectives, never used to write questions. Absent: the server defaults by type. */
+  heldBack?: boolean;
 }
 
 /** What happens to an upload's questions (`Generation` in src/lib/server/jobs/start.ts). */

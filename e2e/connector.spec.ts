@@ -1,6 +1,6 @@
 import { type Page } from "@playwright/test";
 import type { QuizQuestion } from "../src/lib/data";
-import { fakeModel } from "./fake-model";
+import { fakeCalls, fakeModel } from "./fake-model";
 import { expect, test, F, FIXTURE_STATE, ids, seedState, stored } from "./fixture";
 
 /**
@@ -39,7 +39,7 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   const note = await page.request.post(url, { data: { jsonrpc: "2.0", method: "notifications/initialized" } });
   expect(note.status()).toBe(202);
   const tools = await rpc(page, url, "tools/list");
-  expect(tools.body!.result!.tools!.map((t) => t.name)).toEqual(["course_state", "next_questions", "set_exam", "questions_for", "check_answer", "record_answer", "flag_check"]);
+  expect(tools.body!.result!.tools!.map((t) => t.name)).toEqual(["course_state", "next_questions", "set_exam", "questions_for", "check_answer", "record_answer", "flag_check", "material_for", "add_questions", "add_material", "log_evidence"]);
 
   // The courses, then one course: every objective unseen (not flagged), each with its questions counted; weak points first, so none is due.
   const courses = toolText(await call(page, url, "course_state", {}));
@@ -101,14 +101,35 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   expect(held.needsSelfGrade).toBe(true);
   expect(held.reason).toMatch(/bad day/);
   expect(held.rubric?.requiredIdeas).toEqual(["The top bit is the sign"]);
-  const recorded = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: id.prose, outcome: "partial", response: "copy it" }));
+  // Claude graded it against the key, with a hint along the way (cram mode: grader claude, help on the event).
+  const recorded = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: id.prose, outcome: "partial", response: "copy it", help: "hint", confidence: 2, errorType: "concept" }));
   expect(recorded).toEqual({ recorded: true, objectiveId: F.signExtend, status: "learning" });
+  // An exact answer Claude marked right that the stored key disagrees with: Orca's result is recorded instead (corrected).
+  const corrected = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: F.ba2, outcome: "correct", response: "a" }));
+  expect(corrected).toEqual({ recorded: true, objectiveId: F.simplify, status: "learning", corrected: true });
+  // The key agrees, but Claude showed the answer first: recorded as given, and the fold counts it as a miss (the objective's third: mixed up).
+  const shown = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: F.ba1, outcome: "correct", response: "it is x", help: "shown" }));
+  expect(shown).toEqual({ recorded: true, objectiveId: F.simplify, status: "mixed-up" });
+
+  // A cram: a problem Claude set and judged, and what the student did, logged on the objective.
+  const work = toolText(await call(page, url, "log_evidence", { courseId: F.course, objectiveId: F.signExtend, kind: "work", problem: "Sign-extend 1011 to 8 bits.", response: "11111011", basis: "known-answer", outcome: "correct", help: "none", confidence: 3 }));
+  expect(work).toEqual({ recorded: true, objectiveId: F.signExtend, status: "learning" });
+  const harder = toolText(await call(page, url, "log_evidence", { courseId: F.course, objectiveId: F.signExtend, kind: "signal", signal: "asked-harder", note: "wanted a 16-bit one" }));
+  expect(harder).toEqual({ recorded: true, objectiveId: F.signExtend, status: "learning" });
+  // "Got it" on an objective not in rotation opens a check.
+  const gotIt = toolText(await call(page, url, "log_evidence", { courseId: F.course, objectiveId: id.noq, kind: "signal", signal: "got-it" }));
+  expect(gotIt).toEqual({ recorded: true, objectiveId: id.noq, status: "check-due" });
+  const noSuch = await call(page, url, "log_evidence", { courseId: F.course, objectiveId: "f0000000-0000-4000-8000-000000000099", kind: "signal", signal: "lost" });
+  expect(noSuch.body!.result!.isError).toBe(true);
 
   // The student asked about conversion in the chat: a check-me flag on the verified objective, so it comes due for one question.
   const flagged = toolText(await call(page, url, "flag_check", { courseId: F.course, objectiveIds: [F.convert], said: "why does the sign bit get copied?" })) as { flagged: Array<{ objectiveId: string; status: string }>; unknown: string[]; withoutQuestions: string[] };
   expect(flagged).toEqual({ flagged: [{ objectiveId: F.convert, status: "check-due" }], unknown: [], withoutQuestions: [] });
+  // A struggled flag from Claude: its own source, struggled strength.
+  const struggled = toolText(await call(page, url, "flag_check", { courseId: F.course, objectiveIds: [F.signExtend], said: "I'm lost on sign extension", strength: "struggled" }));
+  expect(struggled).toEqual({ flagged: [{ objectiveId: F.signExtend, status: "learning" }], unknown: [], withoutQuestions: [] });
   const after = toolText(await call(page, url, "course_state", { courseId: F.course })) as { objectives: Array<{ id: string; status: string }>; exams: Array<{ title: string }>; dueNow: string[] };
-  expect(Object.fromEntries(after.objectives.map((o) => [o.id, o.status]))).toEqual({ [F.simplify]: "learning", [F.convert]: "check-due", [F.signExtend]: "learning", [id.noq]: "unseen" });
+  expect(Object.fromEntries(after.objectives.map((o) => [o.id, o.status]))).toEqual({ [F.simplify]: "mixed-up", [F.convert]: "check-due", [F.signExtend]: "learning", [id.noq]: "check-due" });
   expect([...after.dueNow].sort()).toEqual([F.simplify, F.convert, F.signExtend].sort());
   expect(after.exams.map((e) => e.title)).toEqual(["Midterm"]);
   // The exam is cancelled.
@@ -121,10 +142,30 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
     [F.ba2, "incorrect", "exact", "connector"],
     [id.mc, "correct", "choice", "connector"],
     [id.prose, "correct", "rubric", "connector"],
-    [id.prose, "partial", "self", "connector"],
+    [id.prose, "partial", "claude", "connector"],
+    [F.ba2, "incorrect", "claude", "connector"],
+    [F.ba1, "correct", "claude", "connector"],
   ]);
-  expect(events.map((e) => (e.kind === "answer" ? e.response : null))).toEqual(["it's x", "a", "2", "Because the top bit is the sign bit.", "copy it"]);
-  expect(s.evidence.filter((e) => e.kind === "confusion")).toEqual([expect.objectContaining({ objectiveId: F.convert, flagSource: "connector", note: "why does the sign bit get copied?", materialId: null, page: null })]);
+  expect(events.map((e) => (e.kind === "answer" ? e.response : null))).toEqual(["it's x", "a", "2", "Because the top bit is the sign bit.", "copy it", "a", "it is x"]);
+  // What Claude reported with each answer, stored on the event (record_answer's help defaults to none); Orca's own graders report nothing.
+  expect(events.map((e) => (e.kind === "answer" ? [e.help ?? null, e.confidence ?? null, e.errorType ?? null] : null))).toEqual([
+    [null, null, null],
+    [null, null, null],
+    [null, null, null],
+    [null, null, null],
+    ["hint", 2, "concept"],
+    ["none", null, null],
+    ["shown", null, null],
+  ]);
+  expect(s.evidence.filter((e) => e.kind === "confusion").sort((a, b) => a.at.localeCompare(b.at))).toEqual([
+    expect.objectContaining({ objectiveId: F.convert, flagSource: "connector", note: "why does the sign bit get copied?", materialId: null, page: null }),
+    expect.objectContaining({ objectiveId: F.signExtend, flagSource: "connector-struggled", note: "I'm lost on sign extension", materialId: null, page: null }),
+  ]);
+  expect(s.evidence.filter((e) => e.kind === "work")).toEqual([expect.objectContaining({ objectiveId: F.signExtend, topicId: F.twosComplement, problem: "Sign-extend 1011 to 8 bits.", response: "11111011", basis: "known-answer", outcome: "correct", help: "none", confidence: 3, source: "connector" })]);
+  expect(s.evidence.filter((e) => e.kind === "signal").sort((a, b) => a.at.localeCompare(b.at))).toEqual([
+    expect.objectContaining({ objectiveId: F.signExtend, signal: "asked-harder", note: "wanted a 16-bit one", source: "connector" }),
+    expect.objectContaining({ objectiveId: id.noq, signal: "got-it", note: null, source: "connector" }),
+  ]);
 
   // Refusals are the tool's, not the protocol's: an unknown question, a name for an id.
   const bad = await call(page, url, "record_answer", { courseId: F.course, questionId: "a0000000-0000-4000-8000-000000000009", outcome: "correct" });
@@ -145,6 +186,54 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Not connected/);
   const revoked = await rpc(page, url, "ping");
   expect(revoked.status).toBe(401);
+});
+
+test("in a cram Orca makes no model calls: prose is handed back for Claude to grade and no questions are written; a corrected answer carries no errorType", async ({ page, student }) => {
+  const id = ids("prose", "noq");
+  const prose: QuizQuestion = { id: id.prose, kind: "Short answer", tier: "mechanism", topic: "Two's Complement", prompt: "Why does sign extension copy the top bit?", options: [], answer: -1, rubric: { requiredIdeas: ["The top bit is the sign"], acceptableAlternatives: [], knownMisconceptions: [] }, explanation: "The weight of the new bits cancels.", anchor: { locator: "slide 9", excerpt: "fixture" }, objectiveId: F.signExtend };
+  const bank = FIXTURE_STATE.questionBank[F.course];
+  const noq = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.noq, name: "Factor an expression" };
+  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], prose] } } });
+  await page.goto("/settings?section=connections");
+  const card = page.locator('[data-part="claude-connector"]');
+  await card.locator('[data-part="connector-create"]').click();
+  const url = (await card.locator('[data-part="connector-url"]').textContent())!.trim();
+  await fakeModel({});
+
+  // An exam 12 days out the student is cramming for: the course is in exam-week whatever the date.
+  const far = new Date(Date.now() + 12 * 86_400_000).toISOString().slice(0, 10);
+  const exam = toolText(await call(page, url, "set_exam", { courseId: F.course, title: "Final", date: far, topicIds: [], cramming: true })) as { id: string; mode: string };
+  expect(exam.mode).toBe("exam-week");
+  expect(toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" }))).toMatchObject({ mode: "exam-week", cramming: exam.id });
+  // A prose answer isn't graded by Orca's model: the key comes back for Claude to grade.
+  const held = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." })) as { needsSelfGrade: boolean; reason: string; rubric?: { requiredIdeas: string[] } };
+  expect(held.needsSelfGrade).toBe(true);
+  expect(held.reason).toMatch(/cram/);
+  expect(held.rubric?.requiredIdeas).toEqual(["The top bit is the sign"]);
+  // Nothing askable and nothing pending: Orca starts no top-up, and says Claude writes.
+  const none = toolText(await call(page, url, "next_questions", { courseId: F.course, objectiveIds: [id.noq] })) as { questions: unknown[]; pending?: unknown; reason?: string };
+  expect(none.questions).toEqual([]);
+  expect(none.pending).toBeUndefined();
+  expect(none.reason).toMatch(/add_questions/);
+  const flagged = toolText(await call(page, url, "flag_check", { courseId: F.course, objectiveIds: [id.noq], said: "factoring is hard", strength: "struggled" })) as { withoutQuestions: string[]; note?: string };
+  expect(flagged.withoutQuestions).toEqual([id.noq]);
+  expect(flagged.note).toMatch(/add_questions/);
+  expect((toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { writing: unknown[] }).writing).toEqual([]);
+  expect(await fakeCalls()).toEqual([]);
+  // Claude marked an exact answer wrong with a kind of mistake; the key says it's right: Orca's result wins and no errorType is stored.
+  const corrected = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: F.ba1, outcome: "incorrect", response: "x", errorType: "sign" }));
+  expect(corrected).toEqual({ recorded: true, objectiveId: F.simplify, status: "verified", corrected: true });
+  const s = await stored(page, student);
+  const answers = s.evidence.filter((e) => e.kind === "answer");
+  expect(answers).toHaveLength(1);
+  expect(answers[0]).toMatchObject({ questionId: F.ba1, outcome: "correct", grader: "claude", help: "none" });
+  expect(answers[0]).not.toHaveProperty("errorType");
+
+  // Cramming stopped (the exam is still 12 days out): Orca's grader is back.
+  expect((toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], cramming: false })) as { mode: string }).mode).toBe("normal");
+  const graded = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." }));
+  expect(graded).toMatchObject({ outcome: "correct", grader: "rubric", objectiveId: F.signExtend });
+  expect(await fakeCalls()).toEqual(["grade"]);
 });
 
 test("a made-up link is refused, and GET isn't served", async ({ page }) => {

@@ -50,6 +50,8 @@ export interface CourseAgenda {
   heldForNext: RankedObjective[];
   /** Mastered objectives whose check comes due tomorrow. */
   dueTomorrow: RankedObjective[];
+  /** False when quick reviews are set to Never, including their scheduled spaced checks. */
+  quickReviewEnabled: boolean;
   /** Today's quick review hasn't been done yet, by the course's cadence, and something is due. */
   quickReviewDue: boolean;
   /** The next quick-review day on the course's cadence after today; null when none is coming (exam cadence, no exam ahead). */
@@ -89,18 +91,20 @@ export function addDays(day: string, n: number): string {
 }
 
 /**
- * The course's next exam (the exams table) if today is in its "1 wk before exam" window, with its
- * topics as they are now (`currentTopic` follows topic merges; an exam's topic ids aren't updated by them).
+ * The course's exam in its window (the exams table): the one the student is cramming for, whatever its date
+ * (cramming is the window, cram mode contract), else the next one if today is in its "1 wk before exam" window;
+ * the same exam `scopingExam` (src/lib/course/weights.ts) picks. With its topics as they are now (`currentTopic`
+ * follows topic merges; an exam's topic ids aren't updated by them).
  */
 export function examInWindow(
-  exams: readonly { courseId: string; date: string; topicIds: readonly string[] }[],
+  exams: readonly { courseId: string; date: string; topicIds: readonly string[]; cramming?: boolean }[],
   courseId: string,
   today: string,
   currentTopic: (topicId: string) => string = (id) => id,
 ): { topicIds: readonly string[] } | null {
   const next = exams
-    .filter((e) => e.courseId === courseId && e.date >= today && addDays(e.date, -AGENDA_RULES.examWindowDays) <= today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
+    .filter((e) => e.courseId === courseId && (e.cramming || (e.date >= today && addDays(e.date, -AGENDA_RULES.examWindowDays) <= today)))
+    .sort((a, b) => Number(!!b.cramming) - Number(!!a.cramming) || a.date.localeCompare(b.date))[0];
   return next ? { topicIds: [...new Set(next.topicIds.map(currentTopic))] } : null;
 }
 
@@ -188,7 +192,10 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const quick = config.quick.cadence;
   let quickCadenceDue: boolean;
   let nextQuickDay: string | null = null;
-  if (quick === "1 wk before exam") {
+  const quickReviewEnabled = quick !== "Never";
+  if (quick === "Never") {
+    quickCadenceDue = false;
+  } else if (quick === "1 wk before exam") {
     quickCadenceDue = inExamWindow(today) && !quickDays.includes(today);
     for (let d = tomorrow; d <= addDays(tomorrow, 366); d = addDays(d, 1)) {
       if (inExamWindow(d)) {
@@ -218,7 +225,7 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   const deepDays = finishedOn("deep").sort();
   const lastDeep = deepDays.at(-1) ?? null;
   let dueDay: string | null = null;
-  if (candidates > 0) {
+  if (candidates > 0 && config.deep.cadence !== "Never") {
     if (config.deep.cadence === "1 wk before exam") {
       const upcoming = input.examDays.filter((e) => e >= today).sort()[0];
       if (upcoming) dueDay = addDays(upcoming, -AGENDA_RULES.examWindowDays);
@@ -238,5 +245,5 @@ export function courseAgenda(input: AgendaInput): CourseAgenda {
   }
   const deepReview: DeepReviewDue = { due: dueDay !== null && dueDay <= today, dueDay, tomorrow: dueDay === tomorrow, candidates };
 
-  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewDue, nextQuickDay, upNext, quickTomorrow, deepReview };
+  return { courseId, ranked, dueToday, heldForNext, dueTomorrow, quickReviewEnabled, quickReviewDue, nextQuickDay, upNext, quickTomorrow, deepReview };
 }

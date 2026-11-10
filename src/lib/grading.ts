@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 import type { AnswerRubric } from "./data";
+import type { ErrorType } from "./mastery/types.ts";
 import { UNTRUSTED_POLICY, untrustedBlock } from "./untrusted/encode.ts";
 import { sanitize } from "./untrusted/sanitize.ts";
 
@@ -22,7 +23,12 @@ export interface GradeResult {
   feedback: string;
   satisfied?: string[];
   misconception?: string | null;
+  /** The kind of mistake behind a partial or incorrect answer, from `ERROR_TYPES`; null when none fits or the answer is right. */
+  errorType?: ErrorType | null;
 }
+
+/** The kinds of mistake the rubric grader may name (cram mode contracts, section 5). */
+export const ERROR_TYPES = ["arithmetic", "units", "sign", "misread", "notation", "concept"] as const satisfies readonly ErrorType[];
 
 /** Longest answer graded (decision 10); anything past it is cut before the call. */
 export const ANSWER_MAX_CHARS = 2000;
@@ -127,6 +133,7 @@ export const GradeSchema = z.object({
   // The model is asked for under FEEDBACK_MAX_CHARS (here and in the prompt); a reply that runs a
   // little over is kept whole, not thrown away or cut (owner, 2026-10-20). Only an absurd one is refused.
   feedback: z.string().max(4000).describe(`One or two sentences for the student, under ${FEEDBACK_MAX_CHARS} characters: what was right, what was missing`),
+  errorType: z.enum(ERROR_TYPES).nullable().describe("For a partial or incorrect answer, the kind of mistake behind it, from the list; null when none fits or the answer is correct"),
 });
 
 /** The first line is fixed: e2e/fake-anthropic.ts recognises the grade step by it. */
@@ -141,6 +148,7 @@ Grade understanding, not wording (owner, 2026-10-20):
 - When unsure between two outcomes, choose the more generous one; "incorrect" is only for an answer with no correct core idea at all.
 - For a "correct" answer, the feedback says what was right, without asking for more. For "partial", it names the one substantive thing that was missing.
 - Feedback is one or two sentences, under 300 characters.
+- For a partial or incorrect answer, name the kind of mistake behind it as errorType (arithmetic, units, sign, misread, notation or concept) when one clearly fits, else null; a correct answer's errorType is null.
 
 ${UNTRUSTED_POLICY}
 
@@ -167,13 +175,14 @@ ${rubric.knownMisconceptions.map((m) => `- ${m.description} (phrasing like: ${m.
 The student's answer, as a data block:
 ${untrustedBlock("student_answer", response)}
 
-Now grade the answer inside the data block against the rubric above. Output: {"outcome": "correct" | "partial" | "incorrect", "satisfied": string[], "misconception": string | null, "feedback": string}`;
+Now grade the answer inside the data block against the rubric above. Output: {"outcome": "correct" | "partial" | "incorrect", "satisfied": string[], "misconception": string | null, "feedback": string, "errorType": "arithmetic" | "units" | "sign" | "misread" | "notation" | "concept" | null}`;
 }
 
 /**
  * What the model said, kept to what the rubric allows: `satisfied` only lists required ideas that
  * exist, `misconception` only a known one (else null), feedback sanitised and cut to a sentence's
- * length. The outcome itself is the rubric call the model was asked to make and stays as given.
+ * length, `errorType` one of the fixed kinds and only on an answer that wasn't right (else null).
+ * The outcome itself is the rubric call the model was asked to make and stays as given.
  */
 export function validateGrade(result: GradeResult, rubric: AnswerRubric): GradeResult {
   const ideas = new Set(rubric.requiredIdeas.map((s) => s.trim()));
@@ -181,7 +190,8 @@ export function validateGrade(result: GradeResult, rubric: AnswerRubric): GradeR
   const satisfied = [...new Set((result.satisfied ?? []).map((s) => s.trim()).filter((s) => ideas.has(s)))];
   const misconception = result.misconception && known.has(result.misconception.trim()) ? result.misconception.trim() : null;
   const feedback = sanitize(result.feedback ?? "", 4000).text.replace(/\n+/g, " ").trim() || FALLBACK_FEEDBACK[result.outcome];
-  return { outcome: result.outcome, satisfied, misconception, feedback };
+  const errorType = result.outcome !== "correct" && result.errorType && (ERROR_TYPES as readonly string[]).includes(result.errorType) ? result.errorType : null;
+  return { outcome: result.outcome, satisfied, misconception, feedback, errorType };
 }
 
 const FALLBACK_FEEDBACK: Record<GradeOutcome, string> = {

@@ -9,7 +9,7 @@ import { IconPlus } from "@/components/icons";
 import { useOrca, useTodos } from "@/lib/store";
 
 export default function HomePage() {
-  const { courses, hydrated } = useOrca();
+  const { courses, hydrated, isAdmin } = useOrca();
   const todos = useTodos();
   const dueCount = (courseId: string) => todos.filter((d) => d.courseId === courseId && d.when === "today").length;
 
@@ -25,13 +25,19 @@ export default function HomePage() {
         </div>
       )}
 
-      <Link
-        href="/new-course"
-        className="pressable absolute right-[28px] top-[28px] inline-flex items-center gap-2 rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink"
-      >
-        <IconPlus size={18} />
-        Add Course
-      </Link>
+      <div className="absolute right-[28px] top-[28px] flex items-center gap-[12px]">
+        {/* The owner's door to the admin view (profiles.is_admin, set only in the database); nobody else sees it. */}
+        {isAdmin && (
+          <Link href="/admin" data-part="admin-link" className="pressable inline-flex items-center gap-2 rounded-[16px] bg-parchment px-[16px] py-[12px] text-[15px] font-bold text-prussian lip-4 lip-alice">
+            <span className="rounded-pill bg-wisteria px-[8px] py-[2px] text-[11px] font-bold uppercase tracking-[1.2px] text-parchment">Admin</span>
+            Dashboard
+          </Link>
+        )}
+        <Link href="/new-course" data-part="add-course" className="pressable inline-flex items-center gap-2 rounded-[16px] bg-prussian px-[18px] py-[12px] text-[15px] font-bold text-parchment lip-4 lip-ink">
+          <IconPlus size={18} />
+          Add Course
+        </Link>
+      </div>
 
       {hydrated && <StudyStats usage={courses.length > 0} />}
     </AppShell>

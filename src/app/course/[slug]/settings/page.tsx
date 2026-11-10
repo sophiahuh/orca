@@ -112,6 +112,7 @@ export default function CourseSettingsPage({ params }: PageProps<"/course/[slug]
                 {(["quick", "deep", "exam"] as const).map((key) => (
                   <div key={key} className="flex flex-col gap-[8px]">
                     <ConfigRow
+                      allowNever={key !== "exam"}
                       label={REVIEW_LABELS[key]}
                       row={config[key]}
                       onChange={(row) => {

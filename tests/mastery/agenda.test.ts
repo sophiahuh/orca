@@ -154,6 +154,30 @@ test("a missing weight is a bug", () => {
 const tueThu: CourseSchedule = { meetings: [{ day: 4, start: "10:10", end: "11:25" }, { day: 2, start: "10:10", end: "11:25" }], quickDays: null, deepDays: null };
 const quickOn = (cadence: ReviewConfig["quick"]["cadence"]): ReviewConfig => ({ ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence } });
 
+test("Never disables scheduled quick reviews and dives despite weak points, class days, and exams", () => {
+  const config: ReviewConfig = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "Never" }, deep: { ...DEFAULT_CONFIG.deep, cadence: "Never" } };
+  const evidence = [ans("a1", "2026-10-01T10:00:00Z", "incorrect")];
+  const schedule: CourseSchedule = { ...tueThu, quickDays: [1], deepDays: [1] };
+  for (const now of ["2026-10-05T12:00:00Z", "2026-10-06T12:00:00Z"]) {
+    const g = agenda(evidence, now, { config, schedule, examDays: ["2026-10-12"] });
+    assert.ok(g.dueToday.length > 0, "weak points remain available for manual study");
+    assert.ok(g.deepReview.candidates > 0);
+    assert.equal(g.quickReviewEnabled, false);
+    assert.equal(g.quickReviewDue, false);
+    assert.equal(g.nextQuickDay, null);
+    assert.equal(g.quickTomorrow, false);
+    assert.equal(g.deepReview.due, false);
+    assert.equal(g.deepReview.dueDay, null);
+    assert.equal(g.deepReview.tomorrow, false);
+  }
+  const quickOnly = agenda(evidence, "2026-10-10T12:00:00Z", { config: { ...config, quick: DEFAULT_CONFIG.quick } });
+  assert.equal(quickOnly.quickReviewDue, true, "quick reviews can be enabled independently");
+  assert.equal(quickOnly.deepReview.due, false);
+  const deepOnly = agenda(evidence, "2026-10-10T12:00:00Z", { config: { ...config, deep: DEFAULT_CONFIG.deep } });
+  assert.equal(deepOnly.quickReviewDue, false);
+  assert.equal(deepOnly.deepReview.due, true, "dives can be enabled independently");
+});
+
 test("review days default to the day before the week's first classes; a pick wins; too few meetings rolls", () => {
   assert.deepEqual(reviewWeekdays("Weekly", null, tueThu.meetings), [1]);
   assert.deepEqual(reviewWeekdays("Twice a week", null, tueThu.meetings), [1, 3]);
@@ -237,6 +261,16 @@ test("an exam is in its window from 7 days before it, through its day", () => {
   assert.equal(examInWindow(exams, "k", "2026-11-12"), null);
   assert.equal(examInWindow(exams, "k", "2026-11-21"), null);
   assert.equal(examInWindow(exams, "other", "2026-11-15"), null);
+});
+
+test("an exam being crammed for is in the window whatever its date, and comes before a nearer one (cram mode contract)", () => {
+  const far = { courseId: "k", date: "2026-11-25", topicIds: ["t2"], cramming: true };
+  const near = { courseId: "k", date: "2026-11-16", topicIds: ["t1"], cramming: false };
+  assert.deepEqual(examInWindow([far], "k", "2026-11-13"), { topicIds: ["t2"] });
+  assert.deepEqual(examInWindow([{ ...far, cramming: false }], "k", "2026-11-13"), null);
+  assert.deepEqual(examInWindow([near, far], "k", "2026-11-13"), { topicIds: ["t2"] });
+  assert.deepEqual(examInWindow([near, { ...far, cramming: false }], "k", "2026-11-13"), { topicIds: ["t1"] });
+  assert.equal(examInWindow([{ ...far, courseId: "other" }], "k", "2026-11-13"), null);
 });
 
 test("an exam naming a merged-away topic covers its survivor", () => {

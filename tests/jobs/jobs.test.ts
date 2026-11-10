@@ -11,7 +11,7 @@ import type { ConfusionEvent } from "../../src/lib/mastery/types.ts";
 import { markerFlagId } from "../../src/lib/mastery/ids.ts";
 
 const anchor = { locator: "slide 2", excerpt: "x + xy = x" };
-const material: Material = { id: "m1", courseId: "c", filename: "L02.pdf", type: "Lecture", assigned: null, due: null, reflect: false };
+const material: Material = { id: "m1", courseId: "c", filename: "L02.pdf", type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false };
 const queued = (over: Partial<PipelineRun> = {}): PipelineRun => ({
   id: "run1",
   kind: "upload",

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { objectivePriority, openConfusion, reasonsOf } from "../../src/lib/mastery/priority.ts";
-import type { AnswerEvent, ConfusionEvent, ObjectiveState, ObjectiveStatus } from "../../src/lib/mastery/types.ts";
+import type { AnswerEvent, ConfusionEvent, ObjectiveState, ObjectiveStatus, SignalEvent, WorkEvent } from "../../src/lib/mastery/types.ts";
 
 const now = new Date("2026-10-05T09:00:00Z");
 const s = (status: ObjectiveStatus, extra: Partial<ObjectiveState> = {}): ObjectiveState => ({
@@ -103,4 +103,34 @@ test("confusion stays open until an unaided correct answer comes after it", () =
   assert.equal(openConfusion("o", [confusion("2026-10-01T00:00:00Z"), answer("2026-10-02T00:00:00Z", "correct", "self")]), "2026-10-01T00:00:00Z");
   assert.equal(openConfusion("o", [confusion("2026-10-01T00:00:00Z"), answer("2026-10-02T00:00:00Z", "correct")]), null);
   assert.equal(openConfusion("other", [confusion("2026-10-01T00:00:00Z")]), null);
+});
+
+const signal = (at: string, kind: SignalEvent["signal"]): SignalEvent => ({ kind: "signal", id: `s-${at}`, at, courseId: "c", topicId: "t", objectiveId: "o", signal: kind, note: null, source: "connector", sessionId: "chat" });
+const work = (at: string, over: Partial<WorkEvent> = {}): WorkEvent => ({ kind: "work", id: `w-${at}`, at, courseId: "c", topicId: "t", objectiveId: "o", problem: "Add 0110 and 0011.", basis: "known-answer", outcome: "correct", source: "connector", sessionId: "chat", ...over });
+
+test("rules v4: a correct answer Claude graded clears the confusion only with no help; a hint or a shown answer leaves it open", () => {
+  const since = "2026-10-01T00:00:00Z";
+  const claude = (help?: AnswerEvent["help"]) => ({ ...answer("2026-10-02T00:00:00Z", "correct", "claude"), ...(help ? { help } : {}) });
+  assert.equal(openConfusion("o", [confusion(since), claude()]), null);
+  assert.equal(openConfusion("o", [confusion(since), claude("none")]), null);
+  assert.equal(openConfusion("o", [confusion(since), claude("hint")]), since);
+  assert.equal(openConfusion("o", [confusion(since), claude("shown")]), since);
+  assert.equal(openConfusion("o", [confusion(since), { ...answer("2026-10-02T00:00:00Z", "correct", "rubric"), help: "shown" }]), since);
+});
+
+test("rules v4: correct work judged against a solution or a known answer clears the confusion; judged by Claude alone, hinted or shown it doesn't", () => {
+  const since = "2026-10-01T00:00:00Z";
+  assert.equal(openConfusion("o", [confusion(since), work("2026-10-02T00:00:00Z")]), null);
+  assert.equal(openConfusion("o", [confusion(since), work("2026-10-02T00:00:00Z", { basis: "official-solution" })]), null);
+  assert.equal(openConfusion("o", [confusion(since), work("2026-10-02T00:00:00Z", { basis: "claude" })]), since);
+  assert.equal(openConfusion("o", [confusion(since), work("2026-10-02T00:00:00Z", { help: "hint" })]), since);
+  assert.equal(openConfusion("o", [confusion(since), work("2026-10-02T00:00:00Z", { help: "shown" })]), since);
+  assert.equal(openConfusion("o", [confusion(since), work("2026-10-02T00:00:00Z", { outcome: "partial" })]), since);
+});
+
+test("rules v4: a lost signal opens the confusion like a struggled flag; the other signals don't", () => {
+  assert.equal(openConfusion("o", [signal("2026-10-01T00:00:00Z", "lost")]), "2026-10-01T00:00:00Z");
+  assert.equal(openConfusion("o", [confusion("2026-10-01T00:00:00Z"), answer("2026-10-02T00:00:00Z", "correct"), signal("2026-10-03T00:00:00Z", "lost")]), "2026-10-03T00:00:00Z");
+  assert.equal(openConfusion("o", [signal("2026-10-01T00:00:00Z", "lost"), answer("2026-10-02T00:00:00Z", "correct")]), null);
+  for (const kind of ["got-it", "asked-answer", "asked-harder"] as const) assert.equal(openConfusion("o", [signal("2026-10-01T00:00:00Z", kind)]), null);
 });

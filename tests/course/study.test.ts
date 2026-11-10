@@ -11,7 +11,7 @@ test("slide locators collapse into ranges; other locators stay as written", () =
   assert.equal(slideRanges([]), "");
 });
 
-const material = (id: string, filename: string): Material => ({ id, courseId: "c", filename, type: "Lecture", assigned: null, due: null, reflect: false });
+const material = (id: string, filename: string): Material => ({ id, courseId: "c", filename, type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false });
 const objective = (signals: Objective["signals"]): Objective => ({
   id: "o",
   topicId: "t",

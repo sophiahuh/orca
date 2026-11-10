@@ -62,7 +62,7 @@ export interface Course {
   trail?: string;
 }
 
-export type Cadence = "Daily" | "Twice a week" | "Weekly" | "1 wk before exam";
+export type Cadence = "Daily" | "Twice a week" | "Weekly" | "1 wk before exam" | "Never";
 export type Duration = "5 min" | "10 min" | "15 min" | "30 min" | "1 hour" | "3 hours" | "10 hours";
 
 export interface ReviewRow {
@@ -108,6 +108,29 @@ export interface Exam {
   /** ISO date, YYYY-MM-DD */
   date: string;
   topicIds: string[];
+  /** The student is cramming for it (set from the exam card or `set_exam`): the exam window applies whatever the date. */
+  cramming: boolean;
+  /** What the exam weighs inside its window, and where that came from; null = no scope beyond topicIds. */
+  scope: ExamScope | null;
+}
+
+/** Where a piece of an exam's scope came from; its strength is fixed per signal (`SCOPE_STRENGTH`, src/lib/course/scope.ts). */
+export type ScopeSignal = "practice-exam" | "professor" | "study-guide" | "homework" | "lecture-emphasis" | "guess";
+
+export interface ScopeEvidence {
+  signal: ScopeSignal;
+  strength: "strongest" | "strong" | "medium" | "light";
+  quote?: string;
+  materialId?: string;
+}
+
+/** An exam's scope (`exams.scope`): per-objective weights inside the exam window, the format, and the sources it was built from. */
+export interface ExamScope {
+  /** Per-objective weight inside the exam window; 0 = excluded. Objectives not listed weigh 1. */
+  objectives: Array<{ objectiveId: string; weight: number; evidence: ScopeEvidence[] }>;
+  format?: { minutes?: number; problems?: number; kinds?: Array<"Multiple choice" | "True or false" | "Short answer" | "Problem"> };
+  /** Where the scope came from, for the card ("from the practice exam and your professor's words"). */
+  sources: ScopeSignal[];
 }
 
 export interface CalendarEvent {
@@ -145,6 +168,8 @@ export interface Material {
   hiddenText?: { items: number; pages: number[] };
   /** Where its file is in Storage (the `materials` bucket); absent when there's no file (typed notes, a Canvas syllabus, a pasted chat). */
   storagePath?: string;
+  /** Mapped to objectives but never used to write questions, never shown to Claude and never listed beyond its name (a past or practice exam kept for a practice test). */
+  heldBack: boolean;
 }
 
 /** The topics a student sees: everything except archived (rejected or merged-away) ones. */
@@ -391,6 +416,8 @@ export interface QuizQuestion {
   objectiveId: string;
   /** A deep-review question (written when a deep review starts): longer and harder; only deep reviews ask it. */
   deep?: boolean;
+  /** Written by Claude through the connector (`add_questions`); absent = Orca's. */
+  source?: "claude";
 }
 
 /* ── Defaults ─────────────────────────────────────────────────────────── */
