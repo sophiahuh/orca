@@ -89,7 +89,7 @@ export default defineConfig({
       command: `npm run dev -- --port ${PORT}`,
       url: `http://localhost:${PORT}`,
       reuseExistingServer: !process.env.CI,
-      env: { ...FAKE_MODEL, ...SUPABASE },
+      env: { ...FAKE_MODEL, ...SUPABASE, CRON_SECRET: "e2e-cron-secret" },
       timeout: 120_000,
     },
   ],

@@ -1,7 +1,9 @@
+import { after } from "next/server";
 import { z } from "zod";
 import { BROWSER_FLAG_SOURCES } from "@/lib/mastery/flags";
 import { NewerRulesError, VersionConflictError, recordEvent } from "@/lib/mastery/snapshots";
 import type { AnswerEvent, EvidenceEvent } from "@/lib/mastery/types";
+import { topUpAfterFlag } from "@/lib/server/flag-top-up";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
 import { forStudent, ownsCourse, reply } from "@/lib/server/student";
 
@@ -121,6 +123,12 @@ export async function POST(request: Request) {
 
     try {
       const r = await recordEvent(supabaseSnapshotStore(db, student.id, body.courseId), event);
+      // A flag always ends in questions (owner, 2026-11-10): ask for them here, after the reply, so
+      // it doesn't depend on the browser staying open; a top-up already in flight covers it.
+      if (event.kind === "confusion") {
+        const flagged = event.objectiveId;
+        after(() => topUpAfterFlag(db, student.id, body.courseId, [flagged]));
+      }
       return reply(201, {
         event,
         countsFor: r.objectiveId,
