@@ -250,6 +250,9 @@ test("an upload that finishes while you're elsewhere pops a toast that opens it,
   const db = admin();
   expect((await db.from("pipeline_runs").update({ status: "running", started_at: new Date().toISOString() }).eq("owner_id", student.id).eq("id", runId)).error).toBeNull();
   await page.goto("/");
+  // The map has loaded the run as building (the island comes from the same read) before its job
+  // "finishes": a run first loaded as finished is history and never toasts (CI lost this race).
+  await expect(page.getByRole("button", { name: "Open Logic", exact: true })).toBeVisible();
   await expect(page.locator("[data-part=upload-toast]")).toHaveCount(0);
   expect((await db.from("pipeline_runs").update({ status: "done" }).eq("owner_id", student.id).eq("id", runId)).error).toBeNull();
   const toast = page.locator("[data-part=upload-toast]");

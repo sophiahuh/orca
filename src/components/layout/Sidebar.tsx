@@ -7,7 +7,7 @@ import { useAgenda, useOrca, useTodos } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
 import type { Course } from "@/lib/data";
 import type { TodoCard } from "@/lib/mastery/todo";
-import { CaughtUp, FOCUS_COPY, useCaughtUp } from "./CaughtUp";
+import { CaughtUp, useCaughtUp } from "./CaughtUp";
 import { NavBar } from "./NavBar";
 
 export const SIDEBAR_W = 340;
@@ -27,7 +27,7 @@ export function todoHref(card: TodoCard, course: Course): string {
   }
 }
 
-function Section({ title, items, hydrated, courses, emptyNote }: { title: string; hydrated: boolean; items: TodoCard[]; courses: Map<string, Course>; emptyNote?: string }) {
+function Section({ title, items, hydrated, courses }: { title: string; hydrated: boolean; items: TodoCard[]; courses: Map<string, Course> }) {
   return (
     <motion.section variants={stagger()} initial="hidden" animate="show" className="flex flex-col gap-[12px]">
       <motion.h2 variants={fadeUp} className="text-[22px] font-bold text-prussian">
@@ -35,8 +35,9 @@ function Section({ title, items, hydrated, courses, emptyNote }: { title: string
       </motion.h2>
       {items.length === 0
         ? hydrated && (
-            <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep">
-              Nothing due. Nice.{emptyNote ? ` ${emptyNote}` : ""}
+            // Nothing in it: just that (owner, 2026-11-08).
+            <motion.p variants={fadeUp} className="text-[15px] text-wisteria-deep" data-part="nothing-due">
+              Nothing. All caught up
             </motion.p>
           )
         : items.map((d) => {
@@ -77,7 +78,7 @@ function CourseToday({ course, hydrated, items, courses }: { course: Course; hyd
       </motion.section>
     );
   }
-  return <Section title="Due today" hydrated={hydrated} items={items} courses={courses} emptyNote={FOCUS_COPY} />;
+  return <Section title="Due today" hydrated={hydrated} items={items} courses={courses} />;
 }
 
 /** 340px right rail: Due today / Due tomorrow + bottom nav. */
@@ -99,7 +100,7 @@ export function Sidebar() {
         {course ? (
           <CourseToday course={course} hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "today")} courses={byId} />
         ) : (
-          <Section title="Due today" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "today")} courses={byId} emptyNote={FOCUS_COPY} />
+          <Section title="Due today" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "today")} courses={byId} />
         )}
         <Section title="Due tomorrow" hydrated={hydrated} items={visibleTodos.filter((d) => d.when === "tomorrow")} courses={byId} />
       </div>
