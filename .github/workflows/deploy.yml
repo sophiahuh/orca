@@ -38,7 +38,7 @@ jobs:
   deploy:
     name: Migrations, then main → backend-implementation
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       SUPABASE_PROJECT_REF: fbbimuspcsytjhbqlzzc
