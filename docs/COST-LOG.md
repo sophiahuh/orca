@@ -54,18 +54,20 @@ from public.model_usage group by 1, 2, 3 order by 1 desc, 2;
 | 2026-11-07 | Dive into "Circuit variables and elements" | Quiz starts within 2 minutes | **Fail**: "Preparing your quiz" with no end; the run was held by the spent token day and the screen didn't say | 0 | 0 | ~5 | The preparing screen now says so (11-08) |
 | 2026-11-07 | Quiz through the Claude connector | Claude asks an Orca question and records the answer | **Fail**: no questions existed for unflagged objectives; the flag top-up parked on the spent day; Claude promised "a few minutes" | 0 | 0 | ~10 | `next_questions`, `check_answer`, budget in `course_state` (11-08) |
 | 2026-11-08 | Remove a failed upload from Circuit Analysis | The failed card goes; the course keeps what other files taught | **Fail**: the file's done run went too (same material), its objectives were archived; restored by hand | 0 | 0 | ~10 | Removal now archives only what no other file teaches (11-08); the course had one file, so this case still loses its source |
-| 2026-11-08 | Re-paste the syllabus as Syllabus, then quiz through Claude | A Syllabus-typed material builds; Claude asks and Orca grades one question | pending | | | | After the 11-08 deploy |
+| 2026-11-08 | Restore the archived objectives by hand after the removal | The course keeps its outline | **Fail** as a task a student should never need: the objectives came back but their source pages were gone, so no questions could be written; the sidebar said "writing" for two days with no job | 0 | 0 | ~5 | Sidebar now honest, and the server asks for questions itself (PRs #18, #19) |
+| 2026-11-09 | Re-paste the syllabus as Syllabus | A Syllabus-typed material builds | **Fail**: "OpenAI rejected that API key" from the job on Trigger.dev (its copy of the key) | 0 | 0 | ~3 | Fix the key on the Trigger project, Try again |
+| 2026-11-10 | Quiz through Claude | Claude asks and Orca grades one question | pending | | | | After the key is fixed and the syllabus builds |
 
 ## Totals so far
 
 | | |
 |---|---|
-| Attempts | 5 (1 pending) |
+| Attempts | 7 (1 pending) |
 | Passed | 0 |
-| Success rate | 0 of 5 |
-| Model $ | to fill from the first query (the three model-free fails are 0) |
+| Success rate | 0 of 7 |
+| Model $ | to fill from the first query (the five model-free fails are 0) |
 | Tool $ | 0 |
-| Human minutes | ~60, about $30 at the stated rate |
+| Human minutes | ~68, about $34 at the stated rate |
 | Cost per successful task | **none: no task passed** |
 
 Each fail above has a shipped fix beside it; the next rows are the same tasks run again on the
