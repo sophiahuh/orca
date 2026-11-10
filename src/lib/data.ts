@@ -124,6 +124,16 @@ export interface ScopeEvidence {
   materialId?: string;
 }
 
+/** The student's time budget for a cram (cram mode contract, section 6), asked at setup; the plan is derived from it, never stored. */
+export interface CramBudget {
+  /** Hours the student can put in before the exam, asked at setup (prefilled from the course's exam review duration). */
+  hours: number;
+  /** Days with no study, YYYY-MM-DD, in the student's timezone. */
+  daysOut: string[];
+  /** When cramming started, ISO: minutes studied since then count against the budget. */
+  since: string;
+}
+
 /** An exam's scope (`exams.scope`): per-objective weights inside the exam window, the format, and the sources it was built from. */
 export interface ExamScope {
   /** Per-objective weight inside the exam window; 0 = excluded. Objectives not listed weigh 1. */
@@ -131,6 +141,8 @@ export interface ExamScope {
   format?: { minutes?: number; problems?: number; kinds?: Array<"Multiple choice" | "True or false" | "Short answer" | "Problem"> };
   /** Where the scope came from, for the card ("from the practice exam and your professor's words"). */
   sources: ScopeSignal[];
+  /** The time budget while cramming (set at cram setup); absent until then. */
+  budget?: CramBudget;
 }
 
 export interface CalendarEvent {
