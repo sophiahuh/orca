@@ -79,130 +79,135 @@ export default function ReviewPage({ params, searchParams }: PageProps<"/course/
 
   return (
     <Screen bg="ocean" className="overflow-y-auto">
-      <header className="flex items-center gap-[16px] px-[28px] pt-[28px]">
+      {/* Everything below the back button sits in the title's column, so it lines up with the course name. */}
+      <div className="flex items-start gap-[16px] px-[28px] pt-[28px]">
         <BackButton href={`/course/${course.slug}`} />
-        <div className="flex flex-col gap-[4px]">
-          <h1 className="text-[40px] font-bold leading-none text-prussian">{course.short}: uploads &amp; review</h1>
-          <p className="text-[15px] font-medium text-wisteria-deep">
-            {tab === "uploads" ? "Every file you've added and what it built." : "New topics, marked Unreviewed until you confirm them. Questions come when you flag something, start a dive, or try the warm-up."}
-          </p>
-        </div>
-      </header>
-
-      <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="flex w-[820px] max-w-full flex-col gap-[24px] px-[28px] py-[28px]">
-        {runId && missing && (
-          <motion.div variants={fadeUp}>
-            <Card radius={20} lip={4} className="px-[22px] py-[18px] text-[16px] font-semibold text-prussian" data-part="run-missing">
-              Orca can&apos;t find that upload&apos;s run.
-            </Card>
-          </motion.div>
-        )}
-
-        {run && (
-          <motion.div variants={fadeUp}>
-            {/* From an upload's toast (`&slides=1`): "Which slides were hard?" opens with the card. */}
-            <UploadCard run={run} material={material} focused openSlides={sp.slides === "1"} />
-          </motion.div>
-        )}
-
-        <motion.div variants={fadeUp} className="flex items-center justify-between gap-[12px]">
-          <ReviewTabs slug={course.slug} current={tab} runId={runId} uploads={uploadsInProgress(runs, course.id)} toReview={pending.count} />
-          <Link
-            href={`/add-material?course=${course.slug}`}
-            className="pressable flex items-center gap-[8px] rounded-pill bg-wisteria px-[16px] py-[9px] text-[14px] font-bold text-parchment lip-3 lip-wisteria"
-            data-part="add-material"
-          >
-            <IconUpload size={16} />
-            Add material
-          </Link>
-        </motion.div>
-
-        {tab === "uploads" ? (
-          <motion.section variants={fadeUp} className="flex flex-col gap-[14px]" data-part="uploads-list">
-            <QueueControls courseId={course.id} uploads={uploads} />
-            {unbuilt.map((m) => (
-              <UnbuiltCard key={m.id} material={m} slug={course.slug} />
-            ))}
-            {uploads.length === 0 && unbuilt.length === 0 ? (
-              <p className="text-[17px] font-semibold text-prussian">
-                No uploads yet.{" "}
-                <Link href={`/add-material?course=${course.slug}`} className="text-wisteria-deep hover:underline">
-                  Add material
-                </Link>
+        <div className="flex min-w-0 flex-col">
+          <header className="flex flex-col pt-[2px]">
+            <div className="flex flex-col gap-[4px]">
+              <h1 className="text-[40px] font-bold leading-none text-prussian">{course.short}: uploads &amp; review</h1>
+              <p className="text-[15px] font-medium text-wisteria-deep">
+                {tab === "uploads" ? "Every file you've added and what it built." : "New topics, marked Unreviewed until you confirm them. Questions come when you flag something, start a dive, or try the warm-up."}
               </p>
-            ) : (
-              uploads.filter((u) => u.id !== runId).map((u) => <UploadCard key={u.id} run={u} material={materials.find((m) => m.id === u.materialId)} />)
-            )}
-          </motion.section>
-        ) : (
-          <>
-        {pending.count === 0 && !working && (
-          <motion.div variants={fadeUp} className="flex flex-col items-start gap-[12px]">
-            <p className="text-[20px] font-bold text-prussian">Nothing to review.</p>
-            <Link href={`/course/${course.slug}`} className="text-[15px] font-bold text-wisteria-deep hover:underline">
-              Back to the island
-            </Link>
-          </motion.div>
-        )}
-
-        {(pending.uncertainTopics.length > 0 || pending.uncertainObjectives.length > 0) && (
-          <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
-            <h2 className="text-[22px] font-bold text-prussian">Possible duplicates</h2>
-            {pending.uncertainTopics.map((t) => (
-              <Duplicate
-                key={t.id}
-                kind="topic"
-                name={t.name}
-                other={topicName(t.uncertain!.candidateId)}
-                reasoning={t.uncertain!.reasoning}
-                onSame={() => edit((s) => resolveUncertainTopic(s, t.id, "same"))}
-                onSeparate={() => edit((s) => resolveUncertainTopic(s, t.id, "separate"))}
-              />
-            ))}
-            {pending.uncertainObjectives.map((o) => (
-              <Duplicate
-                key={o.id}
-                kind="objective"
-                name={o.name}
-                other={catalogue[o.uncertain!.candidateId]?.name ?? "another objective"}
-                reasoning={o.uncertain!.reasoning}
-                onSame={() => edit((s) => resolveUncertain(s, o.id, "same"))}
-                onSeparate={() => edit((s) => resolveUncertain(s, o.id, "separate"))}
-              />
-            ))}
-          </motion.section>
-        )}
-
-        {pending.topics.length > 0 && (
-          <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[22px] font-bold text-prussian">New topics</h2>
-              {pending.topics.length > 1 && (
-                <TextAction onClick={() => edit((s) => pending.topics.reduce((acc, t) => confirmTopic(acc, t.id), s))}>Confirm all</TextAction>
-              )}
             </div>
-            {pending.topics.map((t) => (
-              <NewTopic
-                key={t.id}
-                topic={t}
-                objectives={objectivesIn(t.id)}
-                onRename={(name) => edit((s) => renameTopic(s, t.id, name))}
-                onConfirm={() => edit((s) => confirmTopic(s, t.id))}
-                onReject={() => edit((s) => rejectTopic(s, t.id))}
-                onRejectObjective={(id) => edit((s) => rejectObjective(s, id))}
-              />
-            ))}
-          </motion.section>
-        )}
+          </header>
 
-        <motion.div variants={fadeUp}>
-          <Link href={`/course/${course.slug}/objectives`} className="text-[15px] font-bold text-wisteria-deep hover:underline">
-            See every objective in {course.short}
-          </Link>
-        </motion.div>
-          </>
-        )}
-      </motion.div>
+          <motion.div variants={stagger(0.06)} initial="hidden" animate="show" className="flex w-[760px] max-w-full flex-col gap-[24px] py-[28px]">
+            {runId && missing && (
+              <motion.div variants={fadeUp}>
+                <Card radius={20} lip={4} className="px-[22px] py-[18px] text-[16px] font-semibold text-prussian" data-part="run-missing">
+                  Orca can&apos;t find that upload&apos;s run.
+                </Card>
+              </motion.div>
+            )}
+
+            {run && (
+              <motion.div variants={fadeUp}>
+                {/* From an upload's toast (`&slides=1`): "Which slides were hard?" opens with the card. */}
+                <UploadCard run={run} material={material} focused openSlides={sp.slides === "1"} />
+              </motion.div>
+            )}
+
+            <motion.div variants={fadeUp} className="flex items-center justify-between gap-[12px]">
+              <ReviewTabs slug={course.slug} current={tab} runId={runId} uploads={uploadsInProgress(runs, course.id)} toReview={pending.count} />
+              <Link
+                href={`/add-material?course=${course.slug}`}
+                className="pressable flex items-center gap-[8px] rounded-pill bg-wisteria px-[16px] py-[9px] text-[14px] font-bold text-parchment lip-3 lip-wisteria"
+                data-part="add-material"
+              >
+                <IconUpload size={16} />
+                Add material
+              </Link>
+            </motion.div>
+
+            {tab === "uploads" ? (
+              <motion.section variants={fadeUp} className="flex flex-col gap-[14px]" data-part="uploads-list">
+                <QueueControls courseId={course.id} uploads={uploads} />
+                {unbuilt.map((m) => (
+                  <UnbuiltCard key={m.id} material={m} slug={course.slug} />
+                ))}
+                {uploads.length === 0 && unbuilt.length === 0 ? (
+                  <p className="text-[17px] font-semibold text-prussian">
+                    No uploads yet.{" "}
+                    <Link href={`/add-material?course=${course.slug}`} className="text-wisteria-deep hover:underline">
+                      Add material
+                    </Link>
+                  </p>
+                ) : (
+                  uploads.filter((u) => u.id !== runId).map((u) => <UploadCard key={u.id} run={u} material={materials.find((m) => m.id === u.materialId)} />)
+                )}
+              </motion.section>
+            ) : (
+              <>
+            {pending.count === 0 && !working && (
+              <motion.div variants={fadeUp} className="flex flex-col items-start gap-[12px]">
+                <p className="text-[20px] font-bold text-prussian">Nothing to review.</p>
+                <Link href={`/course/${course.slug}`} className="text-[15px] font-bold text-wisteria-deep hover:underline">
+                  Back to the island
+                </Link>
+              </motion.div>
+            )}
+
+            {(pending.uncertainTopics.length > 0 || pending.uncertainObjectives.length > 0) && (
+              <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
+                <h2 className="text-[22px] font-bold text-prussian">Possible duplicates</h2>
+                {pending.uncertainTopics.map((t) => (
+                  <Duplicate
+                    key={t.id}
+                    kind="topic"
+                    name={t.name}
+                    other={topicName(t.uncertain!.candidateId)}
+                    reasoning={t.uncertain!.reasoning}
+                    onSame={() => edit((s) => resolveUncertainTopic(s, t.id, "same"))}
+                    onSeparate={() => edit((s) => resolveUncertainTopic(s, t.id, "separate"))}
+                  />
+                ))}
+                {pending.uncertainObjectives.map((o) => (
+                  <Duplicate
+                    key={o.id}
+                    kind="objective"
+                    name={o.name}
+                    other={catalogue[o.uncertain!.candidateId]?.name ?? "another objective"}
+                    reasoning={o.uncertain!.reasoning}
+                    onSame={() => edit((s) => resolveUncertain(s, o.id, "same"))}
+                    onSeparate={() => edit((s) => resolveUncertain(s, o.id, "separate"))}
+                  />
+                ))}
+              </motion.section>
+            )}
+
+            {pending.topics.length > 0 && (
+              <motion.section variants={fadeUp} className="flex flex-col gap-[12px]">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-[22px] font-bold text-prussian">New topics</h2>
+                  {pending.topics.length > 1 && (
+                    <TextAction onClick={() => edit((s) => pending.topics.reduce((acc, t) => confirmTopic(acc, t.id), s))}>Confirm all</TextAction>
+                  )}
+                </div>
+                {pending.topics.map((t) => (
+                  <NewTopic
+                    key={t.id}
+                    topic={t}
+                    objectives={objectivesIn(t.id)}
+                    onRename={(name) => edit((s) => renameTopic(s, t.id, name))}
+                    onConfirm={() => edit((s) => confirmTopic(s, t.id))}
+                    onReject={() => edit((s) => rejectTopic(s, t.id))}
+                    onRejectObjective={(id) => edit((s) => rejectObjective(s, id))}
+                  />
+                ))}
+              </motion.section>
+            )}
+
+            <motion.div variants={fadeUp}>
+              <Link href={`/course/${course.slug}/objectives`} className="text-[15px] font-bold text-wisteria-deep hover:underline">
+                See every objective in {course.short}
+              </Link>
+            </motion.div>
+              </>
+            )}
+          </motion.div>
+        </div>
+      </div>
     </Screen>
   );
 }
