@@ -16,6 +16,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { KnowledgePath } from "@/components/path/KnowledgePath";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { ExamsModal } from "@/components/config/ExamsModal";
+import { duration, useUserMetrics } from "@/components/settings/YourMetrics";
 import { fadeUp, stagger } from "@/lib/motion";
 import { COURSE_NAME_MAX, DEFAULT_CONFIG, trailTopics } from "@/lib/data";
 import { courseUploads, pendingReview, uploadsInProgress } from "@/lib/course/review";
@@ -33,6 +34,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
   const { hydrated, objectives, renameCourse, configs, runs, flagObjectives, questionBank, feedback } = useOrca();
   const course = useCourse(slug);
   const mastery = useMasteryByCourse();
+  const { metrics } = useUserMetrics();
   const agendas = useAgenda();
 
   if (!course) {
@@ -46,6 +48,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
     );
   }
 
+  const studied = metrics?.courses.find((c) => c.courseId === course.id);
   const m = mastery[course.id];
   if (!m) throw new Error(`No mastery computed for course ${course.id}`);
   const topics = trailTopics(course);
@@ -116,6 +119,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
           </motion.h1>
           <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part={topics.length > 0 ? "weak-count" : undefined}>
             {weak ? `${held} of ${weak} weak spots mastered` : "No weak spots flagged yet"}
+            {studied && <span data-part="course-studied"> · {duration(studied.seconds)} studied · {studied.solved} solved</span>}
           </motion.p>
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
             <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />

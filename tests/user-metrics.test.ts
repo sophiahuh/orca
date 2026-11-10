@@ -9,8 +9,11 @@ test("metrics roll up persisted session time, correct answers, topics, and local
     sessions: [{ courseId: "c1", topicId: "t1", seconds: 300, finishedAt: "2026-10-01T18:00:00Z" }, { courseId: "c2", topicId: null, seconds: 120, finishedAt: "2026-10-02T18:00:00Z" }],
     answers: [{ courseId: "c1", topicId: "t1", at: "2026-10-01T18:00:00Z", outcome: "correct" }, { courseId: "c1", topicId: "t2", at: "2026-10-02T18:00:00Z", outcome: "incorrect" }, { courseId: "c1", topicId: "t2", at: "2026-10-03T18:00:00Z", outcome: "correct" }],
     timezone: "America/New_York",
+    now: new Date("2026-10-08T20:00:00Z"),
   });
   assert.equal(metrics.seconds, 420);
+  // Only the session within 7 days of now: Oct 2 is, Oct 1 18:00 isn't.
+  assert.equal(metrics.weekSeconds, 120);
   assert.equal(metrics.solved, 2);
   assert.equal(metrics.longestStreak, 3);
   assert.deepEqual(metrics.courses[0], { courseId: "c1", name: "Data Structures", seconds: 300, solved: 2, topics: [{ topicId: "t1", name: "Merge sort", seconds: 300, solved: 1 }, { topicId: "t2", name: "Heaps", seconds: 0, solved: 1 }] });

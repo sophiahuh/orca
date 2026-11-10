@@ -6,11 +6,12 @@ import { usePathname } from "next/navigation";
 import { AvatarPreviewProvider } from "@/components/brand/avatar-preview";
 import { FlagTopUpWatcher } from "@/components/layout/FlagTopUpWatcher";
 import { OnboardingTips } from "@/components/onboarding/OnboardingTips";
+import { Heartbeat } from "@/components/layout/Heartbeat";
 import { UploadToasts } from "@/components/layout/UploadToasts";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { TopBar } from "@/components/layout/TopBar";
 import { LoadFailed, SaveStatus } from "@/components/store/SaveStatus";
-import { isPublicPath } from "@/lib/auth/paths";
+import { isAdminPath, isPublicPath } from "@/lib/auth/paths";
 import { OrcaProvider, useOrca } from "@/lib/store";
 import { useNavHistory } from "@/lib/nav-history";
 
@@ -23,13 +24,14 @@ function NavHistory() {
 /**
  * The app once the student's data is in, or why it couldn't be loaded. While their courses load
  * (sign-in, or opening the app) every signed-in screen shows the loading screen instead of a
- * half-empty page; the account screens (sign-in and the rest) never wait on it.
+ * half-empty page; the account screens (sign-in and the rest) never wait on it, nor does the admin
+ * view, which is rendered on the server from the database (its 404 must reach the response).
  */
 function Loaded({ children }: { children: React.ReactNode }) {
   const { status } = useOrca();
   const pathname = usePathname();
   if (status === "failed") return <LoadFailed />;
-  if (status === "loading" && !isPublicPath(pathname)) return <LoadingScreen title="Loading your courses…" message="Gathering your islands, topics and what's due." />;
+  if (status === "loading" && !isPublicPath(pathname) && !isAdminPath(pathname)) return <LoadingScreen title="Loading your courses…" message="Gathering your islands, topics and what's due." />;
   return (
     <>
       {children}
@@ -37,6 +39,7 @@ function Loaded({ children }: { children: React.ReactNode }) {
       <FlagTopUpWatcher />
       {status === "ready" && (
         <>
+          <Heartbeat />
           <Suspense fallback={null}>
             <UploadToasts />
           </Suspense>

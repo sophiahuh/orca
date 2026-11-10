@@ -2,16 +2,15 @@
 
 import Link from "next/link";
 import { AppShell } from "@/components/layout/AppShell";
-import { DailyUsage } from "@/components/map/DailyUsage";
 import { KnowledgeMap } from "@/components/map/KnowledgeMap";
 import { OrcaLogo } from "@/components/brand/OrcaLogo";
+import { StudyStats } from "@/components/map/StudyStats";
 import { IconPlus } from "@/components/icons";
-import { useOrca, useStreak, useTodos } from "@/lib/store";
+import { useOrca, useTodos } from "@/lib/store";
 
 export default function HomePage() {
   const { courses, hydrated } = useOrca();
   const todos = useTodos();
-  const streak = useStreak();
   const dueCount = (courseId: string) => todos.filter((d) => d.courseId === courseId && d.when === "today").length;
 
   return (
@@ -35,11 +34,7 @@ export default function HomePage() {
         Add Course
       </Link>
 
-      <div className="absolute bottom-[28px] left-[28px] inline-flex items-center gap-[10px] rounded-pill border-2 border-alice-deep bg-parchment py-[8px] pl-[12px] pr-[18px] lip-3 lip-alice">
-        <OrcaLogo width={38} shadow={false} />
-        {hydrated && <span className="text-[15px] font-bold text-prussian">{streak} day streak</span>}
-      </div>
-      {hydrated && courses.length > 0 && <DailyUsage />}
+      {hydrated && <StudyStats usage={courses.length > 0} />}
     </AppShell>
   );
 }

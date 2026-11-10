@@ -86,11 +86,13 @@ test.describe("sign up", () => {
     await expect(page).toHaveURL(/\/sign-in/);
 
     await page.goto(await emailedLink(email));
-    await page.goto("/settings");
-    // The Account card edits contacts in place (e427e9c): the email and name are inputs.
+    await page.goto("/settings?section=account");
+    // The Account section edits contacts in place (e427e9c); the timezone is in Preferences.
     await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
-    await expect(page.getByRole("textbox", { name: "Username" })).toHaveValue("Sophia");
+    await page.goto("/settings");
     await expect(page.getByRole("combobox", { name: "Timezone" })).toHaveValue("America/New_York");
+    await page.goto("/settings?section=account");
+    await expect(page.getByRole("textbox", { name: "Username" })).toHaveValue("Sophia");
     // The profile's avatar and name came from sign-up; the top bar shows the avatar.
     await expect(page.locator("[data-part=top-bar] [data-avatar=turtle]")).toBeVisible();
     await expect(page.getByRole("radio", { name: "Turtle" })).toHaveAttribute("aria-checked", "true");
@@ -158,7 +160,7 @@ test.describe("resend the confirmation email", () => {
 
     // Confirmed from that link, the account signs in and the offer is gone.
     await page.goto(await emailedLink(email));
-    await page.goto("/settings");
+    await page.goto("/settings?section=account");
     await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
 
     // A wrong password never reveals whether the address is confirmed, so no offer either.
@@ -228,8 +230,8 @@ test("a token-hash link (hosted email templates) signs you in from any browser; 
   // A browser that never asked for the link.
   const other = await browser.newContext();
   const page = await other.newPage();
-  await page.goto(`${baseURL}/auth/callback?token_hash=${magic.data.properties!.hashed_token}&type=magiclink&next=/settings`);
-  await expect(page).toHaveURL(/\/settings$/);
+  await page.goto(`${baseURL}/auth/callback?token_hash=${magic.data.properties!.hashed_token}&type=magiclink&next=/settings?section=account`);
+  await expect(page).toHaveURL(/\/settings\?section=account$/);
   await expect(page.locator("[data-part=account-email]")).toHaveValue(email);
   await other.close();
 

@@ -262,6 +262,21 @@ route is an OAuth developer key approved by the school's Canvas administrators (
 "Developer Keys" under the account admin), which is a request to the university, not a setting.
 Disconnect in Settings deletes the stored token; the student can also delete the token in Canvas.
 
+## 10. The admin view (the owner, once)
+
+`/admin` (users, their courses and uploads, model spend, question feedback, security events) opens
+only for accounts whose profile is flagged `is_admin`. Nothing in the app sets the flag; run this in
+the SQL editor with your own user id (Authentication → Users):
+
+```sql
+update public.profiles set is_admin = true where owner_id = '<user id>';
+```
+
+(`profiles` is keyed by `owner_id`, the auth user's id.) Anyone else, signed in
+or not, gets a 404 on `/admin` and `/api/admin/*`; every admin read is logged in `security_events`
+as `admin_read`. To take it away, set it back to false. "Last active" on the users table comes from
+the heartbeat the app sends every 5 minutes while a tab is open (`profiles.last_active_at`).
+
 ## Order
 
 Done: the Supabase project, keys and auth settings; Vercel's variables; the model key; the Deploy
