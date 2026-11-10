@@ -27,7 +27,7 @@ function fakeModel(h: Handlers) {
 
 let n = 0;
 const newId = () => `id${++n}`;
-const material = (type: Material["type"] = "Lecture"): Material => ({ id: "mat", courseId: "c", filename: "L02.pdf", type, assigned: null, due: null, reflect: false });
+const material = (type: Material["type"] = "Lecture"): Material => ({ id: "mat", courseId: "c", filename: "L02.pdf", type, assigned: null, due: null, reflect: false, heldBack: false });
 const pages = [1, 2, 3, 4].map((i) => ({ n: i, text: `slide ${i} text about logic` }));
 const input = (over: Partial<RunInput> = {}): RunInput => ({
   course: { id: "c", name: "Logic", short: "LOG", topics: [] },

@@ -209,7 +209,7 @@ export const objective = (id: string, topicId: string, name: string, extra: Part
 });
 
 /** The deck the fixture's objectives came from, in `courseId`. */
-export const fixtureMaterial = (courseId: string): Material => ({ id: F.material, courseId, filename: DECK, type: "Lecture", assigned: null, due: null, reflect: false });
+export const fixtureMaterial = (courseId: string): Material => ({ id: F.material, courseId, filename: DECK, type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false });
 
 export const FIXTURE_STATE = {
   courses: [

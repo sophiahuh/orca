@@ -562,7 +562,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
 
   const addExam = useCallback<OrcaActions["addExam"]>(
     (courseId, title, date, topicIds) => {
-      const exam: Exam = { id: crypto.randomUUID(), courseId, title, date, topicIds };
+      const exam: Exam = { id: crypto.randomUUID(), courseId, title, date, topicIds, cramming: false, scope: null };
       setState((s) => ({ ...s, exams: [...s.exams, exam] }));
       save(async () => void must(await browserSupabase().from("exams").insert(examToRow(exam))));
     },

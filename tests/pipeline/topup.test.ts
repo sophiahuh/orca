@@ -7,7 +7,7 @@ import { deepQuestionCount } from "../../src/lib/deep-review.ts";
 import { locatorPages } from "../../src/lib/course/study.ts";
 import type { GeneratedQuestion, StepInput } from "../../src/lib/pipeline/schemas.ts";
 
-const material = (id: string): Material => ({ id, courseId: "c", filename: `${id}.pdf`, type: "Lecture", assigned: null, due: null, reflect: false });
+const material = (id: string): Material => ({ id, courseId: "c", filename: `${id}.pdf`, type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false });
 const topic: Topic = { id: "t", name: "Two's complement", review: "confirmed", pos: { x: 0, y: 0 }, summary: "Signed numbers" };
 const objective = (id: string, extra: Partial<Objective> = {}): Objective => ({
   id,

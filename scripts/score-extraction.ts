@@ -163,7 +163,7 @@ async function main() {
   const uploaded: Array<{ id: string; filename: string }> = [];
   for (const lecture of LECTURES) {
     const file = deckFor(lecture);
-    const material: Material = { id: `deck-${lecture}`, courseId: "ald", filename: path.basename(file), type: "Lecture", assigned: null, due: null, reflect: false };
+    const material: Material = { id: `deck-${lecture}`, courseId: "ald", filename: path.basename(file), type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false };
     console.log(`Uploading ${material.filename}…`);
     uploaded.push({ id: material.id, filename: material.filename });
     const plan = await runUpload(
@@ -228,7 +228,7 @@ async function main() {
       objectives: course.objectives,
       bank: course.bank,
       relations: course.relations,
-      material: { id: "deck-injected", courseId: "ald", filename: "L02_Combinational_injected.pdf", type: "Lecture", assigned: null, due: null, reflect: false },
+      material: { id: "deck-injected", courseId: "ald", filename: "L02_Combinational_injected.pdf", type: "Lecture", assigned: null, due: null, reflect: false, heldBack: false },
       materials: [...uploaded],
       pages: injectDeck(await readDeck(deckFor(2))),
       runId: crypto.randomUUID(),

@@ -15,6 +15,7 @@ import type {
   Course,
   CourseSchedule,
   Exam,
+  ExamScope,
   IslandVariant,
   Material,
   Objective,
@@ -196,6 +197,7 @@ export function questionToRow(q: QuizQuestion, topicId: string, sortOrder: numbe
     figure: json(q.figure ?? null),
     material_id: q.materialId ?? null,
     deep: q.deep ?? false,
+    source: q.source ?? "orca",
   };
 }
 
@@ -217,6 +219,7 @@ export function questionFromRow(r: Row<"questions">): QuizQuestion {
     ...(r.material_id !== null ? { materialId: r.material_id } : {}),
     objectiveId: r.objective_id,
     ...(r.deep ? { deep: true } : {}),
+    ...(r.source === "claude" ? { source: "claude" as const } : {}),
   };
 }
 
@@ -353,6 +356,7 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
     error: null,
     hidden_text: null,
     reading_since: null,
+    held_back: m.heldBack,
   };
 }
 
@@ -361,8 +365,8 @@ export function materialToRow(m: Material): Omit<Row<"materials">, "owner_id" | 
  * is a record without a file, which the database marks ready.
  */
 export function materialInsertRow(m: Material) {
-  const { id, course_id, filename, type, assigned, due, reflect, reflection } = materialToRow(m);
-  return { id, course_id, filename, type, assigned, due, reflect, reflection };
+  const { id, course_id, filename, type, assigned, due, reflect, reflection, held_back } = materialToRow(m);
+  return { id, course_id, filename, type, assigned, due, reflect, reflection, held_back };
 }
 
 export function materialFromRow(r: Row<"materials">): Material {
@@ -377,6 +381,7 @@ export function materialFromRow(r: Row<"materials">): Material {
     ...(r.reflection !== null ? { reflection: r.reflection as unknown as NonNullable<Material["reflection"]> } : {}),
     ...(r.hidden_text !== null ? { hiddenText: r.hidden_text as unknown as NonNullable<Material["hiddenText"]> } : {}),
     ...(r.storage_path ? { storagePath: r.storage_path } : {}),
+    heldBack: r.held_back,
   };
 }
 
@@ -406,11 +411,11 @@ export function calendarFromRow(r: Row<"calendar_events">): CalendarEvent {
 }
 
 export function examToRow(e: Exam): Omit<Row<"exams">, "owner_id" | "created_at"> {
-  return { id: e.id, course_id: e.courseId, title: e.title, date: e.date, topic_ids: e.topicIds };
+  return { id: e.id, course_id: e.courseId, title: e.title, date: e.date, topic_ids: e.topicIds, cramming: e.cramming, scope: json(e.scope) };
 }
 
 export function examFromRow(r: Row<"exams">): Exam {
-  return { id: r.id, courseId: r.course_id, title: r.title, date: r.date, topicIds: r.topic_ids };
+  return { id: r.id, courseId: r.course_id, title: r.title, date: r.date, topicIds: r.topic_ids, cramming: r.cramming, scope: r.scope as unknown as ExamScope | null };
 }
 
 /* ── Everything at once (public.my_data()) ── */
