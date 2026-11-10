@@ -99,7 +99,7 @@ jobs:
           TRIGGER_PROJECT_REF: ${{ secrets.TRIGGER_PROJECT_REF }}
         run: |
           npm ci --no-audit --no-fund
-          npx --yes trigger.dev@4 deploy --env prod
+          npx --yes trigger.dev@4.8.3 deploy --env prod
 
       - name: Merge main into backend-implementation and push (Vercel builds it)
         if: steps.diff.outputs.nothing != 'true'
