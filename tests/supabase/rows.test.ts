@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { courseView, eventFromRow, eventToRow } from "../../src/lib/supabase/rows.ts";
-import type { AnswerEvent, ConfusionEvent } from "../../src/lib/mastery/types.ts";
+import type { AnswerEvent, ConfusionEvent, SignalEvent, WorkEvent } from "../../src/lib/mastery/types.ts";
 
 const answer: AnswerEvent = {
   kind: "answer",
@@ -20,9 +20,15 @@ const answer: AnswerEvent = {
 const confusion: ConfusionEvent = { kind: "confusion", id: "e2", at: "2026-10-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: "m", note: "lost", flagSource: "homework", page: null };
 const manual: ConfusionEvent = { kind: "confusion", id: "e3", at: "2026-11-05T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", materialId: null, note: null, flagSource: "manual", page: null };
 const slide: ConfusionEvent = { ...manual, id: "e4", flagSource: "slide", materialId: "m", page: 4 };
+const struggledByClaude: ConfusionEvent = { ...manual, id: "e5", flagSource: "connector-struggled", note: "I'm lost on carries" };
+const reported: AnswerEvent = { ...answer, id: "e6", source: "connector", grader: "claude", outcome: "correct", response: "no ripple", help: "hint", confidence: 2, errorType: "sign" };
+const work: WorkEvent = { kind: "work", id: "e7", at: "2026-11-10T12:00:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", problem: "Add 0110 and 0011.", response: "1001", basis: "known-answer", outcome: "correct", source: "connector", sessionId: "chat", help: "none", confidence: 3 };
+const bareWork: WorkEvent = { kind: "work", id: "e8", at: "2026-11-10T12:01:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", problem: "Simplify x + xy.", basis: "claude", outcome: "partial", source: "connector", sessionId: "chat" };
+const signal: SignalEvent = { kind: "signal", id: "e9", at: "2026-11-10T12:02:00.000Z", courseId: "c", topicId: "t", objectiveId: "o", signal: "lost", note: "went quiet", source: "connector", sessionId: "chat" };
+const bareSignal: SignalEvent = { ...signal, id: "e10", signal: "got-it", note: null };
 
 test("events survive the trip to a row and back, with Postgres's timestamp format normalised", () => {
-  for (const e of [answer, confusion, manual, slide]) {
+  for (const e of [answer, confusion, manual, slide, struggledByClaude, reported, work, bareWork, signal, bareSignal]) {
     const row = { ...eventToRow(e), owner_id: "u" };
     assert.deepEqual(eventFromRow({ ...row, at: row.at.replace("Z", "+00:00") }), e);
   }
@@ -39,6 +45,18 @@ test("a connector answer's words ride the note column and come back as response"
 test("a row missing a field its kind needs throws instead of becoming a partial event", () => {
   const row = { ...eventToRow(answer), owner_id: "u", outcome: null };
   assert.throws(() => eventFromRow(row), /missing/);
+  assert.throws(() => eventFromRow({ ...eventToRow(work), owner_id: "u", problem: null }), /missing/);
+  assert.throws(() => eventFromRow({ ...eventToRow(signal), owner_id: "u", signal: null }), /missing/);
+});
+
+test("work and signal rows: the problem, basis and signal columns, the words on note, nothing of an answer's", () => {
+  const w = eventToRow(work);
+  assert.deepEqual([w.problem, w.basis, w.outcome, w.note, w.help, w.confidence, w.error_type, w.question_id, w.signal, w.flag_source], ["Add 0110 and 0011.", "known-answer", "correct", "1001", "none", 3, null, null, null, null]);
+  const sg = eventToRow(signal);
+  assert.deepEqual([sg.signal, sg.note, sg.source, sg.session_id, sg.problem, sg.outcome, sg.help], ["lost", "went quiet", "connector", "chat", null, null, null]);
+  const a = eventToRow(reported);
+  assert.deepEqual([a.grader, a.help, a.confidence, a.error_type, a.problem, a.signal], ["claude", "hint", 2, "sign", null, null]);
+  assert.deepEqual([eventToRow(answer).help, eventToRow(answer).confidence, eventToRow(answer).error_type], [null, null, null], "an answer without a report stores none");
 });
 
 test("a struggle flag's row carries its source and page; an answer's carries neither", () => {
