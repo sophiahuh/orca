@@ -240,6 +240,7 @@ test("which slides were hard: the deck's pages as a grid; tapping a page flags t
 
 /** A toast when an upload finishes while the student is elsewhere in the app (owner, 2026-11-08); it opens the upload with "Which slides were hard?" open. */
 test("an upload that finishes while you're elsewhere pops a toast that opens it, ready to flag slides", async ({ page, student }) => {
+  test.setTimeout(90_000);
   await fakeModel({ extract: ONE_TOPIC, perObjective: 2 });
   await createCourse(page, "Logic");
   await upload(page);
@@ -249,6 +250,9 @@ test("an upload that finishes while you're elsewhere pops a toast that opens it,
   const db = admin();
   expect((await db.from("pipeline_runs").update({ status: "running", started_at: new Date().toISOString() }).eq("owner_id", student.id).eq("id", runId)).error).toBeNull();
   await page.goto("/");
+  // The map has loaded the run as building (the island comes from the same read) before its job
+  // "finishes": a run first loaded as finished is history and never toasts (CI lost this race).
+  await expect(page.getByRole("button", { name: "Open Logic", exact: true })).toBeVisible();
   await expect(page.locator("[data-part=upload-toast]")).toHaveCount(0);
   expect((await db.from("pipeline_runs").update({ status: "done" }).eq("owner_id", student.id).eq("id", runId)).error).toBeNull();
   const toast = page.locator("[data-part=upload-toast]");

@@ -13,7 +13,7 @@ import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
 
 /** How long a toast stays when the pointer isn't on it. */
-const TOAST_MS = 10_000;
+const TOAST_MS = 5_000;
 /** How often unfinished uploads are read again, in case a Realtime message was missed. */
 const POLL_MS = 20_000;
 
@@ -85,8 +85,16 @@ export function UploadToasts() {
   }, [runs, announce]);
 
   // Realtime: an upload finished (the store then reads what it built, and the effect above toasts it).
+  // Once subscribed, the building uploads are read once: one that finished between the store's load
+  // and the subscription sent its message before anyone listened (as `useRun` does for one run).
   useEffect(() => {
     const db = browserSupabase();
+    const catchUp = async () => {
+      const ids = runsRef.current.filter((r) => isUpload(r) && !isFinished(r) && r.status !== "paused").map((r) => r.id);
+      if (!ids.length) return;
+      const { data } = await db.from("pipeline_runs").select("id, status").in("id", ids);
+      if (data?.some((r) => r.status === "done" || r.status === "failed")) void refresh();
+    };
     const channel = db
       .channel("uploads-finished")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pipeline_runs", filter: "kind=eq.upload" }, (payload) => {
@@ -96,7 +104,9 @@ export function UploadToasts() {
         toldFinished.current.add(row.id);
         void refresh();
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void catchUp();
+      });
     return () => void db.removeChannel(channel);
   }, [refresh]);
 
