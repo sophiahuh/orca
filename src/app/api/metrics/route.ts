@@ -31,6 +31,7 @@ export async function GET(request: Request) {
       sessions: sessions.filter((s) => live.has(s.course_id)).map((session) => ({ courseId: session.course_id, topicId: session.topic_id, seconds: session.seconds, finishedAt: session.finished_at })),
       answers: answers.filter((a) => live.has(a.course_id)).map((answer) => ({ courseId: answer.course_id, topicId: answer.topic_id, at: answer.at, outcome: answer.outcome as "correct" | "partial" | "incorrect" })),
       timezone: profile.data?.timezone ?? "UTC",
+      now: new Date(),
     }));
   });
 }

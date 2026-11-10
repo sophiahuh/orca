@@ -213,7 +213,7 @@ export default function ImportCanvasPage() {
           <motion.div variants={fadeUp}>
             <Card className="flex flex-col gap-[10px] px-[24px] py-[20px]" data-part="canvas-not-connected">
               <p className="text-[15px] font-semibold text-prussian">Canvas isn&apos;t connected yet.</p>
-              <Link href="/settings" className="text-[15px] font-bold text-wisteria-deep underline underline-offset-2">
+              <Link href="/settings?section=connections" className="text-[15px] font-bold text-wisteria-deep underline underline-offset-2">
                 Connect it in Settings
               </Link>
             </Card>

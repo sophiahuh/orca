@@ -29,6 +29,8 @@ export interface CourseMetric {
 
 export interface UserMetrics {
   seconds: number;
+  /** Session time finished in the last 7 days (the home page's "past week"). */
+  weekSeconds: number;
   solved: number;
   longestStreak: number;
   courses: CourseMetric[];
@@ -63,7 +65,10 @@ export function userMetrics(input: {
   sessions: ReadonlyArray<MetricsSession>;
   answers: ReadonlyArray<MetricsAnswer>;
   timezone: string;
+  now: Date;
 }): UserMetrics {
+  const weekStart = input.now.getTime() - 7 * 86_400_000;
+  let weekSeconds = 0;
   const courses = new Map(input.courses.map((course) => [course.id, { courseId: course.id, name: course.name, seconds: 0, solved: 0, topics: new Map<string, TopicMetric>() }]));
   const topicInfo = new Map(input.topics.map((topic) => [topic.id, topic]));
   const days = new Set<string>();
@@ -71,6 +76,7 @@ export function userMetrics(input: {
     const course = courses.get(session.courseId);
     if (!course) continue;
     course.seconds += session.seconds;
+    if (Date.parse(session.finishedAt) >= weekStart) weekSeconds += session.seconds;
     days.add(dayKey(session.finishedAt, input.timezone));
     if (session.topicId) {
       const topic = topicInfo.get(session.topicId);
@@ -98,5 +104,5 @@ export function userMetrics(input: {
     .map((course) => ({ ...course, topics: [...course.topics.values()].sort((a, b) => b.seconds - a.seconds || b.solved - a.solved || a.name.localeCompare(b.name)).slice(0, 3) }))
     .filter((course) => course.seconds > 0 || course.solved > 0)
     .sort((a, b) => b.seconds - a.seconds || b.solved - a.solved || a.name.localeCompare(b.name));
-  return { seconds: result.reduce((total, course) => total + course.seconds, 0), solved: result.reduce((total, course) => total + course.solved, 0), longestStreak: longestRun(days), courses: result };
+  return { seconds: result.reduce((total, course) => total + course.seconds, 0), weekSeconds, solved: result.reduce((total, course) => total + course.solved, 0), longestStreak: longestRun(days), courses: result };
 }
