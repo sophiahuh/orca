@@ -49,59 +49,62 @@ export default function ListPage({ params }: PageProps<"/course/[slug]/list">) {
   return (
     <AppShell bg="ocean">
       <div className="absolute inset-0 overflow-auto px-[28px] pb-[28px] pt-[28px]">
-        <motion.header variants={stagger()} initial="hidden" animate="show" className="flex items-start gap-[16px]">
-          <motion.div variants={fadeUp}>
+        {/* The list sits in the header's column, so it lines up with the title and the Path pill. */}
+        <div className="flex items-start gap-[16px]">
+          <motion.div variants={fadeUp} initial="hidden" animate="show">
             <BackButton href={`/course/${course.slug}`} />
           </motion.div>
-          <div className="flex flex-col gap-[6px] pt-[2px]">
-            <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-none text-prussian">
-              {course.name}
-            </motion.h1>
-            <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part="list-summary">
-              {rows.length ? `${rows.length} topic${rows.length === 1 ? "" : "s"} with weak spots` : "No weak spots flagged yet"}
-            </motion.p>
-            <motion.div variants={fadeUp} className="mt-[4px]">
-              <AtlasSwitch slug={course.slug} current="list" />
-            </motion.div>
-          </div>
-        </motion.header>
+          <div className="flex min-w-0 max-w-[560px] flex-1 flex-col">
+            <motion.header variants={stagger()} initial="hidden" animate="show" className="flex flex-col gap-[6px] pt-[2px]">
+              <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-none text-prussian">
+                {course.name}
+              </motion.h1>
+              <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part="list-summary">
+                {rows.length ? `${rows.length} topic${rows.length === 1 ? "" : "s"} with weak spots` : "No weak spots flagged yet"}
+              </motion.p>
+              <motion.div variants={fadeUp} className="mt-[4px]">
+                <AtlasSwitch slug={course.slug} current="list" />
+              </motion.div>
+            </motion.header>
 
-        {rows.length === 0 ? (
-          <p className="mt-[40px] text-center text-[16px] text-wisteria-deep" data-part="list-empty">
-            Flag what&apos;s hard, or miss a question, and its topic shows up here.
-          </p>
-        ) : (
-          <motion.ul variants={stagger()} initial="hidden" animate="show" className="mt-[24px] flex max-w-[860px] flex-col gap-[12px]" data-part="weak-list">
-            {rows.map(({ topic, status, progress }) => (
-              <motion.li
-                key={topic.id}
-                variants={fadeUp}
-                data-part="weak-row"
-                data-status={status}
-                className="flex items-center gap-[16px] rounded-[20px] bg-parchment px-[22px] py-[14px] lip-4 lip-alice"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[19px] font-bold text-prussian">{topic.name}</p>
-                  <p className="text-[14px] text-wisteria-deep">
-                    {progress.mastered} of {progress.weak} weak spot{progress.weak === 1 ? "" : "s"} mastered
-                  </p>
-                </div>
-                <StatusPill status={status} />
-                <button
-                  type="button"
-                  onClick={() => setDiving({ id: topic.id, name: topic.name })}
-                  aria-label={`Dive into ${topic.name}`}
-                  data-part="weak-row-play"
-                  className="pressable flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-wisteria text-parchment lip-3 lip-wisteria"
-                >
-                  <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true">
-                    <path d="M2 1.5v13l11-6.5z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-                  </svg>
-                </button>
-              </motion.li>
-            ))}
-          </motion.ul>
-        )}
+            {rows.length === 0 ? (
+              <p className="mt-[40px] text-[16px] text-wisteria-deep" data-part="list-empty">
+                Flag what&apos;s hard, or miss a question, and its topic shows up here.
+              </p>
+            ) : (
+              <motion.ul variants={stagger()} initial="hidden" animate="show" className="mt-[24px] flex flex-col gap-[12px]" data-part="weak-list">
+                {rows.map(({ topic, status, progress }) => (
+                  <motion.li
+                    key={topic.id}
+                    variants={fadeUp}
+                    data-part="weak-row"
+                    data-status={status}
+                    className="flex items-center gap-[16px] rounded-[20px] bg-parchment px-[22px] py-[14px] lip-4 lip-alice"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[19px] font-bold text-prussian">{topic.name}</p>
+                      <p className="text-[14px] text-wisteria-deep">
+                        {progress.mastered} of {progress.weak} weak spot{progress.weak === 1 ? "" : "s"} mastered
+                      </p>
+                    </div>
+                    <StatusPill status={status} />
+                    <button
+                      type="button"
+                      onClick={() => setDiving({ id: topic.id, name: topic.name })}
+                      aria-label={`Dive into ${topic.name}`}
+                      data-part="weak-row-play"
+                      className="pressable flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-wisteria text-parchment lip-3 lip-wisteria"
+                    >
+                      <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true">
+                        <path d="M2 1.5v13l11-6.5z" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </motion.li>
+                ))}
+              </motion.ul>
+            )}
+          </div>
+        </div>
       </div>
       <DiveModal
         topic={diving}
