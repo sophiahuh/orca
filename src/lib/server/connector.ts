@@ -24,7 +24,8 @@ import { topUpAfterFlag } from "@/lib/server/flag-top-up";
 import { recordSecurityEvents } from "@/lib/server/security";
 import { checkBudget } from "@/lib/server/usage";
 import { RecordError, supabaseSnapshotStore } from "@/lib/server/snapshot-store";
-import { questionFromRow } from "@/lib/supabase/app-rows";
+import { objectiveFromRow, questionFromRow, relationFromRow, topicFromRow } from "@/lib/supabase/app-rows";
+import { courseObjectiveWeights, examScopeWeights } from "@/lib/course/weights";
 import type { Json } from "@/lib/supabase/database.types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
 
@@ -216,6 +217,18 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     };
   };
 
+  /** The agenda's weights for the course's live objectives: the course weights, times the exam's scope inside its window (src/lib/course/weights.ts). */
+  const effectiveWeights = async (courseId: string, exams: readonly ExamLine[], today: string): Promise<Map<string, number>> => {
+    const [topics, objectives, relations] = await Promise.all([
+      db.from("topics").select().eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("objectives").select().eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("relations").select().eq("owner_id", ownerId).eq("course_id", courseId),
+    ]);
+    for (const r of [topics, objectives, relations]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
+    const computed = courseObjectiveWeights(Object.fromEntries((objectives.data ?? []).map((o) => [o.id, objectiveFromRow(o)])), (topics.data ?? []).map(topicFromRow), (relations.data ?? []).map(relationFromRow));
+    return examScopeWeights(exams.map((e) => ({ courseId, date: e.date, cramming: e.cramming, scope: e.scope })), courseId, today, computed);
+  };
+
   /** Askable questions (not dive-only, not thumbed down) for some objectives, with what the student has answered. */
   const askableFor = async (courseId: string, objectiveIds: readonly string[]) => {
     if (!objectiveIds.length) return { byObjective: new Map<string, QuestionLine[]>(), lastAnswered: new Map<string, string>() };
@@ -343,8 +356,16 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       else if (topicIds?.length) candidates = lines.filter((l) => topicIds.includes(l.topicId)).map((l) => l.id);
       else {
         const focus = new Set(state.examFocus);
+        // Heaviest first within each group: the course weight, times the exam's scope inside its window (contract section 5); weight 0 is never drawn.
+        const weights = await effectiveWeights(courseId, state.exams, state.today);
+        const weightOf = (id: string) => {
+          const w = weights.get(id);
+          if (w === undefined) throw new Error(`No weight computed for objective ${id}`);
+          return w;
+        };
+        const heaviest = (ids: string[]) => ids.map((id, i) => ({ id, i, w: weightOf(id) })).filter((x) => x.w > 0).sort((a, b) => b.w - a.w || a.i - b.i).map((x) => x.id);
         const rest = lines.filter((l) => !state.dueNow.includes(l.id) && (l.status === "unseen" || l.status === "verified"));
-        candidates = [...state.dueNow, ...rest.filter((l) => focus.has(l.topicId)).map((l) => l.id), ...rest.filter((l) => !focus.has(l.topicId) && l.status === "unseen").map((l) => l.id)];
+        candidates = [...state.dueNow.filter((id) => weightOf(id) > 0), ...heaviest(rest.filter((l) => focus.has(l.topicId)).map((l) => l.id)), ...heaviest(rest.filter((l) => !focus.has(l.topicId) && l.status === "unseen").map((l) => l.id))];
       }
       if (!candidates.length) return { questions: [], reason: objectiveIds?.length || topicIds?.length ? "None of those are live objectives of this course." : "This course has no objectives yet: add its material in Orca first." };
       const { byObjective, lastAnswered } = await askableFor(courseId, candidates);
@@ -526,6 +547,15 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       const known = new Set((topics ?? []).map((t) => t.id));
       const unknown = exam.topicIds.filter((id) => !known.has(id));
       if (unknown.length) return { error: `These aren't topic ids in this course: ${unknown.join(", ")}. Use ids from course_state.` };
+      // A scope names live objectives of this course (archived and merged ones are no longer live).
+      if (exam.scope?.objectives.length) {
+        const wanted = [...new Set(exam.scope.objectives.map((o) => o.objectiveId))];
+        const { data: live, error: liveError } = await db.from("objectives").select("id").eq("owner_id", ownerId).eq("course_id", courseId).neq("review", "archived").is("merged_into", null).in("id", wanted);
+        if (liveError) throw new Error(`Couldn't read the objectives: ${liveError.message}`);
+        const known = new Set((live ?? []).map((o) => o.id));
+        const unknownObjectives = wanted.filter((id) => !known.has(id));
+        if (unknownObjectives.length) return { error: `These aren't objective ids in this course: ${unknownObjectives.join(", ")}. Use ids from course_state (detail "full").` };
+      }
       // cramming and scope left out keep what the exam already has (false and null for a new one).
       let kept: { cramming: boolean; scope: ExamScope | null } = { cramming: false, scope: null };
       if (exam.id) {
