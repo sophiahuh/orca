@@ -2,16 +2,19 @@
  * The pure part of add_questions (docs/superpowers/specs/2026-11-10-cram-mode-contracts.md, section
  * 4): a question Claude wrote is held to the same checks as one Orca's writer produced, in code,
  * before it is stored (Phase 4 plan, decision 13). The shape is `GeneratedQuestion`'s (the tier and
- * figure slide, which Claude doesn't give, left out); an exact answer stays plain text and is never
- * an expression (`isExpressionAnswer`); every string is sanitised and refused for HTML, a link, a URL
- * the material doesn't have or instruction-like text (`validateFields`); the math shown must render
- * (`mathProblem`); an anchor that names pages must name ones its material has. Refused questions are
- * dropped with a reason, never repaired.
+ * figure slide, which Claude doesn't give, left out) under the pipeline's structural rules
+ * (`structuralProblem`: four options for multiple choice, two for true or false, a key for a short
+ * answer, an anchor for an objective taught in the material); an exact answer stays plain text and
+ * is never an expression (`isExpressionAnswer`); every string is sanitised and refused for HTML, a
+ * link, a URL the material doesn't have or instruction-like text (`validateFields`); the math shown
+ * must render (`mathProblem`); an anchor that names pages must name ones its material has. A
+ * question for an inferred objective keeps no anchor (it must not present itself as course-specific).
+ * Refused questions are dropped with a reason, never repaired.
  */
 import type { AddQuestion } from "./mcp.ts";
 import type { QuizQuestion } from "../data.ts";
-import { isExpressionAnswer } from "../grading.ts";
 import { locatorPages } from "../course/study.ts";
+import { structuralProblem } from "../pipeline/run.ts";
 import { GeneratedQuestion } from "../pipeline/schemas.ts";
 import { mathProblem } from "../math-text.ts";
 import { validateFields } from "../untrusted/validate.ts";
@@ -30,7 +33,12 @@ const Shape = GeneratedQuestion.omit({ tier: true, figureSlide: true });
 
 const NO_URLS: ReadonlySet<string> = new Set();
 
-export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null): { ok: true; question: CheckedQuestion } | { ok: false; reason: string } {
+/**
+ * `facts`: what is known about the anchor's material (null: none named, or it can't be read).
+ * `inferred`: the objective comes from general knowledge, not the material, so the question needs
+ * no anchor and keeps none.
+ */
+export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null, inferred = false): { ok: true; question: CheckedQuestion } | { ok: false; reason: string } {
   const short = q.kind === "Short answer";
   const shaped = Shape.safeParse({
     objectiveId: q.objectiveId,
@@ -47,12 +55,11 @@ export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null): { ok: 
     const issue = shaped.error.issues[0];
     return { ok: false, reason: `${issue?.path.join(".") || "the question"} ${issue?.message ?? "has the wrong shape"}` };
   }
-  const g = shaped.data;
-  if (!short && (g.answer < 0 || g.answer >= g.options.length)) return { ok: false, reason: "a choice question needs options and the index of the right one" };
-  if (short && !(g.exact && g.exact.length) && !g.rubric) return { ok: false, reason: "a short answer needs exact forms or a rubric" };
-  // Exact answers are compared with what the student types, so they stay plain text (src/lib/pipeline/run.ts).
-  if (g.exact?.some((e) => /\\[(\[]/.test(e))) return { ok: false, reason: "an exact answer is written as LaTeX" };
-  if (short && g.exact?.some(isExpressionAnswer)) return { ok: false, reason: "an algebraic or Boolean expression as an exact answer (give a rubric or make it multiple choice)" };
+  // The pipeline's own rules (src/lib/pipeline/run.ts): the option counts and a valid answer, a key for a
+  // short answer, plain-text exact answers that are never expressions, and an anchor unless the objective is inferred.
+  const g = { ...shaped.data, tier: "retrieval" as const, figureSlide: null };
+  const structural = structuralProblem(g, inferred);
+  if (structural) return { ok: false, reason: structural };
 
   const texts = validateFields(
     {
@@ -98,7 +105,8 @@ export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null): { ok: 
           }
         : {}),
       explanation: v.explanation,
-      ...(g.anchor ? { anchor: { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } } : {}),
+      // Questions for inferred objectives must not present themselves as course-specific.
+      ...(g.anchor && !inferred ? { anchor: { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } } : {}),
       source: "claude",
     },
   };

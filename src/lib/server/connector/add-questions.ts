@@ -1,8 +1,8 @@
 /**
  * add_questions (docs/superpowers/specs/2026-11-10-cram-mode-contracts.md, section 4): questions
  * Claude wrote, validated like generated questions (`checkQuestion` in src/lib/connector/
- * question-check.ts: GeneratedQuestion's shape, isExpressionAnswer, the math render check, the
- * sanitiser), stored with source claude, tier null, under the objective's current topic after the
+ * question-check.ts: GeneratedQuestion's shape and the pipeline's structural rules, isExpressionAnswer,
+ * the math render check, the sanitiser), stored with source claude, tier null, under the objective's current topic after the
  * topic's last question, and materialId from anchor.materialId when given and live. Saved the way a
  * job saves its questions: the course loaded through the job store, the new questions appended to
  * the bank, and `structureRows` + `save_structure` writing only the rows that are new.
@@ -58,7 +58,7 @@ export async function addQuestions(db: OrcaSupabase, ownerId: string, courseId: 
       continue;
     }
     const materialId = anchored && live.has(anchored) ? anchored : undefined;
-    const checked = checkQuestion(q, materialId ? (facts.get(materialId) ?? null) : null);
+    const checked = checkQuestion(q, materialId ? (facts.get(materialId) ?? null) : null, objective.origin === "inferred");
     if (!checked.ok) {
       refused.push({ index, reason: checked.reason });
       continue;

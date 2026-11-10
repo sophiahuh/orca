@@ -43,6 +43,7 @@ export function ExamCard({ course, mastery }: { course: Course; mastery: CourseM
   const closeSetup = useCallback(() => setSetup(false), []);
   const today = dayKey(new Date(nowMs).toISOString());
   const exam = cardExam(exams, course.id, today);
+  const connected = useConnectorStatus(Boolean(exam?.cramming));
   if (!exam) return null;
   const catalogue = objectives[course.id] ?? {};
   const covered = examObjectives(exam, course.topics, catalogue);
@@ -74,9 +75,15 @@ export function ExamCard({ course, mastery }: { course: Course; mastery: CourseM
                 Verified: {share}%.
               </p>
               <div className="mt-[4px] flex flex-wrap items-center gap-[8px]">
-                <Link href="/settings#connector" data-part="study-with-claude" className={PILL}>
-                  Study with Claude
-                </Link>
+                {connected ? (
+                  <span className="text-[13px] font-medium text-wisteria-deep" data-part="study-with-claude">
+                    Study with Claude: it has this exam&apos;s scope.
+                  </span>
+                ) : (
+                  <Link href="/settings#connector" data-part="study-with-claude" className={PILL}>
+                    Study with Claude
+                  </Link>
+                )}
                 <button type="button" onClick={() => setSetup(true)} data-part="cram-edit" className={PILL}>
                   Edit scope
                 </button>
@@ -95,6 +102,32 @@ export function ExamCard({ course, mastery }: { course: Course; mastery: CourseM
       <CramSetup exam={setup ? exam : null} course={course} covered={covered} catalogue={catalogue} mastery={mastery} onClose={closeSetup} />
     </>
   );
+}
+
+/**
+ * Whether the student's Claude is connected (a connector token exists), read once the card shows
+ * the cramming state: null until known. Study with Claude links to Settings only when it isn't.
+ */
+function useConnectorStatus(wanted: boolean): boolean | null {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!wanted) return;
+    let live = true;
+    fetch("/api/connector", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Couldn't read the connector: ${res.status}`);
+        const body = (await res.json()) as { connected: boolean };
+        if (live) setConnected(body.connected);
+      })
+      .catch(() => {
+        // Unknown stays null: the link to Settings is shown, which works either way.
+        if (live) setConnected(null);
+      });
+    return () => {
+      live = false;
+    };
+  }, [wanted]);
+  return connected;
 }
 
 /**

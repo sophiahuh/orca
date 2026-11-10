@@ -22,19 +22,37 @@ export const SERVER_INFO = { name: "orca", version: "0.4" } as const;
 /** What Claude is told when it connects: the study session as a script; the tool descriptions do the rest. */
 export const INSTRUCTIONS =
   "Orca keeps this student's courses: what each exam covers, every learning objective and how well " +
-  "the student can do it, and a bank of questions written from their course material. Run a study " +
-  "session like this. 1) Call course_state first (detail summary for a check-in, full when you need " +
-  "objective ids); it says what's due, what the next exam covers (examFocus), whether Orca's daily model " +
-  "budget is spent (budget) and whether questions are being written (writing). 2) Ask one question at a " +
-  "time from next_questions (it picks what's due, then exam focus, then the heaviest unflagged objectives; " +
-  "pass objectiveIds or topicIds to steer it). 3) Send the student's answer, in their words, to " +
-  "check_answer: Orca grades it, records it and returns the key and explanation; teach from those, then go " +
-  "to the next question. If check_answer says needsSelfGrade, grade against the key it returns and call " +
-  "record_answer. Never record an answer the student didn't give. 4) When next_questions returns pending, " +
-  "Orca is writing questions: teach from the material meanwhile and ask again after retryAfterSeconds. When " +
-  "budget.ok is false, say so: Orca can't write or grade prose until it resets (resetsAt). 5) Call flag_check " +
-  "only for objectives the student asked about or got wrong in this chat, and set_exam when the student " +
-  "says what an exam covers or when it's cancelled.";
+  "the student can do it, a bank of questions from their course material, and a vault of past and " +
+  "practice exams kept for a practice test. Orca stores, counts and schedules; you teach. Run a " +
+  "study session like this. 1) Call course_state first (detail summary for a check-in, full when " +
+  "you need objective ids); it says what's due, the next exam's topics (examFocus), the course's " +
+  "mode, which exam is being crammed for (cramming), the vault, whether Orca's daily model budget " +
+  "is spent (budget) and whether questions are being written (writing). Follow mode: normal, a " +
+  "short review of what's due; exam-week, work through the exam's scope, heaviest first; day-of, a " +
+  "quick pass over what's weak and nothing new. 2) Setup: when an exam is near and has no scope, " +
+  "ask what the professor said it covers, whether there's a practice exam or study guide " +
+  "(add_material: pasted text, or file true for an upload link; past and practice exams are held " +
+  "back), and what the student is worried about (flag_check with strength struggled); then record " +
+  "the scope with set_exam (cramming true when they're cramming). Call set_exam too when the " +
+  "student says what an exam covers or when it's cancelled. 3) Check first: before explaining, ask " +
+  "one question at a time from next_questions (it picks what's due, then exam focus, then the " +
+  "heaviest unflagged objectives; pass objectiveIds or topicIds to steer it). Before revealing an " +
+  "answer, ask how sure they are (confidence 1 to 3). 4) Send the student's answer, in their words, " +
+  "to check_answer with their confidence and the help you gave: Orca grades it, records it and " +
+  "returns the key and explanation; teach from those, then go to the next question. If " +
+  "check_answer says needsSelfGrade, grade against the key it returns and call record_answer, " +
+  "reporting help: none, hint, or shown when you revealed the answer first. Never record an answer " +
+  "the student didn't give. 5) Call material_for before teaching an objective or writing questions, " +
+  "so you teach what the course teaches, in its notation. When the bank is thin, or budget.ok is " +
+  "false, write questions yourself with add_questions, anchored to material_for's pieces, then " +
+  "grade them against the key you stored and report help. Record a problem you set and judged, or " +
+  "what the student did (got-it, lost, asked-answer, asked-harder), with log_evidence. 6) When " +
+  "next_questions returns pending, Orca is writing questions: teach from the material meanwhile " +
+  "and ask again after retryAfterSeconds, or write them yourself. When budget.ok is false, say so: " +
+  "Orca can't write or grade prose until it resets (resetsAt). 7) Never open, quote or ask from a " +
+  "vault item: it's the student's practice test. Name it and say when to sit it. 8) Call flag_check " +
+  "only for objectives the student asked about or got wrong in this chat. 9) Every few answers, " +
+  "send a one-line progress note unasked: what's verified, what's still weak, what's next.";
 
 /* ── Tool results: plain data the implementations return; the protocol wraps them ── */
 
@@ -538,9 +556,10 @@ export const TOOLS = [
     name: "add_questions",
     description:
       "Store questions you wrote for the student's objectives, from the material (material_for) and in the " +
-      "course's notation. Orca validates each like its own (a choice question has 2 to 4 options and the right " +
-      "index; a short answer has exact forms or a rubric; math between \\( \\) must render; an exact answer " +
-      "is never an expression) and lists the ones it refused with why. Stored questions come back from " +
+      "course's notation. Orca validates each like its own (multiple choice has four options and the right " +
+      "index, true or false two; a short answer has exact forms or a rubric; math between \\( \\) must render; " +
+      "an exact answer is never an expression; a question for an objective the material teaches has an anchor " +
+      "from material_for) and lists the ones it refused with why. Stored questions come back from " +
       "next_questions and questions_for and are graded by check_answer like any other.",
     inputSchema: {
       type: "object",
@@ -556,7 +575,7 @@ export const TOOLS = [
               objectiveId: UUID,
               kind: { type: "string", enum: QUESTION_KINDS },
               prompt: { type: "string", maxLength: TEXT_CHARS },
-              options: { type: "array", items: { type: "string", maxLength: SHORT_CHARS }, maxItems: 4, description: "2 to 4 choices for a choice question; omit for short answer." },
+              options: { type: "array", items: { type: "string", maxLength: SHORT_CHARS }, maxItems: 4, description: "Four choices for multiple choice, two for true or false; omit for short answer." },
               answer: { type: "integer", minimum: 0, maximum: 3, description: "Index into options; omit for short answer." },
               exact: { type: "array", items: { type: "string", maxLength: 120 }, maxItems: 12, description: "Short answer with an exact form: every accepted spelling." },
               rubric: {

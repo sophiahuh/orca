@@ -1,5 +1,19 @@
 # Cram mode: shared contracts (2026-11-10)
 
+> **Status (2026-11-10, integration):** shipped on branch `cram-mode` (PR to `main` open, not merged).
+> Foundation: migration `20261110090000_cram_mode.sql` (the `help` and `signal` column checks are named
+> `evidence_events_help_values_check` / `evidence_events_signal_values_check`, since Postgres's default
+> names collide with the table-level ones named below), pgTAP `19_cram_mode.test.sql`, the types
+> (section 2), mastery rules v4 (section 3, `tests/mastery/cram-rules.test.ts`) and the connector's
+> eleven tools (section 4). B1 hold-back vault, B2 `material_for` / `add_questions` / `add_material`,
+> B3 evidence (`record_answer` with `help` and `corrected`, `check_answer` storing the report and
+> returning `errorType`, `log_evidence`, the rubric grader's `errorType`) and B4 exam scope weights,
+> the exam card and cram setup are all built. `INSTRUCTIONS` rewritten per section 4. Beyond this file:
+> `examFocus` also lists a cramming exam's topics (cramming is the window); `add_questions` applies the
+> pipeline's structural rules too (four options for multiple choice, an anchor for a material objective)
+> and refuses a question anchored to a held-back material; `course_state.vault` lists every
+> non-removed held-back material. Open product questions: `docs/TO-DISCUSS.md` (2026-11-10).
+
 The owner's plan ("Orca Cram Mode Plan", 2026-11-09) and the decisions of 2026-11-10 (living doc
 "Orca Cram Mode: how it works"). This file is the single source of truth for every surface more
 than one workstream touches. Build exactly what it says; where it is silent, follow the nearest

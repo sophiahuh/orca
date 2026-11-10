@@ -1,7 +1,8 @@
 /**
  * The Claude connector against Supabase: the student's secret link (one per account, only its hash
- * stored) and the five tools in `src/lib/connector/mcp.ts` read and written with the service-role
- * client, every query scoped to that student.
+ * stored) and the tools in `src/lib/connector/mcp.ts` (v0.4; the material, question and evidence
+ * tools live one per file under `connector/`) read and written with the service-role client, every
+ * query scoped to that student.
  */
 import { createHash, randomBytes } from "node:crypto";
 import type { AnswerKey, AnswerReport, CheckedAnswer, ConnectorTools, CourseMode, CourseState, ExamLine, FlagCheckResult, NextQuestions, ObjectiveLine, QuestionLine, RecordedAnswer, SelfGradeNeeded, TopicLine, VaultLine, WritingLine } from "@/lib/connector/mcp";
@@ -187,8 +188,9 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     const weekOut = new Date(at.getTime() + AGENDA_RULES.examWindowDays * 86_400_000).toISOString().slice(0, 10);
     // The exams table holds scope to an object (or null); its shape is the app's ExamScope.
     const examLines: ExamLine[] = (exams.data ?? []).map((e) => ({ id: e.id, title: e.title, date: e.date, topicIds: e.topic_ids, cramming: e.cramming, scope: e.scope as unknown as ExamScope | null, mode: examMode(e, today, weekOut) }));
-    // The next week's exams' topics; an exam that names none covers every topic.
-    const examFocus = [...new Set(examLines.filter((e) => e.date >= today && e.date <= weekOut).flatMap((e) => (e.topicIds.length ? e.topicIds : liveTopics.map((t) => t.id))))];
+    // The topics of the exams in the window (the next week's, and one being crammed for whatever its date:
+    // cramming is the window, contract section 5); an exam that names none covers every topic.
+    const examFocus = [...new Set(examLines.filter((e) => e.cramming || (e.date >= today && e.date <= weekOut)).flatMap((e) => (e.topicIds.length ? e.topicIds : liveTopics.map((t) => t.id))))];
     const mode = examLines.reduce<CourseMode>((m, e) => (MODE_ORDER[e.mode] > MODE_ORDER[m] ? e.mode : m), "normal");
     const cramming = examLines.find((e) => e.cramming)?.id ?? null;
     const vaultLines: VaultLine[] = (vault.data ?? []).map((m) => ({ materialId: m.id, filename: m.filename, type: m.type as MaterialType }));

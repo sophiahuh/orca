@@ -31,7 +31,7 @@ function db() {
   });
 }
 
-const choice: AddQuestion = { objectiveId: OBJ, kind: "Multiple choice", prompt: "Which adder has no ripple?", options: ["Ripple carry", "Carry-save", "Serial"], answer: 1, explanation: "Carry-save defers the carries.", anchor: { locator: "slide 4", excerpt: "defer the carries", materialId: L1 } };
+const choice: AddQuestion = { objectiveId: OBJ, kind: "Multiple choice", prompt: "Which adder has no ripple?", options: ["Ripple carry", "Carry-save", "Serial", "Carry-lookahead"], answer: 1, explanation: "Carry-save defers the carries.", anchor: { locator: "slide 4", excerpt: "defer the carries", materialId: L1 } };
 const short: AddQuestion = { objectiveId: OBJ, kind: "Short answer", prompt: "Name the adder that defers carries.", exact: ["carry-save"], explanation: "Carry-save.", anchor: { locator: "problem 2", excerpt: "x", materialId: GONE } };
 
 test("add_questions stores the sound questions through save_structure with source claude, no tier, the objective's current topic, after its last question, and the anchor's material when live", async () => {

@@ -158,7 +158,8 @@ async function resolve(
 }
 
 /** Problems that make a generated question unusable, before any model checks it. */
-function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | null {
+/** The shape rules of a question Orca stores (also applied to one Claude writes, src/lib/connector/question-check.ts). */
+export function structuralProblem(q: GeneratedQuestion, inferred: boolean): string | null {
   if (q.kind === "Multiple choice" && (q.options.length !== 4 || q.answer < 0 || q.answer > 3)) return "multiple choice needs four options and a valid answer";
   if (q.kind === "True or false" && (q.options.length !== 2 || q.answer < 0 || q.answer > 1)) return "true/false needs two options and a valid answer";
   if (q.kind === "Short answer" && !(q.exact && q.exact.length) && !q.rubric) return "short answer with neither an exact answer nor a rubric";
