@@ -100,7 +100,7 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
             {topics} topic{topics === 1 ? "" : "s"} · {connections} connection{connections === 1 ? "" : "s"}
           </motion.p>
           <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
-            <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />
+            <ProgressBar value={pct} height={12} label="Course progress" track="alice" />
           </motion.div>
           <motion.div variants={fadeUp} className="pointer-events-auto mt-[4px] flex items-center gap-[10px]">
             <AtlasSwitch slug={course.slug} current="atlas" />
