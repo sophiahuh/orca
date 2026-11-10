@@ -5,9 +5,10 @@ import type { Material, PipelineRun } from "@/lib/data";
 import { hiddenNote, pauseUploads, removeMaterial, retryUpload, stopUpload } from "@/lib/uploads";
 import { progressMessage } from "@/lib/pipeline/progress-text";
 import { isFinished, useRun } from "@/hooks/useRun";
-import { jobAhead } from "@/lib/course/review";
 import { useOrca } from "@/lib/store";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { IconPause, IconPlay, IconTrash } from "@/components/icons";
 import { HardSlides } from "@/components/review/HardSlides";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
@@ -32,7 +33,7 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
   const { run: live } = useRun(focused || isFinished(stored) ? null : stored.id);
   // A finished stored row wins: useRun keeps its last live row when it stops following, which would show a stopped run as still building.
   const run = isFinished(stored) ? stored : (live ?? stored);
-  const { runs, courses, refresh } = useOrca();
+  const { courses, refresh } = useOrca();
   const [pickingSlides, setPickingSlides] = useState(openSlides);
   const name = material?.filename ?? "An upload";
   const course = material ? courses.find((c) => c.id === material.courseId) : undefined;
@@ -72,9 +73,15 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
           </button>
         </>
       ) : (
-        <button type="button" onClick={() => setConfirming("remove")} className="font-bold text-wisteria-deep underline underline-offset-2" data-part="remove-material">
-          {unbuilt ? "Delete upload" : "Remove from course"}
-        </button>
+        unbuilt ? (
+          <Button size="sm" variant="danger" icon={<IconTrash size={18} />} onClick={() => setConfirming("remove")} data-part="remove-material">
+            Delete upload
+          </Button>
+        ) : (
+          <button type="button" onClick={() => setConfirming("remove")} className="font-bold text-wisteria-deep underline underline-offset-2" data-part="remove-material">
+            Remove from course
+          </button>
+        )
       )}
     </span>
   );
@@ -131,13 +138,12 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
     return (
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-paused")} data-status={run.status} role="status">
         {head}
-        <span className="flex flex-wrap items-center gap-[10px] text-[14px] font-semibold text-wisteria-deep">
-          Paused: Orca won&apos;t build from it until you resume it. Later uploads go ahead of it meanwhile.
-          <button type="button" onClick={() => void setPaused(false)} className="font-bold text-prussian underline underline-offset-2" data-part="resume-upload">
+        <div className="flex flex-wrap items-center gap-[10px]">
+          <Button size="sm" variant="secondary" icon={<IconPlay size={18} />} onClick={() => void setPaused(false)} data-part="resume-upload">
             Resume
-          </button>
-        </span>
-        {removeOffer}
+          </Button>
+          {removeOffer}
+        </div>
         {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
@@ -147,17 +153,18 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
       <Card radius={20} lip={4} className="flex flex-col gap-[10px] px-[22px] py-[18px]" data-part={part("run-progress")} data-status={run.status} role="status">
         {head}
         <ProgressBar value={run.status === "running" ? stageShare(run.progress?.stage) : 0.05} height={10} label="Building" />
-        <span className="flex flex-wrap items-center gap-[10px] text-[14px] font-semibold text-wisteria-deep">
-          <span>
-            {run.status === "running" ? progressMessage(run.progress) : jobAhead(runs, run) ? "Waiting for your other upload to finish; this one starts next." : "Starting…"} This takes a few minutes. You can leave this page; it keeps going.
-          </span>
-          {run.status === "queued" && (
-            <button type="button" onClick={() => void setPaused(true)} className="font-bold text-prussian underline underline-offset-2" data-part="pause-upload">
+        {run.status === "queued" && (
+          <div className="flex flex-wrap items-center gap-[10px]">
+            <Button size="sm" variant="secondary" icon={<IconPause size={18} />} onClick={() => void setPaused(true)} data-part="pause-upload">
               Pause
-            </button>
-          )}
-          {run.status === "running" &&
-            (confirming === "stop" ? (
+            </Button>
+            {removeOffer}
+          </div>
+        )}
+        {run.status === "running" && (
+          <span className="flex flex-wrap items-center gap-[10px] text-[14px] font-semibold text-wisteria-deep">
+            <span>{progressMessage(run.progress)}</span>
+            {confirming === "stop" ? (
               <>
                 <span className="text-prussian">Stop it? What it has built so far is dropped; the file stays, so uploading it again retries.</span>
                 <button type="button" onClick={() => void act("stop")} className="font-bold text-bad-text underline underline-offset-2" data-part="stop-confirm">
@@ -171,9 +178,9 @@ export function UploadCard({ run: stored, material, focused = false, openSlides 
               <button type="button" onClick={() => setConfirming("stop")} className="font-bold text-prussian underline underline-offset-2" data-part="stop-upload">
                 Stop
               </button>
-            ))}
-        </span>
-        {run.status === "queued" && removeOffer}
+            )}
+          </span>
+        )}
         {pausing && <span className="text-[13px] font-semibold text-prussian">{pausing}</span>}
       </Card>
     );
