@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { islandLevel, topicProgress } from "../../src/lib/mastery/progress.ts";
+import { islandLevel, topicProgress, weakSpotStatus } from "../../src/lib/mastery/progress.ts";
 import type { ObjectiveState, ObjectiveStatus } from "../../src/lib/mastery/types.ts";
 
 const s = (objectiveId: string, status: ObjectiveStatus): ObjectiveState => ({
@@ -56,4 +56,15 @@ test("fading objectives don't hold an island's level", () => {
 test("an open check is a weak spot to the student: counted in the topic's weak spots and it lifts the island off uncharted (owner, 2026-11-10)", () => {
   assert.deepEqual(topicProgress(["a", "b"], map(s("a", "check-due"), s("b", "unseen"))), { status: "in-progress", mastered: 0, inRotation: 0, weak: 1, objectives: 2 });
   assert.equal(islandLevel([s("a", "check-due"), s("b", "unseen")]), "sprouting");
+});
+
+test("the List view's status: none without weak spots, needs review until a weak spot earns credit, mastered when all are held", () => {
+  const credited = (id: string, status: ObjectiveStatus): ObjectiveState => ({ ...s(id, status), credit: 1 });
+  assert.equal(weakSpotStatus(["a", "b"], map(s("a", "unseen"), s("b", "verified"))), null);
+  assert.equal(weakSpotStatus(["a", "b"], map(s("a", "learning"), s("b", "check-due"))), "needs-review");
+  assert.equal(weakSpotStatus(["a"], map(s("a", "mixed-up"))), "needs-review", "a miss with no credit yet is still unstarted");
+  assert.equal(weakSpotStatus(["a", "b"], map(credited("a", "learning"), s("b", "learning"))), "in-progress");
+  assert.equal(weakSpotStatus(["a"], map(s("a", "fading"))), "in-progress", "a mastered weak spot due for its check is in progress");
+  assert.equal(weakSpotStatus(["a", "b"], map(s("a", "mastered"), s("b", "learning"))), "in-progress");
+  assert.equal(weakSpotStatus(["a", "b", "c"], map(s("a", "mastered"), s("b", "retired"), s("c", "unseen"))), "mastered");
 });
