@@ -5,6 +5,7 @@ import { MotionConfig } from "motion/react";
 import { usePathname } from "next/navigation";
 import { AvatarPreviewProvider } from "@/components/brand/avatar-preview";
 import { FlagTopUpWatcher } from "@/components/layout/FlagTopUpWatcher";
+import { OnboardingTips } from "@/components/onboarding/OnboardingTips";
 import { UploadToasts } from "@/components/layout/UploadToasts";
 import { LoadingScreen } from "@/components/layout/LoadingScreen";
 import { TopBar } from "@/components/layout/TopBar";
@@ -35,9 +36,12 @@ function Loaded({ children }: { children: React.ReactNode }) {
       <SaveStatus />
       <FlagTopUpWatcher />
       {status === "ready" && (
-        <Suspense fallback={null}>
-          <UploadToasts />
-        </Suspense>
+        <>
+          <Suspense fallback={null}>
+            <UploadToasts />
+          </Suspense>
+          <OnboardingTips />
+        </>
       )}
     </>
   );
