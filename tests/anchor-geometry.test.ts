@@ -1,0 +1,42 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { GAP, MARGIN, placeBubble, spotlightClip } from "../src/lib/anchor-geometry.ts";
+
+const viewport = { width: 1194, height: 834 };
+const bubble = { width: 340, height: 160 };
+
+test("the bubble goes below its target, centred on it, when there is room", () => {
+  const p = placeBubble({ left: 400, top: 100, width: 100, height: 40 }, bubble, viewport);
+  assert.deepEqual(p, { side: "below", left: 400 + 50 - 170, top: 100 + 40 + GAP });
+});
+
+test("near the right edge it stays on screen", () => {
+  const p = placeBubble({ left: 1050, top: 28, width: 120, height: 44 }, bubble, viewport);
+  assert.equal(p.side, "below");
+  assert.equal(p.left, viewport.width - bubble.width - MARGIN);
+});
+
+test("at the bottom of the screen it goes above", () => {
+  const p = placeBubble({ left: 900, top: 770, width: 48, height: 48 }, bubble, viewport);
+  assert.equal(p.side, "above");
+  assert.equal(p.top, 770 - GAP - bubble.height);
+});
+
+test("beside a target as tall as the screen it goes to the side with room", () => {
+  const p = placeBubble({ left: 854, top: 0, width: 340, height: 834 }, bubble, viewport);
+  assert.equal(p.side, "left");
+  assert.equal(p.left, 854 - GAP - bubble.width);
+});
+
+test("with no room anywhere it is clamped onto the screen", () => {
+  const p = placeBubble({ left: 0, top: 0, width: 1194, height: 834 }, bubble, viewport);
+  assert.ok(p.left >= MARGIN && p.left + bubble.width <= viewport.width - MARGIN);
+  assert.ok(p.top >= MARGIN && p.top + bubble.height <= viewport.height - MARGIN);
+});
+
+test("the spotlight is the whole screen with a padded hole at the target", () => {
+  assert.equal(
+    spotlightClip({ left: 100.4, top: 50, width: 80, height: 30 }, 6),
+    "polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 94px 44px, 94px 86px, 186px 86px, 186px 44px, 94px 44px)",
+  );
+});
