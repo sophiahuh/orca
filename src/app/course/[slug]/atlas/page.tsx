@@ -10,6 +10,7 @@ import { UploadsLink } from "@/components/course/UploadsLink";
 import { TopicGraph } from "@/components/atlas/TopicGraph";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackButton } from "@/components/layout/BackButton";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DEFAULT_CONFIG, trailTopics } from "@/lib/data";
 import { topicGraph, topicStrength } from "@/lib/course/topic-graph";
 import { useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
@@ -67,6 +68,14 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
     }
   };
 
+  // The same header as Path (title, line, progress bar, then the pills), so the pills sit at the same height on every tab.
+  const trail = trailTopics(course).map((t) => {
+    const p = m.topics.get(t.id);
+    if (!p) throw new Error(`No progress computed for topic ${t.id}`);
+    return p;
+  });
+  const weak = trail.reduce((sum, p) => sum + p.weak, 0);
+  const pct = weak ? trail.reduce((sum, p) => sum + p.mastered, 0) / weak : 0;
   const topics = graph.nodes.length;
   const connections = graph.edges.length;
   return (
@@ -83,15 +92,17 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
         <motion.div variants={fadeUp} className="pointer-events-auto">
           <BackButton href={`/course/${course.slug}`} />
         </motion.div>
-        <div className="flex flex-col gap-[4px] pt-[2px]">
-          <motion.h1 variants={fadeUp} className="text-[28px] font-bold leading-none text-prussian">
+        <div className="flex flex-col gap-[6px] pt-[2px]">
+          <motion.h1 variants={fadeUp} className="text-[34px] font-bold leading-none text-prussian">
             {course.name}
           </motion.h1>
-          <motion.p variants={fadeUp} className="text-[13px] font-semibold text-wisteria-deep" data-part="atlas-summary">
+          <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part="atlas-summary">
             {topics} topic{topics === 1 ? "" : "s"} · {connections} connection{connections === 1 ? "" : "s"}
-
           </motion.p>
-          <motion.div variants={fadeUp} className="pointer-events-auto mt-[6px] flex items-center gap-[10px]">
+          <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
+            <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />
+          </motion.div>
+          <motion.div variants={fadeUp} className="pointer-events-auto mt-[4px] flex items-center gap-[10px]">
             <AtlasSwitch slug={course.slug} current="atlas" />
             <UploadsLink course={course} />
             {topics > 1 && (

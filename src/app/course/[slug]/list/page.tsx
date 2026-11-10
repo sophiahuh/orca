@@ -10,6 +10,7 @@ import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
 import { UploadsLink } from "@/components/course/UploadsLink";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackButton } from "@/components/layout/BackButton";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { DEFAULT_CONFIG, trailTopics } from "@/lib/data";
 import { useCourse, useMasteryByCourse, useOrca } from "@/lib/store";
 import { fadeUp, stagger } from "@/lib/motion";
@@ -47,6 +48,15 @@ export default function ListPage({ params }: PageProps<"/course/[slug]/list">) {
     return status ? [{ topic, status, progress }] : [];
   });
 
+  // The same header as Path (title, line, progress bar, then the pills), so the pills sit at the same height on every tab.
+  const trail = trailTopics(course).map((t) => {
+    const p = m.topics.get(t.id);
+    if (!p) throw new Error(`No progress computed for topic ${t.id}`);
+    return p;
+  });
+  const weak = trail.reduce((sum, p) => sum + p.weak, 0);
+  const pct = weak ? trail.reduce((sum, p) => sum + p.mastered, 0) / weak : 0;
+
   return (
     <AppShell bg="ocean">
       <div className="absolute inset-0 overflow-auto px-[28px] pb-[28px] pt-[28px]">
@@ -63,6 +73,9 @@ export default function ListPage({ params }: PageProps<"/course/[slug]/list">) {
               <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part="list-summary">
                 {rows.length ? `${rows.length} topic${rows.length === 1 ? "" : "s"} with weak spots` : "No weak spots flagged yet"}
               </motion.p>
+              <motion.div variants={fadeUp} className="mt-[6px] w-[240px]">
+                <ProgressBar value={pct} height={12} label="Course progress" track="parchment" />
+              </motion.div>
               <motion.div variants={fadeUp} className="mt-[4px] flex items-center gap-[10px]">
                 <AtlasSwitch slug={course.slug} current="list" />
                 <UploadsLink course={course} />
