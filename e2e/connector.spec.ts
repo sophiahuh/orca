@@ -204,7 +204,16 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   const far = new Date(Date.now() + 12 * 86_400_000).toISOString().slice(0, 10);
   const exam = toolText(await call(page, url, "set_exam", { courseId: F.course, title: "Final", date: far, topicIds: [], cramming: true })) as { id: string; mode: string };
   expect(exam.mode).toBe("exam-week");
-  expect(toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" }))).toMatchObject({ mode: "exam-week", cramming: exam.id });
+  expect(toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" }))).toMatchObject({ mode: "exam-week", cramming: exam.id, plan: null });
+  // The time budget (set at cram setup, or here) makes course_state carry the derived plan and the scope's coverage.
+  const budgeted = toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { objectives: [], sources: [], budget: { hours: 6, daysOut: [], since: new Date().toISOString() } } })) as { scope: { budget: { hours: number } } };
+  expect(budgeted.scope.budget.hours).toBe(6);
+  const planned = toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { plan: { line: string; daysLeft: number; hoursLeft: number }; coverage: { total: number; verified: number }; topErrors: unknown[] };
+  expect(planned.plan.line).toMatch(/days to the exam/);
+  expect(planned.plan.daysLeft).toBeGreaterThan(10);
+  expect(planned.plan.hoursLeft).toBe(6);
+  expect(planned.coverage.total).toBeGreaterThan(0);
+  expect(planned.topErrors).toEqual([]);
   // A prose answer isn't graded by Orca's model: the key comes back for Claude to grade.
   const held = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." })) as { needsSelfGrade: boolean; reason: string; rubric?: { requiredIdeas: string[] } };
   expect(held.needsSelfGrade).toBe(true);
