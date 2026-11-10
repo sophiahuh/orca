@@ -19,6 +19,12 @@ function fakeTools() {
   const TOPIC = "e0000000-0000-4000-8000-000000000001";
   const OBJ = "f0000000-0000-4000-8000-000000000001";
   const Q = "a0000000-0000-4000-8000-000000000001";
+  const MATERIAL = "d0000000-0000-4000-8000-000000000001";
+  /** What the server does for a summary: each exam's scope by its size instead of its entries. */
+  const summarised = (e: ExamLine): ExamLine => {
+    const { scope, ...rest } = e;
+    return { ...rest, scopeSummary: scope ? { inScope: scope.objectives.filter((o) => o.weight > 0).length, excluded: scope.objectives.filter((o) => o.weight === 0).length, sources: scope.sources, ...(scope.budget ? { budget: scope.budget } : {}) } : null };
+  };
   const tools: ConnectorTools = {
     async courses() {
       return [{ id: COURSE, name: "ALD" }];
@@ -28,9 +34,14 @@ function fakeTools() {
       return {
         course: { id: COURSE, name: "ALD" },
         today: "2026-11-04",
-        exams,
+        exams: options.detail === "summary" ? exams.map(summarised) : exams,
         topics: [{ id: TOPIC, name: "Adders", objectives: 1, weak: 0, askable: 1 }],
-        ...(options.detail === "summary" ? {} : { objectives: [{ id: OBJ, topicId: TOPIC, topic: "Adders", name: "Explain carry-save", status: "unseen", recall: null, questions: 1, upcoming: false }] }),
+        ...(options.detail === "summary"
+          ? {}
+          : {
+              objectives: [{ id: OBJ, topicId: TOPIC, topic: "Adders", name: "Explain carry-save", status: "unseen", recall: null, questions: 1, materialIds: [MATERIAL] }],
+              materials: [{ id: MATERIAL, filename: "L11_Adders.pdf", type: "Lecture" as const, heldBack: false }],
+            }),
         dueNow: [OBJ],
         examFocus: [],
         budget: { ok: true, resetsAt: "2026-11-05T05:00:00.000Z" },
@@ -110,7 +121,7 @@ function fakeTools() {
       screened.push(hits);
     },
   };
-  return { tools, recorded, checked, exams, flagged, screened, materialAsked, added, materials, logged, COURSE, TOPIC, OBJ, Q };
+  return { tools, recorded, checked, exams, flagged, screened, materialAsked, added, materials, logged, COURSE, TOPIC, OBJ, Q, MATERIAL };
 }
 
 const rpc = (method: string, params?: unknown, id: number | string | null = 1) => ({ jsonrpc: "2.0", id, method, ...(params === undefined ? {} : { params }) });
@@ -562,4 +573,30 @@ test("course_state carries the plan, coverage and top errors, and the instructio
   assert.ok(tool);
   const scope = (tool.inputSchema.properties as Record<string, { properties?: Record<string, unknown> }>).scope;
   assert.ok(scope.properties && "budget" in scope.properties, "the schema offers the budget");
+});
+
+/* ── Cram scope (2026-11-10, after the step 8 deploy): materials, materialIds, the trimmed summary, the assumed budget ── */
+
+test("course_state full lists the materials and each objective's materialIds; summary carries each exam's scope by its size; the instructions map files to materials and say when the budget was assumed", async () => {
+  const { tools, COURSE, OBJ, MATERIAL } = fakeTools();
+  const full = text(await handleRpc(call("course_state", { courseId: COURSE }), tools, "s"));
+  assert.deepEqual(full.materials, [{ id: MATERIAL, filename: "L11_Adders.pdf", type: "Lecture", heldBack: false }]);
+  assert.deepEqual((full.objectives as Array<{ id: string; materialIds: string[] }>).find((o) => o.id === OBJ)?.materialIds, [MATERIAL]);
+  const quote = "lectures 11 to 16";
+  const scope = { objectives: [{ objectiveId: OBJ, weight: 1, evidence: [{ signal: "professor", quote }] }, { objectiveId: "f0000000-0000-4000-8000-000000000002", weight: 0, evidence: [{ signal: "professor", quote: "not in the files the exam covers" }] }], sources: ["professor"], materialIds: [MATERIAL, MATERIAL] };
+  const saved = text(await handleRpc(call("set_exam", { courseId: COURSE, title: "Midterm 2", date: "2026-11-20", topicIds: [], cramming: true, scope }), tools, "s")) as { scope: { materialIds: string[] } };
+  assert.deepEqual(saved.scope.materialIds, [MATERIAL], "the materials picked are stored, deduplicated");
+  const summary = text(await handleRpc(call("course_state", { courseId: COURSE, detail: "summary" }), tools, "s")) as { exams: Array<Record<string, unknown>>; materials?: unknown };
+  assert.equal("materials" in summary, false);
+  assert.equal("scope" in summary.exams[0], false, "a summary carries no scope entries");
+  assert.deepEqual(summary.exams[0].scopeSummary, { inScope: 1, excluded: 1, sources: ["professor"] });
+  const again = text(await handleRpc(call("course_state", { courseId: COURSE }), tools, "s")) as { exams: Array<{ scope: { objectives: unknown[] } }> };
+  assert.equal(again.exams[0].scope.objectives.length, 2, "full keeps the scope");
+  assert.equal(isError(await handleRpc(call("set_exam", { courseId: COURSE, title: "Quiz", date: "2026-11-21", topicIds: [], scope: { objectives: [], sources: [], materialIds: ["L11"] } }), tools, "s")), true, "materialIds are ids");
+  assert.match(INSTRUCTIONS, /map them to the course's materials by filename/);
+  assert.match(INSTRUCTIONS, /weight 0 for objectives taught only elsewhere/);
+  assert.match(INSTRUCTIONS, /plan\.defaulted is true/);
+  const tool = TOOLS.find((t) => t.name === "set_exam");
+  const schema = (tool!.inputSchema.properties as Record<string, { properties?: Record<string, unknown> }>).scope;
+  assert.ok(schema.properties && "materialIds" in schema.properties, "the schema offers the materials");
 });

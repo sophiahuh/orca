@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Objective, QuizResult, Topic } from "../../src/lib/data.ts";
-import { hoursFromDuration, planTopics, remainingDays, spentMinutesInOrca } from "../../src/lib/course/cram-page.ts";
+import { hoursFromDuration, perDayHours, planTopics, remainingDays, spentMinutesInOrca, weekdayName } from "../../src/lib/course/cram-page.ts";
 import { cramPlan } from "../../src/lib/mastery/cram-plan.ts";
 
 const topic = (id: string, extra: Partial<Topic> = {}): Topic => ({ id, name: id, review: "confirmed", pos: { x: 0, y: 0 }, source: [], ...extra });
@@ -13,6 +13,15 @@ test("the setup's hours come from the exam review duration; the days a student c
   assert.equal(hoursFromDuration("30 min"), 0.5);
   assert.deepEqual(remainingDays("2026-11-10", "2026-11-13"), ["2026-11-10", "2026-11-11", "2026-11-12"]);
   assert.deepEqual(remainingDays("2026-11-10", "2026-11-10"), [], "none on the day");
+});
+
+test("the setup's hours a day are the total over the study days, to the nearest half hour and at least half an hour", () => {
+  assert.equal(perDayHours(10, 5), 2);
+  assert.equal(perDayHours(10, 4), 2.5);
+  assert.equal(perDayHours(10, 3), 3.5, "3.33 rounds to the nearest half hour");
+  assert.equal(perDayHours(1, 6), 0.5, "never below half an hour");
+  assert.equal(perDayHours(10, 0), 10, "no study days: the total as it is");
+  assert.equal(weekdayName("2026-11-13"), "Friday");
 });
 
 test("spent minutes count this course's sessions finished since cramming started", () => {

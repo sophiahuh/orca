@@ -44,23 +44,61 @@ export function examObjectives(exam: Pick<Exam, "topicIds" | "scope">, topics: r
     .map((o) => o.id);
 }
 
+/** The materials an objective is taught in: the one that created it and the ones its signals name, deduplicated, in that order. */
+export function objectiveMaterialIds(o: Pick<Objective, "materialId" | "signals">): string[] {
+  return [...new Set([...(o.materialId ? [o.materialId] : []), ...o.signals.map((s) => s.materialId)])];
+}
+
+/** What the picker excludes says on the scope: the professor's words, by elimination. */
+export const NOT_IN_FILES = "not in the files the exam covers";
+
 /**
- * The scope the cram setup saves: every covered objective, at the weight it already has (1 when
- * new), with the professor's words as `professor` evidence on each (its earlier professor quote
- * replaced), and `professor` among the sources. Without words, the scope is left as it is.
+ * The objectives the cram setup starts from: every live objective of the exam's topics (its scope
+ * set aside, so a narrowed scope can be widened again), split by the materials picked. With
+ * nothing picked everything is in scope; else an objective is in scope when the material that
+ * created it, or one its signals name, was picked.
  */
-export function scopeFromSetup(existing: ExamScope | null, covered: readonly string[], words: string): ExamScope | null {
+export function splitByMaterials(candidates: readonly string[], picked: readonly string[], catalogue: Readonly<Record<string, Objective>>): { inScope: string[]; excluded: string[] } {
+  if (!picked.length) return { inScope: [...candidates], excluded: [] };
+  const chosen = new Set(picked);
+  const inScope: string[] = [];
+  const excluded: string[] = [];
+  for (const id of candidates) {
+    const o = catalogue[id];
+    (o && objectiveMaterialIds(o).some((m) => chosen.has(m)) ? inScope : excluded).push(id);
+  }
+  return { inScope, excluded };
+}
+
+/**
+ * The scope the cram setup saves. In-scope objectives (every candidate, or the ones taught in the
+ * picked materials) keep the weight they had above 0 (1 when new or excluded before), with the
+ * professor's words as `professor` evidence on each (its earlier professor quote replaced); the
+ * objectives the picker excludes weigh 0 with a `professor` note saying so. Other evidence, the
+ * format and the sources are kept; `professor` joins the sources; the picked materials are stored
+ * (none when nothing was picked). Without words and without a pick, the scope is left as it is.
+ */
+export function scopeFromSetup(existing: ExamScope | null, candidates: readonly string[], words: string, picked: readonly string[] = [], catalogue: Readonly<Record<string, Objective>> = {}): ExamScope | null {
   const quote = words.trim();
-  if (!quote) return existing;
-  const evidence = { signal: "professor" as const, strength: SCOPE_STRENGTH.professor, quote };
+  if (!quote && !picked.length) return existing;
+  const said = quote ? [{ signal: "professor" as const, strength: SCOPE_STRENGTH.professor, quote }] : [];
+  const notInFiles = { signal: "professor" as const, strength: SCOPE_STRENGTH.professor, quote: NOT_IN_FILES };
+  const { inScope, excluded } = splitByMaterials(candidates, picked, catalogue);
+  const chosen = new Set(inScope);
+  const out = new Set(excluded);
   const was = new Map((existing?.objectives ?? []).map((o) => [o.objectiveId, o]));
-  const ids = [...new Set([...was.keys(), ...covered])];
+  const ids = [...new Set([...was.keys(), ...inScope, ...excluded])];
   return {
     objectives: ids.map((objectiveId) => {
       const before = was.get(objectiveId);
-      return { objectiveId, weight: before?.weight ?? 1, evidence: [...(before?.evidence ?? []).filter((e) => e.signal !== "professor"), evidence] };
+      const kept = (before?.evidence ?? []).filter((e) => e.signal !== "professor");
+      if (out.has(objectiveId)) return { objectiveId, weight: 0, evidence: [...kept, notInFiles] };
+      // A listed objective that's no longer a candidate (not in the exam's topics) keeps its weight as it was.
+      const weight = chosen.has(objectiveId) ? (before && before.weight > 0 ? before.weight : 1) : (before?.weight ?? 1);
+      return { objectiveId, weight, evidence: [...kept, ...said] };
     }),
     ...(existing?.format ? { format: existing.format } : {}),
     sources: [...new Set([...(existing?.sources ?? []), "professor" as const])],
+    ...(picked.length ? { materialIds: [...new Set(picked)] } : {}),
   };
 }

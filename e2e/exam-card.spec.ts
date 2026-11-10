@@ -3,7 +3,7 @@ import { admin, expect, F, FIXTURE_STATE, seedFixtureCourse, stored, test } from
 /**
  * The exam card on the course page (cram mode contract, sections 5 and 6): the soonest upcoming
  * exam with its days left, scope size and verified share; Cram for this exam goes to the cram
- * page's setup (the professor's words, Add material held back, worries, hours), Confirm stores
+ * page's setup (the professor's words, the files, Add material held back, worries, hours a day), Confirm stores
  * cramming, the scope and the budget, the card then shows the plan line, and Stop cramming clears
  * it. Edit Exams has the same switch per exam.
  */
@@ -14,6 +14,7 @@ const inDays = (n: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 const WORDS = "Only two's complement, no Boolean algebra.";
+const weekday = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
 
 test("the exam card shows the soonest exam; Cram for this exam opens the page's setup, Confirm stores cramming, the scope and the budget, Stop cramming clears it", async ({ page, student }) => {
   await seedFixtureCourse(student);
@@ -37,8 +38,11 @@ test("the exam card shows the soonest exam; Cram for this exam opens the page's 
   const setup = page.locator("[data-part=cram-setup]");
   await expect(setup).toContainText("Cram for Midterm");
   await expect(setup.locator("[data-part=cram-add-material]")).toHaveAttribute("href", `/add-material?course=${SLUG}&type=Practice%20exam&holdBack=1`);
-  // Hours start from the course's exam review duration (the fixture's: 10 hours).
-  await expect(setup.locator("[data-part=cram-hours]")).toHaveValue("10");
+  // Hours a day start from the course's exam review duration (the fixture's: 10 hours) over the 5 study days; the deck is picked by default.
+  await expect(setup.locator("[data-part=cram-hours]")).toHaveValue("2");
+  await expect(setup.locator("[data-part=cram-hours-total]")).toHaveText(`2 h × 5 study days = 10 hours before ${weekday(inDays(5))}`);
+  await expect(setup.locator(`[data-part=cram-material][data-id="${F.material}"]`)).toBeChecked();
+  await expect(setup.locator("[data-part=cram-scope-size]")).toHaveText("2 of 2 objectives in scope.");
   await setup.locator("[data-part=professor-words]").fill(WORDS);
   await setup.getByRole("button", { name: "Objectives you're worried about" }).click();
   // The list floats over the page (a portal).
@@ -66,6 +70,7 @@ test("the exam card shows the soonest exam; Cram for this exam opens the page's 
     ].sort(),
   );
   expect(exam.scope?.budget).toMatchObject({ hours: 10, daysOut: [] });
+  expect(exam.scope?.materialIds).toEqual([F.material]);
   expect(typeof exam.scope?.budget?.since).toBe("string");
   // The worry is a manual struggled flag on that objective, and only that one.
   const flags = state.evidence.filter((e) => e.kind === "confusion" && e.flagSource === "manual");
@@ -75,7 +80,7 @@ test("the exam card shows the soonest exam; Cram for this exam opens the page's 
   await card.locator("[data-part=cram-edit]").click();
   await expect(page).toHaveURL(`/course/${SLUG}/cram?edit=1`);
   await expect(setup.locator("[data-part=professor-words]")).toHaveValue(WORDS);
-  await expect(setup.locator("[data-part=cram-hours]")).toHaveValue("10");
+  await expect(setup.locator("[data-part=cram-hours]")).toHaveValue("2");
 
   await page.goto(`/course/${SLUG}`);
   await card.locator("[data-part=cram-stop]").click();

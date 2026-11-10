@@ -9,7 +9,7 @@ const COURSE = "c0000000-0000-4000-8000-000000000001";
 const AT = new Date("2026-11-13T15:00:00.000Z");
 const SINCE = "2026-11-10T09:00:00.000Z";
 
-const objective = (id: string, topicId: string, status: string): ObjectiveLine => ({ id, topicId, topic: `Topic ${topicId}`, name: `Objective ${id}`, status, recall: null, questions: 1 });
+const objective = (id: string, topicId: string, status: string): ObjectiveLine => ({ id, topicId, topic: `Topic ${topicId}`, name: `Objective ${id}`, status, recall: null, questions: 1, materialIds: [] });
 const topics = [
   { id: "A", name: "Adders" },
   { id: "B", name: "Buses" },
@@ -66,9 +66,13 @@ test("the plan covers only the exam's topics when it names some, and is null wit
   assert.deepEqual(named.plan?.topics.map((t) => t.id), ["A"]);
   assert.deepEqual(named.coverage, { verified: 1, total: 2, share: 0.5, byTopic: [{ topicId: "A", verified: 1, total: 2 }] });
 
+  // Cramming without a budget: the plan assumes 2 hours a study day from today (6 days to the 19th), nothing spent, and says so.
   const noBudget = await cramFields(db as never, OWNER, input([exam({ scope: null })]));
-  assert.equal(noBudget.plan, null, "cramming without a budget: no plan yet");
+  assert.equal(noBudget.plan?.defaulted, true);
+  assert.deepEqual([noBudget.plan?.hoursLeft, noBudget.plan?.minutesPerDay, noBudget.plan?.behindMinutes], [12, 120, 0]);
   assert.ok(noBudget.coverage, "coverage still follows the cramming exam");
+  const budgeted = await cramFields(db as never, OWNER, input([exam()]));
+  assert.equal(budgeted.plan?.defaulted, false, "a set budget isn't assumed");
 
   const soon = await cramFields(db as never, OWNER, input([exam({ cramming: false, scope: null, date: "2026-11-15", mode: "exam-week" })]));
   assert.equal(soon.plan, null, "no exam is cramming");

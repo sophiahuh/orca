@@ -475,7 +475,14 @@ All 11 Figma screens are built. Where things live:
   (the professor's words as `professor` evidence, Add material held back, worries as manual struggled flags, Confirm
   sets `cramming`); while cramming: the plan line, Study with Claude (`/settings#connector` until a token exists),
   Edit scope, Stop cramming (`cram-stop`); the Exams modal has a Cramming switch per exam. Inside the window the agenda
-  weighs objectives by course × scope weight (`useAgenda`). The rubric grader names an `errorType` from the fixed list
+  weighs objectives by course × scope weight (`useAgenda`). **Since 2026-11-10 (branch `cram-scope`, after the step 8
+  deploy):** the setup picks the files the exam covers (`cram-materials`, one `cram-material[data-id]` per non-removed
+  material, lectures and notes ticked, held-back files tickable) and asks hours a day (`cram-hours-pick[data-hours]`,
+  `cram-hours`, the total line `cram-hours-total`; `scope.budget.hours` still stores the total), so `scopeFromSetup`
+  weighs objectives taught only in unpicked files 0 with a `professor` "not in the files the exam covers" note and
+  stores `scope.materialIds`; `course_state` detail full lists `materials` and each objective's `materialIds`, detail
+  summary replaces each exam's `scope` with `scopeSummary` (`inScope`, `excluded`, `sources`, `budget`), and a cramming
+  exam without a budget gets a `plan` from 2 hours a study day with `plan.defaulted: true`. The rubric grader names an `errorType` from the fixed list
   (`src/lib/grading.ts`). The token is minted in Settings → Claude connector (`/api/connector`; only its sha256 is
   stored, `connector_tokens`, migration `20261104090000`) and pasted into Claude as a custom connector with no sign-in:
   the URL is the secret, so the proper OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is

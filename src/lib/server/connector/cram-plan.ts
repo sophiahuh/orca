@@ -1,7 +1,8 @@
 /**
  * course_state's cram fields (docs/superpowers/specs/2026-11-10-cram-mode-contracts.md, section 6):
  * `plan` (the derived cram plan over the cramming exam, src/lib/mastery/cram-plan.ts: the same
- * calculation the cram page reads in the browser), `coverage` (how much of the scoping exam's scope
+ * calculation the cram page reads in the browser; from an assumed budget, `defaulted`, until the
+ * student sets one), `coverage` (how much of the scoping exam's scope
  * is verified) and `topErrors` (the kinds of mistake made most). No model calls; two reads beyond
  * what course_state already holds: the sessions finished and the evidence recorded since the cram
  * started (or the last 30 days).
@@ -9,7 +10,7 @@
 import type { CourseState, CoverageLine, ExamLine, ObjectiveLine, TopError } from "@/lib/connector/mcp";
 import { scopingExam } from "@/lib/course/weights";
 import { ERROR_TYPES } from "@/lib/grading";
-import { cramPlan, type CramPlanInput } from "@/lib/mastery/cram-plan";
+import { cramPlan, defaultBudget, type CramPlanInput } from "@/lib/mastery/cram-plan";
 import { dayKeyIn } from "@/lib/mastery/objective-state";
 import type { ErrorType, ObjectiveStatus } from "@/lib/mastery/types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -97,7 +98,7 @@ function coverageOf(topics: CramPlanInput["topics"]): CoverageLine {
 }
 
 export async function cramFields(db: OrcaSupabase, ownerId: string, input: CramFieldsInput): Promise<Pick<CourseState, "plan" | "coverage" | "topErrors">> {
-  const scoped = input.exams.map((e) => ({ ...e, courseId: input.courseId }));
+  const scoped = input.exams.map((e) => ({ ...e, courseId: input.courseId, scope: e.scope ?? null }));
   const scoping = scopingExam(scoped, input.courseId, input.today);
   const cramming = scoped.find((e) => e.cramming) ?? null;
   const budget = cramming?.scope?.budget ?? null;
@@ -114,6 +115,9 @@ export async function cramFields(db: OrcaSupabase, ownerId: string, input: CramF
   if (cramming && budget) {
     const sessionMinutes = (sessions.data ?? []).reduce((n, s) => n + s.seconds, 0) / 60;
     plan = cramPlan({ today: input.today, examDate: cramming.date, budget, topics: planTopics(cramming, input), spentMinutes: sessionMinutes + connectorMinutes(events.data ?? [], input.timezone) });
+  } else if (cramming) {
+    // No budget set yet: the plan assumes one (2 hours a study day from now, nothing spent) and says so, so Claude can ask.
+    plan = cramPlan({ today: input.today, examDate: cramming.date, budget: defaultBudget(input.today, cramming.date, input.at.toISOString()), topics: planTopics(cramming, input), spentMinutes: 0, defaulted: true });
   }
   return { plan, coverage, topErrors: topErrorsOf(events.data ?? []) };
 }

@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { DEFAULT_CONFIG, type Course, type Exam, type ExamScope, type Objective } from "@/lib/data";
-import { hoursFromDuration, remainingDays } from "@/lib/course/cram-page";
-import { scopeFromSetup } from "@/lib/course/exam-card";
+import { DEFAULT_CONFIG, type Course, type Exam, type ExamScope, type Material, type MaterialType, type Objective } from "@/lib/data";
+import { hoursFromDuration, perDayHours, remainingDays, weekdayName } from "@/lib/course/cram-page";
+import { scopeFromSetup, splitByMaterials } from "@/lib/course/exam-card";
 import { canFlagHard } from "@/lib/mastery/flags";
 import type { CourseMastery } from "@/lib/mastery/course-mastery";
 import { Button } from "@/components/ui/Button";
@@ -14,42 +14,58 @@ import { useOrca } from "@/lib/store";
 /** The most a professor's quote holds (the connector's limit for a scope quote). */
 const WORDS_MAX = 500;
 const FIELD = "h-[40px] rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] text-[15px] font-semibold text-prussian focus:border-wisteria focus:outline-none";
+const PICK = "pressable rounded-pill px-[12px] py-[6px] text-[13px] font-bold ring-2 ring-inset ring-alice-deep";
+/** The quick picks for hours a day. */
+const HOUR_PICKS = [1, 2, 3, 4];
+/** Materials ticked by default: what the course teaches from. Exam files (held back) start unticked. */
+const PICKED_TYPES: ReadonlySet<MaterialType> = new Set(["Lecture", "Handwritten notes", "Typed notes"]);
 
 /** "Tue, Nov 11" for a YYYY-MM-DD day (pure date arithmetic, so the zone can't shift it). */
 const dayLabel = (day: string) => {
   const [y, m, d] = day.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 };
+const hoursText = (h: number) => (Number.isInteger(h) ? `${h}` : `${Math.round(h * 10) / 10}`);
 
 /**
  * Cram setup (cram mode contract, section 6), on the cram page: the professor's words (saved as
- * `professor` evidence on the scope), a link to add a practice exam held back, the objectives the
- * student worries about (a manual struggled flag each), the hours they can put in and the days
- * they're out; Confirm sets the exam cramming with its budget (`since` = now, kept when the scope
- * of a running cram is edited).
+ * `professor` evidence on the scope), the files the exam covers (the materials picked: objectives
+ * taught only elsewhere weigh 0), a link to add a practice exam held back, the objectives the
+ * student worries about (a manual struggled flag each), the hours a day they can put in and the
+ * days they're out (the total is what the budget stores); Confirm sets the exam cramming with its
+ * budget (`since` = now, kept when the scope of a running cram is edited).
  */
-export function CramSetup({ exam, course, covered, catalogue, mastery, today, onDone, onCancel }: { exam: Exam; course: Course; covered: readonly string[]; catalogue: Readonly<Record<string, Objective>>; mastery: CourseMastery; today: string; onDone: () => void; onCancel: () => void }) {
+export function CramSetup({ exam, course, candidates, materials, catalogue, mastery, today, onDone, onCancel }: { exam: Exam; course: Course; candidates: readonly string[]; materials: readonly Material[]; catalogue: Readonly<Record<string, Objective>>; mastery: CourseMastery; today: string; onDone: () => void; onCancel: () => void }) {
   const { updateExam, flagObjectives, configs } = useOrca();
   const budget = exam.scope?.budget;
   const days = remainingDays(today, exam.date);
   // Starts from the quote already on the scope, so Edit scope shows what was said.
   const [words, setWords] = useState(() => exam.scope?.objectives.flatMap((o) => o.evidence).find((e) => e.signal === "professor" && e.quote)?.quote ?? "");
+  const [picked, setPicked] = useState<string[]>(() => {
+    const known = new Set(materials.map((m) => m.id));
+    const stored = (exam.scope?.materialIds ?? []).filter((id) => known.has(id));
+    return stored.length ? stored : materials.filter((m) => !m.heldBack && PICKED_TYPES.has(m.type)).map((m) => m.id);
+  });
   const [worries, setWorries] = useState<string[]>([]);
-  const [hours, setHours] = useState(() => String(budget?.hours ?? hoursFromDuration((configs[course.id] ?? DEFAULT_CONFIG).exam.duration)));
   const [daysOut, setDaysOut] = useState<string[]>(() => (budget?.daysOut ?? []).filter((d) => days.includes(d)));
-  const hoursValue = Number(hours);
-  const hoursOk = hours.trim() !== "" && Number.isFinite(hoursValue) && hoursValue > 0;
+  const studyDays = days.filter((d) => !daysOut.includes(d));
+  // Hours a day: the budget's total over the study days left, else the course's exam review duration over them.
+  const [perDay, setPerDay] = useState(() => String(perDayHours(budget?.hours ?? hoursFromDuration((configs[course.id] ?? DEFAULT_CONFIG).exam.duration), studyDays.length)));
+  const perDayValue = Number(perDay);
+  const hoursOk = perDay.trim() !== "" && Number.isFinite(perDayValue) && perDayValue > 0;
+  const total = hoursOk ? Math.round(perDayValue * studyDays.length * 2) / 2 : 0;
 
-  const options = covered.map((id) => ({ id, name: catalogue[id]?.name ?? id }));
+  const { inScope } = splitByMaterials(candidates, picked, catalogue);
+  const options = candidates.map((id) => ({ id, name: catalogue[id]?.name ?? id }));
   const confirm = () => {
     if (!hoursOk) return;
     // A worry is a struggled flag (manual); one already being learned needs no second flag.
     const toFlag = worries.filter((id) => canFlagHard(mastery.objectives.get(id)?.status ?? "unseen"));
     if (toFlag.length) flagObjectives(course.id, toFlag);
-    const scope: ExamScope = scopeFromSetup(exam.scope, covered, words) ?? { objectives: [], sources: [] };
+    const scope: ExamScope = scopeFromSetup(exam.scope, candidates, words, picked, catalogue) ?? { objectives: [], sources: [] };
     updateExam(exam.id, {
       cramming: true,
-      scope: { ...scope, budget: { hours: hoursValue, daysOut: [...daysOut].sort(), since: exam.cramming && budget ? budget.since : new Date().toISOString() } },
+      scope: { ...scope, budget: { hours: total, daysOut: [...daysOut].sort(), since: exam.cramming && budget ? budget.since : new Date().toISOString() } },
     });
     onDone();
   };
@@ -73,6 +89,45 @@ export function CramSetup({ exam, course, covered, catalogue, mastery, today, on
           className="min-h-[88px] w-full resize-y rounded-[16px] border-2 border-alice-deep bg-parchment px-[16px] py-[12px] text-[16px] text-prussian outline-none focus:border-wisteria"
         />
       </label>
+
+      <fieldset className="flex flex-col gap-[6px]">
+        <legend className="text-[15px] font-bold text-prussian">Which files does it cover?</legend>
+        {materials.length ? (
+          <ul className="flex max-h-[220px] flex-col gap-[4px] overflow-auto rounded-[12px] border-2 border-alice-deep bg-parchment px-[12px] py-[8px]" data-part="cram-materials">
+            {materials.map((m) => {
+              const on = picked.includes(m.id);
+              return (
+                <li key={m.id}>
+                  <label className="flex cursor-pointer items-center gap-[8px] text-[14px] font-semibold text-prussian">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={(e) => setPicked((ids) => (e.target.checked ? [...ids, m.id] : ids.filter((x) => x !== m.id)))}
+                      className="size-[14px] accent-wisteria"
+                      data-part="cram-material"
+                      data-id={m.id}
+                    />
+                    <span className="truncate">{m.filename}</span>
+                    <span className="shrink-0 text-[12px] font-medium text-wisteria-deep">
+                      {m.type}
+                      {m.heldBack ? " · held back" : ""}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-[14px] font-medium text-wisteria-deep" data-part="cram-materials">
+            No files in this course yet.
+          </p>
+        )}
+        <p className="text-[14px] font-medium text-wisteria-deep" data-part="cram-scope-size">
+          {picked.length
+            ? `${inScope.length} of ${candidates.length} objective${candidates.length === 1 ? "" : "s"} in scope.`
+            : `Nothing picked, so all ${candidates.length} objective${candidates.length === 1 ? "" : "s"} are in scope.`}
+        </p>
+      </fieldset>
 
       <p className="text-[15px] font-medium text-prussian">
         Have a practice exam or a study guide?{" "}
@@ -98,11 +153,24 @@ export function CramSetup({ exam, course, covered, catalogue, mastery, today, on
         )}
       </div>
 
-      <label className="flex flex-col gap-[6px]">
-        <span className="text-[15px] font-bold text-prussian">How many hours can you put in before the exam?</span>
-        <input type="number" min={0.5} step={0.5} value={hours} onChange={(e) => setHours(e.target.value)} aria-label="Hours before the exam" data-part="cram-hours" className={`${FIELD} w-[120px]`} />
+      <div className="flex flex-col gap-[6px]">
+        <span className="text-[15px] font-bold text-prussian">How much time per day?</span>
+        <div className="flex flex-wrap items-center gap-[8px]">
+          {HOUR_PICKS.map((n) => {
+            const on = hoursOk && perDayValue === n;
+            return (
+              <button key={n} type="button" onClick={() => setPerDay(String(n))} aria-pressed={on} data-part="cram-hours-pick" data-hours={n} className={`${PICK} ${on ? "bg-wisteria text-parchment ring-wisteria" : "bg-parchment text-prussian"}`}>
+                {n} h
+              </button>
+            );
+          })}
+          <label className="flex items-center gap-[6px] text-[13px] font-semibold text-wisteria-deep">
+            <input type="number" min={0.5} step={0.5} value={perDay} onChange={(e) => setPerDay(e.target.value)} aria-label="Hours a day" data-part="cram-hours" className={`${FIELD} w-[88px]`} />
+            hours a day
+          </label>
+        </div>
         {!hoursOk && <span className="text-[13px] font-medium text-bad-text">Give a number of hours above 0.</span>}
-      </label>
+      </div>
 
       {days.length > 0 && (
         <fieldset className="flex flex-col gap-[6px]">
@@ -128,8 +196,14 @@ export function CramSetup({ exam, course, covered, catalogue, mastery, today, on
         </fieldset>
       )}
 
-      <p className="text-[14px] font-medium text-wisteria-deep" data-part="cram-scope-size">
-        {covered.length} objective{covered.length === 1 ? "" : "s"} in scope.
+      <p className="text-[15px] font-semibold text-prussian" data-part="cram-hours-total">
+        {days.length === 0
+          ? "Exam day: no study days left."
+          : studyDays.length === 0
+            ? `Every day is out: 0 hours before ${weekdayName(exam.date)}.`
+            : hoursOk
+              ? `${hoursText(perDayValue)} h × ${studyDays.length} study day${studyDays.length === 1 ? "" : "s"} = ${hoursText(total)} hours before ${weekdayName(exam.date)}`
+              : `${studyDays.length} study day${studyDays.length === 1 ? "" : "s"} before ${weekdayName(exam.date)}.`}
       </p>
 
       <div className="flex items-center justify-end gap-[10px] border-t-2 border-alice-deep pt-[16px]">
