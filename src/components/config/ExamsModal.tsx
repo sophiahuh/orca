@@ -70,7 +70,6 @@ export function ExamsModal({ course, onClose }: { course: Course | null; onClose
             <h2 id="exams-title" className="pr-[56px] text-[28px] font-semibold text-prussian">
               {course.name} exams
             </h2>
-            <p className="mt-[8px] text-[15px] font-medium text-wisteria-deep">Exams show on your calendar, and Orca steps up review before each one. Pick the topics an exam covers if you know them.</p>
 
             <ul className="mt-[24px] flex flex-col gap-[10px]" aria-label="Exams">
               {exams.length === 0 && <li className="text-[15px] font-medium text-prussian">No exams yet.</li>}
