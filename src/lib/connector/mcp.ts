@@ -61,7 +61,9 @@ export const INSTRUCTIONS =
   "the student didn't give. 5) Call material_for before teaching an objective or writing questions, " +
   "so you teach what the course teaches, in its notation. When the bank is thin, budget.ok is " +
   "false, or the course is in a cram (mode isn't normal: Orca writes no questions then), write " +
-  "questions yourself with add_questions, anchored to material_for's pieces, then " +
+  "questions yourself with add_questions, anchored to material_for's pieces; when material_for " +
+  "returns no pieces for an objective, write from general knowledge without an anchor and tell the " +
+  "student the question isn't from their material. Then " +
   "grade them against the key you stored and report help. Record a problem you set and judged, or " +
   "what the student did (got-it, lost, asked-answer, asked-harder), with log_evidence. 6) When " +
   "next_questions returns pending, Orca is writing questions: teach from the material meanwhile " +
@@ -316,7 +318,8 @@ export interface AddQuestion {
 }
 
 export interface AddQuestionsResult {
-  added: Array<{ id: string; objectiveId: string }>;
+  /** `note` only on a question stored without an anchor because no live material teaches its objective. */
+  added: Array<{ id: string; objectiveId: string; note?: string }>;
   /** Questions not stored, by their position in the list, and why. */
   refused: Array<{ index: number; reason: string }>;
 }
@@ -647,7 +650,9 @@ export const TOOLS = [
       "course's notation. Orca validates each like its own (multiple choice has four options and the right " +
       "index, true or false two; a short answer has exact forms or a rubric; math between \\( \\) must render; " +
       "an exact answer is never an expression; a question for an objective the material teaches has an anchor " +
-      "from material_for) and lists the ones it refused with why. Stored questions come back from " +
+      "from material_for) and lists the ones it refused with why. When material_for returns no pieces for an " +
+      "objective (nothing live teaches it), send no anchor: the question is stored as not course-specific, " +
+      "with a note, and you tell the student it isn't from their material. Stored questions come back from " +
       "next_questions and questions_for and are graded by check_answer like any other.",
     inputSchema: {
       type: "object",

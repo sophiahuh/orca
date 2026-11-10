@@ -8,7 +8,9 @@
  * is never an expression (`isExpressionAnswer`); every string is sanitised and refused for HTML, a
  * link, a URL the material doesn't have or instruction-like text (`validateFields`); the math shown
  * must render (`mathProblem`); an anchor that names pages must name ones its material has. A
- * question for an inferred objective keeps no anchor (it must not present itself as course-specific).
+ * question for an inferred objective keeps no anchor (it must not present itself as course-specific),
+ * and so does one for an objective no live material teaches (owner, 2026-11-10: a course whose
+ * only lecture was removed is otherwise a dead end; the caller decides, `unanchored`).
  * Refused questions are dropped with a reason, never repaired.
  */
 import type { AddQuestion } from "./mcp.ts";
@@ -35,10 +37,11 @@ const NO_URLS: ReadonlySet<string> = new Set();
 
 /**
  * `facts`: what is known about the anchor's material (null: none named, or it can't be read).
- * `inferred`: the objective comes from general knowledge, not the material, so the question needs
- * no anchor and keeps none.
+ * `unanchored`: the question needs no anchor and keeps none, because the objective comes from
+ * general knowledge (inferred) or no live, non-held-back material teaches it; it is stored as not
+ * course-specific either way.
  */
-export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null, inferred = false): { ok: true; question: CheckedQuestion } | { ok: false; reason: string } {
+export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null, unanchored = false): { ok: true; question: CheckedQuestion } | { ok: false; reason: string } {
   const short = q.kind === "Short answer";
   const shaped = Shape.safeParse({
     objectiveId: q.objectiveId,
@@ -56,9 +59,9 @@ export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null, inferre
     return { ok: false, reason: `${issue?.path.join(".") || "the question"} ${issue?.message ?? "has the wrong shape"}` };
   }
   // The pipeline's own rules (src/lib/pipeline/run.ts): the option counts and a valid answer, a key for a
-  // short answer, plain-text exact answers that are never expressions, and an anchor unless the objective is inferred.
+  // short answer, plain-text exact answers that are never expressions, and an anchor unless the question is unanchored.
   const g = { ...shaped.data, tier: "retrieval" as const, figureSlide: null };
-  const structural = structuralProblem(g, inferred);
+  const structural = structuralProblem(g, unanchored);
   if (structural) return { ok: false, reason: structural };
 
   const texts = validateFields(
@@ -105,8 +108,8 @@ export function checkQuestion(q: AddQuestion, facts: AnchorFacts | null, inferre
           }
         : {}),
       explanation: v.explanation,
-      // Questions for inferred objectives must not present themselves as course-specific.
-      ...(g.anchor && !inferred ? { anchor: { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } } : {}),
+      // An unanchored question (inferred objective, or none of the material teaches it) must not present itself as course-specific.
+      ...(g.anchor && !unanchored ? { anchor: { locator: g.anchor.locator, excerpt: v["anchor excerpt"] } } : {}),
       source: "claude",
     },
   };

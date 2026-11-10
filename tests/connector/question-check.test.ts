@@ -40,7 +40,7 @@ test("the pipeline's structural rules: an exact answer is never an expression no
   assert.match(reason({ ...choice, options: ["x".repeat(241), "b", "c", "d"], answer: 0 })!, /options/);
 });
 
-test("a question for an objective taught in the material needs an anchor; one for an inferred objective keeps none", () => {
+test("a question for an objective taught in the material needs an anchor; an unanchored one (inferred objective, or nothing live teaches it) keeps none", () => {
   assert.match(reason({ ...short, anchor: undefined })!, /no source anchor/);
   const inferred = checkQuestion({ ...short, anchor: undefined }, null, true);
   assert.ok(inferred.ok);

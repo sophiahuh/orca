@@ -189,11 +189,13 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
 });
 
 test("in a cram Orca makes no model calls: prose is handed back for Claude to grade and no questions are written; a corrected answer carries no errorType", async ({ page, student }) => {
-  const id = ids("prose", "noq");
+  const id = ids("prose", "noq", "untaught");
   const prose: QuizQuestion = { id: id.prose, kind: "Short answer", tier: "mechanism", topic: "Two's Complement", prompt: "Why does sign extension copy the top bit?", options: [], answer: -1, rubric: { requiredIdeas: ["The top bit is the sign"], acceptableAlternatives: [], knownMisconceptions: [] }, explanation: "The weight of the new bits cancels.", anchor: { locator: "slide 9", excerpt: "fixture" }, objectiveId: F.signExtend };
   const bank = FIXTURE_STATE.questionBank[F.course];
   const noq = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.noq, name: "Factor an expression" };
-  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], prose] } } });
+  // An objective from the material that no live file teaches any more (its lecture was removed): material_for has no pieces for it.
+  const untaught = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.untaught, name: "Apply De Morgan's laws", materialId: null };
+  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq, [id.untaught]: untaught } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], prose] } } });
   await page.goto("/settings?section=connections");
   const card = page.locator('[data-part="claude-connector"]');
   await card.locator('[data-part="connector-create"]').click();
@@ -224,7 +226,7 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   expect(planned.plan.daysLeft).toBeGreaterThan(10);
   expect(planned.plan.hoursLeft).toBe(6);
   expect(planned.plan.defaulted).toBe(false);
-  expect(planned.coverage.total).toBe(3);
+  expect(planned.coverage.total).toBe(4);
   expect(planned.topErrors).toEqual([]);
   // A total is spread over the days: half an hour each over the 12 days, today included.
   const today = new Date().toISOString().slice(0, 10);
@@ -232,9 +234,9 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   expect(planned.plan.perDay[today]).toBe(0.5);
   expect(planned.plan.minutesToday).toBe(30);
   expect(planned.plan.line).toMatch(/Today: /);
-  // A summary carries each exam's scope by its size, not its entries (three live objectives in scope, the one excluded).
+  // A summary carries each exam's scope by its size, not its entries (four live objectives in scope, the one excluded).
   expect(planned.exams[0]).not.toHaveProperty("scope");
-  expect(planned.exams[0].scopeSummary).toMatchObject({ inScope: 3, excluded: 1, sources: ["professor"], budget: { hours: 6 } });
+  expect(planned.exams[0].scopeSummary).toMatchObject({ inScope: 4, excluded: 1, sources: ["professor"], budget: { hours: 6 } });
   // "I have no time today": the budget's today, with objectives and sources left out, keeps the scope; the plan follows the day's hours.
   const none0 = toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], scope: { budget: { today: 0 } } })) as { scope: { objectives: unknown[]; materialIds: string[]; budget: { hours: number; daysOut: string[]; perDay: Record<string, number> } } };
   expect(none0.scope.objectives).toHaveLength(1);
@@ -269,6 +271,18 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   expect(flagged.note).toMatch(/add_questions/);
   expect((toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { writing: unknown[] }).writing).toEqual([]);
   expect(await fakeCalls()).toEqual([]);
+  // Claude writes instead. Nothing live teaches the untaught objective, so its question needs no anchor and is stored as not
+  // course-specific, with a note; the taught objective's anchorless question is refused as before.
+  const tf = { kind: "True or false", prompt: "De Morgan's law turns (a + b)' into a'b'.", options: ["True", "False"], answer: 0, explanation: "The complement of a sum is the product of the complements." };
+  expect(toolText(await call(page, url, "material_for", { courseId: F.course, objectiveIds: [id.untaught] }))).toEqual({ objectives: [{ objectiveId: id.untaught, pieces: [] }], heldBack: 0 });
+  const written = toolText(await call(page, url, "add_questions", { courseId: F.course, questions: [{ ...tf, objectiveId: id.untaught }, { ...tf, objectiveId: F.convert }] })) as { added: Array<{ id: string; objectiveId: string; note?: string }>; refused: Array<{ index: number; reason: string }> };
+  expect(written.added).toEqual([{ id: expect.any(String), objectiveId: id.untaught, note: "no course material teaches this objective; stored as not course-specific" }]);
+  expect(written.refused).toEqual([{ index: 1, reason: "no source anchor" }]);
+  const bankNow = (await stored(page, student)).questionBank[F.course][F.booleanAlgebra];
+  const unanchored = bankNow.find((q) => q.id === written.added[0].id)!;
+  expect(unanchored).toMatchObject({ objectiveId: id.untaught, source: "claude", kind: "True or false", unanchored: true });
+  expect(unanchored.anchor).toBeUndefined();
+  expect(unanchored.materialId).toBeUndefined();
   // Claude marked an exact answer wrong with a kind of mistake; the key says it's right: Orca's result wins and no errorType is stored.
   const corrected = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: F.ba1, outcome: "incorrect", response: "x", errorType: "sign" }));
   expect(corrected).toEqual({ recorded: true, objectiveId: F.simplify, status: "verified", corrected: true });

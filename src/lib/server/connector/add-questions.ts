@@ -3,7 +3,11 @@
  * Claude wrote, validated like generated questions (`checkQuestion` in src/lib/connector/
  * question-check.ts: GeneratedQuestion's shape and the pipeline's structural rules, isExpressionAnswer,
  * the math render check, the sanitiser), stored with source claude, tier null, under the objective's current topic after the
- * topic's last question, and materialId from anchor.materialId when given and live. Saved the way a
+ * topic's last question, and materialId from anchor.materialId when given and live. An objective no
+ * live material teaches (none of `materialsFor`'s ids is a ready, non-held-back material: its lecture
+ * was removed, or only a held-back exam names it) takes a question without an anchor, stored
+ * `unanchored` (migration 20261110170000: the one way past the anchor check) and shown as not
+ * course-specific like an inferred objective's, with a note (owner, 2026-11-10). Saved the way a
  * job saves its questions: the course loaded through the job store, the new questions appended to
  * the bank, and `structureRows` + `save_structure` writing only the rows that are new.
  */
@@ -12,9 +16,13 @@ import { type AnchorFacts, checkQuestion } from "@/lib/connector/question-check"
 import type { QuizQuestion } from "@/lib/data";
 import { LIMITS } from "@/lib/limits";
 import { materialFacts } from "@/lib/pipeline/run";
+import { materialsFor } from "@/lib/pipeline/topup";
 import { supabaseJobStore } from "@/lib/server/job-store";
 import { structureRows } from "@/lib/supabase/app-rows";
 import type { OrcaSupabase } from "@/lib/supabase/server";
+
+/** The note on a question stored without an anchor because nothing live teaches its objective. */
+export const UNTAUGHT_NOTE = "no course material teaches this objective; stored as not course-specific";
 
 export async function addQuestions(db: OrcaSupabase, ownerId: string, courseId: string, questions: AddQuestion[]): Promise<AddQuestionsResult | { error: string }> {
   const store = supabaseJobStore(db, ownerId);
@@ -58,14 +66,16 @@ export async function addQuestions(db: OrcaSupabase, ownerId: string, courseId: 
       continue;
     }
     const materialId = anchored && live.has(anchored) ? anchored : undefined;
-    const checked = checkQuestion(q, materialId ? (facts.get(materialId) ?? null) : null, objective.origin === "inferred");
+    // No live material teaches it: the anchor isn't required (there is no page to anchor to) and none is kept.
+    const untaught = objective.origin !== "inferred" && !materialsFor(objective).some((id) => live.has(id));
+    const checked = checkQuestion(q, materialId ? (facts.get(materialId) ?? null) : null, objective.origin === "inferred" || untaught);
     if (!checked.ok) {
       refused.push({ index, reason: checked.reason });
       continue;
     }
-    const question: QuizQuestion = { id: crypto.randomUUID(), ...checked.question, topic: topic.name, ...(materialId ? { materialId } : {}) };
+    const question: QuizQuestion = { id: crypto.randomUUID(), ...checked.question, topic: topic.name, ...(untaught ? { unanchored: true } : materialId ? { materialId } : {}) };
     bank[topic.id] = [...(bank[topic.id] ?? []), question];
-    added.push({ id: question.id, objectiveId: question.objectiveId });
+    added.push({ id: question.id, objectiveId: question.objectiveId, ...(untaught ? { note: UNTAUGHT_NOTE } : {}) });
   }
   if (added.length) await store.save(courseId, structureRows(before, { ...before, bank }));
   return { added, refused };

@@ -446,6 +446,8 @@ export interface QuizQuestion {
   deep?: boolean;
   /** Written by Claude through the connector (`add_questions`); absent = Orca's. */
   source?: "claude";
+  /** Stored without an anchor although its objective came from the material: nothing live taught it when it was written. Shown like an inferred objective's question (not course-specific). */
+  unanchored?: true;
 }
 
 /* ── Defaults ─────────────────────────────────────────────────────────── */
