@@ -56,3 +56,21 @@ export function islandLevel(states: readonly ObjectiveState[]): IslandLevel {
   if (share >= ISLAND_THRESHOLDS.growing) return "growing";
   return "sprouting";
 }
+
+/** A topic's row in the course's List view (owner, 2026-11-10): needs review, in progress or mastered. */
+export type WeakSpotStatus = "needs-review" | "in-progress" | "mastered";
+
+/**
+ * The List view's status for a topic with weak spots; null when it has none. mastered: every weak
+ * spot held and no open check (the topic is done). needs-review: no weak spot has earned credit
+ * since it was flagged, and none was ever mastered (unstarted). in-progress: anything between,
+ * including a mastered weak spot whose spaced check is due (fading).
+ */
+export function weakSpotStatus(objectiveIds: readonly string[], states: ReadonlyMap<string, ObjectiveState>): WeakSpotStatus | null {
+  const progress = topicProgress(objectiveIds, states);
+  if (progress.weak === 0) return null;
+  if (progress.status === "done") return "mastered";
+  const weak = objectiveIds.map((id) => states.get(id)!).filter((s) => isInRotation(s.status) || s.status === "check-due");
+  const started = weak.some((s) => s.credit > 0 || s.status === "mastered" || s.status === "fading" || s.status === "retired");
+  return started ? "in-progress" : "needs-review";
+}
