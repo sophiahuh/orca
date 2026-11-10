@@ -194,7 +194,7 @@ test("in a cram Orca makes no model calls: prose is handed back for Claude to gr
   const bank = FIXTURE_STATE.questionBank[F.course];
   const noq = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.noq, name: "Factor an expression" };
   await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], prose] } } });
-  await page.goto("/settings");
+  await page.goto("/settings?section=connections");
   const card = page.locator('[data-part="claude-connector"]');
   await card.locator('[data-part="connector-create"]').click();
   const url = (await card.locator('[data-part="connector-url"]').textContent())!.trim();
