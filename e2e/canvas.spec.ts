@@ -7,7 +7,7 @@ import { expect, test, F } from "./fixture";
  */
 
 test("Settings → Canvas refuses a site Orca can't send a token to, with the reason", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings?section=connections");
   const card = page.locator('[data-part="canvas-connection"]');
   await card.locator('[data-part="canvas-site"]').fill("http://canvas.test");
   await card.locator('[data-part="canvas-token"]').fill("7~abcdefghijklmnopqrstuvwxyz0123456789");
@@ -52,7 +52,7 @@ test("connected, Settings says who, and offers the import; the import page lists
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/settings?section=connections");
   const card = page.locator('[data-part="canvas-connection"]');
   await expect(card.locator('[data-part="canvas-status"]')).toHaveText(/Connected as Sophia Test/);
   await card.locator('[data-part="canvas-import-link"]').click();
@@ -80,7 +80,7 @@ test("the import page says when Canvas isn't connected", async ({ page }) => {
   await page.goto("/import/canvas");
   await expect(page.locator('[data-part="canvas-not-connected"]')).toBeVisible();
   await page.locator('[data-part="canvas-not-connected"]').getByRole("link", { name: "Connect it in Settings" }).click();
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page).toHaveURL(/\/settings\?section=connections$/);
 });
 
 test("New course offers the Canvas import", async ({ page }) => {

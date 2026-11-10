@@ -14,12 +14,17 @@ interface Usage {
   globalSpent: boolean;
 }
 
+/** From this share of the day's allowance, the meter shows on the map itself, not only in the stats popover. */
+const WARN_AT = 0.8;
+
 /**
- * Today's model use against the student's daily allowance, on the home page (owner, 2026-11-08):
- * a held upload, dive or connector request is explained where the student looks, not guessed at.
- * Reads GET /api/usage once, and again whenever the number of held runs changes.
+ * Today's model use against the student's daily allowance (owner, 2026-11-08): a held upload, dive
+ * or connector request is explained where the student looks, not guessed at. Reads GET /api/usage
+ * once, and again whenever the number of held runs changes. `inline` is the stats popover's copy;
+ * `floating` sits on the map above the stats strip (its column places it) only when it matters (80% used, spent, or an
+ * upload waiting for it).
  */
-export function DailyUsage() {
+export function DailyUsage({ placement }: { placement: "floating" | "inline" }) {
   const { runs, hydrated } = useOrca();
   const held = runs.filter((r) => r.status === "waiting").length;
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -47,9 +52,13 @@ export function DailyUsage() {
     : spent
       ? "Today's limit reached"
       : `Today's reading: ${percent}% used`;
+  if (placement === "floating" && !spent && held === 0 && share < WARN_AT) return null;
   return (
     <div
-      className="absolute bottom-[28px] left-[220px] flex flex-col gap-[6px] rounded-[16px] border-2 border-alice-deep bg-parchment px-[14px] py-[8px] lip-3 lip-alice"
+      className={cn(
+        "flex flex-col gap-[6px]",
+        placement === "floating" && "rounded-[16px] border-2 border-alice-deep bg-parchment px-[14px] py-[8px] lip-3 lip-alice",
+      )}
       data-part="daily-usage"
       data-spent={spent ? "1" : "0"}
       title={`${usage.pages} of ${usage.pagesPerDay} pages and ${Math.round(usage.tokens / 1000)}k of ${Math.round(usage.tokensPerDay / 1000)}k tokens today`}
