@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-10):** planned, not started. Branch `onboarding` (off `main`), worked in the worktree `.claude/worktrees/onboarding`.
+**Status (2026-11-10):** built on branch `onboarding`; not merged. As built, the geometry is the generic `src/lib/anchor-geometry.ts` (tests in `tests/anchor-geometry.test.ts`), and the bubble, spotlight, key caps and inline confirm are reusable `src/components/ui/` pieces (`AnchoredBubble`, `Spotlight` with `data-part` `spotlight-dim`/`spotlight-ring`, `Kbd`, `InlineConfirm`, `Button size="xs"`) with `useElementBox` in `src/hooks/`; `TipBubble` composes them. Otherwise as below. Branch `onboarding` (off `main`), worked in the worktree `.claude/worktrees/onboarding`.
 
 **Goal:** New students get skippable pop-up tips, spoken by the orca, that point at the next thing to do (create a course, write Notes for Orca, upload, flag hard slides, and so on) while the rest of the screen is slightly desaturated.
 

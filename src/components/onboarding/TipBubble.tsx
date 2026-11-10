@@ -46,7 +46,7 @@ export function TipBubble({
       </div>
       <div className="mt-[12px] flex min-h-[32px] flex-wrap items-center justify-between gap-[10px] text-[13px] font-semibold">
         {confirming ? (
-          <span className="flex flex-wrap items-center gap-[10px]" data-part="tip-skip-confirm">
+          <span className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] [&>span:first-child]:basis-full" data-part="tip-skip-confirm">
             <InlineConfirm question="Skip all tips? They won't come back." confirm="Skip" cancel="Keep going" onConfirm={onSkip} onCancel={() => setConfirming(false)} confirmPart="tip-skip-yes" cancelPart="tip-skip-no" />
           </span>
         ) : (

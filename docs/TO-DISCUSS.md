@@ -476,6 +476,20 @@ faithful); or ask students to upload decks as PDFs (File → Save as PDF) when t
 - **Watch for:** a bad extraction filling due lists and dragging islands down before the student
   reviews it.
 
+### Onboarding tips (2026-11-10): assumed
+- **Assumed:** the X dismisses that one tip for good, and the next tip on the page follows (the
+  same as Next). "Skip all tips" is the way out of all of them.
+- **Assumed:** existing accounts get the tips too (the column defaults to nothing seen). They are
+  contextual, so an existing student sees each once, or skips them in two clicks.
+- **Assumed:** a tip the student ignores (they leave the page without touching it or its target)
+  shows again on the next visit. Clicking the thing it points at counts as seen.
+- **Assumed:** no "Getting started" checklist in this version: the later features (Canvas, the
+  Claude connector, marker notes, account-wide Notes for Orca) are covered by tips on Settings,
+  shown once the student has finished one session.
+- **Assumed:** the Canvas tip doesn't promise exams pulled from Canvas (not built yet).
+- **Changed with it:** the upload card's Stop confirms lost their underlines, matching Delete/Keep
+  (they share `InlineConfirm` now).
+
 ## Decided (recorded in the roadmap)
 
 - 2026-11-04: weak points first (Plan A built 2026-11-05; Plans B and C and the follow-up built
