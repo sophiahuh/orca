@@ -13,7 +13,7 @@ import { useOrca } from "@/lib/store";
 import { browserSupabase } from "@/lib/supabase/browser";
 
 /** How long a toast stays when the pointer isn't on it. */
-const TOAST_MS = 10_000;
+const TOAST_MS = 5_000;
 /** How often unfinished uploads are read again, in case a Realtime message was missed. */
 const POLL_MS = 20_000;
 
