@@ -6,7 +6,7 @@ import type { ObjectiveState } from "../../src/lib/mastery/types.ts";
 
 const ranked = (objectiveId: string, status: RankedObjective["status"]): RankedObjective => ({ objectiveId, topicId: "t", status, priority: { objectiveId, score: 1, terms: [] }, weight: 1 });
 const state = (objectiveId: string, dueAt: string | null): ObjectiveState => ({ objectiveId, status: "mastered", credit: 3, creditDays: 2, stabilityDays: 5, dueAt, spacedChecks: 0, recall: 0.9, lastEvidenceAt: null });
-const empty: CourseAgenda = { courseId: "c", ranked: [], dueToday: [], heldForNext: [], dueTomorrow: [], quickReviewDue: false, nextQuickDay: "2026-10-07", upNext: [], quickTomorrow: false, deepReview: { due: false, dueDay: null, tomorrow: false, candidates: 0 } };
+const empty: CourseAgenda = { courseId: "c", ranked: [], dueToday: [], heldForNext: [], dueTomorrow: [], quickReviewEnabled: true, quickReviewDue: false, nextQuickDay: "2026-10-07", upNext: [], quickTomorrow: false, deepReview: { due: false, dueDay: null, tomorrow: false, candidates: 0 } };
 const day = (iso: string) => iso.slice(0, 10);
 const TODAY = "2026-10-06";
 
@@ -42,4 +42,16 @@ test("today's quick review, what was missed today on the next one, later spaced 
 test("with today's quick review done (or not on the cadence), today's due list moves to the next one", () => {
   const agenda: CourseAgenda = { ...empty, dueToday: [ranked("a", "learning")], heldForNext: [ranked("b", "learning")] };
   assert.deepEqual(reviewDates([{ id: "c", short: "LOG", agenda, objectives: new Map() }], TODAY, day).map((e) => [e.date, e.title]), [["2026-10-07", "LOG quick review · 2 objectives"]]);
+});
+
+test("Never omits future spaced checks from the calendar while dives remain scheduled", () => {
+  const agenda: CourseAgenda = {
+    ...empty,
+    quickReviewEnabled: false,
+    nextQuickDay: null,
+    ranked: [ranked("a", "mastered")],
+    deepReview: { due: false, dueDay: "2026-10-10", tomorrow: false, candidates: 1 },
+  };
+  const objectives = new Map([["a", state("a", "2026-10-09T10:00:00Z")]]);
+  assert.deepEqual(reviewDates([{ id: "c", short: "LOG", agenda, objectives }], TODAY, day).map((e) => [e.date, e.title]), [["2026-10-10", "LOG Dive in"]]);
 });

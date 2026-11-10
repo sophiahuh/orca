@@ -27,7 +27,7 @@ export function reviewDates(courses: readonly ReviewCourse[], today: string, day
     const later = new Map<string, number>();
     const waiting = agenda.heldForNext.length + (agenda.quickReviewDue ? 0 : agenda.dueToday.length);
     if (waiting && agenda.nextQuickDay) later.set(agenda.nextQuickDay, waiting);
-    for (const r of agenda.ranked) {
+    for (const r of agenda.quickReviewEnabled ? agenda.ranked : []) {
       const dueAt = c.objectives.get(r.objectiveId)?.dueAt;
       if (r.status !== "mastered" || !dueAt) continue;
       const day = dayKey(dueAt);

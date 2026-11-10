@@ -5,6 +5,8 @@ import { DEFAULT_CONFIG } from "../../src/lib/data.ts";
 import {
   type MyData,
   type StructureState,
+  defaultsToRow,
+  courseToRow,
   loadedState,
   objectiveFromRow,
   objectiveToRow,
@@ -89,6 +91,15 @@ test("loading groups rows by course and puts questions in stock order", () => {
   assert.deepEqual(inherit.configs.c, DEFAULT_CONFIG, "no override and no account default: Orca's");
   assert.equal(inherit.configOverrides.c, null);
   assert.deepEqual(s.configOverrides.c, s.configs.c, "an override wins over the account default");
+
+  const never = { ...DEFAULT_CONFIG, quick: { ...DEFAULT_CONFIG.quick, cadence: "Never" as const }, deep: { ...DEFAULT_CONFIG.deep, cadence: "Never" as const } };
+  const profile = { ...data.profile!, ...defaultsToRow(never) };
+  const accountNever = loadedState({ ...data, profile, courses: [{ ...data.courses[0], review_config: null }] });
+  assert.deepEqual(accountNever.defaultConfig, never);
+  assert.deepEqual(accountNever.configs.c, never, "courses inherit Never from account defaults");
+  const row = { ...data.courses[0], ...courseToRow(s.courses[0], never, null) };
+  const courseNever = loadedState({ ...data, courses: [row] });
+  assert.deepEqual(courseNever.configOverrides.c, never, "Never round-trips through a course override");
 
   // When the class meets: read and checked like the settings; null = not set.
   assert.equal(s.schedules.c, null);
