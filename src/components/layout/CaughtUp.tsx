@@ -9,8 +9,6 @@ import { fadeUp } from "@/lib/motion";
 import { useNow } from "@/hooks/useNow";
 import { useAgenda, useDayKey, useOrca } from "@/lib/store";
 
-export const FOCUS_COPY = "Orca focuses on what you flag: star things in your notes, study with Claude, or tap the slides that were hard.";
-
 /**
  * The caught-up card's props for a course, or null when it isn't caught up: something is due today
  * (by the agenda, whether or not the cadence asks for a review today), or the course has no objectives
@@ -39,7 +37,6 @@ export function CaughtUp({ course, canPractise, examTopics }: { course: Course; 
   return (
     <motion.div variants={fadeUp} data-part="caught-up" className="flex flex-col gap-[10px] rounded-[20px] bg-alice px-[18px] py-[16px] lip-4 lip-alice">
       <p className="text-[17px] font-bold text-prussian">You&apos;re caught up</p>
-      <p className="text-[14px] text-wisteria-deep">{FOCUS_COPY}</p>
       {canPractise ? (
         <div className="flex flex-wrap gap-[8px]">
           <Link href={`/session/${course.slug}?kind=deep&scope=practice`} data-part="practice-other" className="pressable rounded-pill bg-prussian px-[14px] py-[7px] text-[13px] font-bold text-parchment lip-2 lip-ink">

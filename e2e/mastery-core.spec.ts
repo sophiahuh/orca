@@ -18,7 +18,7 @@ test.describe("a fresh browser", () => {
     await expect(page.getByText("No islands yet.")).toBeVisible();
     await expect(page.locator("[data-level]")).toHaveCount(0);
     await expect(page.getByText("0 day streak")).toBeVisible();
-    await expect(page.getByText("Nothing due. Nice.")).toHaveCount(2);
+    await expect(page.getByText("Nothing. All caught up", { exact: true })).toHaveCount(2);
     // Calendar and Add material: Settings is in the top bar, and hidden from this nav on home (8970e4e).
     await expect(page.getByRole("navigation", { name: "Primary" }).getByRole("link")).toHaveCount(2);
   });
