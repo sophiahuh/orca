@@ -47,8 +47,8 @@ type SectionKey = (typeof SECTIONS)[number]["key"];
 
 export default function SettingsPage() {
   return (
-    <Screen bg="ocean" className="h-screen-below-bar">
-      <header className="flex items-center gap-[12px] px-[24px] pt-[20px]">
+    <Screen bg="ocean" className="h-screen-below-bar max-h-screen-below-bar">
+      <header className="flex shrink-0 items-center gap-[12px] px-[24px] pt-[20px]">
         <BackButton />
         <h1 className="text-[46px] font-bold leading-none text-prussian">Settings</h1>
       </header>
@@ -64,34 +64,38 @@ function SettingsBody() {
   const section = SECTIONS.find((s) => s.key === asked) ?? SECTIONS[0];
 
   return (
-    <div className="flex min-h-0 flex-1 gap-[20px] px-[24px] pb-[28px] pt-[20px]">
+    <div className="flex min-h-0 flex-1 gap-[20px] overflow-hidden px-[24px] pb-[28px] pt-[20px]">
       <SectionRail current={section.key} />
       <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-[14px]", section.key === "preferences" ? "max-w-[1000px]" : "max-w-[720px]")} data-part="settings-section" data-section={section.key}>
-        <div className="flex flex-col gap-[4px] px-[4px]">
+        <div className="flex shrink-0 flex-col gap-[4px] px-[4px]">
           <h2 className="text-[28px] font-semibold leading-tight text-prussian">{section.label}</h2>
           <p className="text-[15px] font-medium text-wisteria-deep">{section.blurb}</p>
         </div>
-        {/* Only the section scrolls; the padding keeps the cards' lips and the last card clear of the edge. */}
-        <div className="-mx-[8px] min-h-0 flex-1 overflow-y-auto px-[8px] pb-[12px]" data-part="settings-scroll">
+        {/* Each column scrolls independently; padding leaves room for the cards' lips. */}
+        <div className="-mx-[8px] flex min-h-0 flex-1 flex-col">
           <AnimatePresence mode="wait">
-            <motion.div key={section.key} variants={fadeSwap} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-[14px]">
+            <motion.div key={section.key} variants={fadeSwap} initial="hidden" animate="show" exit="exit" className="flex min-h-0 flex-1 gap-[14px]">
               {section.key === "preferences" && (
-                <div className="flex items-start gap-[14px]">
-                  <div className="flex min-w-0 flex-1 flex-col gap-[14px]">
+                <>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[8px] pb-[12px] [&>*]:shrink-0" data-part="settings-scroll" data-column="notes">
                     <StudyNotes />
                   </div>
-                  <div className="w-[340px] shrink-0">
+                  <div className="min-h-0 w-[356px] shrink-0 overflow-y-auto overscroll-contain px-[8px] pb-[12px]" data-part="settings-scroll" data-column="rhythm">
                     <ReviewRhythm />
                   </div>
-                </div>
-              )}
-              {section.key === "connections" && (
-                <>
-                  <ClaudeConnectorCard />
-                  <CanvasConnectionCard />
                 </>
               )}
-              {section.key === "account" && <AccountCard />}
+              {section.key !== "preferences" && (
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-[14px] overflow-y-auto overscroll-contain px-[8px] pb-[12px] [&>*]:shrink-0" data-part="settings-scroll">
+                  {section.key === "connections" && (
+                    <>
+                      <ClaudeConnectorCard />
+                      <CanvasConnectionCard />
+                    </>
+                  )}
+                  {section.key === "account" && <AccountCard />}
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -117,7 +121,7 @@ function SectionRail({ current }: { current: SectionKey }) {
   }, []);
 
   return (
-    <Card className="flex w-[260px] shrink-0 flex-col overflow-y-auto gap-[14px] px-[16px] pb-[18px] pt-[18px]" lip={6} radius={28}>
+    <Card className="flex min-h-0 w-[260px] shrink-0 flex-col overflow-y-auto gap-[14px] px-[16px] pb-[18px] pt-[18px]" lip={6} radius={28} data-part="settings-rail">
       <div className="flex items-center gap-[10px] px-[6px]" data-part="settings-identity">
         <Avatar creature={avatar} size={44} />
         <div className="flex min-w-0 flex-col">
