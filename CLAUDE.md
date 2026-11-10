@@ -143,8 +143,8 @@ own courses (Data Structures, Fundamentals of Computer Systems) on the hosted pr
   (the Deploy run of 2026-11-08). The Deploy workflow pushes
   pending migrations to production on every merge to `main` (its two secrets are set), so nobody
   pushes by hand; a new migration must be numbered after the newest one applied, or `db push`
-  refuses it. The development project `mtztzsxgcopohlokragm` was last checked on 2026-10-25
-  (everything through `20261019090000`); later ones go there only by hand. A migration the code
+  refuses it. The development project `mtztzsxgcopohlokragm` was brought up to date on 2026-11-10
+  (everything through `20261110090000_onboarding_tips`, pushed from branch `onboarding`); later ones go there only by hand. A migration the code
   needs but the database lacks shows as "Could not find the table … in the schema cache". Check
   with `npx supabase migration list --linked` (read-only; from an IPv4-only network the CLI says
   "IPv6 is not supported" until `supabase link` is rerun). A migration that drops a column the
