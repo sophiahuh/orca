@@ -5,12 +5,13 @@
  * student sets one), `coverage` (how much of the scoping exam's scope
  * is verified) and `topErrors` (the kinds of mistake made most). No model calls; two reads beyond
  * what course_state already holds: the sessions finished and the evidence recorded since the cram
- * started (or the last 30 days).
+ * started (or the last 30 days), each put on the student's day so the plan knows what was spent
+ * before today and today (the per-day addendum).
  */
 import type { CourseState, CoverageLine, ExamLine, ObjectiveLine, TopError } from "@/lib/connector/mcp";
 import { scopingExam } from "@/lib/course/weights";
 import { ERROR_TYPES } from "@/lib/grading";
-import { cramPlan, defaultBudget, type CramPlanInput } from "@/lib/mastery/cram-plan";
+import { cramPlan, defaultBudget, type CramPlanInput, type SpentMinutes } from "@/lib/mastery/cram-plan";
 import { dayKeyIn } from "@/lib/mastery/objective-state";
 import type { ErrorType, ObjectiveStatus } from "@/lib/mastery/types";
 import type { OrcaSupabase } from "@/lib/supabase/server";
@@ -37,10 +38,10 @@ export interface CramFieldsInput {
 }
 
 /**
- * Minutes of connector study estimated from its evidence: per day (the student's), the span from the
+ * Minutes of connector study estimated from its evidence, by day (the student's): the span from the
  * first to the last connector-sourced event, capped. A day with one event counts 0.
  */
-export function connectorMinutes(events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string): number {
+export function connectorMinutesByDay(events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string): Map<string, number> {
   const dayKey = dayKeyIn(timezone);
   const spans = new Map<string, { first: number; last: number }>();
   for (const e of events) {
@@ -54,9 +55,31 @@ export function connectorMinutes(events: ReadonlyArray<{ at: string; source: str
       span.last = Math.max(span.last, t);
     }
   }
+  return new Map([...spans].map(([day, { first, last }]) => [day, Math.min(CONNECTOR_MINUTES_PER_DAY_CAP, (last - first) / 60_000)]));
+}
+
+/** The connector estimate over every day. */
+export function connectorMinutes(events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string): number {
   let minutes = 0;
-  for (const { first, last } of spans.values()) minutes += Math.min(CONNECTOR_MINUTES_PER_DAY_CAP, (last - first) / 60_000);
+  for (const m of connectorMinutesByDay(events, timezone).values()) minutes += m;
   return minutes;
+}
+
+/**
+ * The minutes studied since the cram started, split at the start of today (the plan's
+ * `spentMinutes`): the course's finished sessions by the day they finished, plus the connector
+ * estimate by day.
+ */
+export function spentMinutesSplit(sessions: ReadonlyArray<{ finished_at: string; seconds: number }>, events: ReadonlyArray<{ at: string; source: string | null }>, timezone: string, today: string): SpentMinutes {
+  const dayKey = dayKeyIn(timezone);
+  const spent = { beforeToday: 0, today: 0 };
+  const add = (day: string, minutes: number) => {
+    if (day === today) spent.today += minutes;
+    else if (day < today) spent.beforeToday += minutes;
+  };
+  for (const s of sessions) add(dayKey(s.finished_at), s.seconds / 60);
+  for (const [day, minutes] of connectorMinutesByDay(events, timezone)) add(day, minutes);
+  return spent;
 }
 
 /** The kinds of mistake on answer and work events, most frequent first (ties by name), at most six. */
@@ -105,7 +128,7 @@ export async function cramFields(db: OrcaSupabase, ownerId: string, input: CramF
   const since = budget?.since ?? new Date(input.at.getTime() - TOP_ERRORS_DAYS * 86_400_000).toISOString();
 
   const [sessions, events] = await Promise.all([
-    budget ? db.from("session_results").select("seconds").eq("owner_id", ownerId).eq("course_id", input.courseId).gte("finished_at", since) : Promise.resolve({ data: [], error: null }),
+    budget ? db.from("session_results").select("finished_at, seconds").eq("owner_id", ownerId).eq("course_id", input.courseId).gte("finished_at", since) : Promise.resolve({ data: [], error: null }),
     db.from("evidence_events").select("at, kind, source, error_type").eq("owner_id", ownerId).eq("course_id", input.courseId).gte("at", since),
   ]);
   for (const r of [sessions, events]) if (r.error) throw new Error(`Couldn't read the course: ${r.error.message}`);
@@ -113,11 +136,10 @@ export async function cramFields(db: OrcaSupabase, ownerId: string, input: CramF
   const coverage = scoping ? coverageOf(planTopics(scoping, input)) : null;
   let plan: CourseState["plan"] = null;
   if (cramming && budget) {
-    const sessionMinutes = (sessions.data ?? []).reduce((n, s) => n + s.seconds, 0) / 60;
-    plan = cramPlan({ today: input.today, examDate: cramming.date, budget, topics: planTopics(cramming, input), spentMinutes: sessionMinutes + connectorMinutes(events.data ?? [], input.timezone) });
+    plan = cramPlan({ today: input.today, examDate: cramming.date, budget, topics: planTopics(cramming, input), spentMinutes: spentMinutesSplit(sessions.data ?? [], events.data ?? [], input.timezone, input.today) });
   } else if (cramming) {
     // No budget set yet: the plan assumes one (2 hours a study day from now, nothing spent) and says so, so Claude can ask.
-    plan = cramPlan({ today: input.today, examDate: cramming.date, budget: defaultBudget(input.today, cramming.date, input.at.toISOString()), topics: planTopics(cramming, input), spentMinutes: 0, defaulted: true });
+    plan = cramPlan({ today: input.today, examDate: cramming.date, budget: defaultBudget(input.today, cramming.date, input.at.toISOString()), topics: planTopics(cramming, input), spentMinutes: { beforeToday: 0, today: 0 }, defaulted: true });
   }
   return { plan, coverage, topErrors: topErrorsOf(events.data ?? []) };
 }

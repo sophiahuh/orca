@@ -485,7 +485,12 @@ All 11 Figma screens are built. Where things live:
   weighs objectives taught only in unpicked files 0 with a `professor` "not in the files the exam covers" note and
   stores `scope.materialIds`; `course_state` detail full lists `materials` and each objective's `materialIds`, detail
   summary replaces each exam's `scope` with `scopeSummary` (`inScope`, `excluded`, `sources`, `budget`), and a cramming
-  exam without a budget gets a `plan` from 2 hours a study day with `plan.defaulted: true`. The rubric grader names an `errorType` from the fixed list
+  exam without a budget gets a `plan` from 2 hours a study day with `plan.defaulted: true`. **Since 2026-11-10 (branch
+  `cram-per-day`):** the time budget is entered per day (`CramBudget.perDay`, half-hour steps, 0 = a day off; `hours` and
+  `daysOut` derived; `src/lib/mastery/cram-budget.ts`; the setup shows a row per remaining day, `cram-day[data-day]` +
+  `cram-day-hours`, and "Same for every day", `cram-hours`), the plan uses each day's own hours with spent minutes split
+  at today, and `set_exam`'s `scope.budget` merges over the exam's (`perDay`, `today`, or the older `hours`; objectives
+  and sources left out keep the scope), per the contract's per-day addendum. The rubric grader names an `errorType` from the fixed list
   (`src/lib/grading.ts`). The token is minted in Settings → Claude connector (`/api/connector`; only its sha256 is
   stored, `connector_tokens`, migration `20261104090000`) and pasted into Claude as a custom connector with no sign-in:
   the URL is the secret, so the proper OAuth route is still to do (`docs/SETUP-HOSTED.md` §8). The protocol module is

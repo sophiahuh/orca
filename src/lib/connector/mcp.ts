@@ -11,6 +11,7 @@
 
 import { SCOPE_STRENGTH } from "../course/scope.ts";
 import { MATERIAL_TYPES, type CramBudget, type ExamScope, type MaterialType, type ScopeEvidence, type ScopeSignal } from "../data.ts";
+import { BUDGET_DAYS_MAX, HOURS_PER_DAY_MAX, HOUR_STEP, isDay, isHalfHours, type CramBudgetInput } from "../mastery/cram-budget.ts";
 import type { CramPlan } from "../mastery/cram-plan.ts";
 import type { ErrorType, FlagStrength, Help, SignalEvent, WorkEvent } from "../mastery/types.ts";
 import { checkNotes } from "../pipeline/notes.ts";
@@ -31,7 +32,11 @@ export const INSTRUCTIONS =
   "is spent (budget) and whether questions are being written (writing). When plan isn't null (an " +
   "exam is being crammed for), start the session by saying plan.line as is, then follow plan.today's " +
   "order, weak spots first. When plan.defaulted is true the student set no time budget and Orca " +
-  "assumed 2 hours a study day: say so and ask if it's different (set_exam with scope.budget). On " +
+  "assumed 2 hours a study day: say so and ask if it's different (set_exam with scope.budget). The " +
+  "budget is hours per day (scope.budget.perDay, YYYY-MM-DD to hours in half-hour steps, 0 for a " +
+  "day off): when the student says how much time they have today or on a named day, save it with " +
+  "set_exam (scope.budget.today for today, or perDay for the days named; leave objectives and " +
+  "sources out to keep the scope) and read back the new plan.line from course_state. On " +
   "the eve (mode day-of, or plan.daysLeft is 1 or less), mention " +
   "topErrors: the kinds of mistake the student makes most. Follow mode: normal, a " +
   "short review of what's due; exam-week, work through the exam's scope, heaviest first; day-of, a " +
@@ -67,6 +72,10 @@ export const INSTRUCTIONS =
   "vault item: it's the student's practice test. Name it and say when to sit it. 8) Call flag_check " +
   "only for objectives the student asked about or got wrong in this chat. 9) Every few answers, " +
   "send a one-line progress note unasked: what's verified, what's still weak, what's next.";
+
+/** An exam scope as set_exam takes it: the budget is an input merged over the exam's (src/lib/mastery/cram-budget.ts `mergeBudget`), and `objectives` and `sources` left out keep the exam's. */
+export type ScopeInput = Omit<ExamScope, "budget" | "objectives" | "sources"> & { objectives?: ExamScope["objectives"]; sources?: ScopeSignal[]; budget?: CramBudgetInput };
+export type { CramBudgetInput };
 
 /* ── Tool results: plain data the implementations return; the protocol wraps them ── */
 
@@ -364,7 +373,7 @@ export interface ConnectorTools {
   checkAnswer(courseId: string, questionId: string, response: string, sessionId: string, report?: Partial<AnswerReport>): Promise<CheckedAnswer | SelfGradeNeeded | { error: string }>;
   /** An answer Claude graded against the key: recorded with the help it reports (none = full credit). `response`, when given, is the student's words, cleaned and screened. */
   recordAnswer(courseId: string, questionId: string, outcome: Outcome, sessionId: string, response: string | undefined, report: AnswerReport): Promise<RecordedAnswer | { error: string }>;
-  setExam(courseId: string, exam: { id?: string; title: string; date: string; topicIds: string[]; cramming?: boolean; scope?: ExamScope }): Promise<ExamLine | { error: string }>;
+  setExam(courseId: string, exam: { id?: string; title: string; date: string; topicIds: string[]; cramming?: boolean; scope?: ScopeInput }): Promise<ExamLine | { error: string }>;
   /** One flag per known live objective: check (source connector) or struggled (source connector-struggled). `said` arrives cleaned and screened. */
   flagCheck(courseId: string, objectiveIds: string[], said: string, strength: FlagStrength): Promise<FlagCheckResult | { error: string }>;
   /** The anchored pages of some objectives, never from a held-back or removed material. Null: no such course. */
@@ -400,7 +409,7 @@ const TEXT_MATERIAL_CHARS = 200_000;
 /** A scope quote: the words a weight rests on. */
 const QUOTE_CHARS = 500;
 const BUDGET_HOURS_MAX = 1000;
-const BUDGET_DAYS_OUT_MAX = 366;
+const BUDGET_DAYS_OUT_MAX = BUDGET_DAYS_MAX;
 const MATERIALS_MAX = 200;
 
 export const TOOLS = [
@@ -468,7 +477,7 @@ export const TOOLS = [
         cramming: { type: "boolean", description: "The student is cramming for it: Orca treats it as this week's exam whatever the date. Omit to leave as is." },
         scope: {
           type: "object",
-          description: "What the exam weighs, from the practice exam, the professor's words, a study guide, homework, lecture emphasis or a guess. Omit to leave as is.",
+          description: "What the exam weighs, from the practice exam, the professor's words, a study guide, homework, lecture emphasis or a guess. Omit to leave as is; omit objectives and sources together (keeping the exam's) to change only the budget.",
           properties: {
             objectives: {
               type: "array",
@@ -510,18 +519,21 @@ export const TOOLS = [
             sources: { type: "array", items: { type: "string", enum: SCOPE_SIGNALS }, maxItems: 6, description: "Where the scope came from, for the exam card." },
             budget: {
               type: "object",
-              description: "The student's time budget for the cram; the plan is derived from it. Omit to keep what the exam has.",
+              description:
+                "The student's time budget for the cram, hours per day; the plan is derived from it. Merged over the budget the exam has " +
+                "(none yet: 2 hours a study day): perDay replaces the days it names, today sets today only, hours without perDay is a total " +
+                "spread evenly over the days not out. Omit to keep what the exam has.",
               properties: {
-                hours: { type: "number", minimum: 0, maximum: BUDGET_HOURS_MAX, description: "Hours the student can put in before the exam." },
-                daysOut: { type: "array", items: { type: "string" }, maxItems: BUDGET_DAYS_OUT_MAX, description: "Days with no study, YYYY-MM-DD." },
-                since: { type: "string", description: "When cramming started, ISO: minutes studied since then count against the budget." },
+                perDay: { type: "object", additionalProperties: { type: "number", minimum: 0, maximum: HOURS_PER_DAY_MAX }, description: `Hours by day, YYYY-MM-DD, in steps of ${HOUR_STEP}; 0 for a day off. At most ${BUDGET_DAYS_MAX} days.` },
+                today: { type: "number", minimum: 0, maximum: HOURS_PER_DAY_MAX, description: `Hours for today only, in steps of ${HOUR_STEP}: "I have until 7".` },
+                hours: { type: "number", minimum: 0, maximum: BUDGET_HOURS_MAX, description: "A total before the exam, spread evenly over the days not out (the older form; use perDay when days differ)." },
+                daysOut: { type: "array", items: { type: "string" }, maxItems: BUDGET_DAYS_OUT_MAX, description: "Days with no study, YYYY-MM-DD (0 hours each)." },
+                since: { type: "string", description: "When cramming started, ISO: minutes studied since then count against the budget. Omit to keep the exam's (now for a new budget)." },
               },
-              required: ["hours", "daysOut", "since"],
               additionalProperties: false,
             },
             materialIds: { type: "array", items: UUID, maxItems: MATERIALS_MAX, description: "The materials the exam covers (ids from course_state's materials), when the student named files or lectures; objectives taught only elsewhere weigh 0." },
           },
-          required: ["objectives", "sources"],
           additionalProperties: false,
         },
         remove: { type: "boolean", description: "With examId: remove the exam instead." },
@@ -788,13 +800,14 @@ async function screenText(tools: ConnectorTools, raw: string, maxChars: number, 
   return { ok: true, text: said.text };
 }
 
-/** An exam scope as set_exam takes it: ids, weights, evidence (quotes screened), format and sources checked field by field. */
-async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope: ExamScope } | { error: string }> {
+/** An exam scope as set_exam takes it: ids, weights, evidence (quotes screened), format, sources and the budget checked field by field; objectives and sources may be left out together (the exam's are kept). */
+async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope: ScopeInput } | { error: string }> {
   if (!isObject(raw)) return { error: "scope is an object: objectives, sources and optionally format, budget and materialIds." };
-  if (!Array.isArray(raw.objectives) || raw.objectives.length > 400) return { error: "scope.objectives is a list of up to 400 { objectiveId, weight, evidence }." };
-  if (!Array.isArray(raw.sources) || raw.sources.length > 6 || !raw.sources.every((x) => isOneOf(SCOPE_SIGNALS, x))) return { error: `scope.sources is a list of ${SCOPE_SIGNALS.join(", ")}.` };
+  const keepScope = raw.objectives === undefined && raw.sources === undefined;
+  if (!keepScope && (!Array.isArray(raw.objectives) || raw.objectives.length > 400)) return { error: "scope.objectives is a list of up to 400 { objectiveId, weight, evidence } (left out with sources, the exam's are kept)." };
+  if (!keepScope && (!Array.isArray(raw.sources) || raw.sources.length > 6 || !raw.sources.every((x) => isOneOf(SCOPE_SIGNALS, x)))) return { error: `scope.sources is a list of ${SCOPE_SIGNALS.join(", ")}.` };
   const objectives: ExamScope["objectives"] = [];
-  for (const [i, o] of raw.objectives.entries()) {
+  for (const [i, o] of ((raw.objectives as unknown[] | undefined) ?? []).entries()) {
     if (!isObject(o) || !isUuid(o.objectiveId)) return { error: `scope.objectives[${i}].objectiveId must be an objective id from course_state.` };
     if (typeof o.weight !== "number" || !Number.isFinite(o.weight) || o.weight < 0 || o.weight > 10) return { error: `scope.objectives[${i}].weight is a number from 0 (excluded) to 10.` };
     if (!Array.isArray(o.evidence) || o.evidence.length > 8) return { error: `scope.objectives[${i}].evidence is a list of up to 8 { signal, quote?, materialId? }.` };
@@ -823,21 +836,43 @@ async function parseScope(tools: ConnectorTools, raw: unknown): Promise<{ scope:
     if (f.kinds !== undefined && (!Array.isArray(f.kinds) || f.kinds.length > 4 || !f.kinds.every((k) => isOneOf(SCOPE_KINDS, k)))) return { error: `scope.format.kinds is a list of ${SCOPE_KINDS.join(", ")}.` };
     format = { ...(f.minutes !== undefined ? { minutes: f.minutes as number } : {}), ...(f.problems !== undefined ? { problems: f.problems as number } : {}), ...(f.kinds !== undefined ? { kinds: [...new Set(f.kinds as ScopeKind[])] } : {}) };
   }
-  let budget: CramBudget | undefined;
+  let budget: CramBudgetInput | undefined;
   if (raw.budget !== undefined) {
     const b = raw.budget;
-    if (!isObject(b)) return { error: "scope.budget is an object: hours, daysOut, since." };
-    if (typeof b.hours !== "number" || !Number.isFinite(b.hours) || b.hours < 0 || b.hours > BUDGET_HOURS_MAX) return { error: `scope.budget.hours is a number from 0 to ${BUDGET_HOURS_MAX}.` };
-    if (!Array.isArray(b.daysOut) || b.daysOut.length > BUDGET_DAYS_OUT_MAX || !b.daysOut.every((d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)))) return { error: "scope.budget.daysOut is a list of days, YYYY-MM-DD." };
-    if (typeof b.since !== "string" || Number.isNaN(Date.parse(b.since))) return { error: "scope.budget.since is an ISO date-time: when cramming started." };
-    budget = { hours: b.hours, daysOut: [...new Set(b.daysOut as string[])].sort(), since: new Date(b.since).toISOString() };
+    if (!isObject(b)) return { error: "scope.budget is an object: perDay, today, hours, daysOut, since." };
+    budget = {};
+    if (b.perDay !== undefined) {
+      if (!isObject(b.perDay) || Object.keys(b.perDay).length > BUDGET_DAYS_MAX) return { error: `scope.budget.perDay is an object of at most ${BUDGET_DAYS_MAX} days (YYYY-MM-DD) to hours.` };
+      for (const [day, h] of Object.entries(b.perDay)) {
+        if (!isDay(day)) return { error: `scope.budget.perDay: "${day}" isn't a day, YYYY-MM-DD.` };
+        if (!isHalfHours(h)) return { error: `scope.budget.perDay["${day}"] is hours from 0 to ${HOURS_PER_DAY_MAX} in steps of ${HOUR_STEP}.` };
+      }
+      budget.perDay = { ...(b.perDay as Record<string, number>) };
+    }
+    if (b.today !== undefined) {
+      if (!isHalfHours(b.today)) return { error: `scope.budget.today is hours from 0 to ${HOURS_PER_DAY_MAX} in steps of ${HOUR_STEP}.` };
+      budget.today = b.today;
+    }
+    if (b.hours !== undefined) {
+      if (typeof b.hours !== "number" || !Number.isFinite(b.hours) || b.hours < 0 || b.hours > BUDGET_HOURS_MAX) return { error: `scope.budget.hours is a number from 0 to ${BUDGET_HOURS_MAX}.` };
+      budget.hours = b.hours;
+    }
+    if (b.daysOut !== undefined) {
+      if (!Array.isArray(b.daysOut) || b.daysOut.length > BUDGET_DAYS_OUT_MAX || !b.daysOut.every(isDay)) return { error: "scope.budget.daysOut is a list of days, YYYY-MM-DD." };
+      budget.daysOut = [...new Set(b.daysOut as string[])].sort();
+    }
+    if (b.since !== undefined) {
+      if (typeof b.since !== "string" || Number.isNaN(Date.parse(b.since))) return { error: "scope.budget.since is an ISO date-time: when cramming started." };
+      budget.since = new Date(b.since).toISOString();
+    }
+    if (Object.keys(budget).length === 0) return { error: "scope.budget names at least one of perDay, today, hours, daysOut, since." };
   }
   let materialIds: string[] | undefined;
   if (raw.materialIds !== undefined) {
     if (!Array.isArray(raw.materialIds) || raw.materialIds.length > MATERIALS_MAX || !raw.materialIds.every(isUuid)) return { error: `scope.materialIds is a list of up to ${MATERIALS_MAX} material ids from course_state.` };
     materialIds = [...new Set(raw.materialIds as string[])];
   }
-  return { scope: { objectives, ...(format !== undefined ? { format } : {}), sources: [...new Set(raw.sources as ScopeSignal[])], ...(budget !== undefined ? { budget } : {}), ...(materialIds !== undefined ? { materialIds } : {}) } };
+  return { scope: { ...(keepScope ? {} : { objectives, sources: [...new Set(raw.sources as ScopeSignal[])] }), ...(format !== undefined ? { format } : {}), ...(budget !== undefined ? { budget } : {}), ...(materialIds !== undefined ? { materialIds } : {}) } };
 }
 
 /** One question as add_questions takes it, checked field by field (the deeper checks, like a generated question's, are the implementation's). */
@@ -963,7 +998,7 @@ async function callTool(params: Record<string, unknown>, tools: ConnectorTools, 
         if (!Array.isArray(args.topicIds) || !args.topicIds.every(isUuid)) return toolText({ error: "topicIds is a list of topic ids from course_state (empty for the whole course)." }, true);
         if (args.examId !== undefined && !isUuid(args.examId)) return toolText({ error: "examId must be an exam id from course_state." }, true);
         if (args.cramming !== undefined && typeof args.cramming !== "boolean") return toolText({ error: "cramming is true or false." }, true);
-        let scope: ExamScope | undefined;
+        let scope: ScopeInput | undefined;
         if (args.scope !== undefined) {
           const parsed = await parseScope(tools, args.scope);
           if ("error" in parsed) return toolText(parsed, true);
