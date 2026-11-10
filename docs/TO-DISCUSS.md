@@ -46,8 +46,15 @@ in the doc it affects (usually `docs/BACKEND-ROADMAP.md`) and move it to "Decide
   professor's words as `professor` evidence at weight 1 on every covered objective (no per-objective
   weighting from the words yet; the "proposed scope to confirm" is the count and Confirm); the
   rubric grader's `errorType` is stored on `check_answer`'s event too; `record_answer` keeps the stated
-  outcome when no option fits the student's words on a choice question; `log_evidence` refuses an
-  archived or merged-away objective with an error.
+  outcome when no option fits the student's words on a choice question, and drops `errorType` from one
+  Orca found correct; `log_evidence` refuses an archived or merged-away objective with an error.
+  "Orca makes no model calls in a cram" is read as: while `course_state.mode` isn't normal (an exam
+  cramming or within the week), `check_answer` hands prose back as `needsSelfGrade`, and
+  `next_questions` and `flag_check` start no top-up (Claude writes with `add_questions`); choice and
+  exact answers are still checked by Orca (no model). The app's own sessions keep Orca's grader.
+  The agenda's exam focus (`examInWindow`) and streak follow the rules: a cramming exam is the window
+  whatever its date, and only an unaided graded attempt (no hint, nothing shown, not self-marked or
+  judged by Claude alone) keeps the streak or clears an open struggled flag; a `lost` signal opens one.
 
 ### Deleting a course (2026-11-08)
 - **Source:** owner, 2026-11-08 ("soft delete with a `deleted_at` column"); migration

@@ -260,6 +260,16 @@ function gradeOf(a: Pick<GradedAttempt, "outcome" | "assisted">): Grade {
 /** The outcome an attempt counts as: a miss when the answer was shown before it, else what the grader said. */
 const effectiveOutcome = (outcome: Outcome, help: Help | undefined): Outcome => (help === "shown" ? "incorrect" : outcome);
 
+/**
+ * A graded attempt the student made alone, as the fold sees it: graded (not self-marked, and work
+ * judged against a solution or a known answer, not by Claude alone) with no hint and no answer
+ * shown first. What the agenda reads as clearing an open confusion, and what keeps the streak alive.
+ */
+export function unaidedAttempt(e: AnswerEvent | WorkEvent): boolean {
+  const graded = e.kind === "answer" ? e.grader !== "self" : e.basis !== "claude";
+  return graded && e.help !== "hint" && e.help !== "shown";
+}
+
 /** One step of the fold for an answer. Returns a new accumulator; never mutates the one it was given. */
 export function applyAnswer(acc: ObjectiveAccumulator, e: AnswerEvent, options: ObjectiveStateOptions): ObjectiveAccumulator {
   // Self-marked or hinted: assisted. Claude grading against the stored key (grader claude) with no

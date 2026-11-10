@@ -219,6 +219,23 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
     };
   };
 
+  /**
+   * The course is in a cram (`course_state.mode` isn't normal: an exam the student is cramming for, or one within
+   * the window). Orca makes no model calls in a cram (contract, decisions): Claude grades prose and writes questions.
+   */
+  const inCram = async (courseId: string): Promise<boolean> => {
+    const [exams, profile] = await Promise.all([
+      db.from("exams").select("date, cramming").eq("owner_id", ownerId).eq("course_id", courseId),
+      db.from("profiles").select("timezone").eq("owner_id", ownerId).maybeSingle(),
+    ]);
+    if (exams.error || profile.error) throw new Error(`Couldn't read the exams: ${(exams.error ?? profile.error)!.message}`);
+    const at = now();
+    const today = dayKeyIn(profile.data?.timezone ?? "UTC")(at.toISOString());
+    const weekOut = new Date(at.getTime() + AGENDA_RULES.examWindowDays * 86_400_000).toISOString().slice(0, 10);
+    return (exams.data ?? []).some((e) => examMode(e, today, weekOut) !== "normal");
+  };
+  const CRAM_WRITES = "Orca writes no questions during a cram (an exam being crammed for, or within the week): write them with add_questions, anchored to material_for's pieces.";
+
   /** The agenda's weights for the course's live objectives: the course weights, times the exam's scope inside its window (src/lib/course/weights.ts). */
   const effectiveWeights = async (courseId: string, exams: readonly ExamLine[], today: string): Promise<Map<string, number>> => {
     const [topics, objectives, relations] = await Promise.all([
@@ -358,7 +375,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       else if (topicIds?.length) candidates = lines.filter((l) => topicIds.includes(l.topicId)).map((l) => l.id);
       else {
         const focus = new Set(state.examFocus);
-        // Heaviest first within each group: the course weight, times the exam's scope inside its window (contract section 5); weight 0 is never drawn.
+        // The effective weight: the course weight, times the exam's scope inside its window (contract section 5); weight 0 is never
+        // drawn (as the agenda's due list). The due group keeps its urgency order; the exam-focus and unflagged groups go heaviest first.
         const weights = await effectiveWeights(courseId, state.exams, state.today);
         const weightOf = (id: string) => {
           const w = weights.get(id);
@@ -400,6 +418,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         return { questions: [], pending: { runId: inFlight.runId, objectiveIds: inFlight.objectiveIds, state: waiting ? "waiting" : "queued", retryAfterSeconds: waiting ? untilReset : 90, reason: waiting ? `Orca is writing questions for these, but its daily model limit is spent; they're written when it resets. ${state.budget.reason ?? ""}`.trim() : "Orca is writing questions for these now." } };
       }
       if (!write) return { questions: [], reason: "No questions written for these yet (write is false)." };
+      if (state.mode !== "normal") return { questions: [], reason: `No questions written for these yet. ${CRAM_WRITES}` };
       if (!state.budget.ok) return { questions: [], pending: { runId: null, objectiveIds: targets, state: "waiting", retryAfterSeconds: untilReset, reason: `Orca's daily model limit is spent, so it can't write questions until it resets. ${state.budget.reason ?? ""}`.trim() } };
       if (!(await rateLimit(db, ownerId, "topUp")).ok) return { questions: [], reason: "Orca has written questions as often as it allows this hour; ask again later." };
       const started = await startFlagTopUpJob(db, ownerId, { courseId, objectiveIds: targets });
@@ -441,6 +460,8 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
         feedback = r.feedback;
         grader = "exact";
       } else if (q.rubric) {
+        // In a cram Claude grades prose (Orca makes no model calls): the key is handed over, as when the grader can't run.
+        if (await inCram(courseId)) return { needsSelfGrade: true, reason: "The course is in a cram, so Claude grades prose answers: grade against this key and call record_answer with the help you gave.", ...key };
         // Orca's own prose grader, on Orca's key: its rate limit, budgets and the grading-off rule apply.
         const g = await gradeAnswer(db, ownerId, questionId, words);
         if (g.status !== 200 || "error" in g.body) return { needsSelfGrade: true, reason: "error" in g.body ? g.body.error : "Orca couldn't grade this answer.", ...key };
@@ -465,7 +486,9 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       const { q, objectiveId, topicId, tier } = found;
       const checked = response ? orcaOutcome(q, response) : null;
       const corrected = checked !== null && checked !== outcome;
-      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome: corrected ? checked : outcome, grader: "claude", sessionId, ...(response ? { response } : {}), help: report.help, confidence: report.confidence, errorType: report.errorType });
+      const final = corrected ? checked : outcome;
+      // The kind of mistake belongs to an answer that wasn't right (as validateGrade in src/lib/grading.ts keeps it): none on one Orca found correct.
+      const recorded = await record({ courseId, topicId, objectiveId, questionId, tier, outcome: final, grader: "claude", sessionId, ...(response ? { response } : {}), help: report.help, confidence: report.confidence, ...(final === "correct" ? {} : { errorType: report.errorType }) });
       return "error" in recorded || !corrected ? recorded : { ...recorded, corrected: true };
     },
 
@@ -527,6 +550,7 @@ export function connectorTools(db: OrcaSupabase, ownerId: string, now: () => Dat
       }
       const withoutQuestions = ids.filter((id) => !asked.has(id));
       if (!withoutQuestions.length) return { flagged, unknown, withoutQuestions };
+      if (await inCram(courseId)) return { flagged, unknown, withoutQuestions, note: CRAM_WRITES };
       const started = await topUpAfterFlag(db, ownerId, courseId, withoutQuestions);
       // The job itself holds on a spent daily budget (it goes `waiting`), which the hand-off can't
       // see; say so here rather than promising questions in a few minutes (owner, 2026-11-07).

@@ -89,18 +89,20 @@ export function addDays(day: string, n: number): string {
 }
 
 /**
- * The course's next exam (the exams table) if today is in its "1 wk before exam" window, with its
- * topics as they are now (`currentTopic` follows topic merges; an exam's topic ids aren't updated by them).
+ * The course's exam in its window (the exams table): the one the student is cramming for, whatever its date
+ * (cramming is the window, cram mode contract), else the next one if today is in its "1 wk before exam" window;
+ * the same exam `scopingExam` (src/lib/course/weights.ts) picks. With its topics as they are now (`currentTopic`
+ * follows topic merges; an exam's topic ids aren't updated by them).
  */
 export function examInWindow(
-  exams: readonly { courseId: string; date: string; topicIds: readonly string[] }[],
+  exams: readonly { courseId: string; date: string; topicIds: readonly string[]; cramming?: boolean }[],
   courseId: string,
   today: string,
   currentTopic: (topicId: string) => string = (id) => id,
 ): { topicIds: readonly string[] } | null {
   const next = exams
-    .filter((e) => e.courseId === courseId && e.date >= today && addDays(e.date, -AGENDA_RULES.examWindowDays) <= today)
-    .sort((a, b) => a.date.localeCompare(b.date))[0];
+    .filter((e) => e.courseId === courseId && (e.cramming || (e.date >= today && addDays(e.date, -AGENDA_RULES.examWindowDays) <= today)))
+    .sort((a, b) => Number(!!b.cramming) - Number(!!a.cramming) || a.date.localeCompare(b.date))[0];
   return next ? { topicIds: [...new Set(next.topicIds.map(currentTopic))] } : null;
 }
 

@@ -430,17 +430,18 @@ All 11 Figma screens are built. Where things live:
   `detail: "full"` (the default) or none with `"summary"`, what's due now, `examFocus` (the topics of the exams in the
   window: within 7 days or cramming), `budget` (the daily model budget), `writing` (top-up runs in flight), `vault`
   (held-back materials by name only), `mode` (`day-of` / `exam-week` / `normal`) and `cramming` (the exam's id)),
-  `next_questions` (Orca picks: what's due, then exam focus, then unflagged objectives, each group heaviest first by
-  course weight × exam-scope weight inside the window (`examScopeWeights`, `src/lib/course/weights.ts`, weight 0 never
-  drawn); per objective unseen questions first; `count` 1 to 5; when nothing askable exists and `write` (default) it
+  `next_questions` (Orca picks: what's due (in urgency order), then exam focus, then unflagged objectives, those two
+  groups heaviest first by course weight × exam-scope weight inside the window (`examScopeWeights`,
+  `src/lib/course/weights.ts`; weight 0 never drawn, as the agenda's due list); per objective unseen questions first; `count` 1 to 5; when nothing askable exists and `write` (default) it
   starts a top-up and answers `pending`, or says why it won't; never an empty list without a reason), `set_exam` (date +
   topic ids, `cramming`, `scope` (`ExamScope`: per-objective weights with their evidence, validated against the course's
   live objectives); `remove: true` deletes it), `questions_for` (the older draw, kept; no keys), `check_answer` (the
   student's words; Orca grades choice and exact answers itself and prose through `gradeAnswer`, records full credit with
   its own grader, `source: "connector"`, and the reported `help` and `confidence`, returns the key, explanation and the
-  rubric grader's `errorType`; when it can't grade it answers `needsSelfGrade` with the key), `record_answer` (an answer
+  rubric grader's `errorType`; when it can't grade, or in a cram (`mode` isn't normal: Orca makes no model calls then, so
+  `next_questions` and `flag_check` start no top-up either), it answers `needsSelfGrade` with the key), `record_answer` (an answer
   Claude graded against the key: `grader: "claude"`, full credit with `help: "none"`, half with `hint`, a miss with
-  `shown`; for a choice or exact question Orca checks the words against the stored key and its result wins,
+  `shown`, no `errorType` on an answer found correct; for a choice or exact question Orca checks the words against the stored key and its result wins,
   `corrected: true`), `flag_check` (a *check me* flag per objective the student asked about or got wrong, `said`
   screened; `strength: "struggled"` writes `flag_source: "connector-struggled"`, back to learning; writes questions for
   ones with none), `material_for` (each objective's anchored pages, at most 6 pieces cut at 2,500 characters, never from

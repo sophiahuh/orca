@@ -40,11 +40,13 @@ export const INSTRUCTIONS =
   "answer, ask how sure they are (confidence 1 to 3). 4) Send the student's answer, in their words, " +
   "to check_answer with their confidence and the help you gave: Orca grades it, records it and " +
   "returns the key and explanation; teach from those, then go to the next question. If " +
-  "check_answer says needsSelfGrade, grade against the key it returns and call record_answer, " +
+  "check_answer says needsSelfGrade (always for prose in a cram: Orca makes no model calls then), " +
+  "grade against the key it returns and call record_answer, " +
   "reporting help: none, hint, or shown when you revealed the answer first. Never record an answer " +
   "the student didn't give. 5) Call material_for before teaching an objective or writing questions, " +
-  "so you teach what the course teaches, in its notation. When the bank is thin, or budget.ok is " +
-  "false, write questions yourself with add_questions, anchored to material_for's pieces, then " +
+  "so you teach what the course teaches, in its notation. When the bank is thin, budget.ok is " +
+  "false, or the course is in a cram (mode isn't normal: Orca writes no questions then), write " +
+  "questions yourself with add_questions, anchored to material_for's pieces, then " +
   "grade them against the key you stored and report help. Record a problem you set and judged, or " +
   "what the student did (got-it, lost, asked-answer, asked-harder), with log_evidence. 6) When " +
   "next_questions returns pending, Orca is writing questions: teach from the material meanwhile " +
@@ -201,7 +203,7 @@ export interface CheckedAnswer extends AnswerKey {
   note?: string;
 }
 
-/** Orca couldn't grade a prose answer now (no model, the day's budget, a rate limit, grading off): Claude grades against the key and calls record_answer. */
+/** Orca couldn't grade a prose answer now (no model, the day's budget, a rate limit, grading off), or won't during a cram (no model calls then): Claude grades against the key and calls record_answer. */
 export interface SelfGradeNeeded extends AnswerKey {
   needsSelfGrade: true;
   reason: string;
@@ -369,7 +371,8 @@ export const TOOLS = [
       "heaviest objectives nobody has flagged; within an objective, questions the student hasn't seen first. " +
       "Pass objectiveIds or topicIds to steer it. Ask one at a time and send each answer to check_answer. " +
       "When nothing askable exists, Orca writes questions (write true, the default) and answers pending: " +
-      "teach from the material and ask again after retryAfterSeconds. The reply always says why when it's empty.",
+      "teach from the material and ask again after retryAfterSeconds. In a cram (mode isn't normal) Orca " +
+      "writes none: write them with add_questions. The reply always says why when it's empty.",
     inputSchema: {
       type: "object",
       properties: {
@@ -477,8 +480,8 @@ export const TOOLS = [
       "records it: a choice question by the option they picked (its number as shown, 1 to 4, its letter, " +
       "or its text), a short answer by exact match or, for a prose answer, by Orca's grader against the " +
       "question's rubric. The reply carries the outcome, feedback, the key and the explanation: teach from " +
-      "those. If it says needsSelfGrade, Orca couldn't grade it now; grade against the key yourself and call " +
-      "record_answer. 'I don't know' is an answer too: send it.",
+      "those. If it says needsSelfGrade, Orca couldn't grade it now (or won't: it grades no prose during a cram); " +
+      "grade against the key yourself and call record_answer. 'I don't know' is an answer too: send it.",
     inputSchema: {
       type: "object",
       properties: {

@@ -1,6 +1,6 @@
 import { type Page } from "@playwright/test";
 import type { QuizQuestion } from "../src/lib/data";
-import { fakeModel } from "./fake-model";
+import { fakeCalls, fakeModel } from "./fake-model";
 import { expect, test, F, FIXTURE_STATE, ids, seedState, stored } from "./fixture";
 
 /**
@@ -186,6 +186,54 @@ test("Settings mints the connector link once; Claude can read the course, ask a 
   await expect(card.locator('[data-part="connector-status"]')).toHaveText(/Not connected/);
   const revoked = await rpc(page, url, "ping");
   expect(revoked.status).toBe(401);
+});
+
+test("in a cram Orca makes no model calls: prose is handed back for Claude to grade and no questions are written; a corrected answer carries no errorType", async ({ page, student }) => {
+  const id = ids("prose", "noq");
+  const prose: QuizQuestion = { id: id.prose, kind: "Short answer", tier: "mechanism", topic: "Two's Complement", prompt: "Why does sign extension copy the top bit?", options: [], answer: -1, rubric: { requiredIdeas: ["The top bit is the sign"], acceptableAlternatives: [], knownMisconceptions: [] }, explanation: "The weight of the new bits cancels.", anchor: { locator: "slide 9", excerpt: "fixture" }, objectiveId: F.signExtend };
+  const bank = FIXTURE_STATE.questionBank[F.course];
+  const noq = { ...FIXTURE_STATE.objectives[F.course][F.simplify], id: id.noq, name: "Factor an expression" };
+  await seedState(student, { ...FIXTURE_STATE, objectives: { [F.course]: { ...FIXTURE_STATE.objectives[F.course], [id.noq]: noq } }, questionBank: { [F.course]: { ...bank, [F.twosComplement]: [...bank[F.twosComplement], prose] } } });
+  await page.goto("/settings");
+  const card = page.locator('[data-part="claude-connector"]');
+  await card.locator('[data-part="connector-create"]').click();
+  const url = (await card.locator('[data-part="connector-url"]').textContent())!.trim();
+  await fakeModel({});
+
+  // An exam 12 days out the student is cramming for: the course is in exam-week whatever the date.
+  const far = new Date(Date.now() + 12 * 86_400_000).toISOString().slice(0, 10);
+  const exam = toolText(await call(page, url, "set_exam", { courseId: F.course, title: "Final", date: far, topicIds: [], cramming: true })) as { id: string; mode: string };
+  expect(exam.mode).toBe("exam-week");
+  expect(toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" }))).toMatchObject({ mode: "exam-week", cramming: exam.id });
+  // A prose answer isn't graded by Orca's model: the key comes back for Claude to grade.
+  const held = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." })) as { needsSelfGrade: boolean; reason: string; rubric?: { requiredIdeas: string[] } };
+  expect(held.needsSelfGrade).toBe(true);
+  expect(held.reason).toMatch(/cram/);
+  expect(held.rubric?.requiredIdeas).toEqual(["The top bit is the sign"]);
+  // Nothing askable and nothing pending: Orca starts no top-up, and says Claude writes.
+  const none = toolText(await call(page, url, "next_questions", { courseId: F.course, objectiveIds: [id.noq] })) as { questions: unknown[]; pending?: unknown; reason?: string };
+  expect(none.questions).toEqual([]);
+  expect(none.pending).toBeUndefined();
+  expect(none.reason).toMatch(/add_questions/);
+  const flagged = toolText(await call(page, url, "flag_check", { courseId: F.course, objectiveIds: [id.noq], said: "factoring is hard", strength: "struggled" })) as { withoutQuestions: string[]; note?: string };
+  expect(flagged.withoutQuestions).toEqual([id.noq]);
+  expect(flagged.note).toMatch(/add_questions/);
+  expect((toolText(await call(page, url, "course_state", { courseId: F.course, detail: "summary" })) as { writing: unknown[] }).writing).toEqual([]);
+  expect(await fakeCalls()).toEqual([]);
+  // Claude marked an exact answer wrong with a kind of mistake; the key says it's right: Orca's result wins and no errorType is stored.
+  const corrected = toolText(await call(page, url, "record_answer", { courseId: F.course, questionId: F.ba1, outcome: "incorrect", response: "x", errorType: "sign" }));
+  expect(corrected).toEqual({ recorded: true, objectiveId: F.simplify, status: "verified", corrected: true });
+  const s = await stored(page, student);
+  const answers = s.evidence.filter((e) => e.kind === "answer");
+  expect(answers).toHaveLength(1);
+  expect(answers[0]).toMatchObject({ questionId: F.ba1, outcome: "correct", grader: "claude", help: "none" });
+  expect(answers[0]).not.toHaveProperty("errorType");
+
+  // Cramming stopped (the exam is still 12 days out): Orca's grader is back.
+  expect((toolText(await call(page, url, "set_exam", { courseId: F.course, examId: exam.id, title: "Final", date: far, topicIds: [], cramming: false })) as { mode: string }).mode).toBe("normal");
+  const graded = toolText(await call(page, url, "check_answer", { courseId: F.course, questionId: id.prose, response: "Because the top bit is the sign bit." }));
+  expect(graded).toMatchObject({ outcome: "correct", grader: "rubric", objectiveId: F.signExtend });
+  expect(await fakeCalls()).toEqual(["grade"]);
 });
 
 test("a made-up link is refused, and GET isn't served", async ({ page }) => {
