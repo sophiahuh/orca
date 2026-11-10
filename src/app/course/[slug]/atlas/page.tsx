@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { DiveModal } from "@/components/quiz/DiveModal";
 import { durationSeconds } from "@/lib/mastery/session";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
+import { UploadsLink } from "@/components/course/UploadsLink";
 import { TopicGraph } from "@/components/atlas/TopicGraph";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackButton } from "@/components/layout/BackButton";
@@ -92,6 +93,7 @@ export default function AtlasPage({ params }: PageProps<"/course/[slug]/atlas">)
           </motion.p>
           <motion.div variants={fadeUp} className="pointer-events-auto mt-[6px] flex items-center gap-[10px]">
             <AtlasSwitch slug={course.slug} current="atlas" />
+            <UploadsLink course={course} />
             {topics > 1 && (
               <button
                 type="button"

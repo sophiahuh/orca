@@ -7,6 +7,7 @@ import { DiveModal } from "@/components/quiz/DiveModal";
 import { durationSeconds } from "@/lib/mastery/session";
 import { weakSpotStatus, type WeakSpotStatus } from "@/lib/mastery/progress";
 import { AtlasSwitch } from "@/components/atlas/AtlasSwitch";
+import { UploadsLink } from "@/components/course/UploadsLink";
 import { AppShell } from "@/components/layout/AppShell";
 import { BackButton } from "@/components/layout/BackButton";
 import { DEFAULT_CONFIG, trailTopics } from "@/lib/data";
@@ -62,8 +63,9 @@ export default function ListPage({ params }: PageProps<"/course/[slug]/list">) {
               <motion.p variants={fadeUp} className="text-[15px] font-medium text-wisteria-deep" data-part="list-summary">
                 {rows.length ? `${rows.length} topic${rows.length === 1 ? "" : "s"} with weak spots` : "No weak spots flagged yet"}
               </motion.p>
-              <motion.div variants={fadeUp} className="mt-[4px]">
+              <motion.div variants={fadeUp} className="mt-[4px] flex items-center gap-[10px]">
                 <AtlasSwitch slug={course.slug} current="list" />
+                <UploadsLink course={course} />
               </motion.div>
             </motion.header>
 
