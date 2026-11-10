@@ -60,7 +60,7 @@ export function ProfileCard() {
 export function TimezoneRow() {
   const { timezone, setTimezone } = useOrca();
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div className="flex flex-col items-start gap-[8px]">
       <div className="flex flex-col gap-[2px]">
         <span className="text-[16px] font-bold text-prussian">Timezone</span>
         <span className="text-[13px] font-medium text-wisteria-deep">Decides when your day starts and what&apos;s due today.</span>

@@ -38,8 +38,7 @@ async function saveMarkerNotes(markers: string | null) {
  * to the home page's stats strip (src/components/map/StudyStats.tsx).
  */
 const SECTIONS = [
-  { key: "review", label: "Review rhythm", blurb: "Used by every class unless that class's own settings override it." },
-  { key: "notes", label: "Study notes", blurb: "What Orca reads before it writes your topics, objectives and questions." },
+  { key: "preferences", label: "Preferences", blurb: "How Orca studies with you, in every class unless a class's own settings say otherwise." },
   { key: "connections", label: "Connections", blurb: "Study in Claude, and pull your classes from Canvas." },
   { key: "profile", label: "Profile", blurb: "How you show up in Orca." },
   { key: "account", label: "Account", blurb: "How you sign in." },
@@ -68,7 +67,7 @@ function SettingsBody() {
   return (
     <div className="flex min-h-0 flex-1 gap-[20px] px-[24px] pb-[28px] pt-[20px]">
       <SectionRail current={section.key} />
-      <main className="flex min-h-0 min-w-0 max-w-[720px] flex-1 flex-col gap-[14px]" data-part="settings-section" data-section={section.key}>
+      <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-[14px]", section.key === "preferences" ? "max-w-[1000px]" : "max-w-[720px]")} data-part="settings-section" data-section={section.key}>
         <div className="flex flex-col gap-[4px] px-[4px]">
           <h2 className="text-[28px] font-semibold leading-tight text-prussian">{section.label}</h2>
           <p className="text-[15px] font-medium text-wisteria-deep">{section.blurb}</p>
@@ -77,8 +76,16 @@ function SettingsBody() {
         <div className="-mx-[8px] min-h-0 flex-1 overflow-y-auto px-[8px] pb-[12px]" data-part="settings-scroll">
           <AnimatePresence mode="wait">
             <motion.div key={section.key} variants={fadeSwap} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-[14px]">
-              {section.key === "review" && <ReviewRhythm />}
-              {section.key === "notes" && <StudyNotes />}
+              {section.key === "preferences" && (
+                <div className="flex items-start gap-[14px]">
+                  <div className="flex min-w-0 flex-1 flex-col gap-[14px]">
+                    <StudyNotes />
+                  </div>
+                  <div className="w-[340px] shrink-0">
+                    <ReviewRhythm />
+                  </div>
+                </div>
+              )}
               {section.key === "connections" && (
                 <>
                   <ClaudeConnectorCard />
@@ -147,22 +154,25 @@ function SectionRail({ current }: { current: SectionKey }) {
   );
 }
 
-/** The account's default review settings and the timezone; each saves as it changes. */
+/** The account's default review settings and the timezone, beside the notes in Preferences; each saves as it changes. */
 function ReviewRhythm() {
   const { defaultConfig, setDefaults, hydrated } = useOrca();
   // Only once loaded: an edit made before the load lands would be overwritten on screen by it.
   if (!hydrated) return null;
   return (
-    <Card className="flex flex-col gap-[16px] px-[24px] pb-[22px] pt-[20px]" data-part="default-config">
-      <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="flex flex-col gap-[10px]">
+    <Card className="flex flex-col gap-[16px] px-[22px] pb-[22px] pt-[20px]" data-part="default-config">
+      <div className="flex flex-col gap-[4px]">
+        <h2 className="text-[22px] font-bold text-prussian">Review rhythm</h2>
+        <p className="text-[13px] font-medium text-wisteria-deep">How long and how often. Changes save as you make them.</p>
+      </div>
+      <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="flex flex-col gap-[14px]">
         {(["quick", "deep", "exam"] as const).map((k) => (
-          <ConfigRow key={k} label={REVIEW_LABELS[k]} row={defaultConfig[k]} onChange={(row) => setDefaults({ ...defaultConfig, [k]: row })} />
+          <ConfigRow key={k} stacked label={REVIEW_LABELS[k]} row={defaultConfig[k]} onChange={(row) => setDefaults({ ...defaultConfig, [k]: row })} />
         ))}
       </motion.div>
       <div className="border-t border-alice-deep pt-[16px]">
         <TimezoneRow />
       </div>
-      <p className="text-[13px] font-medium text-wisteria-deep">Changes save as you make them.</p>
     </Card>
   );
 }
