@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { connectorMinutes, cramFields, topErrorsOf, type CramFieldsInput } from "../../src/lib/server/connector/cram-plan.ts";
+import { connectorMinutes, cramFields, spentMinutesSplit, topErrorsOf, type CramFieldsInput } from "../../src/lib/server/connector/cram-plan.ts";
 import type { ExamLine, ObjectiveLine } from "../../src/lib/connector/mcp.ts";
 import { fakeDb } from "../support/fake-db.ts";
 
@@ -27,7 +27,7 @@ const exam = (extra: Partial<ExamLine> = {}): ExamLine => ({ id: "e1", title: "F
 const event = (at: string, extra: Record<string, unknown> = {}) => ({ owner_id: OWNER, course_id: COURSE, at, kind: "answer", source: "connector", error_type: null, ...extra });
 const input = (exams: ExamLine[]): CramFieldsInput => ({ courseId: COURSE, at: AT, timezone: "UTC", today: "2026-11-13", exams, topics, objectives, weights });
 
-test("course_state's plan counts the sessions and the connector's chat since the cram started against the budget", async () => {
+test("course_state's plan counts the sessions and the connector's chat since the cram started against the budget, day by day", async () => {
   const db = fakeDb({
     session_results: [
       { owner_id: OWNER, course_id: COURSE, finished_at: "2026-11-11T10:00:00.000Z", seconds: 1800 },
@@ -35,21 +35,23 @@ test("course_state's plan counts the sessions and the connector's chat since the
       { owner_id: "someone-else", course_id: COURSE, finished_at: "2026-11-12T10:00:00.000Z", seconds: 9000 },
     ],
     evidence_events: [
-      // A 20-minute chat on the 12th, and a 5-hour one on the 13th capped at 120 minutes.
+      // A 20-minute chat on the 12th, and a 30-minute one today (the 13th).
       event("2026-11-12T20:00:00.000Z"),
       event("2026-11-12T20:20:00.000Z", { kind: "work" }),
       event("2026-11-13T09:00:00.000Z"),
-      event("2026-11-13T14:00:00.000Z"),
+      event("2026-11-13T09:30:00.000Z"),
       event("2026-11-13T14:30:00.000Z", { source: "quiz" }), // the app's own session, not the chat
       event("2026-11-05T10:00:00.000Z"), // before the cram
     ],
   });
   const { plan, coverage, topErrors } = await cramFields(db as never, OWNER, input([exam()]));
   assert.ok(plan);
-  // 30 session minutes + 20 + 120 chat minutes.
-  assert.equal(plan.hoursLeft, 6 - 170 / 60);
+  // The budget was saved the old way: 6 hours over 9 days is 40 minutes a day. Before today: 30 session + 20 chat minutes against 120 asked for; today: 30 chat minutes.
+  assert.equal(plan.behindMinutes, 70);
+  assert.equal(plan.minutesToday, 10);
+  assert.equal(Math.round(plan.hoursLeft * 1000) / 1000, 3.5);
   assert.equal(plan.daysLeft, 6);
-  assert.match(plan.line, /^6 days to the exam\. Done: Counters\. Today: /);
+  assert.equal(plan.line, "6 days to the exam. Done: Counters. Today: Adders, Buses. Verified: 50%. 70 minutes behind: Buses gets shortened.");
   assert.deepEqual(plan.verified, { done: 2, total: 4, share: 0.5 });
   assert.deepEqual(plan.topics.map((t) => [t.id, t.done, t.weakSpots]), [
     ["A", false, ["a1"]],
@@ -100,6 +102,23 @@ test("topErrors count the kinds of mistake since the cram started, else over the
   assert.equal(many.length, 6);
   assert.deepEqual(many[0], { errorType: "sign", count: 2 });
   assert.deepEqual(topErrorsOf([{ kind: "answer", error_type: "typo" }]), [], "an unknown kind is ignored");
+});
+
+test("spent minutes split at the start of the student's today: sessions by the day they finished, the chat by day", () => {
+  const sessions = [
+    { finished_at: "2026-11-12T10:00:00.000Z", seconds: 600 },
+    { finished_at: "2026-11-13T03:00:00.000Z", seconds: 1200 }, // the 12th's evening in New York
+    { finished_at: "2026-11-13T15:00:00.000Z", seconds: 300 },
+  ];
+  const events = [
+    { at: "2026-11-12T23:00:00.000Z", source: "connector" },
+    { at: "2026-11-12T23:30:00.000Z", source: "connector" },
+    { at: "2026-11-13T15:00:00.000Z", source: "connector" },
+    { at: "2026-11-13T15:10:00.000Z", source: "connector" },
+  ];
+  assert.deepEqual(spentMinutesSplit(sessions, events, "America/New_York", "2026-11-13"), { beforeToday: 60, today: 15 });
+  assert.deepEqual(spentMinutesSplit(sessions, events, "UTC", "2026-11-13"), { beforeToday: 40, today: 35 });
+  assert.deepEqual(spentMinutesSplit(sessions, events, "UTC", "2026-11-12"), { beforeToday: 0, today: 40 }, "later days count nowhere");
 });
 
 test("the connector estimate is each day's span in the student's timezone, capped at 120 minutes", () => {

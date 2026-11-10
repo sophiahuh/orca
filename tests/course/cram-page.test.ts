@@ -24,9 +24,13 @@ test("the setup's hours a day are the total over the study days, to the nearest 
   assert.equal(weekdayName("2026-11-13"), "Friday");
 });
 
-test("spent minutes count this course's sessions finished since cramming started", () => {
-  const results = [result("c", "2026-11-09T10:00:00Z", 600), result("c", "2026-11-10T10:00:00Z", 900), result("d", "2026-11-10T11:00:00Z", 900)];
-  assert.equal(spentMinutesInOrca(results, "c", "2026-11-10T00:00:00Z"), 15);
+test("spent minutes count this course's sessions finished since cramming started, split at the start of today", () => {
+  const results = [result("c", "2026-11-09T10:00:00Z", 600), result("c", "2026-11-10T10:00:00Z", 900), result("c", "2026-11-11T03:00:00Z", 300), result("d", "2026-11-11T11:00:00Z", 900)];
+  const utcDay = (iso: string) => iso.slice(0, 10);
+  assert.deepEqual(spentMinutesInOrca(results, "c", "2026-11-10T00:00:00Z", "2026-11-11", utcDay), { beforeToday: 15, today: 5 });
+  assert.deepEqual(spentMinutesInOrca(results, "c", "2026-11-10T00:00:00Z", "2026-11-10", utcDay), { beforeToday: 0, today: 15 }, "a session after today (the clock moved) counts nowhere");
+  // The day is the student's: at 22:00 in New York the 11th's UTC session is still the 10th.
+  assert.deepEqual(spentMinutesInOrca(results, "c", "2026-11-10T00:00:00Z", "2026-11-10", (iso) => new Date(Date.parse(iso) - 5 * 3_600_000).toISOString().slice(0, 10)), { beforeToday: 0, today: 20 });
 });
 
 test("the plan's topics carry the covered objectives at course × scope weight, by surviving topic, with their status", () => {
@@ -45,18 +49,18 @@ test("the plan's topics carry the covered objectives at course × scope weight, 
   assert.deepEqual(all.map((t) => [t.id, t.objectives.map((o) => [o.id, o.weight])]), [["t2", [["b", 0.75], ["c", 0.75]]]]);
 });
 
-test("the page's plan: an exam 5 days out, 6 hours with one day out, nothing verified", () => {
+test("the page's plan: an exam 5 days out, 6 hours by day with one day out, nothing verified", () => {
   const plan = cramPlan({
     today: "2026-11-10",
     examDate: "2026-11-15",
-    budget: { hours: 6, daysOut: ["2026-11-12"], since: "2026-11-10T09:00:00Z" },
+    budget: { hours: 6, daysOut: ["2026-11-12"], since: "2026-11-10T09:00:00Z", perDay: { "2026-11-10": 1.5, "2026-11-11": 2, "2026-11-12": 0, "2026-11-13": 1.5, "2026-11-14": 1 } },
     topics: [{ id: "t", name: "Two's Complement", objectives: [{ id: "a", name: "a", weight: 1, status: "learning" }, { id: "b", name: "b", weight: 1, status: "unseen" }] }],
-    spentMinutes: 0,
+    spentMinutes: { beforeToday: 0, today: 0 },
   });
   assert.equal(plan.daysLeft, 5);
   assert.deepEqual(plan.studyDays, ["2026-11-10", "2026-11-11", "2026-11-13", "2026-11-14"]);
   assert.equal(plan.hoursLeft, 6);
-  assert.equal(plan.minutesPerDay, 90);
+  assert.equal(plan.minutesToday, 90);
   assert.equal(plan.behindMinutes, 0);
   assert.deepEqual(plan.today, [{ topicId: "t", minutes: 90 }]);
   assert.deepEqual(plan.topics[0].weakSpots, ["a"]);
