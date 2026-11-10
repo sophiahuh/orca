@@ -186,6 +186,8 @@ interface OrcaActions {
   recordReflection: (materialId: string, note: string, events: Array<Omit<ConfusionEvent, "id" | "at" | "kind" | "materialId" | "note" | "flagSource" | "page">>) => void;
   /** "This is hard": one struggled flag from `manual` per objective (random ids, so flagging again later is recorded again). */
   flagObjectives: (courseId: string, objectiveIds: readonly string[]) => void;
+  /** Ask for questions for flagged objectives that have none (a flag top-up); nothing when they all have some. */
+  requestQuestions: (courseId: string, objectiveIds: readonly string[]) => void;
   /** "Which slides were hard?": one struggle flag (source slide) per objective, on the first selected page that names it. */
   flagSlides: (courseId: string, materialId: string, pages: ReadonlyArray<{ page: number; objectiveIds: readonly string[] }>) => void;
   setOnboarded: (v: boolean) => void;
@@ -938,6 +940,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       recordReflection,
       flagObjectives,
       flagSlides,
+      requestQuestions: requestFlagTopUp,
       setOnboarded,
       setName,
       setTimezone,
@@ -949,7 +952,7 @@ export function OrcaProvider({ children }: { children: React.ReactNode }) {
       dismissSaveError,
       reload,
     }),
-    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
+    [state, hydrated, status, loadError, saving, saveError, flagTopUpRun, addCourse, renameCourse, setConfig, clearConfigOverride, addExam, updateExam, removeExam, rateQuestion, saveProgress, setDefaults, addMaterial, recordQuiz, recordEvidence, recordReflection, flagObjectives, flagSlides, requestFlagTopUp, setOnboarded, setName, setTimezone, setAvatar, setLlm, refresh, afterSaves, editStructure, dismissSaveError, reload],
   );
 
   return <OrcaContext.Provider value={value}>{children}</OrcaContext.Provider>;
