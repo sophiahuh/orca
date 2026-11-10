@@ -51,7 +51,7 @@ export function DailyUsage({ placement }: { placement: "floating" | "inline" }) 
     ? "Orca's budget for today is used up"
     : spent
       ? "Today's limit reached"
-      : `Today's reading: ${percent}% used`;
+      : `Today's AI usage: ${percent}% used`;
   if (placement === "floating" && !spent && held === 0 && share < WARN_AT) return null;
   return (
     <div
