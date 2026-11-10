@@ -14,14 +14,78 @@ function zones(current: string): string[] {
   return all.includes(current) ? all : [current, ...all];
 }
 
-/** Who is signed in, their sea buddy, their timezone (every day boundary uses it), and sign out. */
+/** How the student shows up: their name and sea buddy. Each saves as it changes (the store shows a failed save). */
+export function ProfileCard() {
+  const { avatar, setAvatar, name, setName, hydrated } = useOrca();
+  const [username, setUsername] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const value = username ?? name ?? "";
+
+  const saveUsername = () => {
+    try {
+      setName(value);
+      setUsername(null);
+      setNotice("Username saved.");
+      setProblem(null);
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : "Couldn't save your username.");
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-[16px] px-[28px] pb-[24px] pt-[22px]" data-part="profile">
+      {hydrated && (
+        <>
+          <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
+            Username
+            <div className="flex gap-[8px]">
+              <input value={value} onChange={(e) => { setUsername(e.target.value); setNotice(null); }} maxLength={80} autoComplete="username" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
+              <Button size="sm" onClick={saveUsername} disabled={!value.trim() || value.trim() === (name ?? "")}>Save</Button>
+            </div>
+          </label>
+          <div className="flex flex-col gap-[8px]">
+            <span className="text-[14px] font-bold text-prussian">Sea buddy</span>
+            <AvatarPicker value={avatar} onChange={setAvatar} compact className="items-start" />
+          </div>
+        </>
+      )}
+      {notice && <p role="status" className="text-[13px] font-semibold text-good-deep">{notice}</p>}
+      {problem && <p role="alert" className="text-[13px] font-semibold text-prussian">{problem}</p>}
+    </Card>
+  );
+}
+
+/** The student's timezone: every day boundary (what's due today, the streak) uses it. Saves as it changes. */
+export function TimezoneRow() {
+  const { timezone, setTimezone } = useOrca();
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-[2px]">
+        <span className="text-[16px] font-bold text-prussian">Timezone</span>
+        <span className="text-[13px] font-medium text-wisteria-deep">Decides when your day starts and what&apos;s due today.</span>
+      </div>
+      <Select size="sm" label="Timezone" value={timezone} options={zones(timezone)} onChange={setTimezone} />
+    </div>
+  );
+}
+
+export function SignOutButton() {
+  return (
+    <form action={signOut}>
+      <Button variant="secondary" size="sm" type="submit">
+        Sign out
+      </Button>
+    </form>
+  );
+}
+
+/** The sign-in contacts: email and phone, each changed only once confirmed. */
 export function AccountCard() {
-  // The timezone and avatar live in the store; a failed save shows there.
-  const { timezone, setTimezone, avatar, setAvatar, name, setName, hydrated } = useOrca();
+  const { hydrated } = useOrca();
   const [email, setEmail] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
   const [confirmedEmail, setConfirmedEmail] = useState("");
-  const [username, setUsername] = useState("");
   const [phoneCode, setPhoneCode] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [changingEmail, setChangingEmail] = useState(false);
@@ -37,22 +101,11 @@ export function AccountCard() {
       setEmail(auth.user.email ?? "");
       setConfirmedEmail(auth.user.email ?? "");
       setPhone(auth.user.phone ?? "");
-      setUsername(name ?? "");
     })();
     return () => {
       live = false;
     };
-  }, [name]);
-
-  const saveUsername = () => {
-    try {
-      setName(username);
-      setNotice("Username saved.");
-      setProblem(null);
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : "Couldn't save your username.");
-    }
-  };
+  }, []);
 
   const requestEmailChange = async () => {
     const value = email?.trim() ?? "";
@@ -60,7 +113,7 @@ export function AccountCard() {
     setChangingEmail(true);
     setProblem(null);
     setNotice(null);
-    const { error } = await browserSupabase().auth.updateUser({ email: value }, { emailRedirectTo: `${window.location.origin}/auth/callback?next=/settings` });
+    const { error } = await browserSupabase().auth.updateUser({ email: value }, { emailRedirectTo: `${window.location.origin}/auth/callback?next=/settings?section=account` });
     setChangingEmail(false);
     if (error) return setProblem(error.message);
     setNotice("Check your current and new inboxes to confirm the email change. Your email stays the same until it is confirmed.");
@@ -92,19 +145,9 @@ export function AccountCard() {
   };
 
   return (
-    <Card className="flex flex-col gap-[14px] px-[28px] pb-[24px] pt-[24px]">
-      <h2 className="text-[22px] font-bold text-prussian">Account</h2>
+    <Card className="flex flex-col gap-[14px] px-[28px] pb-[24px] pt-[22px]" data-part="account">
       {email !== null && hydrated && (
         <>
-          <div className="flex flex-col gap-[8px]">
-            <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
-              Username
-              <div className="flex gap-[8px]">
-                <input value={username} onChange={(e) => { setUsername(e.target.value); setNotice(null); }} maxLength={80} autoComplete="username" className="min-w-0 flex-1 rounded-[10px] border-2 border-alice-deep bg-parchment px-[10px] py-[8px] text-[14px] font-medium outline-none focus:border-wisteria" />
-                <Button size="sm" onClick={saveUsername} disabled={!username.trim() || username.trim() === (name ?? "")}>Save</Button>
-              </div>
-            </label>
-          </div>
           <div className="flex flex-col gap-[8px]">
             <label className="flex flex-col gap-[5px] text-[14px] font-bold text-prussian">
               Email
@@ -131,23 +174,10 @@ export function AccountCard() {
             )}
             <span className="text-[12px] leading-snug text-wisteria-deep">A confirmation code is required before a new phone number is saved.</span>
           </div>
-          <div className="flex flex-col gap-[8px]">
-            <span className="text-[14px] font-bold text-prussian">Sea buddy</span>
-            <AvatarPicker value={avatar} onChange={setAvatar} compact className="items-start" />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[14px] font-bold text-prussian">Timezone</span>
-            <Select size="sm" label="Timezone" value={timezone} options={zones(timezone)} onChange={setTimezone} />
-          </div>
         </>
       )}
       {notice && <p role="status" className="text-[13px] font-semibold text-good-deep">{notice}</p>}
       {problem && <p role="alert" className="text-[13px] font-semibold text-prussian">{problem}</p>}
-      <form action={signOut}>
-        <Button variant="secondary" size="sm" type="submit">
-          Sign out
-        </Button>
-      </form>
     </Card>
   );
 }

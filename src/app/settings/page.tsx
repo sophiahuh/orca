@@ -1,21 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "motion/react";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { AnimatePresence, motion } from "motion/react";
 import { useOrca } from "@/lib/store";
+import { browserSupabase } from "@/lib/supabase/browser";
+import { cn } from "@/lib/cn";
 import { Screen } from "@/components/layout/Screen";
 import { BackButton } from "@/components/layout/BackButton";
+import { Avatar } from "@/components/brand/Avatar";
 import { Card } from "@/components/ui/Card";
 import { ConfigRow, REVIEW_LABELS } from "@/components/config/ConfigRow";
 import { MarkerNotes } from "@/components/config/MarkerNotes";
 import { NotesForOrca } from "@/components/config/NotesForOrca";
-import { AccountCard } from "@/components/settings/Account";
+import { AccountCard, ProfileCard, SignOutButton, TimezoneRow } from "@/components/settings/Account";
 import { CanvasConnectionCard } from "@/components/settings/CanvasConnection";
 import { ClaudeConnectorCard } from "@/components/settings/ClaudeConnector";
-import { YourMetricsCard } from "@/components/settings/YourMetrics";
-import { fadeUp, stagger } from "@/lib/motion";
+import { fadeSwap, fadeUp, stagger } from "@/lib/motion";
 import { Button } from "@/components/ui/Button";
-import { type ReviewConfig } from "@/lib/data";
 
 async function saveAccountNotes(notes: string | null) {
   const response = await fetch("/api/account-notes", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ notes }) });
@@ -30,95 +33,180 @@ async function saveMarkerNotes(markers: string | null) {
 }
 
 /**
- * Settings: account-wide fallbacks. A course can inherit these live defaults or set a higher-
- * priority override from its own settings page. Notes for Orca here apply to every class, alongside
- * each class's own.
+ * Settings, one section at a time (owner, 2026-11-10: grouped by what a student comes to do). The
+ * section is in the URL (`?section=`), so other screens can link straight to one. Your metrics moved
+ * to the home page's stats strip (src/components/map/StudyStats.tsx).
  */
+const SECTIONS = [
+  { key: "review", label: "Review rhythm", blurb: "Used by every class unless that class's own settings override it." },
+  { key: "notes", label: "Study notes", blurb: "What Orca reads before it writes your topics, objectives and questions." },
+  { key: "connections", label: "Connections", blurb: "Study in Claude, and pull your classes from Canvas." },
+  { key: "profile", label: "Profile", blurb: "How you show up in Orca." },
+  { key: "account", label: "Account", blurb: "How you sign in." },
+] as const;
+
+type SectionKey = (typeof SECTIONS)[number]["key"];
+
 export default function SettingsPage() {
-  const { defaultConfig, setDefaults, accountNotes, markerNotes, refresh, hydrated } = useOrca();
-  const [draft, setDraft] = useState<ReviewConfig | null>(null);
-  const [notesDraft, setNotesDraft] = useState<string | null>(null);
-  const [markersDraft, setMarkersDraft] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  const draftConfig = draft ?? defaultConfig;
-
-  const save = async () => {
-    setDefaults(draftConfig);
-    setSaved(false);
-    setProblem(null);
-    if (notesDraft !== null || markersDraft !== null) {
-      setSaving(true);
-      try {
-        if (notesDraft !== null) {
-          await saveAccountNotes(notesDraft.trim() || null);
-          setNotesDraft(null);
-        }
-        if (markersDraft !== null) {
-          await saveMarkerNotes(markersDraft.trim() || null);
-          setMarkersDraft(null);
-        }
-        await refresh();
-      } catch (error) {
-        setProblem(error instanceof Error ? error.message : "Orca couldn't save your notes.");
-        return;
-      } finally {
-        setSaving(false);
-      }
-    }
-    setSaved(true);
-  };
-
   return (
     <Screen bg="ocean" className="overflow-auto">
       <header className="flex items-center gap-[12px] px-[24px] pt-[20px]">
         <BackButton />
         <h1 className="text-[46px] font-bold leading-none text-prussian">Settings</h1>
       </header>
+      <Suspense>
+        <SettingsBody />
+      </Suspense>
+    </Screen>
+  );
+}
 
-      <div className="grid min-w-[1384px] grid-cols-[600px_380px_380px] items-start gap-[12px] px-[24px] pb-[28px] pt-[20px]">
-        {/* Only once loaded: an edit made before the load lands would be overwritten on screen by it. */}
-        {hydrated && (
-        <motion.div variants={stagger(0.05, 0.08)} initial="hidden" animate="show" className="flex w-[600px] max-w-full flex-col gap-[12px]">
-          <motion.div variants={fadeUp}>
-            <Card className="flex flex-col gap-[12px] px-[24px] pb-[22px] pt-[20px]" data-part="default-config">
-              <div className="flex flex-col gap-[4px]">
-                <h2 className="text-[22px] font-bold text-prussian">Default Review Settings</h2>
-                <p className="text-[14px] font-medium text-wisteria-deep">Used by every course unless overridden by that course&apos;s own configurations.</p>
-              </div>
-              <motion.div variants={stagger(0, 0.05)} className="flex flex-col gap-[10px]">
-                {(["quick", "deep", "exam"] as const).map((k) => (
-                  <ConfigRow key={k} label={REVIEW_LABELS[k]} row={draftConfig[k]} onChange={(row) => { setDraft({ ...draftConfig, [k]: row }); setSaved(false); }} />
-                ))}
-              </motion.div>
-            </Card>
-          </motion.div>
-          <motion.div variants={fadeUp}>
-            <NotesForOrca scope="account" value={notesDraft ?? accountNotes ?? ""} onChange={(v) => { setNotesDraft(v); setSaved(false); }} />
-          </motion.div>
-          <motion.div variants={fadeUp}>
-            <MarkerNotes value={markersDraft ?? markerNotes ?? ""} onChange={(v) => { setMarkersDraft(v); setSaved(false); }} />
-          </motion.div>
-          <motion.div variants={fadeUp} className="flex items-center justify-end gap-[12px]">
-            {problem && <span role="alert" className="text-[14px] font-semibold text-bad-text">{problem}</span>}
-            {saved && <span role="status" aria-label="Saved" className="text-[14px] font-semibold text-good-deep">Saved</span>}
-            <Button size="sm" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
-          </motion.div>
-        </motion.div>
-        )}
+function SettingsBody() {
+  const asked = useSearchParams().get("section");
+  const section = SECTIONS.find((s) => s.key === asked) ?? SECTIONS[0];
 
-        <motion.div variants={fadeUp} initial="hidden" animate="show" className="w-[380px] max-w-full">
-          <AccountCard />
-        </motion.div>
-        <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex w-[380px] max-w-full flex-col gap-[12px]">
-          <YourMetricsCard />
-          <CanvasConnectionCard />
-          <ClaudeConnectorCard />
-        </motion.div>
+  return (
+    <div className="flex items-start gap-[20px] px-[24px] pb-[28px] pt-[20px]">
+      <SectionRail current={section.key} />
+      <main className="flex min-w-0 max-w-[720px] flex-1 flex-col gap-[14px]" data-part="settings-section" data-section={section.key}>
+        <div className="flex flex-col gap-[4px] px-[4px]">
+          <h2 className="text-[28px] font-semibold leading-tight text-prussian">{section.label}</h2>
+          <p className="text-[15px] font-medium text-wisteria-deep">{section.blurb}</p>
+        </div>
+        <AnimatePresence mode="wait">
+          <motion.div key={section.key} variants={fadeSwap} initial="hidden" animate="show" exit="exit" className="flex flex-col gap-[14px]">
+            {section.key === "review" && <ReviewRhythm />}
+            {section.key === "notes" && <StudyNotes />}
+            {section.key === "connections" && (
+              <>
+                <ClaudeConnectorCard />
+                <CanvasConnectionCard />
+              </>
+            )}
+            {section.key === "profile" && <ProfileCard />}
+            {section.key === "account" && <AccountCard />}
+          </motion.div>
+        </AnimatePresence>
         {/* "Your AI" (src/components/settings/YourAI.tsx) is hidden: model calls run on the server with
             Orca's key only (Phase 4, decision 9). Its code stays until "Bring-your-own model" is decided. */}
+      </main>
+    </div>
+  );
+}
+
+/** Who's signed in, the sections, and Sign out at the end. */
+function SectionRail({ current }: { current: SectionKey }) {
+  const { avatar, name } = useOrca();
+  const [email, setEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void browserSupabase()
+      .auth.getUser()
+      .then(({ data }) => live && setEmail(data.user?.email ?? null));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  return (
+    <Card className="sticky top-[20px] flex w-[260px] shrink-0 flex-col gap-[14px] px-[16px] pb-[18px] pt-[18px]" lip={6} radius={28}>
+      <div className="flex items-center gap-[10px] px-[6px]" data-part="settings-identity">
+        <Avatar creature={avatar} size={44} />
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate text-[16px] font-bold text-prussian">{name || "You"}</span>
+          {email && <span className="truncate text-[12px] font-medium text-wisteria-deep">{email}</span>}
+        </div>
       </div>
-    </Screen>
+      <motion.nav variants={stagger(0, 0.04)} initial="hidden" animate="show" aria-label="Settings sections" className="flex flex-col gap-[4px]">
+        {SECTIONS.map((s) => (
+          <motion.div key={s.key} variants={fadeUp}>
+            <Link
+              href={`/settings?section=${s.key}`}
+              replace
+              scroll={false}
+              aria-current={s.key === current ? "page" : undefined}
+              data-part="settings-tab"
+              data-section={s.key}
+              className={cn(
+                "block rounded-[14px] px-[12px] py-[9px] text-[16px] font-bold transition-colors",
+                s.key === current ? "bg-alice text-prussian" : "text-wisteria-deep hover:bg-alice/60 hover:text-prussian",
+              )}
+            >
+              {s.label}
+            </Link>
+          </motion.div>
+        ))}
+      </motion.nav>
+      <div className="border-t border-alice-deep px-[6px] pt-[14px]">
+        <SignOutButton />
+      </div>
+    </Card>
+  );
+}
+
+/** The account's default review settings and the timezone; each saves as it changes. */
+function ReviewRhythm() {
+  const { defaultConfig, setDefaults, hydrated } = useOrca();
+  // Only once loaded: an edit made before the load lands would be overwritten on screen by it.
+  if (!hydrated) return null;
+  return (
+    <Card className="flex flex-col gap-[16px] px-[24px] pb-[22px] pt-[20px]" data-part="default-config">
+      <motion.div variants={stagger(0, 0.05)} initial="hidden" animate="show" className="flex flex-col gap-[10px]">
+        {(["quick", "deep", "exam"] as const).map((k) => (
+          <ConfigRow key={k} label={REVIEW_LABELS[k]} row={defaultConfig[k]} onChange={(row) => setDefaults({ ...defaultConfig, [k]: row })} />
+        ))}
+      </motion.div>
+      <div className="border-t border-alice-deep pt-[16px]">
+        <TimezoneRow />
+      </div>
+      <p className="text-[13px] font-medium text-wisteria-deep">Changes save as you make them.</p>
+    </Card>
+  );
+}
+
+/** Notes for Orca (every class) and how the student marks confusion; saved together by the Save under them. */
+function StudyNotes() {
+  const { accountNotes, markerNotes, refresh, hydrated } = useOrca();
+  const [notesDraft, setNotesDraft] = useState<string | null>(null);
+  const [markersDraft, setMarkersDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const save = async () => {
+    setSaved(false);
+    setProblem(null);
+    setSaving(true);
+    try {
+      if (notesDraft !== null) {
+        await saveAccountNotes(notesDraft.trim() || null);
+        setNotesDraft(null);
+      }
+      if (markersDraft !== null) {
+        await saveMarkerNotes(markersDraft.trim() || null);
+        setMarkersDraft(null);
+      }
+      await refresh();
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : "Orca couldn't save your notes.");
+      return;
+    } finally {
+      setSaving(false);
+    }
+    setSaved(true);
+  };
+
+  if (!hydrated) return null;
+  const changed = notesDraft !== null || markersDraft !== null;
+  return (
+    <>
+      <NotesForOrca scope="account" value={notesDraft ?? accountNotes ?? ""} onChange={(v) => { setNotesDraft(v); setSaved(false); }} />
+      <MarkerNotes value={markersDraft ?? markerNotes ?? ""} onChange={(v) => { setMarkersDraft(v); setSaved(false); }} />
+      <div className="flex items-center justify-end gap-[12px]">
+        {problem && <span role="alert" className="text-[14px] font-semibold text-bad-text">{problem}</span>}
+        {saved && <span role="status" aria-label="Saved" className="text-[14px] font-semibold text-good-deep">Saved</span>}
+        <Button size="sm" onClick={() => void save()} disabled={saving || !changed}>{saving ? "Saving…" : "Save"}</Button>
+      </div>
+    </>
   );
 }
