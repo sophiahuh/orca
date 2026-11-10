@@ -8,6 +8,22 @@ Each phase gets its own plan in `docs/superpowers/plans/` when it starts (Phases
 larger features since have their own plans and specs there too).
 Open questions live in `docs/TO-DISCUSS.md`.
 
+## Staged uploads (implemented behind an opt-in flag)
+
+See [UPLOAD-PIPELINE.md](UPLOAD-PIPELINE.md) for execution and rollout. Preparation overlaps across
+files; extraction/reconciliation holds one course lane; question writing releases that lane.
+Conditional revision checks protect stale snapshots without replacing semantic reconciliation.
+
+New persistence is intentionally operational: manifest/session rows preserve selection order and
+Canvas continuation identity before bytes arrive; task rows own fenced leases and act as the
+outbox; checkpoints and response caches preserve paid work across retries; warm-up rows prevent
+per-file duplication; flag intents bridge structure and evidence commits; objective/flavor claims
+coordinate uploads with top-ups/dives; call/page reservations protect shared budgets. Question
+goals live in task checkpoints rather than a second queue. Internal child tables inherit ownership
+through task/course FKs and have no browser grants. These records do not change learner evidence
+or mastery. Retention and explicit cutover/rollback constraints are documented with the operator
+commands. Default processing remains legacy until activation.
+
 ## Decisions
 
 **Course structure**

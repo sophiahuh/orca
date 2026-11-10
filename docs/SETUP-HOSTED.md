@@ -286,3 +286,9 @@ workflow's Supabase secrets. Left, in order:
 2. Trigger.dev (§2): project and keys, its two repository secrets, then the switch on Vercel.
 3. The dead-run cron (§5), once the Vercel plan is known.
 4. The model key in the cloud environment (§6), which also unblocks the extraction baseline.
+
+## Optional staged upload processing
+
+The staged pipeline is disabled by default. Follow [UPLOAD-PIPELINE.md](UPLOAD-PIPELINE.md) for
+the migration, legacy-worker drain, backfill, database gate and matching web/Trigger flags.
+Do not enable it merely by adding the environment variable.

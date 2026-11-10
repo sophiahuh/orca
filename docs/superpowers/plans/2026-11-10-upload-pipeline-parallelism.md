@@ -1,6 +1,24 @@
 # Upload pipeline: parallel preparation, ordered structure, parallel questions
 
-**Status:** implementation plan reviewed and agreed by the primary agent and independent subagent after an adversarial pass; no runtime changes implemented. Written 2026-11-10 on `upload-pipeline-parallelism`, based on `origin/main` at `75c4758`. Review discussion and remaining assumptions are recorded below. Do not merge this feature or enable it in production just because the plan is reviewed.
+**Status:** implemented inline in the isolated `upload-pipeline-parallelism` worktree, behind an
+explicit opt-in. No hosted activation. Implementation and rollout reference:
+[`docs/UPLOAD-PIPELINE.md`](../../UPLOAD-PIPELINE.md). The original acceptance checklist below
+is retained as the review inventory; unchecked combined test bullets include scenarios beyond
+the automated coverage completed here and must not be read as claims of verification.
+
+**Implementation record:** durable manifest/Canvas sessions, bounded preparation, course revision
+CAS and fenced ordered structure commits, coordinated question stock for uploads/top-ups/dives,
+shared per-attempt budget reservations, recovery/retention, phase UI and operator tooling are built.
+Question goals use phase checkpoints rather than a separate demands table. Capacity misses park
+work; strict provider fairness and reserved interactive headroom are deferred. Existing successful
+model outputs are memoized by actual prompt/model/budget. See the execution guide for actual limits.
+
+**Validation:** all repository SQL specs plus staged invariants and a real two-connection course-lane
+race; real phase-worker integration against isolated PostgREST and a fake model; full unit suite,
+typecheck and lint. No shared database reset or real model spend. Production build is blocked by
+Turbopack's internal port bind restriction in this environment. Browser/HTTP isolation/evidence
+checks remain part of the normal locked-stack merge gate; no deployment or real latency/cost
+benchmark is claimed.
 
 **Owner direction:** prepare files concurrently, keep the course-index work ordered, then write questions concurrently. Cover single files, folders, and Canvas imports. Conditional database writes protect against stale snapshots; they do not replace semantic topic/objective reconciliation.
 
