@@ -55,7 +55,7 @@ export default function CoursePage({ params }: PageProps<"/course/[slug]">) {
     if (!p) throw new Error(`No progress computed for topic ${topicId}`);
     return p;
   };
-  const weak = topics.reduce((sum, t) => sum + progressOf(t.id).inRotation, 0);
+  const weak = topics.reduce((sum, t) => sum + progressOf(t.id).weak, 0);
   const held = topics.reduce((sum, t) => sum + progressOf(t.id).mastered, 0);
   const pct = weak ? held / weak : 0;
   const flaggable = (topicId: string) => (m.topicObjectives.get(topicId) ?? []).filter((id) => canFlagHard(m.objectives.get(id)!.status));

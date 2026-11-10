@@ -21,12 +21,12 @@ const WAVES: Array<{ x: number; y: number; w: 60 | 70 | 80 | 90 }> = [
   { x: 640, y: 150, w: 60 },
 ];
 
-/** The topic's weak points (objectives in rotation): how many are mastered. */
+/** The topic's weak spots (objectives in rotation and open checks): how many are mastered. */
 function statusLine(p: TopicProgress) {
   if (p.objectives === 0) return "No objectives yet";
-  if (p.inRotation === 0) return "No weak spots flagged";
+  if (p.weak === 0) return "No weak spots flagged";
   if (p.status === "done") return "Weak spots mastered";
-  return `${p.mastered} of ${p.inRotation} mastered`;
+  return `${p.mastered} of ${p.weak} mastered`;
 }
 
 /**
@@ -145,7 +145,7 @@ export function KnowledgePath({ course, progress, onStart, warmUp }: {
             y={t.pos.y}
             name={t.name}
             sub={statusLine(progressOf(t))}
-            ring={progressOf(t).inRotation > 0 ? { mastered: progressOf(t).mastered, of: progressOf(t).inRotation } : undefined}
+            ring={progressOf(t).weak > 0 ? { mastered: progressOf(t).mastered, of: progressOf(t).weak } : undefined}
             onClick={() => onStart(t)}
           />
         ))}
