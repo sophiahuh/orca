@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { GAP, MARGIN, placeBubble, spotlightClip } from "../src/lib/anchor-geometry.ts";
+import { ARROW_INSET, GAP, MARGIN, arrowOffset, placeBubble, spotlightClip } from "../src/lib/anchor-geometry.ts";
 
 const viewport = { width: 1194, height: 834 };
 const bubble = { width: 340, height: 160 };
@@ -39,4 +39,11 @@ test("the spotlight is the whole screen with a padded hole at the target", () =>
     spotlightClip({ left: 100.4, top: 50, width: 80, height: 30 }, 6),
     "polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, 94px 44px, 94px 86px, 186px 86px, 186px 44px, 94px 44px)",
   );
+});
+
+test("the pointer arrow aims at the target's centre, kept off the bubble's corners", () => {
+  const target = { left: 400, top: 100, width: 100, height: 40 };
+  assert.equal(arrowOffset(target, bubble, { side: "below", left: 300, top: 154 }), 150);
+  assert.equal(arrowOffset({ ...target, left: 0, width: 20 }, bubble, { side: "below", left: 12, top: 154 }), ARROW_INSET);
+  assert.equal(arrowOffset({ left: 900, top: 400, width: 40, height: 40 }, bubble, { side: "left", left: 546, top: 340 }), 80);
 });

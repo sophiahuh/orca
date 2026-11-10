@@ -16,8 +16,8 @@ export interface Size {
 }
 export type Side = "below" | "above" | "right" | "left";
 
-/** Between the target and the bubble. */
-export const GAP = 14;
+/** Between the target and the bubble: room for the spotlight's outline and the bubble's arrow. */
+export const GAP = 18;
 /** Between the bubble and the edge of the screen. */
 export const MARGIN = 12;
 /** How far the spotlight reaches past the target. */
@@ -52,4 +52,19 @@ export function spotlightClip(target: Box, pad: number = PAD): string {
   const r = Math.round(target.left + target.width + pad);
   const b = Math.round(target.top + target.height + pad);
   return `polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, ${l}px ${t}px, ${l}px ${b}px, ${r}px ${b}px, ${r}px ${t}px, ${l}px ${t}px)`;
+}
+
+/** How far a bubble's pointer arrow sits from the bubble's corner (keeps clear of its rounded corners). */
+export const ARROW_INSET = 22;
+
+/**
+ * Where the bubble's pointer arrow goes along the edge facing the target: the distance from the
+ * bubble's left edge (above/below) or top edge (left/right) to the arrow's centre, aimed at the
+ * target's centre and kept off the bubble's rounded corners.
+ */
+export function arrowOffset(target: Box, bubble: Size, place: { left: number; top: number; side: Side }): number {
+  const vertical = place.side === "below" || place.side === "above";
+  const aim = vertical ? target.left + target.width / 2 - place.left : target.top + target.height / 2 - place.top;
+  const length = vertical ? bubble.width : bubble.height;
+  return clamp(aim, ARROW_INSET, length - ARROW_INSET);
 }

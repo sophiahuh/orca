@@ -3,20 +3,27 @@
 import { type ReactNode, useCallback, useState } from "react";
 import { motion } from "motion/react";
 import { IconClose } from "@/components/icons";
-import { Card } from "@/components/ui/Card";
-import { type Box, type Size, placeBubble } from "@/lib/anchor-geometry";
+import { type Box, type Side, type Size, arrowOffset, placeBubble } from "@/lib/anchor-geometry";
 import { cn } from "@/lib/cn";
 import { popIn } from "@/lib/motion";
 
+/** The pointer arrow: a rotated square half outside the edge facing the target. */
+const ARROW: Record<Side, string> = {
+  below: "top-[-7px] -translate-x-1/2",
+  above: "bottom-[-7px] -translate-x-1/2",
+  right: "left-[-7px] -translate-y-1/2",
+  left: "right-[-7px] -translate-y-1/2",
+};
+
 /**
- * A popover card pointing at an element on screen (`target`, e.g. from useElementBox): placed beside
- * it where it fits and kept on screen (src/lib/anchor-geometry.ts), measured as it renders. An X in
- * its corner when `onClose` is given. Fixed position, above a Spotlight on the same target. Use it
- * inside AnimatePresence for its exit.
+ * A popover pointing at an element on screen (`target`, e.g. from useElementBox): a soft-shadowed
+ * card with an arrow toward the element, placed beside it where it fits and kept on screen
+ * (src/lib/anchor-geometry.ts), measured as it renders. An X in its corner when `onClose` is given.
+ * Fixed position, above a Spotlight on the same target. Use it inside AnimatePresence for its exit.
  */
 export function AnchoredBubble({
   target,
-  width = 340,
+  width = 360,
   onClose,
   closeLabel = "Close",
   closePart = "bubble-close",
@@ -46,6 +53,8 @@ export function AnchoredBubble({
     return () => observer.disconnect();
   }, []);
   const place = placeBubble(target, size, { width: window.innerWidth, height: window.innerHeight });
+  const along = arrowOffset(target, size, place);
+  const vertical = place.side === "below" || place.side === "above";
   return (
     <motion.div
       ref={measure}
@@ -60,14 +69,20 @@ export function AnchoredBubble({
       style={{ left: place.left, top: place.top, width }}
       {...data}
     >
-      <Card radius={20} lip={4} className={cn("relative px-[16px] pb-[14px] pt-[16px]", className)}>
+      <div
+        aria-hidden
+        data-part="bubble-arrow"
+        className={cn("absolute h-[16px] w-[16px] rotate-45 rounded-[3px] bg-parchment", ARROW[place.side])}
+        style={vertical ? { left: along } : { top: along }}
+      />
+      <div className={cn("relative rounded-[24px] bg-parchment px-[22px] pb-[18px] pt-[20px] shadow-[0_12px_32px_-6px_rgb(21_29_58/0.35)]", className)}>
         {onClose && (
-          <button type="button" onClick={onClose} aria-label={closeLabel} data-part={closePart} className="absolute right-[10px] top-[10px] cursor-pointer rounded-full p-[4px] text-prussian/70 hover:text-prussian">
-            <IconClose size={16} />
+          <button type="button" onClick={onClose} aria-label={closeLabel} data-part={closePart} className="absolute right-[14px] top-[14px] cursor-pointer rounded-full p-[4px] text-prussian/50 hover:text-prussian">
+            <IconClose size={18} />
           </button>
         )}
         {children}
-      </Card>
+      </div>
     </motion.div>
   );
 }
