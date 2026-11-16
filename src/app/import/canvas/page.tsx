@@ -20,6 +20,7 @@ interface CanvasCourseLine {
 }
 
 interface ImportSummary {
+  importSessionId?: string;
   course: { id: string; slug: string; name: string; created: boolean };
   exams: number;
   events: number;
@@ -170,9 +171,12 @@ export default function ImportCanvasPage() {
   const importCourse = async (c: CanvasCourseLine, fileIds: string[]) => {
     setProgress((p) => ({ ...p, [c.id]: { kind: "running", pulled: 0 } }));
     let last: ImportSummary | null = null;
+    const storageKey = `orca-canvas-import:${c.id}:${[...fileIds].sort().join(",")}`;
+    const importSessionId = sessionStorage.getItem(storageKey) ?? crypto.randomUUID();
+    sessionStorage.setItem(storageKey, importSessionId);
     // Each request pulls files until its time budget is used; keep going while Canvas has more.
     for (let round = 0; round < 10; round++) {
-      const res = await fetch("/api/canvas/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasCourseId: c.id, fileIds }) });
+      const res = await fetch("/api/canvas/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ canvasCourseId: c.id, fileIds, importSessionId, resumeExpired: round === 0 }) });
       const body = (await res.json().catch(() => null)) as (ImportSummary & { error?: string }) | null;
       if (!res.ok || !body || !("course" in body)) {
         // A later round failing (a 429, a Canvas hiccup) keeps what the earlier rounds pulled: those files
@@ -181,8 +185,8 @@ export default function ImportCanvasPage() {
         setProgress((p) => ({ ...p, [c.id]: { kind: "failed", message: body?.error ?? "Orca couldn't import that course." } }));
         return;
       }
-      last = last ? { ...body, exams: last.exams + body.exams, events: last.events + body.events, syllabus: last.syllabus || body.syllabus, files: { ...body.files, added: last.files.added + body.files.added, duplicates: last.files.duplicates + body.files.duplicates, failed: last.files.failed + body.files.failed, skipped: last.files.skipped + body.files.skipped, skippedNames: [...last.files.skippedNames, ...body.files.skippedNames], total: last.files.total } } : body;
-      if (body.files.remaining === 0) break;
+      last = body.importSessionId ? body : last ? { ...body, exams: last.exams + body.exams, events: last.events + body.events, syllabus: last.syllabus || body.syllabus, files: { ...body.files, added: last.files.added + body.files.added, duplicates: last.files.duplicates + body.files.duplicates, failed: last.files.failed + body.files.failed, skipped: last.files.skipped + body.files.skipped, skippedNames: [...last.files.skippedNames, ...body.files.skippedNames], total: last.files.total } } : body;
+      if (body.files.remaining === 0) { sessionStorage.removeItem(storageKey); break; }
       const pulled = last.files.added + last.files.duplicates + last.files.failed + last.files.skipped;
       setProgress((p) => ({ ...p, [c.id]: { kind: "running", pulled } }));
     }

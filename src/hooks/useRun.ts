@@ -28,6 +28,7 @@ export function useRun(runId: string | null | undefined): { run: PipelineRun | n
   const [live, setLive] = useState<PipelineRun | null>(null);
   const [missing, setMissing] = useState(false);
   const refreshed = useRef<string | null>(null);
+  const structureRefreshed = useRef<string | null>(null);
 
   useEffect(() => {
     if (!runId) return;
@@ -40,6 +41,10 @@ export function useRun(runId: string | null | undefined): { run: PipelineRun | n
       if (!data) return setMissing(true);
       const run = runFromRow(data);
       setLive(run);
+      if (run.protocolVersion === 2 && !isFinished(run)) {
+        // Also revives queued phases after an inline server restart or missed handoff.
+        void fetch("/api/runs/check", { method: "POST" }).catch(() => null);
+      }
       if (!checked && pastLimit(run)) {
         checked = true;
         const res = await fetch("/api/runs/check", { method: "POST" }).catch(() => null);
@@ -63,11 +68,18 @@ export function useRun(runId: string | null | undefined): { run: PipelineRun | n
     };
   }, [runId]);
 
+  useEffect(() => {
+    if (!live?.structureCommittedAt || structureRefreshed.current === live.id) return;
+    structureRefreshed.current = live.id;
+    void refresh();
+  }, [live, refresh]);
+
   // Once it finished, load what the job saved (once per run).
   const stored = runId ? runs.find((r) => r.id === runId) : undefined;
   useEffect(() => {
-    if (!runId || !isFinished(live) || isFinished(stored) || refreshed.current === runId) return;
-    refreshed.current = runId;
+    const completion = live ? `${runId}:${live.status}:${live.questionsAdded}` : null;
+    if (!runId || !isFinished(live) || isFinished(stored) || refreshed.current === completion) return;
+    refreshed.current = completion;
     void refresh();
   }, [runId, live, stored, refresh]);
 

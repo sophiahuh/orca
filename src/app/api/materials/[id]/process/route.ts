@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return forStudent(request, async (student, db) => {
     if (!z.uuid().safeParse(id).success) return reply(404, { error: "No such upload." });
     // { again: true }: the student chose "Upload again" for a file the course already has.
-    const body = (await request.json().catch(() => null)) as { again?: unknown } | null;
-    return uploadReply(db, student.id, await processUpload(db, student.id, id, { again: body?.again === true }));
+    const body = (await request.json().catch(() => null)) as { again?: unknown; admissionId?: unknown } | null;
+    return uploadReply(db, student.id, await processUpload(db, student.id, id, { again: body?.again === true }), z.uuid().safeParse(body?.admissionId).success ? String(body?.admissionId) : undefined);
   });
 }

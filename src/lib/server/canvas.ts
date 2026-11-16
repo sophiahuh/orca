@@ -1,3 +1,5 @@
+import { stagedPipeline, pipelineRpc } from "./staged/db";
+import { concurrent } from "../jobs/staged/types";
 /**
  * Canvas import against Supabase (plan: docs/superpowers/plans/2026-11-04-canvas-import.md): the
  * student's connection (token encrypted at rest; never read by the browser), their Canvas courses,
@@ -173,6 +175,7 @@ export async function listCanvasFiles(db: OrcaSupabase, ownerId: string, client:
 /* ── Importing one course ── */
 
 export interface ImportSummary {
+  importSessionId?: string;
   course: { id: string; slug: string; name: string; created: boolean };
   exams: number;
   events: number;
@@ -190,6 +193,8 @@ export interface ImportSummary {
 }
 
 export interface ImportOptions {
+  importSessionId?: string;
+  resumeExpired?: boolean;
   /** Stop pulling files once this many ms have passed; the rest is reported as `remaining`. */
   budgetMs?: number;
   now?: () => Date;
@@ -245,7 +250,7 @@ async function importAssignments(db: OrcaSupabase, ownerId: string, courseId: st
   return { exams, events };
 }
 
-async function importSyllabus(db: OrcaSupabase, ownerId: string, courseId: string, course: CanvasCourse, linked: Map<string, string>): Promise<boolean> {
+async function importSyllabus(db: OrcaSupabase, ownerId: string, courseId: string, course: CanvasCourse, linked: Map<string, string>, admissionId?: string): Promise<boolean> {
   if (linked.has(`syllabus:${course.id}`)) return false;
   const text = sanitize(htmlToText(course.syllabus_body ?? ""), 180_000).text;
   if (text.length < 80) return false;
@@ -259,14 +264,14 @@ async function importSyllabus(db: OrcaSupabase, ownerId: string, courseId: strin
   const pages = await db.from("material_pages").insert([{ owner_id: ownerId, material_id: id, n: 1, text }]);
   if (pages.error) throw new Error(`Couldn't store the syllabus: ${pages.error.message}`);
   await link(db, ownerId, "syllabus", String(course.id), id);
-  await startUploadJob(db, ownerId, id);
+  await startUploadJob(db, ownerId, id, admissionId);
   return true;
 }
 
 type FileResult = "added" | "duplicate" | "failed" | "skipped";
 
-async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, client: CanvasClient, pick: PickedFile): Promise<{ result: FileResult; materialId: string | null }> {
-  const file = pick.file ?? (await client.get<CanvasFile>(`/files/${pick.id}`).catch((e: unknown) => (e instanceof CanvasError ? null : Promise.reject(e))));
+async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, client: CanvasClient, pick: PickedFile, admissionId?: string): Promise<{ result: FileResult; materialId: string | null }> {
+  const file = pick.file ?? (await client.get<CanvasFile>(`/files/${pick.id}`).catch((e: unknown) => (e instanceof CanvasError && e.status !== 401 ? null : Promise.reject(e))));
   if (!file || file.locked_for_user) return { result: "skipped", materialId: null };
   if ((file.size ?? 0) > LIMITS.uploadBytes) return { result: "skipped", materialId: null };
   const kind = uploadKind(file.display_name, file["content-type"] ?? "");
@@ -275,12 +280,13 @@ async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, c
   try {
     bytes = await client.download(file.url, LIMITS.uploadBytes);
   } catch (e) {
-    if (e instanceof CanvasError) return { result: "skipped", materialId: null };
+    if (e instanceof CanvasError && e.status !== 401) return { result: "skipped", materialId: null };
     throw e;
   }
   const hash = createHash("sha256").update(bytes).digest("hex");
   const started = await startUpload(db, ownerId, {
     courseId,
+    admissionId,
     filename: sanitize(file.display_name, 255).text.trim().slice(0, 255) || `canvas-${file.id}.${kind}`,
     size: bytes.byteLength,
     mime: UPLOAD_MIMES[kind],
@@ -293,15 +299,21 @@ async function importFile(db: OrcaSupabase, ownerId: string, courseId: string, c
     // A past or practice exam from Canvas is kept for a practice test (contract section 5).
     heldBack: heldBackByDefault(pick.type),
   });
-  if (started.status === 200 && "duplicate" in started.body) return { result: "duplicate", materialId: started.body.duplicate.id };
+  if (started.status === 200 && "duplicate" in started.body) {
+    if (admissionId) await startUploadJob(db, ownerId, started.body.duplicate.id, admissionId);
+    return { result: "duplicate", materialId: started.body.duplicate.id };
+  }
   if (started.status !== 201 || !("upload" in started.body)) return { result: "skipped", materialId: null };
   const { material, upload } = started.body;
   const put = await db.storage.from(BUCKET).upload(upload.path, bytes, { contentType: UPLOAD_MIMES[kind], upsert: true });
   if (put.error) throw new Error(`Couldn't store ${file.display_name}: ${put.error.message}`);
   const processed = await processUpload(db, ownerId, material.id);
-  if (processed.status === 200 && "duplicate" in processed.body) return { result: "duplicate", materialId: processed.body.duplicate.id };
+  if (processed.status === 200 && "duplicate" in processed.body) {
+    if (admissionId) await startUploadJob(db, ownerId, processed.body.duplicate.id, admissionId);
+    return { result: "duplicate", materialId: processed.body.duplicate.id };
+  }
   if (processed.status === 200) {
-    await startUploadJob(db, ownerId, material.id);
+    await startUploadJob(db, ownerId, material.id, admissionId);
     return { result: "added", materialId: material.id };
   }
   // Marked failed with why by processUpload (an unreadable file); it shows on the Uploads tab.
@@ -326,6 +338,41 @@ export async function importCanvasCourse(db: OrcaSupabase, ownerId: string, clie
     optional(client.getAll<CanvasFile>(`/courses/${course.id}/files`)),
   ]);
   const dates = await importAssignments(db, ownerId, orca.id, assignments, linked, options.timeZone);
+  if (stagedPipeline()) {
+    const sessionId = options.importSessionId ?? crypto.randomUUID();
+    const syllabusPending = !linked.has(`syllabus:${course.id}`) && sanitize(htmlToText(course.syllabus_body ?? ""), 180_000).text.length >= 80;
+    const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`) && (!options.fileIds || options.fileIds.has(String(p.id))));
+    const entries = [
+      ...(syllabusPending ? [{ id: crypto.randomUUID(), name: "Syllabus (Canvas)", metadata: { sourceId: "syllabus", syllabus: true } }] : []),
+      ...picks.map((p) => ({ id: crypto.randomUUID(), name: p.name, metadata: { sourceId: String(p.id), pick: { ...p, file: null } } })),
+    ];
+    const { data: connection } = await db.from("canvas_connections").select("base_url").eq("owner_id", ownerId).maybeSingle();
+    // Empty sessions still need a durable summary but no blocking manifest entries.
+    const summary = { course: orca, exams: dates.exams, events: dates.events, syllabus: syllabusPending };
+    if (!entries.length && !options.importSessionId) return { ...summary, files: { added: 0, duplicates: 0, failed: 0, skipped: 0, remaining: 0, skippedNames: [], total: 0 } };
+    await pipelineRpc(db, "canvas_session", { ownerId, courseId: orca.id, sessionId, canvasCourseId, site: connection?.base_url ?? "", items: entries, summary, resumeExpired: options.resumeExpired });
+    await concurrent([0, 1], 2, async () => {
+      while (now().getTime() - startedAt < Math.max(0, budgetMs - 70_000)) {
+        const item = await pipelineRpc<{ id: string; token: string; metadata: { syllabus?: boolean; pick?: PickedFile; sourceId: string }; materialId: string | null } | null>(db, "canvas_claim", { ownerId, sessionId });
+        if (!item) break;
+        try {
+          let outcome: { result: FileResult; materialId: string | null };
+          if (item.metadata.syllabus) {
+            await importSyllabus(db, ownerId, orca.id, course, linked, item.id);
+            outcome = { result: "added", materialId: null };
+          } else {
+            outcome = await importFile(db, ownerId, orca.id, client, item.metadata.pick!, item.id);
+            if (outcome.result !== "failed" && outcome.result !== "skipped") await link(db, ownerId, "file", item.metadata.sourceId, outcome.materialId ?? orca.id);
+          }
+          await pipelineRpc(db, "canvas_finish", { ownerId, itemId: item.id, token: item.token, outcome: outcome.result });
+        } catch (error) {
+          await pipelineRpc(db, "canvas_finish", { ownerId, itemId: item.id, token: item.token, outcome: "failed", error: error instanceof Error ? error.message : String(error) });
+          if (error instanceof CanvasError && error.status === 401) throw error;
+        }
+      }
+    });
+    return pipelineRpc<ImportSummary>(db, "canvas_summary", { ownerId, sessionId });
+  }
   const syllabus = await importSyllabus(db, ownerId, orca.id, course, linked);
 
   const picks = pickFiles(modules, files, options.timeZone).filter((p) => !linked.has(`file:${p.id}`) && (!options.fileIds || options.fileIds.has(String(p.id))));

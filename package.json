@@ -18,7 +18,10 @@
     "check:isolation": "node --experimental-strip-types --no-warnings scripts/check-isolation.ts",
     "check:evidence": "node --experimental-strip-types --no-warnings scripts/check-evidence.ts",
     "cleanup:uploads": "node --experimental-strip-types --no-warnings scripts/cleanup-uploads.ts",
-    "locked": "bash scripts/stack-lock.sh"
+    "locked": "bash scripts/stack-lock.sh",
+    "test:uploads:db": "bash scripts/test-staged-db.sh",
+    "test:uploads:integration": "python3 scripts/test-staged-pipeline.py",
+    "pipeline:uploads": "node --experimental-strip-types --import ./tests/support/register.mjs scripts/upload-pipeline.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

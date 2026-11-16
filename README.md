@@ -21,7 +21,8 @@ Stack: Next.js 16 (App Router) + Tailwind v4 + `motion`, Supabase (Postgres with
 security, Auth, Storage), and OpenAI or Claude on the server for reading material, writing
 questions and grading short answers. See `CLAUDE.md` for the product model,
 `docs/BACKEND-ROADMAP.md` for decisions and phases, `docs/SETUP-HOSTED.md` for the hosted setup,
-and `docs/ANIMATION.md` for how motion is organised.
+and `docs/ANIMATION.md` for how motion is organised. The optional staged upload pipeline and
+its activation procedure are documented in `docs/UPLOAD-PIPELINE.md`.
 
 ## Run it
 

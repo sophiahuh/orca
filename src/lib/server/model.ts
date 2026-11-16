@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { stagedPipeline, pipelineRpc } from "@/lib/server/staged/db";
 /**
  * Orca's model, on the server only (Phase 4 plan, decision 9, widened 2026-10-06 to OpenAI): every
  * pipeline step (extract, reconcile, generate, the checks, reflection matching) and every grade
@@ -57,6 +59,13 @@ export interface ModelCtx {
   ownerId: string;
   kind: "upload" | "top-up" | "reflect" | "grade" | "deep-review" | "relink";
   runId?: string;
+  task?: import("@/lib/jobs/staged/types").StageJob;
+  phase?: string;
+  step?: string;
+  attemptId?: string;
+  durationMs?: number;
+  usageAt?: string;
+  writingToken?: () => string;
 }
 
 /** A step failed: the model or its reply, said for the student. */
@@ -125,9 +134,18 @@ export function stepCaller(ctx: ModelCtx, options: StepCallerOptions = {}): Call
       if (!verdict.ok) throw new StepError(step, verdict.message, 429);
     }
     const config = configFor(step);
+    const callCtx = { ...ctx, step };
+    const memo = stagedPipeline() && ctx.runId && ctx.writingToken ? { ownerId: ctx.ownerId, runId: ctx.runId, runToken: ctx.writingToken(), inputHash: createHash("sha256").update(JSON.stringify({ step, built, model: config.model, budget: STEP_BUDGET[step] })).digest("hex") } : null;
+    if (memo) {
+      const cached = await pipelineRpc<{ result: unknown } | null>(db, "writer_result", memo);
+      if (cached) return schema.parse(cached.result);
+    }
     try {
-      return await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ...(built.images ? { images: built.images } : {}), ctx, onUsage: meter(ctx, db, config.model) });
+      const result = await completeJson(config, built.system, built.prompt, schema, (text) => schema.parse(parseLooseJson(text)), { ...STEP_BUDGET[step], context: built.context, ...(built.images ? { images: built.images } : {}), ctx: callCtx, onUsage: meter(callCtx, db, config.model) });
+      if (memo) await pipelineRpc(db, "writer_result", { ...memo, result });
+      return result;
     } catch (error) {
+      if (error instanceof Error && error.name === "PipelineDeferred") throw error;
       if (error instanceof LlmError) throw new StepError(step, error.message, error.status);
       throw new StepError(step, `The ${step} step failed: ${error instanceof Error ? error.message : String(error)}`, 502);
     }

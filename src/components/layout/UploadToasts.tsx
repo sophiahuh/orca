@@ -93,13 +93,14 @@ export function UploadToasts() {
     const catchUp = async () => {
       const ids = runsRef.current.filter((r) => isUpload(r) && !isFinished(r) && r.status !== "paused").map((r) => r.id);
       if (!ids.length) return;
-      const { data } = await db.from("pipeline_runs").select("id, status").in("id", ids);
-      if (data?.some((r) => r.status === "done" || r.status === "failed")) void refresh();
+      const { data } = await db.from("pipeline_runs").select("id, status, structure_committed_at").in("id", ids);
+      if (data?.some((r) => r.status === "done" || r.status === "failed" || (r.structure_committed_at && !runsRef.current.find((stored) => stored.id === r.id)?.structureCommittedAt))) void refresh();
     };
     const channel = db
       .channel("uploads-finished")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pipeline_runs", filter: "kind=eq.upload" }, (payload) => {
-        const row = payload.new as { id?: string; status?: string };
+        const row = payload.new as { id?: string; status?: string; structure_committed_at?: string | null };
+        if (row.structure_committed_at && !runsRef.current.find((r) => r.id === row.id)?.structureCommittedAt) void refresh();
         if (!row.id || (row.status !== "done" && row.status !== "failed") || toldFinished.current.has(row.id)) return;
         if (isFinished(runsRef.current.find((r) => r.id === row.id))) return;
         toldFinished.current.add(row.id);
@@ -118,8 +119,8 @@ export function UploadToasts() {
     if (!buildingKey) return;
     const ids = buildingKey.split(",");
     const poll = window.setInterval(async () => {
-      const { data } = await browserSupabase().from("pipeline_runs").select("id, status").in("id", ids);
-      if (data?.some((r) => r.status === "done" || r.status === "failed")) void refresh();
+      const { data } = await browserSupabase().from("pipeline_runs").select("id, status, structure_committed_at").in("id", ids);
+      if (data?.some((r) => r.status === "done" || r.status === "failed" || (r.structure_committed_at && !runsRef.current.find((stored) => stored.id === r.id)?.structureCommittedAt))) void refresh();
     }, POLL_MS);
     return () => window.clearInterval(poll);
   }, [buildingKey, refresh]);

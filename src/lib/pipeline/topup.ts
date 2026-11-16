@@ -1,3 +1,4 @@
+import { PipelineDeferred } from "../jobs/staged/types.ts";
 /**
  * Topping up the question stock after a session (docs/MASTERY-PLAN.md §4): objectives with fewer
  * than 3 questions the student hasn't seen get new ones, written from the material that teaches
@@ -144,7 +145,7 @@ export function topUpTargets(input: Omit<TopUpInput, "runId" | "model" | "now">)
   return { byMaterial, pages, skipped };
 }
 
-export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "newId" | "onProgress">): Promise<TopUpPlan> {
+export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "newId" | "onProgress" | "claimWriting">): Promise<TopUpPlan> {
   const { byMaterial, pages, skipped } = topUpTargets(input);
   const questions: Record<string, QuizQuestion[]> = {};
   const dropped: PipelineRun["dropped"] = [];
@@ -159,6 +160,7 @@ export async function runTopUp(input: TopUpInput, deps: Pick<RunDeps, "call" | "
     try {
       written = await writeQuestions({ course: input.course, material, pages: pages.get(materialId)!, topics, targets, bank, ...(input.flagged ? { flagged: input.flagged } : {}), ...(input.notes ? { notes: input.notes } : {}) }, deps);
     } catch (e) {
+    if (e instanceof PipelineDeferred) throw e;
       for (const t of targets) skipped.push({ objectiveId: t.objective.id, reason: `couldn't write questions: ${e instanceof Error ? e.message : String(e)}` });
       continue;
     }
@@ -201,7 +203,7 @@ export interface DeepInput extends Pick<TopUpInput, "course" | "objectives" | "b
  * (one each down the list, then round again), each from the pages
  * its objective is taught on, marked `deep`. Objectives with nothing to write from are skipped.
  */
-export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call" | "newId">): Promise<{ questions: Record<string, QuizQuestion[]>; dropped: PipelineRun["dropped"]; skipped: TopUpSkip[] }> {
+export async function runDeepReview(input: DeepInput, deps: Pick<RunDeps, "call" | "newId" | "claimWriting">): Promise<{ questions: Record<string, QuizQuestion[]>; dropped: PipelineRun["dropped"]; skipped: TopUpSkip[] }> {
   const all = Object.values(input.bank).flat();
   const skipped: TopUpSkip[] = [];
   const writable: Array<{ o: Objective; material: Material; pages: MaterialPages }> = [];

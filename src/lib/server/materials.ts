@@ -1,3 +1,4 @@
+import { stagedPipeline, pipelineRpc } from "./staged/db";
 /**
  * Uploads (Phase 4 plan, decisions 7, 10 and 13). Two steps, each a route:
  *
@@ -49,6 +50,7 @@ export interface Started {
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const UploadRequest = z.object({
   courseId: z.uuid(),
+  admissionId: z.uuid().optional(),
   filename: z.string().trim().min(1).max(255),
   size: z.number().int().min(1),
   mime: z.string().max(200),
@@ -90,13 +92,30 @@ async function sameFile(db: OrcaSupabase, ownerId: string, courseId: string, has
 }
 
 export async function startUpload(db: OrcaSupabase, ownerId: string, body: UploadRequest): Promise<Outcome> {
+  if (stagedPipeline() && body.admissionId) {
+    const { data: item } = await db.from("pipeline_items").select("course_id,state,material_id,error").eq("id", body.admissionId).eq("owner_id", ownerId).maybeSingle();
+    if (!item || item.course_id !== body.courseId) return reply(404, { error: "No such upload admission." });
+    if (item.state === "failed" || item.state === "cancelled") return reply(429, { error: item.error ?? "This upload admission was cancelled." });
+    if (item.material_id) {
+      const { data: existing } = await db.from("materials").select("*").eq("id", item.material_id).eq("owner_id", ownerId).maybeSingle();
+      if (existing?.status === "ready") return reply(200, { duplicate: { id: existing.id, filename: existing.filename } });
+      if (existing?.storage_path) {
+        const signed = await db.storage.from(BUCKET).createSignedUploadUrl(existing.storage_path, { upsert: true });
+        if (signed.error) throw fail("resume the upload", signed.error);
+        return reply(201, { material: materialFromRow(existing), upload: { path: existing.storage_path, token: signed.data.token } });
+      }
+    }
+  }
   const kind = uploadKind(body.filename, body.mime);
   if (!kind) return reply(415, { error: UNSUPPORTED_UPLOAD });
   if (body.size > LIMITS.uploadBytes) return reply(413, { error: `This file is over ${LIMITS.uploadBytes / 1024 / 1024} MB.` });
   if (!(await ownsCourse(db, ownerId, body.courseId))) return reply(404, { error: "No such course." });
   // A file the course already has is answered as such, unless the student asked to upload it again.
   const known = body.again ? null : await sameFile(db, ownerId, body.courseId, body.hash);
-  if (known) return reply(200, known);
+  if (known) {
+    if (stagedPipeline() && body.admissionId) await pipelineRpc(db, "ingestion", { ownerId, itemId: body.admissionId, action: "bind", materialId: known.duplicate.id });
+    return reply(200, known);
+  }
 
   const id = crypto.randomUUID();
   const path = uploadPath(ownerId, id);
@@ -121,6 +140,7 @@ export async function startUpload(db: OrcaSupabase, ownerId: string, body: Uploa
     .select()
     .single();
   if (error) throw fail("record the upload", error);
+  if (stagedPipeline() && body.admissionId) await pipelineRpc(db, "ingestion", { ownerId, itemId: body.admissionId, action: "bind", materialId: id });
   const signed = await db.storage.from(BUCKET).createSignedUploadUrl(path);
   if (signed.error) throw fail("prepare the upload", signed.error);
   return reply(201, { material: materialFromRow(row), upload: { path, token: signed.data.token } });
@@ -279,6 +299,22 @@ export async function removeMaterial(db: OrcaSupabase, ownerId: string, id: stri
   const { data: m, error } = await db.from("materials").select("id, course_id, storage_path, status").eq("owner_id", ownerId).eq("id", id).maybeSingle();
   if (error) throw fail("read the material", error);
   if (!m) return answer(404, { error: "No such material." });
+  if (stagedPipeline()) {
+    try {
+      const result = await pipelineRpc<{ archivedObjectives: number }>(db, "remove_material", { ownerId, materialId: id });
+      if (m.storage_path) {
+        const removed = await db.storage.from(BUCKET).remove([m.storage_path]);
+        if (removed.error) throw fail("remove the file", removed.error);
+        const cleared = await db.from("materials").update({ storage_path: null }).eq("owner_id", ownerId).eq("id", id).eq("status", "removed");
+        if (cleared.error) throw fail("clear the removed file path", cleared.error);
+      }
+      await checkRuns(db, ownerId);
+      return answer(200, { removed: true, archivedObjectives: result.archivedObjectives });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "55P03") return answer(409, { error: "Stop this upload first, then remove its material." });
+      throw error;
+    }
+  }
   if (m.status === "removed") return answer(200, { removed: true });
 
   const { data: runs, error: runsError } = await db.from("pipeline_runs").select("id, status").eq("owner_id", ownerId).eq("material_id", id).eq("kind", "upload").in("status", ["queued", "waiting", "running", "paused"]);

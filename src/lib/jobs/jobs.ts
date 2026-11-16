@@ -1,3 +1,4 @@
+import { PipelineDeferred } from "./staged/types.ts";
 /**
  * The two jobs (Phase 4 plan, decision 8): `processMaterial` builds a course's topics, objectives
  * and questions from an upload's stored pages, and `topUp` writes more questions after a session.
@@ -13,7 +14,7 @@
 import type { Course, FlaggedQuestion, Material, MaterialPages, PipelineRun } from "../data.ts";
 import { laidOut } from "../course/layout.ts";
 import { applyUploadPlan } from "../pipeline/apply.ts";
-import { type CallStep, type Progress, runUpload } from "../pipeline/run.ts";
+import { type CallStep, type Progress, type RunDeps, runUpload } from "../pipeline/run.ts";
 import type { OrcaNotes } from "../pipeline/notes.ts";
 import { describeFigures, transcribePages } from "../pipeline/transcribe.ts";
 import { runDeepReview, runTopUp, SKIPPED_PREFIX, topUpTargets, unansweredDeepQuestions } from "../pipeline/topup.ts";
@@ -72,6 +73,7 @@ export interface JobDeps {
   store: JobStore;
   call: CallStep;
   newId: () => string;
+  claimWriting?: RunDeps["claimWriting"];
   /** Render one slide of a material as an image for a figure question; null when it can't be. */
   renderFigure?: (material: Material, slide: number) => Promise<string | null>;
   /** Render one page of a material whole, for reading a handwritten or scanned page; null when it can't be. */
@@ -127,6 +129,10 @@ async function begin(store: JobStore, runId: string, kind: NonNullable<PipelineR
 }
 
 async function failed(store: JobStore, runId: string, prefix: string, e: unknown): Promise<JobOutcome> {
+  if (e instanceof PipelineDeferred) {
+    await store.wait(runId, { ok: false, reason: "daily-tokens", message: e.message });
+    return { status: "waiting", reason: e.reason };
+  }
   const error = `${prefix}: ${message(e)}`;
   await store.fail(runId, error);
   return { status: "failed", error };
@@ -257,7 +263,7 @@ export async function topUp(deps: JobDeps, job: { runId: string; objectiveIds: r
         model: run.model,
         now: run.at,
       },
-      { call: deps.call, newId: deps.newId, onProgress: progress.write },
+      { call: deps.call, newId: deps.newId, onProgress: progress.write, claimWriting: deps.claimWriting },
     );
     const bank = { ...before.bank };
     for (const [topicId, qs] of Object.entries(plan.questions)) bank[topicId] = [...(bank[topicId] ?? []), ...qs];
@@ -358,7 +364,7 @@ export async function deepReview(deps: JobDeps, job: { runId: string; objectiveI
       const materialPages = await store.pages(materials.map((m) => m.id));
       plan = await runDeepReview(
         { course: { ...loaded.course, topics: before.topics }, objectives: before.objectives, bank: before.bank, materials, materialPages, objectiveIds, count: toWrite, flagged: await store.flagged(run.courseId), notes: loaded.notes },
-        { call: deps.call, newId: deps.newId },
+        { call: deps.call, newId: deps.newId, claimWriting: deps.claimWriting },
       );
     }
     const written = Object.entries(plan.questions).flatMap(([topicId, questions]) => questions.map((question) => ({ topicId, question })));

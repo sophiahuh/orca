@@ -38,16 +38,19 @@ test("connected, Settings says who, and offers the import; the import page lists
       },
     }),
   );
-  const imports: string[] = [];
+  const imports: Array<{ canvasCourseId: string; fileIds: string[]; importSessionId: string; resumeExpired: boolean }> = [];
   await page.route("**/api/canvas/import", (route) => {
-    imports.push(route.request().postData() ?? "");
+    const request = route.request().postDataJSON() as (typeof imports)[number];
+    imports.push(request);
     return route.fulfill({
       json: {
+        importSessionId: request.importSessionId,
         course: { id: F.course, slug: "logic-e2e", name: "Logic Fixture", created: false },
         exams: 1,
         events: 2,
         syllabus: true,
-        files: { added: 2, duplicates: 0, failed: 0, skipped: 1, remaining: 0, skippedNames: ["Old scan.pdf"], total: 3 },
+        // Staged summaries are cumulative; the second response must replace the first.
+        files: { added: imports.length === 1 ? 1 : 2, duplicates: 0, failed: 0, skipped: 1, remaining: imports.length === 1 ? 1 : 0, skippedNames: ["Old scan.pdf"], total: 3 },
       },
     });
   });
@@ -72,7 +75,13 @@ test("connected, Settings says who, and offers the import; the import page lists
   await expect(picker.locator('[data-part="canvas-import-chosen"]')).toHaveText("Import 2 files");
   await picker.locator('[data-part="canvas-import-chosen"]').click();
   await expect(courses.first().locator('[data-part="canvas-summary"]')).toHaveText(/Updated Logic Fixture · 1 exam · 2 assignments on the calendar · syllabus · files: 2 added, 1 skipped \(Old scan\.pdf\)\./);
-  expect(imports).toEqual([JSON.stringify({ canvasCourseId: "77", fileIds: ["501", "502"] })]);
+  const sessionId = imports[0]?.importSessionId;
+  expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  expect(imports).toEqual([
+    { canvasCourseId: "77", fileIds: ["501", "502"], importSessionId: sessionId, resumeExpired: true },
+    { canvasCourseId: "77", fileIds: ["501", "502"], importSessionId: sessionId, resumeExpired: false },
+  ]);
+  expect(await page.evaluate(() => sessionStorage.getItem("orca-canvas-import:77:501,502"))).toBeNull();
   await expect(courses.first().locator('[data-part="canvas-import"]')).toHaveText("Update");
 });
 

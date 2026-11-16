@@ -364,6 +364,9 @@ export interface Relation {
 export type RunStatus = "queued" | "waiting" | "running" | "paused" | "done" | "failed";
 
 export interface PipelineRun {
+  protocolVersion?: number;
+  structureCommittedAt?: string;
+  phase?: string;
   id: string;
   /** An upload, a post-session top-up, or a durable Dive In (absent on older records: an upload). */
   kind?: "upload" | "top-up" | "deep-review";

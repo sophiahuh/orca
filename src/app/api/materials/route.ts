@@ -1,3 +1,5 @@
+import { singleton } from "@/lib/server/staged/admission";
+import { pipelineRpc, stagedPipeline } from "@/lib/server/staged/db";
 import { z } from "zod";
 import { UploadRequest, startUpload } from "@/lib/server/materials";
 import { rateLimit, tooManyRequests } from "@/lib/server/rate-limit";
@@ -25,9 +27,16 @@ export async function POST(request: Request) {
     }
     const parsed = UploadRequest.safeParse(raw);
     if (!parsed.success) return reply(400, { error: "Those aren't an upload's details.", issues: z.flattenError(parsed.error).fieldErrors });
+    if (stagedPipeline() && !parsed.data.admissionId) {
+      parsed.data.admissionId = crypto.randomUUID();
+      await singleton(db, student.id, parsed.data.courseId, parsed.data.admissionId, parsed.data.filename, "browser", { again: !!parsed.data.again });
+      await pipelineRpc(db, "charge_item", { ownerId: student.id, itemId: parsed.data.admissionId });
+    }
     // Decision 10: at most LIMITS.rate.upload starts a day per student (a re-upload of a known file counts too).
-    const rate = await rateLimit(db, student.id, "upload");
-    if (!rate.ok) return tooManyRequests(rate);
-    return uploadReply(db, student.id, await startUpload(db, student.id, parsed.data));
+    if (!stagedPipeline() || !parsed.data.admissionId) {
+      const rate = await rateLimit(db, student.id, "upload");
+      if (!rate.ok) return tooManyRequests(rate);
+    }
+    return uploadReply(db, student.id, await startUpload(db, student.id, parsed.data), parsed.data.admissionId);
   });
 }

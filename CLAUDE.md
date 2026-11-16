@@ -18,6 +18,16 @@ links), **Next** (the next step), **Notes** (only explanations or decisions the 
 A few bullets each; no restating the plan, no long background, no option surveys. Answer a
 question directly first, then stop.
 
+## Staged upload processing (opt-in, 2026-11-10)
+
+`ORCA_UPLOAD_PIPELINE=staged` routes uploads through parallel preparation → per-course ordered
+structure → parallel coordinated questions. Default remains legacy. Read `docs/UPLOAD-PIPELINE.md`
+for the call path, durable-state rationale, test commands, explicit backfill/enable procedure and
+rollback constraints before changing workers or enabling it. Core code is `src/lib/server/staged/`;
+folder and Canvas ingestion share manifest ordering. Never send protocol-2 runs to legacy workers.
+Tests use disposable schema-only databases (`test:uploads:db`, `test:uploads:integration`), not a
+reset of the owner's local stack. No hosted activation or measured production speedup is implied.
+
 ## Start here (handoff, updated 2026-11-04)
 
 **Who it's for.** A college student who wants to actually master their classes, not cram. They

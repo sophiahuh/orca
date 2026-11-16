@@ -1,3 +1,6 @@
+import { stagedPipeline, pipelineRpc } from "@/lib/server/staged/db";
+import { singleton } from "@/lib/server/staged/admission";
+import { scheduleStages } from "@/lib/server/staged/schedule";
 /**
  * Starting jobs from routes (Phase 4 plan, decision 8). The decisions (what runs, what's already
  * built, dead runs, a failed hand-off) are in `src/lib/jobs/start.ts`; this wires in the server's
@@ -53,6 +56,7 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
   if (mode === "trigger") configureTrigger();
   return {
     db,
+    protocol: stagedPipeline() ? 2 : 1,
     model: serverModel(),
     budget: (ownerId, pages) => checkBudget(db, ownerId, pages),
     async dispatch(d: Dispatch) {
@@ -77,8 +81,36 @@ function deps(db: OrcaSupabase, run: "after-response" | "now" = "after-response"
 }
 
 /** See `startUploadJob` in src/lib/jobs/start.ts. */
-export function startUploadJob(db: OrcaSupabase, ownerId: string, materialId: string): Promise<Generation> {
-  return core.startUploadJob(deps(db), ownerId, materialId);
+export async function startUploadJob(db: OrcaSupabase, ownerId: string, materialId: string, admissionId?: string): Promise<Generation> {
+  if (!stagedPipeline()) return core.startUploadJob(deps(db), ownerId, materialId);
+  const model = serverModel();
+  if (!model) return { state: "no-model" };
+  const { data: material, error } = await db.from("materials").select("id,course_id,filename").eq("owner_id", ownerId).eq("id", materialId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!material) return { state: "no-text" };
+  const { data: prior } = await db.from("pipeline_runs").select("id,status,protocol_version").eq("owner_id", ownerId).eq("material_id", materialId).order("at", { ascending: false }).limit(1).maybeSingle();
+  if (prior?.protocol_version === 2 && prior.status === "failed") {
+    await pipelineRpc(db, "control_run", { ownerId, runId: prior.id, action: "retry" });
+    await scheduleStages(db, ownerId);
+    return { state: "queued", runId: prior.id };
+  }
+  if (prior && !admissionId) {
+    if (prior.status === "done") return { state: "built", runId: prior.id };
+    if (prior.protocol_version === 2) {
+      if (prior.status === "paused") await pipelineRpc(db, "control_run", { ownerId, runId: prior.id, action: "resume" });
+      await scheduleStages(db, ownerId);
+      return { state: prior.status === "running" ? "running" : prior.status === "waiting" ? "waiting" : "queued", runId: prior.id };
+    }
+  }
+  let itemId = admissionId;
+  if (!itemId) {
+    const { data: item } = await db.from("pipeline_items").select("id").eq("owner_id", ownerId).eq("material_id", materialId).eq("state", "ingesting").limit(1).maybeSingle();
+    itemId = item?.id;
+  }
+  if (!itemId) { itemId = crypto.randomUUID(); await singleton(db, ownerId, material.course_id, itemId, material.filename); await pipelineRpc(db, "charge_item", { ownerId, itemId }); }
+  const attached = await pipelineRpc<{ runId: string }>(db, "attach", { ownerId, itemId, materialId, model });
+  await scheduleStages(db, ownerId);
+  return { state: prior?.status === "done" ? "built" : "queued", runId: attached.runId };
 }
 
 /** See `startTopUpJob` in src/lib/jobs/start.ts. */
@@ -106,7 +138,8 @@ export function startDeepReviewJob(db: OrcaSupabase, ownerId: string, req: { cou
  * that just finished (`src/lib/server/jobs/run.ts`), so the next one runs at once, not after a
  * response that already went out.
  */
-export function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+export async function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+  if (stagedPipeline()) await scheduleStages(db, ownerId, "now");
   return core.resumeNext(deps(db, "now"), ownerId);
 }
 
@@ -115,7 +148,8 @@ export function resumeNext(db: OrcaSupabase, ownerId: string): Promise<Dispatch 
  * (`DEAD_RUN_MS`, judged by the server's clock) is marked failed, and their next queued or resumable
  * job starts after the response.
  */
-export function checkRuns(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+export async function checkRuns(db: OrcaSupabase, ownerId: string): Promise<Dispatch | null> {
+  if (stagedPipeline()) await scheduleStages(db, ownerId);
   return core.resumeNext(deps(db, "after-response"), ownerId);
 }
 
@@ -124,6 +158,15 @@ export function checkRuns(db: OrcaSupabase, ownerId: string): Promise<Dispatch |
  * response if nothing of theirs is running (POST /api/runs/pause). Returns how many runs changed.
  */
 export async function pauseRuns(db: OrcaSupabase, ownerId: string, target: core.PauseTarget, paused: boolean): Promise<number> {
+  if (stagedPipeline()) {
+    let query = db.from("pipeline_runs").select("id").eq("owner_id", ownerId).eq("protocol_version", 2).eq("kind", "upload").in("status", ["queued", "running", "waiting", "paused"]);
+    query = "runId" in target ? query.eq("id", target.runId) : query.eq("course_id", target.courseId);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    for (const run of data ?? []) await pipelineRpc(db, "control_run", { ownerId, runId: run.id, action: paused ? "pause" : "resume" });
+    await scheduleStages(db, ownerId);
+    return data?.length ?? 0;
+  }
   const changed = await core.pauseUploadRuns(deps(db, "after-response"), ownerId, target, paused);
   if (!paused && changed > 0) await core.resumeNext(deps(db, "after-response"), ownerId);
   return changed;
@@ -131,6 +174,14 @@ export async function pauseRuns(db: OrcaSupabase, ownerId: string, target: core.
 
 /** Stop an upload's run now (POST /api/runs/stop) and start the student's next job after the response. */
 export async function stopRun(db: OrcaSupabase, ownerId: string, runId: string): Promise<boolean> {
+  if (stagedPipeline()) {
+    const { data } = await db.from("pipeline_runs").select("protocol_version").eq("owner_id", ownerId).eq("id", runId).maybeSingle();
+    if (data?.protocol_version === 2) {
+      await pipelineRpc(db, "control_run", { ownerId, runId, action: "stop" });
+      await scheduleStages(db, ownerId);
+      return true;
+    }
+  }
   const stopped = await core.stopRun(deps(db, "after-response"), ownerId, runId);
   if (stopped) {
     await cancelJobs(db, ownerId, [runId]);
@@ -200,5 +251,11 @@ export async function failRunFromTask(db: OrcaSupabase, ownerId: string, runId: 
 export async function ownersWithPendingRuns(db: OrcaSupabase): Promise<string[]> {
   const { data, error } = await db.from("pipeline_runs").select("owner_id").in("status", ["queued", "waiting", "running"]);
   if (error) throw new Error(`Couldn't read the pending runs: ${error.message}`);
-  return [...new Set(data.map((r) => r.owner_id))];
+  const owners = data.map((r) => r.owner_id);
+  if (stagedPipeline()) {
+    const { data: pending, error: pendingError } = await db.from("pipeline_items").select("owner_id").eq("state", "ingesting").lt("expires_at", new Date().toISOString());
+    if (pendingError) throw new Error(pendingError.message);
+    owners.push(...(pending ?? []).map((i) => i.owner_id));
+  }
+  return [...new Set(owners)];
 }
